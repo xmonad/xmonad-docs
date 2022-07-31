@@ -1,0 +1,871 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd"><html xmlns="http://www.w3.org/1999/xhtml"><head><link rel="stylesheet" type="text/css" href="style.css" /><script type="text/javascript" src="highlight.js"></script></head><body><pre><span class="hs-pragma">{-# LANGUAGE ExistentialQuantification, Rank2Types, FunctionalDependencies, FlexibleInstances, FlexibleContexts, PatternGuards, ScopedTypeVariables #-}</span><span>
+</span><span id="line-2"></span><span>
+</span><span id="line-3"></span><span class="hs-comment">-----------------------------------------------------------------------------</span><span>
+</span><span id="line-4"></span><span class="hs-comment">-- |</span><span>
+</span><span id="line-5"></span><span class="hs-comment">-- Module      :  XMonad.Layout.MultiToggle</span><span>
+</span><span id="line-6"></span><span class="hs-comment">-- Description :  Dynamically apply and unapply transformers to your window layout.</span><span>
+</span><span id="line-7"></span><span class="hs-comment">-- Copyright   :  (c) Lukas Mai</span><span>
+</span><span id="line-8"></span><span class="hs-comment">-- License     :  BSD-style (see LICENSE)</span><span>
+</span><span id="line-9"></span><span class="hs-comment">--</span><span>
+</span><span id="line-10"></span><span class="hs-comment">-- Maintainer  :  &lt;l.mai@web.de&gt;</span><span>
+</span><span id="line-11"></span><span class="hs-comment">-- Stability   :  unstable</span><span>
+</span><span id="line-12"></span><span class="hs-comment">-- Portability :  unportable</span><span>
+</span><span id="line-13"></span><span class="hs-comment">--</span><span>
+</span><span id="line-14"></span><span class="hs-comment">-- Dynamically apply and unapply transformers to your window layout. This can</span><span>
+</span><span id="line-15"></span><span class="hs-comment">-- be used to rotate your window layout by 90 degrees, or to make the</span><span>
+</span><span id="line-16"></span><span class="hs-comment">-- currently focused window occupy the whole screen (\&quot;zoom in\&quot;) then undo</span><span>
+</span><span id="line-17"></span><span class="hs-comment">-- the transformation (\&quot;zoom out\&quot;).</span><span>
+</span><span id="line-18"></span><span>
+</span><span id="line-19"></span><span class="hs-keyword">module</span><span> </span><span class="hs-identifier">XMonad.Layout.MultiToggle</span><span> </span><span class="hs-special">(</span><span>
+</span><span id="line-20"></span><span>    </span><span class="annot"><span class="hs-comment">-- * Usage</span></span><span>
+</span><span id="line-21"></span><span>    </span><span class="annot"><span class="hs-comment">-- $usage</span></span><span>
+</span><span id="line-22"></span><span>    </span><span class="annot"><a href="XMonad.Layout.MultiToggle.html#Transformer"><span class="hs-identifier">Transformer</span></a></span><span class="hs-special">(</span><span class="hs-glyph">..</span><span class="hs-special">)</span><span class="hs-special">,</span><span>
+</span><span id="line-23"></span><span>    </span><span class="annot"><a href="XMonad.Layout.MultiToggle.html#Toggle"><span class="hs-identifier">Toggle</span></a></span><span class="hs-special">(</span><span class="hs-glyph">..</span><span class="hs-special">)</span><span class="hs-special">,</span><span>
+</span><span id="line-24"></span><span>    </span><span class="annot"><a href="XMonad.Layout.MultiToggle.html#%3F%3F"><span class="hs-operator">(??)</span></a></span><span class="hs-special">,</span><span>
+</span><span id="line-25"></span><span>    </span><span class="annot"><a href="XMonad.Layout.MultiToggle.html#EOT"><span class="hs-identifier">EOT</span></a></span><span class="hs-special">(</span><span class="hs-glyph">..</span><span class="hs-special">)</span><span class="hs-special">,</span><span>
+</span><span id="line-26"></span><span>    </span><span class="annot"><a href="XMonad.Layout.MultiToggle.html#single"><span class="hs-identifier">single</span></a></span><span class="hs-special">,</span><span>
+</span><span id="line-27"></span><span>    </span><span class="annot"><a href="XMonad.Layout.MultiToggle.html#mkToggle"><span class="hs-identifier">mkToggle</span></a></span><span class="hs-special">,</span><span>
+</span><span id="line-28"></span><span>    </span><span class="annot"><a href="XMonad.Layout.MultiToggle.html#mkToggle1"><span class="hs-identifier">mkToggle1</span></a></span><span class="hs-special">,</span><span>
+</span><span id="line-29"></span><span>    </span><span class="annot"><a href="XMonad.Layout.MultiToggle.html#isToggleActive"><span class="hs-identifier">isToggleActive</span></a></span><span class="hs-special">,</span><span>
+</span><span id="line-30"></span><span>
+</span><span id="line-31"></span><span>    </span><span class="annot"><a href="XMonad.Layout.MultiToggle.html#HList"><span class="hs-identifier">HList</span></a></span><span class="hs-special">,</span><span>
+</span><span id="line-32"></span><span>    </span><span class="annot"><a href="XMonad.Layout.MultiToggle.html#HCons"><span class="hs-identifier">HCons</span></a></span><span class="hs-special">,</span><span>
+</span><span id="line-33"></span><span>    </span><span class="annot"><a href="XMonad.Layout.MultiToggle.html#MultiToggle"><span class="hs-identifier">MultiToggle</span></a></span><span class="hs-special">,</span><span>
+</span><span id="line-34"></span><span class="hs-special">)</span><span> </span><span class="hs-keyword">where</span><span>
+</span><span id="line-35"></span><span>
+</span><span id="line-36"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><span class="hs-identifier">XMonad</span></span><span>
+</span><span id="line-37"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><a href="XMonad.Prelude.html"><span class="hs-identifier">XMonad.Prelude</span></a></span><span> </span><span class="hs-keyword">hiding</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier">find</span></span><span class="hs-special">)</span><span>
+</span><span id="line-38"></span><span>
+</span><span id="line-39"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><span class="hs-identifier">XMonad.StackSet</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier">Workspace</span></span><span class="hs-special">(</span><span class="hs-glyph">..</span><span class="hs-special">)</span><span class="hs-special">)</span><span>
+</span><span id="line-40"></span><span>
+</span><span id="line-41"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><span class="hs-identifier">Control.Arrow</span></span><span>
+</span><span id="line-42"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><span class="hs-identifier">Data.IORef</span></span><span>
+</span><span id="line-43"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><span class="hs-identifier">Data.Typeable</span></span><span>
+</span><span id="line-44"></span><span>
+</span><span id="line-45"></span><span class="hs-comment">-- $usage</span><span>
+</span><span id="line-46"></span><span class="hs-comment">-- The basic idea is to have a base layout and a set of layout transformers,</span><span>
+</span><span id="line-47"></span><span class="hs-comment">-- of which at most one is active at any time. Enabling another transformer</span><span>
+</span><span id="line-48"></span><span class="hs-comment">-- first disables any currently active transformer; i.e. it works like a</span><span>
+</span><span id="line-49"></span><span class="hs-comment">-- group of radio buttons.</span><span>
+</span><span id="line-50"></span><span class="hs-comment">--</span><span>
+</span><span id="line-51"></span><span class="hs-comment">-- To use this module, you need some data types which represent</span><span>
+</span><span id="line-52"></span><span class="hs-comment">-- transformers; for some commonly used transformers (including</span><span>
+</span><span id="line-53"></span><span class="hs-comment">-- MIRROR, NOBORDERS, and FULL used in the examples below) you can</span><span>
+</span><span id="line-54"></span><span class="hs-comment">-- simply import &quot;XMonad.Layout.MultiToggle.Instances&quot;.</span><span>
+</span><span id="line-55"></span><span class="hs-comment">--</span><span>
+</span><span id="line-56"></span><span class="hs-comment">-- Somewhere else in your file you probably have a definition of @layout@;</span><span>
+</span><span id="line-57"></span><span class="hs-comment">-- the default looks like this:</span><span>
+</span><span id="line-58"></span><span class="hs-comment">--</span><span>
+</span><span id="line-59"></span><span class="hs-comment">-- &gt; layout = tiled ||| Mirror tiled ||| Full</span><span>
+</span><span id="line-60"></span><span class="hs-comment">--</span><span>
+</span><span id="line-61"></span><span class="hs-comment">-- After changing this to</span><span>
+</span><span id="line-62"></span><span class="hs-comment">--</span><span>
+</span><span id="line-63"></span><span class="hs-comment">-- &gt; layout = mkToggle (single MIRROR) (tiled ||| Full)</span><span>
+</span><span id="line-64"></span><span class="hs-comment">--</span><span>
+</span><span id="line-65"></span><span class="hs-comment">-- you can now dynamically apply the 'XMonad.Layout.Mirror' transformation:</span><span>
+</span><span id="line-66"></span><span class="hs-comment">--</span><span>
+</span><span id="line-67"></span><span class="hs-comment">-- &gt; ...</span><span>
+</span><span id="line-68"></span><span class="hs-comment">-- &gt;   , ((modm,               xK_x     ), sendMessage $ Toggle MIRROR)</span><span>
+</span><span id="line-69"></span><span class="hs-comment">-- &gt; ...</span><span>
+</span><span id="line-70"></span><span class="hs-comment">--</span><span>
+</span><span id="line-71"></span><span class="hs-comment">-- (That should be part of your key bindings.) When you press @mod-x@, the</span><span>
+</span><span id="line-72"></span><span class="hs-comment">-- active layout is mirrored. Another @mod-x@ and it's back to normal.</span><span>
+</span><span id="line-73"></span><span class="hs-comment">--</span><span>
+</span><span id="line-74"></span><span class="hs-comment">-- It's also possible to stack @MultiToggle@s.  For example:</span><span>
+</span><span id="line-75"></span><span class="hs-comment">--</span><span>
+</span><span id="line-76"></span><span class="hs-comment">-- @</span><span>
+</span><span id="line-77"></span><span class="hs-comment">-- layout = id</span><span>
+</span><span id="line-78"></span><span class="hs-comment">--     . 'XMonad.Layout.NoBorders.smartBorders'</span><span>
+</span><span id="line-79"></span><span class="hs-comment">--     . mkToggle (NOBORDERS ?? FULL ?? EOT)</span><span>
+</span><span id="line-80"></span><span class="hs-comment">--     . mkToggle (single MIRROR)</span><span>
+</span><span id="line-81"></span><span class="hs-comment">--     $ tiled ||| 'XMonad.Layout.Grid.Grid' ||| 'XMonad.Layout.Circle.Circle'</span><span>
+</span><span id="line-82"></span><span class="hs-comment">-- @</span><span>
+</span><span id="line-83"></span><span class="hs-comment">--</span><span>
+</span><span id="line-84"></span><span class="hs-comment">-- By binding a key to @(sendMessage $ Toggle FULL)@ you can temporarily</span><span>
+</span><span id="line-85"></span><span class="hs-comment">-- maximize windows, in addition to being able to rotate layouts and remove</span><span>
+</span><span id="line-86"></span><span class="hs-comment">-- window borders.</span><span>
+</span><span id="line-87"></span><span class="hs-comment">--</span><span>
+</span><span id="line-88"></span><span class="hs-comment">-- You can also define your own transformers by creating a data type</span><span>
+</span><span id="line-89"></span><span class="hs-comment">-- which is an instance of the 'Transformer' class.  For example, here</span><span>
+</span><span id="line-90"></span><span class="hs-comment">-- is the definition of @MIRROR@:</span><span>
+</span><span id="line-91"></span><span class="hs-comment">--</span><span>
+</span><span id="line-92"></span><span class="hs-comment">-- &gt; data MIRROR = MIRROR deriving (Read, Show, Eq)</span><span>
+</span><span id="line-93"></span><span class="hs-comment">-- &gt; instance Transformer MIRROR Window where</span><span>
+</span><span id="line-94"></span><span class="hs-comment">-- &gt;     transform _ x k = k (Mirror x) (\(Mirror x') -&gt; x')</span><span>
+</span><span id="line-95"></span><span class="hs-comment">--</span><span>
+</span><span id="line-96"></span><span class="hs-comment">-- Note, you need to put @{-\# LANGUAGE</span><span>
+</span><span id="line-97"></span><span class="hs-comment">-- TypeSynonymInstances, MultiParamTypeClasses \#-}@ at the</span><span>
+</span><span id="line-98"></span><span class="hs-comment">-- beginning of your file.</span><span>
+</span><span id="line-99"></span><span>
+</span><span id="line-100"></span><span class="hs-comment">-- | A class to identify custom transformers (and look up transforming</span><span>
+</span><span id="line-101"></span><span class="hs-comment">-- functions by type).</span><span>
+</span><span id="line-102"></span><span class="hs-keyword">class</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">Eq</span></span><span> </span><span class="annot"><a href="#local-6989586621679358449"><span class="hs-identifier hs-type">t</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Typeable</span></span><span> </span><span class="annot"><a href="#local-6989586621679358449"><span class="hs-identifier hs-type">t</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=&gt;</span><span> </span><span id="Transformer"><span class="annot"><a href="XMonad.Layout.MultiToggle.html#Transformer"><span class="hs-identifier hs-var">Transformer</span></a></span></span><span> </span><span id="local-6989586621679358449"><span class="annot"><a href="#local-6989586621679358449"><span class="hs-identifier hs-type">t</span></a></span></span><span> </span><span id="local-6989586621679358448"><span class="annot"><a href="#local-6989586621679358448"><span class="hs-identifier hs-type">a</span></a></span></span><span> </span><span class="hs-glyph">|</span><span> </span><span class="annot"><a href="#local-6989586621679358449"><span class="hs-identifier hs-type">t</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="#local-6989586621679358448"><span class="hs-identifier hs-type">a</span></a></span><span> </span><span class="hs-keyword">where</span><span>
+</span><span id="line-103"></span><span>    </span><span id="local-6989586621679358445"><span id="local-6989586621679358446"><span id="transform"><span class="annot"><a href="XMonad.Layout.MultiToggle.html#transform"><span class="hs-identifier hs-type">transform</span></a></span></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">LayoutClass</span></span><span> </span><span class="annot"><a href="#local-6989586621679358446"><span class="hs-identifier hs-type">l</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679358448"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=&gt;</span><span> </span><span class="annot"><a href="#local-6989586621679358449"><span class="hs-identifier hs-type">t</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="#local-6989586621679358446"><span class="hs-identifier hs-type">l</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679358448"><span class="hs-identifier hs-type">a</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span>
+</span><span id="line-104"></span><span>        </span><span class="hs-special">(</span><span class="hs-keyword">forall</span><span> </span><span id="local-6989586621679358450"><span class="annot"><a href="#local-6989586621679358450"><span class="hs-identifier hs-type">l'</span></a></span></span><span class="hs-operator">.</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">LayoutClass</span></span><span> </span><span class="annot"><a href="#local-6989586621679358450"><span class="hs-identifier hs-type">l'</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679358448"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=&gt;</span><span> </span><span class="annot"><a href="#local-6989586621679358450"><span class="hs-identifier hs-type">l'</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679358448"><span class="hs-identifier hs-type">a</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="hs-special">(</span><span class="annot"><a href="#local-6989586621679358450"><span class="hs-identifier hs-type">l'</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679358448"><span class="hs-identifier hs-type">a</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="#local-6989586621679358446"><span class="hs-identifier hs-type">l</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679358448"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="#local-6989586621679358445"><span class="hs-identifier hs-type">b</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="#local-6989586621679358445"><span class="hs-identifier hs-type">b</span></a></span></span></span><span>
+</span><span id="line-105"></span><span>
+</span><span id="line-106"></span><span class="hs-keyword">data</span><span>  </span><span id="EL"><span class="annot"><a href="XMonad.Layout.MultiToggle.html#EL"><span class="hs-identifier hs-var">EL</span></a></span></span><span> </span><span id="local-6989586621679358441"><span class="annot"><a href="#local-6989586621679358441"><span class="hs-identifier hs-type">l</span></a></span></span><span> </span><span id="local-6989586621679358442"><span class="annot"><a href="#local-6989586621679358442"><span class="hs-identifier hs-type">a</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-keyword">forall</span><span> </span><span id="local-6989586621679358443"><span class="annot"><a href="#local-6989586621679358443"><span class="hs-identifier hs-type">l'</span></a></span></span><span class="hs-operator">.</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">LayoutClass</span></span><span> </span><span class="annot"><a href="#local-6989586621679358443"><span class="hs-identifier hs-type">l'</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679358442"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=&gt;</span><span> </span><span id="EL"><span class="annot"><a href="XMonad.Layout.MultiToggle.html#EL"><span class="hs-identifier hs-var">EL</span></a></span></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="#local-6989586621679358443"><span class="hs-identifier hs-type">l'</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679358442"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-special">(</span><span class="annot"><a href="#local-6989586621679358443"><span class="hs-identifier hs-type">l'</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679358442"><span class="hs-identifier hs-type">a</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="#local-6989586621679358441"><span class="hs-identifier hs-type">l</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679358442"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-107"></span><span>
+</span><span id="line-108"></span><span id="local-6989586621679358308"><span id="local-6989586621679358309"><span id="local-6989586621679358310"><span class="annot"><a href="XMonad.Layout.MultiToggle.html#unEL"><span class="hs-identifier hs-type">unEL</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">LayoutClass</span></span><span> </span><span class="annot"><a href="#local-6989586621679358310"><span class="hs-identifier hs-type">l</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679358309"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=&gt;</span><span> </span><span class="annot"><a href="XMonad.Layout.MultiToggle.html#EL"><span class="hs-identifier hs-type">EL</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679358310"><span class="hs-identifier hs-type">l</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679358309"><span class="hs-identifier hs-type">a</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="hs-special">(</span><span class="hs-keyword">forall</span><span> </span><span id="local-6989586621679358461"><span class="annot"><a href="#local-6989586621679358461"><span class="hs-identifier hs-type">l'</span></a></span></span><span class="hs-operator">.</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">LayoutClass</span></span><span> </span><span class="annot"><a href="#local-6989586621679358461"><span class="hs-identifier hs-type">l'</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679358309"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=&gt;</span><span> </span><span class="annot"><a href="#local-6989586621679358461"><span class="hs-identifier hs-type">l'</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679358309"><span class="hs-identifier hs-type">a</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="#local-6989586621679358308"><span class="hs-identifier hs-type">b</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="#local-6989586621679358308"><span class="hs-identifier hs-type">b</span></a></span></span></span></span><span>
+</span><span id="line-109"></span><span id="unEL"><span class="annot"><span class="annottext">unEL :: EL l a
+-&gt; (forall (l' :: * -&gt; *). LayoutClass l' a =&gt; l' a -&gt; b) -&gt; b
+</span><a href="XMonad.Layout.MultiToggle.html#unEL"><span class="hs-identifier hs-var hs-var">unEL</span></a></span></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="XMonad.Layout.MultiToggle.html#EL"><span class="hs-identifier hs-type">EL</span></a></span><span> </span><span id="local-6989586621679358264"><span class="annot"><span class="annottext">l' a
+</span><a href="#local-6989586621679358264"><span class="hs-identifier hs-var">x</span></a></span></span><span> </span><span class="annot"><span class="annottext">l' a -&gt; l a
+</span><span class="hs-identifier">_</span></span><span class="hs-special">)</span><span> </span><span id="local-6989586621679358263"><span class="annot"><span class="annottext">forall (l' :: * -&gt; *). LayoutClass l' a =&gt; l' a -&gt; b
+</span><a href="#local-6989586621679358263"><span class="hs-identifier hs-var">k</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">l' a -&gt; b
+forall (l' :: * -&gt; *). LayoutClass l' a =&gt; l' a -&gt; b
+</span><a href="#local-6989586621679358263"><span class="hs-identifier hs-var">k</span></a></span><span> </span><span class="annot"><span class="annottext">l' a
+</span><a href="#local-6989586621679358264"><span class="hs-identifier hs-var">x</span></a></span><span>
+</span><span id="line-110"></span><span>
+</span><span id="line-111"></span><span id="local-6989586621679358383"><span id="local-6989586621679358384"><span class="annot"><a href="XMonad.Layout.MultiToggle.html#deEL"><span class="hs-identifier hs-type">deEL</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">LayoutClass</span></span><span> </span><span class="annot"><a href="#local-6989586621679358384"><span class="hs-identifier hs-type">l</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679358383"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=&gt;</span><span> </span><span class="annot"><a href="XMonad.Layout.MultiToggle.html#EL"><span class="hs-identifier hs-type">EL</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679358384"><span class="hs-identifier hs-type">l</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679358383"><span class="hs-identifier hs-type">a</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="#local-6989586621679358384"><span class="hs-identifier hs-type">l</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679358383"><span class="hs-identifier hs-type">a</span></a></span></span></span><span>
+</span><span id="line-112"></span><span id="deEL"><span class="annot"><span class="annottext">deEL :: EL l a -&gt; l a
+</span><a href="XMonad.Layout.MultiToggle.html#deEL"><span class="hs-identifier hs-var hs-var">deEL</span></a></span></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="XMonad.Layout.MultiToggle.html#EL"><span class="hs-identifier hs-type">EL</span></a></span><span> </span><span id="local-6989586621679358261"><span class="annot"><span class="annottext">l' a
+</span><a href="#local-6989586621679358261"><span class="hs-identifier hs-var">x</span></a></span></span><span> </span><span id="local-6989586621679358260"><span class="annot"><span class="annottext">l' a -&gt; l a
+</span><a href="#local-6989586621679358260"><span class="hs-identifier hs-var">det</span></a></span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">l' a -&gt; l a
+</span><a href="#local-6989586621679358260"><span class="hs-identifier hs-var">det</span></a></span><span> </span><span class="annot"><span class="annottext">l' a
+</span><a href="#local-6989586621679358261"><span class="hs-identifier hs-var">x</span></a></span><span>
+</span><span id="line-113"></span><span>
+</span><span id="line-114"></span><span id="local-6989586621679358397"><span id="local-6989586621679358398"><span id="local-6989586621679358399"><span class="annot"><a href="XMonad.Layout.MultiToggle.html#transform%27"><span class="hs-identifier hs-type">transform'</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="hs-special">(</span><span class="annot"><a href="XMonad.Layout.MultiToggle.html#Transformer"><span class="hs-identifier hs-type">Transformer</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679358399"><span class="hs-identifier hs-type">t</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679358398"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier hs-type">LayoutClass</span></span><span> </span><span class="annot"><a href="#local-6989586621679358397"><span class="hs-identifier hs-type">l</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679358398"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=&gt;</span><span> </span><span class="annot"><a href="#local-6989586621679358399"><span class="hs-identifier hs-type">t</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="XMonad.Layout.MultiToggle.html#EL"><span class="hs-identifier hs-type">EL</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679358397"><span class="hs-identifier hs-type">l</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679358398"><span class="hs-identifier hs-type">a</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="XMonad.Layout.MultiToggle.html#EL"><span class="hs-identifier hs-type">EL</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679358397"><span class="hs-identifier hs-type">l</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679358398"><span class="hs-identifier hs-type">a</span></a></span></span></span></span><span>
+</span><span id="line-115"></span><span id="transform%27"><span class="annot"><span class="annottext">transform' :: t -&gt; EL l a -&gt; EL l a
+</span><a href="XMonad.Layout.MultiToggle.html#transform%27"><span class="hs-identifier hs-var hs-var">transform'</span></a></span></span><span> </span><span id="local-6989586621679358258"><span class="annot"><span class="annottext">t
+</span><a href="#local-6989586621679358258"><span class="hs-identifier hs-var">t</span></a></span></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="XMonad.Layout.MultiToggle.html#EL"><span class="hs-identifier hs-type">EL</span></a></span><span> </span><span id="local-6989586621679358257"><span class="annot"><span class="annottext">l' a
+</span><a href="#local-6989586621679358257"><span class="hs-identifier hs-var">l</span></a></span></span><span> </span><span id="local-6989586621679358256"><span class="annot"><span class="annottext">l' a -&gt; l a
+</span><a href="#local-6989586621679358256"><span class="hs-identifier hs-var">det</span></a></span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">t
+-&gt; l' a
+-&gt; (forall (l' :: * -&gt; *).
+    LayoutClass l' a =&gt;
+    l' a -&gt; (l' a -&gt; l' a) -&gt; EL l a)
+-&gt; EL l a
+forall t a (l :: * -&gt; *) b.
+(Transformer t a, LayoutClass l a) =&gt;
+t
+-&gt; l a
+-&gt; (forall (l' :: * -&gt; *).
+    LayoutClass l' a =&gt;
+    l' a -&gt; (l' a -&gt; l a) -&gt; b)
+-&gt; b
+</span><a href="XMonad.Layout.MultiToggle.html#transform"><span class="hs-identifier hs-var">transform</span></a></span><span> </span><span class="annot"><span class="annottext">t
+</span><a href="#local-6989586621679358258"><span class="hs-identifier hs-var">t</span></a></span><span> </span><span class="annot"><span class="annottext">l' a
+</span><a href="#local-6989586621679358257"><span class="hs-identifier hs-var">l</span></a></span><span> </span><span class="hs-special">(</span><span class="hs-glyph">\</span><span id="local-6989586621679358255"><span class="annot"><span class="annottext">l' a
+</span><a href="#local-6989586621679358255"><span class="hs-identifier hs-var">l'</span></a></span></span><span> </span><span id="local-6989586621679358254"><span class="annot"><span class="annottext">l' a -&gt; l' a
+</span><a href="#local-6989586621679358254"><span class="hs-identifier hs-var">det'</span></a></span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">l' a -&gt; (l' a -&gt; l a) -&gt; EL l a
+forall (l :: * -&gt; *) a (l' :: * -&gt; *).
+LayoutClass l' a =&gt;
+l' a -&gt; (l' a -&gt; l a) -&gt; EL l a
+</span><a href="XMonad.Layout.MultiToggle.html#EL"><span class="hs-identifier hs-var">EL</span></a></span><span> </span><span class="annot"><span class="annottext">l' a
+</span><a href="#local-6989586621679358255"><span class="hs-identifier hs-var">l'</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">l' a -&gt; l a
+</span><a href="#local-6989586621679358256"><span class="hs-identifier hs-var">det</span></a></span><span> </span><span class="annot"><span class="annottext">(l' a -&gt; l a) -&gt; (l' a -&gt; l' a) -&gt; l' a -&gt; l a
+forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">l' a -&gt; l' a
+</span><a href="#local-6989586621679358254"><span class="hs-identifier hs-var">det'</span></a></span><span class="hs-special">)</span><span class="hs-special">)</span><span>
+</span><span id="line-116"></span><span>
+</span><span id="line-117"></span><span class="hs-comment">-- | Toggle the specified layout transformer.</span><span>
+</span><span id="line-118"></span><span class="hs-keyword">data</span><span> </span><span id="Toggle"><span class="annot"><a href="XMonad.Layout.MultiToggle.html#Toggle"><span class="hs-identifier hs-var">Toggle</span></a></span></span><span> </span><span id="local-6989586621679358252"><span class="annot"><a href="#local-6989586621679358252"><span class="hs-identifier hs-type">a</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-keyword">forall</span><span> </span><span id="local-6989586621679358251"><span class="annot"><a href="#local-6989586621679358251"><span class="hs-identifier hs-type">t</span></a></span></span><span class="hs-operator">.</span><span> </span><span class="hs-special">(</span><span class="annot"><a href="XMonad.Layout.MultiToggle.html#Transformer"><span class="hs-identifier hs-type">Transformer</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679358251"><span class="hs-identifier hs-type">t</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679358252"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=&gt;</span><span> </span><span id="Toggle"><span class="annot"><a href="XMonad.Layout.MultiToggle.html#Toggle"><span class="hs-identifier hs-var">Toggle</span></a></span></span><span> </span><span class="annot"><a href="#local-6989586621679358251"><span class="hs-identifier hs-type">t</span></a></span><span>
+</span><span id="line-119"></span><span>
+</span><span id="line-120"></span><span id="local-6989586621679358249"><span class="hs-keyword">instance</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">Typeable</span></span><span> </span><span class="annot"><a href="#local-6989586621679358249"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Message</span></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="XMonad.Layout.MultiToggle.html#Toggle"><span class="hs-identifier hs-type">Toggle</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679358249"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">)</span></span><span>
+</span><span id="line-121"></span><span>
+</span><span id="line-122"></span><span class="hs-keyword">data</span><span> </span><span id="MultiToggleS"><span class="annot"><a href="XMonad.Layout.MultiToggle.html#MultiToggleS"><span class="hs-identifier hs-var">MultiToggleS</span></a></span></span><span> </span><span id="local-6989586621679358385"><span class="annot"><a href="#local-6989586621679358385"><span class="hs-identifier hs-type">ts</span></a></span></span><span> </span><span id="local-6989586621679358387"><span class="annot"><a href="#local-6989586621679358387"><span class="hs-identifier hs-type">l</span></a></span></span><span> </span><span id="local-6989586621679358386"><span class="annot"><a href="#local-6989586621679358386"><span class="hs-identifier hs-type">a</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span id="MultiToggleS"><span class="annot"><a href="XMonad.Layout.MultiToggle.html#MultiToggleS"><span class="hs-identifier hs-var">MultiToggleS</span></a></span></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="#local-6989586621679358387"><span class="hs-identifier hs-type">l</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679358386"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">Maybe</span></span><span> </span><span class="annot"><span class="hs-identifier hs-type">Int</span></span><span class="hs-special">)</span><span> </span><span class="annot"><a href="#local-6989586621679358385"><span class="hs-identifier hs-type">ts</span></a></span><span>
+</span><span id="line-123"></span><span>    </span><span class="hs-keyword">deriving</span><span> </span><span class="hs-special">(</span><span id="local-6989586621679358238"><span id="local-6989586621679358240"><span id="local-6989586621679358242"><span id="local-6989586621679358244"><span class="annot"><span class="annottext">ReadPrec [MultiToggleS ts l a]
+ReadPrec (MultiToggleS ts l a)
+Int -&gt; ReadS (MultiToggleS ts l a)
+ReadS [MultiToggleS ts l a]
+(Int -&gt; ReadS (MultiToggleS ts l a))
+-&gt; ReadS [MultiToggleS ts l a]
+-&gt; ReadPrec (MultiToggleS ts l a)
+-&gt; ReadPrec [MultiToggleS ts l a]
+-&gt; Read (MultiToggleS ts l a)
+forall a.
+(Int -&gt; ReadS a)
+-&gt; ReadS [a] -&gt; ReadPrec a -&gt; ReadPrec [a] -&gt; Read a
+forall ts (l :: * -&gt; *) a.
+(Read ts, Read (l a)) =&gt;
+ReadPrec [MultiToggleS ts l a]
+forall ts (l :: * -&gt; *) a.
+(Read ts, Read (l a)) =&gt;
+ReadPrec (MultiToggleS ts l a)
+forall ts (l :: * -&gt; *) a.
+(Read ts, Read (l a)) =&gt;
+Int -&gt; ReadS (MultiToggleS ts l a)
+forall ts (l :: * -&gt; *) a.
+(Read ts, Read (l a)) =&gt;
+ReadS [MultiToggleS ts l a]
+readListPrec :: ReadPrec [MultiToggleS ts l a]
+$creadListPrec :: forall ts (l :: * -&gt; *) a.
+(Read ts, Read (l a)) =&gt;
+ReadPrec [MultiToggleS ts l a]
+readPrec :: ReadPrec (MultiToggleS ts l a)
+$creadPrec :: forall ts (l :: * -&gt; *) a.
+(Read ts, Read (l a)) =&gt;
+ReadPrec (MultiToggleS ts l a)
+readList :: ReadS [MultiToggleS ts l a]
+$creadList :: forall ts (l :: * -&gt; *) a.
+(Read ts, Read (l a)) =&gt;
+ReadS [MultiToggleS ts l a]
+readsPrec :: Int -&gt; ReadS (MultiToggleS ts l a)
+$creadsPrec :: forall ts (l :: * -&gt; *) a.
+(Read ts, Read (l a)) =&gt;
+Int -&gt; ReadS (MultiToggleS ts l a)
+</span><span class="hs-identifier hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var">Read</span></span></span></span></span></span><span class="hs-special">,</span><span> </span><span id="local-6989586621679358231"><span id="local-6989586621679358233"><span id="local-6989586621679358235"><span class="annot"><span class="annottext">Int -&gt; MultiToggleS ts l a -&gt; ShowS
+[MultiToggleS ts l a] -&gt; ShowS
+MultiToggleS ts l a -&gt; String
+(Int -&gt; MultiToggleS ts l a -&gt; ShowS)
+-&gt; (MultiToggleS ts l a -&gt; String)
+-&gt; ([MultiToggleS ts l a] -&gt; ShowS)
+-&gt; Show (MultiToggleS ts l a)
+forall a.
+(Int -&gt; a -&gt; ShowS) -&gt; (a -&gt; String) -&gt; ([a] -&gt; ShowS) -&gt; Show a
+forall ts (l :: * -&gt; *) a.
+(Show ts, Show (l a)) =&gt;
+Int -&gt; MultiToggleS ts l a -&gt; ShowS
+forall ts (l :: * -&gt; *) a.
+(Show ts, Show (l a)) =&gt;
+[MultiToggleS ts l a] -&gt; ShowS
+forall ts (l :: * -&gt; *) a.
+(Show ts, Show (l a)) =&gt;
+MultiToggleS ts l a -&gt; String
+showList :: [MultiToggleS ts l a] -&gt; ShowS
+$cshowList :: forall ts (l :: * -&gt; *) a.
+(Show ts, Show (l a)) =&gt;
+[MultiToggleS ts l a] -&gt; ShowS
+show :: MultiToggleS ts l a -&gt; String
+$cshow :: forall ts (l :: * -&gt; *) a.
+(Show ts, Show (l a)) =&gt;
+MultiToggleS ts l a -&gt; String
+showsPrec :: Int -&gt; MultiToggleS ts l a -&gt; ShowS
+$cshowsPrec :: forall ts (l :: * -&gt; *) a.
+(Show ts, Show (l a)) =&gt;
+Int -&gt; MultiToggleS ts l a -&gt; ShowS
+</span><span class="hs-identifier hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var">Show</span></span></span></span></span><span class="hs-special">)</span><span>
+</span><span id="line-124"></span><span>
+</span><span id="line-125"></span><span class="hs-keyword">data</span><span> </span><span id="MultiToggle"><span class="annot"><a href="XMonad.Layout.MultiToggle.html#MultiToggle"><span class="hs-identifier hs-var">MultiToggle</span></a></span></span><span> </span><span id="local-6989586621679358393"><span class="annot"><a href="#local-6989586621679358393"><span class="hs-identifier hs-type">ts</span></a></span></span><span> </span><span id="local-6989586621679358392"><span class="annot"><a href="#local-6989586621679358392"><span class="hs-identifier hs-type">l</span></a></span></span><span> </span><span id="local-6989586621679358391"><span class="annot"><a href="#local-6989586621679358391"><span class="hs-identifier hs-type">a</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span id="MultiToggle"><span class="annot"><a href="XMonad.Layout.MultiToggle.html#MultiToggle"><span class="hs-identifier hs-var">MultiToggle</span></a></span></span><span class="hs-special">{</span><span>
+</span><span id="line-126"></span><span>    </span><span id="currLayout"><span class="annot"><span class="annottext">MultiToggle ts l a -&gt; EL l a
+</span><a href="XMonad.Layout.MultiToggle.html#currLayout"><span class="hs-identifier hs-var hs-var">currLayout</span></a></span></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><a href="XMonad.Layout.MultiToggle.html#EL"><span class="hs-identifier hs-type">EL</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679358392"><span class="hs-identifier hs-type">l</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679358391"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">,</span><span>
+</span><span id="line-127"></span><span>    </span><span id="currIndex"><span class="annot"><span class="annottext">MultiToggle ts l a -&gt; Maybe Int
+</span><a href="XMonad.Layout.MultiToggle.html#currIndex"><span class="hs-identifier hs-var hs-var">currIndex</span></a></span></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Maybe</span></span><span> </span><span class="annot"><span class="hs-identifier hs-type">Int</span></span><span class="hs-special">,</span><span>
+</span><span id="line-128"></span><span>    </span><span id="transformers"><span class="annot"><span class="annottext">MultiToggle ts l a -&gt; ts
+</span><a href="XMonad.Layout.MultiToggle.html#transformers"><span class="hs-identifier hs-var hs-var">transformers</span></a></span></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><a href="#local-6989586621679358393"><span class="hs-identifier hs-type">ts</span></a></span><span>
+</span><span id="line-129"></span><span class="hs-special">}</span><span>
+</span><span id="line-130"></span><span>
+</span><span id="line-131"></span><span id="local-6989586621679358370"><span id="local-6989586621679358371"><span id="local-6989586621679358372"><span class="annot"><a href="XMonad.Layout.MultiToggle.html#expand"><span class="hs-identifier hs-type">expand</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">LayoutClass</span></span><span> </span><span class="annot"><a href="#local-6989586621679358372"><span class="hs-identifier hs-type">l</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679358371"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><a href="XMonad.Layout.MultiToggle.html#HList"><span class="hs-identifier hs-type">HList</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679358370"><span class="hs-identifier hs-type">ts</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679358371"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=&gt;</span><span> </span><span class="annot"><a href="XMonad.Layout.MultiToggle.html#MultiToggleS"><span class="hs-identifier hs-type">MultiToggleS</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679358370"><span class="hs-identifier hs-type">ts</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679358372"><span class="hs-identifier hs-type">l</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679358371"><span class="hs-identifier hs-type">a</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="XMonad.Layout.MultiToggle.html#MultiToggle"><span class="hs-identifier hs-type">MultiToggle</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679358370"><span class="hs-identifier hs-type">ts</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679358372"><span class="hs-identifier hs-type">l</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679358371"><span class="hs-identifier hs-type">a</span></a></span></span></span></span><span>
+</span><span id="line-132"></span><span id="expand"><span class="annot"><span class="annottext">expand :: MultiToggleS ts l a -&gt; MultiToggle ts l a
+</span><a href="XMonad.Layout.MultiToggle.html#expand"><span class="hs-identifier hs-var hs-var">expand</span></a></span></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="XMonad.Layout.MultiToggle.html#MultiToggleS"><span class="hs-identifier hs-type">MultiToggleS</span></a></span><span> </span><span id="local-6989586621679358224"><span class="annot"><span class="annottext">l a
+</span><a href="#local-6989586621679358224"><span class="hs-identifier hs-var">b</span></a></span></span><span> </span><span id="local-6989586621679358223"><span class="annot"><span class="annottext">Maybe Int
+</span><a href="#local-6989586621679358223"><span class="hs-identifier hs-var">i</span></a></span></span><span> </span><span id="local-6989586621679358222"><span class="annot"><span class="annottext">ts
+</span><a href="#local-6989586621679358222"><span class="hs-identifier hs-var">ts</span></a></span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=</span><span>
+</span><span id="line-133"></span><span>    </span><span class="annot"><span class="annottext">ts
+-&gt; Int
+-&gt; (MultiToggle ts l a -&gt; MultiToggle ts l a)
+-&gt; (forall t.
+    Transformer t a =&gt;
+    t -&gt; MultiToggle ts l a -&gt; MultiToggle ts l a)
+-&gt; MultiToggle ts l a
+-&gt; MultiToggle ts l a
+forall c a b.
+HList c a =&gt;
+c -&gt; Int -&gt; b -&gt; (forall t. Transformer t a =&gt; t -&gt; b) -&gt; b
+</span><a href="XMonad.Layout.MultiToggle.html#resolve"><span class="hs-identifier hs-var">resolve</span></a></span><span> </span><span class="annot"><span class="annottext">ts
+</span><a href="#local-6989586621679358222"><span class="hs-identifier hs-var">ts</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Int -&gt; Maybe Int -&gt; Int
+forall a. a -&gt; Maybe a -&gt; a
+</span><span class="hs-identifier hs-var">fromMaybe</span></span><span> </span><span class="hs-special">(</span><span class="hs-glyph">-</span><span class="annot"><span class="annottext">Int
+</span><span class="hs-number">1</span></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">Maybe Int
+</span><a href="#local-6989586621679358223"><span class="hs-identifier hs-var">i</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">MultiToggle ts l a -&gt; MultiToggle ts l a
+forall a. a -&gt; a
+</span><span class="hs-identifier hs-var">id</span></span><span>
+</span><span id="line-134"></span><span>        </span><span class="hs-special">(</span><span class="hs-glyph">\</span><span id="local-6989586621679358218"><span class="annot"><span class="annottext">t
+</span><a href="#local-6989586621679358218"><span class="hs-identifier hs-var">x</span></a></span></span><span> </span><span id="local-6989586621679358217"><span class="annot"><span class="annottext">MultiToggle ts l a
+</span><a href="#local-6989586621679358217"><span class="hs-identifier hs-var">mt</span></a></span></span><span> </span><span class="hs-glyph">-&gt;</span><span>
+</span><span id="line-135"></span><span>            </span><span class="hs-keyword">let</span><span> </span><span id="local-6989586621679358216"><span class="annot"><span class="annottext">g :: EL l a -&gt; EL l a
+</span><a href="#local-6989586621679358216"><span class="hs-identifier hs-var hs-var">g</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">t -&gt; EL l a -&gt; EL l a
+forall t a (l :: * -&gt; *).
+(Transformer t a, LayoutClass l a) =&gt;
+t -&gt; EL l a -&gt; EL l a
+</span><a href="XMonad.Layout.MultiToggle.html#transform%27"><span class="hs-identifier hs-var">transform'</span></a></span><span> </span><span class="annot"><span class="annottext">t
+</span><a href="#local-6989586621679358218"><span class="hs-identifier hs-var">x</span></a></span><span> </span><span class="hs-keyword">in</span><span> </span><span class="annot"><span class="annottext">MultiToggle ts l a
+</span><a href="#local-6989586621679358217"><span class="hs-identifier hs-var">mt</span></a></span><span class="hs-special">{</span><span> </span><span class="annot"><span class="annottext">currLayout :: EL l a
+</span><a href="XMonad.Layout.MultiToggle.html#currLayout"><span class="hs-identifier hs-var">currLayout</span></a></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">EL l a -&gt; EL l a
+</span><a href="#local-6989586621679358216"><span class="hs-identifier hs-var">g</span></a></span><span> </span><span class="annot"><span class="annottext">(EL l a -&gt; EL l a) -&gt; EL l a -&gt; EL l a
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">MultiToggle ts l a -&gt; EL l a
+forall ts (l :: * -&gt; *) a. MultiToggle ts l a -&gt; EL l a
+</span><a href="XMonad.Layout.MultiToggle.html#currLayout"><span class="hs-identifier hs-var hs-var">currLayout</span></a></span><span> </span><span class="annot"><span class="annottext">MultiToggle ts l a
+</span><a href="#local-6989586621679358217"><span class="hs-identifier hs-var">mt</span></a></span><span> </span><span class="hs-special">}</span><span>
+</span><span id="line-136"></span><span>        </span><span class="hs-special">)</span><span>
+</span><span id="line-137"></span><span>        </span><span class="hs-special">(</span><span class="annot"><span class="annottext">EL l a -&gt; Maybe Int -&gt; ts -&gt; MultiToggle ts l a
+forall ts (l :: * -&gt; *) a.
+EL l a -&gt; Maybe Int -&gt; ts -&gt; MultiToggle ts l a
+</span><a href="XMonad.Layout.MultiToggle.html#MultiToggle"><span class="hs-identifier hs-var">MultiToggle</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">l a -&gt; (l a -&gt; l a) -&gt; EL l a
+forall (l :: * -&gt; *) a (l' :: * -&gt; *).
+LayoutClass l' a =&gt;
+l' a -&gt; (l' a -&gt; l a) -&gt; EL l a
+</span><a href="XMonad.Layout.MultiToggle.html#EL"><span class="hs-identifier hs-var">EL</span></a></span><span> </span><span class="annot"><span class="annottext">l a
+</span><a href="#local-6989586621679358224"><span class="hs-identifier hs-var">b</span></a></span><span> </span><span class="annot"><span class="annottext">l a -&gt; l a
+forall a. a -&gt; a
+</span><span class="hs-identifier hs-var">id</span></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">Maybe Int
+</span><a href="#local-6989586621679358223"><span class="hs-identifier hs-var">i</span></a></span><span> </span><span class="annot"><span class="annottext">ts
+</span><a href="#local-6989586621679358222"><span class="hs-identifier hs-var">ts</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-138"></span><span>
+</span><span id="line-139"></span><span id="local-6989586621679358364"><span id="local-6989586621679358365"><span id="local-6989586621679358366"><span class="annot"><a href="XMonad.Layout.MultiToggle.html#collapse"><span class="hs-identifier hs-type">collapse</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">LayoutClass</span></span><span> </span><span class="annot"><a href="#local-6989586621679358366"><span class="hs-identifier hs-type">l</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679358365"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=&gt;</span><span> </span><span class="annot"><a href="XMonad.Layout.MultiToggle.html#MultiToggle"><span class="hs-identifier hs-type">MultiToggle</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679358364"><span class="hs-identifier hs-type">ts</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679358366"><span class="hs-identifier hs-type">l</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679358365"><span class="hs-identifier hs-type">a</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="XMonad.Layout.MultiToggle.html#MultiToggleS"><span class="hs-identifier hs-type">MultiToggleS</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679358364"><span class="hs-identifier hs-type">ts</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679358366"><span class="hs-identifier hs-type">l</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679358365"><span class="hs-identifier hs-type">a</span></a></span></span></span></span><span>
+</span><span id="line-140"></span><span id="collapse"><span class="annot"><span class="annottext">collapse :: MultiToggle ts l a -&gt; MultiToggleS ts l a
+</span><a href="XMonad.Layout.MultiToggle.html#collapse"><span class="hs-identifier hs-var hs-var">collapse</span></a></span></span><span> </span><span id="local-6989586621679358214"><span class="annot"><span class="annottext">MultiToggle ts l a
+</span><a href="#local-6989586621679358214"><span class="hs-identifier hs-var">mt</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">l a -&gt; Maybe Int -&gt; ts -&gt; MultiToggleS ts l a
+forall ts (l :: * -&gt; *) a.
+l a -&gt; Maybe Int -&gt; ts -&gt; MultiToggleS ts l a
+</span><a href="XMonad.Layout.MultiToggle.html#MultiToggleS"><span class="hs-identifier hs-var">MultiToggleS</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">EL l a -&gt; l a
+forall (l :: * -&gt; *) a. LayoutClass l a =&gt; EL l a -&gt; l a
+</span><a href="XMonad.Layout.MultiToggle.html#deEL"><span class="hs-identifier hs-var">deEL</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">MultiToggle ts l a -&gt; EL l a
+forall ts (l :: * -&gt; *) a. MultiToggle ts l a -&gt; EL l a
+</span><a href="XMonad.Layout.MultiToggle.html#currLayout"><span class="hs-identifier hs-var hs-var">currLayout</span></a></span><span> </span><span class="annot"><span class="annottext">MultiToggle ts l a
+</span><a href="#local-6989586621679358214"><span class="hs-identifier hs-var">mt</span></a></span><span class="hs-special">)</span><span class="hs-special">)</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">MultiToggle ts l a -&gt; Maybe Int
+forall ts (l :: * -&gt; *) a. MultiToggle ts l a -&gt; Maybe Int
+</span><a href="XMonad.Layout.MultiToggle.html#currIndex"><span class="hs-identifier hs-var hs-var">currIndex</span></a></span><span> </span><span class="annot"><span class="annottext">MultiToggle ts l a
+</span><a href="#local-6989586621679358214"><span class="hs-identifier hs-var">mt</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">MultiToggle ts l a -&gt; ts
+forall ts (l :: * -&gt; *) a. MultiToggle ts l a -&gt; ts
+</span><a href="XMonad.Layout.MultiToggle.html#transformers"><span class="hs-identifier hs-var hs-var">transformers</span></a></span><span> </span><span class="annot"><span class="annottext">MultiToggle ts l a
+</span><a href="#local-6989586621679358214"><span class="hs-identifier hs-var">mt</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-141"></span><span>
+</span><span id="line-142"></span><span id="local-6989586621679358211"><span id="local-6989586621679358212"><span id="local-6989586621679358213"><span class="hs-keyword">instance</span><span> </span><span id="local-6989586621679358204"><span id="local-6989586621679358206"><span id="local-6989586621679358208"><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">LayoutClass</span></span><span> </span><span class="annot"><a href="#local-6989586621679358213"><span class="hs-identifier hs-type">l</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679358212"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Read</span></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="#local-6989586621679358213"><span class="hs-identifier hs-type">l</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679358212"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">)</span><span class="hs-special">,</span><span> </span><span class="annot"><a href="XMonad.Layout.MultiToggle.html#HList"><span class="hs-identifier hs-type">HList</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679358211"><span class="hs-identifier hs-type">ts</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679358212"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Read</span></span><span> </span><span class="annot"><a href="#local-6989586621679358211"><span class="hs-identifier hs-type">ts</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Read</span></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="XMonad.Layout.MultiToggle.html#MultiToggle"><span class="hs-identifier hs-type">MultiToggle</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679358211"><span class="hs-identifier hs-type">ts</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679358213"><span class="hs-identifier hs-type">l</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679358212"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">)</span></span></span></span><span> </span><span class="hs-keyword">where</span><span>
+</span><span id="line-143"></span><span>    </span><span id="local-6989586621679358203"><span class="annot"><span class="annottext">readsPrec :: Int -&gt; ReadS (MultiToggle ts l a)
+</span><span class="hs-identifier hs-var hs-var hs-var hs-var">readsPrec</span></span></span><span> </span><span id="local-6989586621679358201"><span class="annot"><span class="annottext">Int
+</span><a href="#local-6989586621679358201"><span class="hs-identifier hs-var">p</span></a></span></span><span> </span><span id="local-6989586621679358200"><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679358200"><span class="hs-identifier hs-var">s</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">((MultiToggleS ts l a, String) -&gt; (MultiToggle ts l a, String))
+-&gt; [(MultiToggleS ts l a, String)]
+-&gt; [(MultiToggle ts l a, String)]
+forall a b. (a -&gt; b) -&gt; [a] -&gt; [b]
+</span><span class="hs-identifier hs-var">map</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">(MultiToggleS ts l a -&gt; MultiToggle ts l a)
+-&gt; (MultiToggleS ts l a, String) -&gt; (MultiToggle ts l a, String)
+forall (a :: * -&gt; * -&gt; *) b c d.
+Arrow a =&gt;
+a b c -&gt; a (b, d) (c, d)
+</span><span class="hs-identifier hs-var">first</span></span><span> </span><span class="annot"><span class="annottext">MultiToggleS ts l a -&gt; MultiToggle ts l a
+forall (l :: * -&gt; *) a ts.
+(LayoutClass l a, HList ts a) =&gt;
+MultiToggleS ts l a -&gt; MultiToggle ts l a
+</span><a href="XMonad.Layout.MultiToggle.html#expand"><span class="hs-identifier hs-var">expand</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">([(MultiToggleS ts l a, String)] -&gt; [(MultiToggle ts l a, String)])
+-&gt; [(MultiToggleS ts l a, String)]
+-&gt; [(MultiToggle ts l a, String)]
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">Int -&gt; ReadS (MultiToggleS ts l a)
+forall a. Read a =&gt; Int -&gt; ReadS a
+</span><span class="hs-identifier hs-var">readsPrec</span></span><span> </span><span class="annot"><span class="annottext">Int
+</span><a href="#local-6989586621679358201"><span class="hs-identifier hs-var">p</span></a></span><span> </span><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679358200"><span class="hs-identifier hs-var">s</span></a></span></span></span></span><span>
+</span><span id="line-144"></span><span>
+</span><span id="line-145"></span><span id="local-6989586621679358197"><span id="local-6989586621679358198"><span id="local-6989586621679358199"><span class="hs-keyword">instance</span><span> </span><span id="local-6989586621679358192"><span id="local-6989586621679358194"><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">Show</span></span><span> </span><span class="annot"><a href="#local-6989586621679358199"><span class="hs-identifier hs-type">ts</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Show</span></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="#local-6989586621679358198"><span class="hs-identifier hs-type">l</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679358197"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">)</span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier hs-type">LayoutClass</span></span><span> </span><span class="annot"><a href="#local-6989586621679358198"><span class="hs-identifier hs-type">l</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679358197"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Show</span></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="XMonad.Layout.MultiToggle.html#MultiToggle"><span class="hs-identifier hs-type">MultiToggle</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679358199"><span class="hs-identifier hs-type">ts</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679358198"><span class="hs-identifier hs-type">l</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679358197"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">)</span></span></span><span> </span><span class="hs-keyword">where</span><span>
+</span><span id="line-146"></span><span>    </span><span id="local-6989586621679358191"><span class="annot"><span class="annottext">showsPrec :: Int -&gt; MultiToggle ts l a -&gt; ShowS
+</span><span class="hs-identifier hs-var hs-var hs-var hs-var">showsPrec</span></span></span><span> </span><span id="local-6989586621679358189"><span class="annot"><span class="annottext">Int
+</span><a href="#local-6989586621679358189"><span class="hs-identifier hs-var">p</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Int -&gt; MultiToggleS ts l a -&gt; ShowS
+forall a. Show a =&gt; Int -&gt; a -&gt; ShowS
+</span><span class="hs-identifier hs-var">showsPrec</span></span><span> </span><span class="annot"><span class="annottext">Int
+</span><a href="#local-6989586621679358189"><span class="hs-identifier hs-var">p</span></a></span><span> </span><span class="annot"><span class="annottext">(MultiToggleS ts l a -&gt; ShowS)
+-&gt; (MultiToggle ts l a -&gt; MultiToggleS ts l a)
+-&gt; MultiToggle ts l a
+-&gt; ShowS
+forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">MultiToggle ts l a -&gt; MultiToggleS ts l a
+forall (l :: * -&gt; *) a ts.
+LayoutClass l a =&gt;
+MultiToggle ts l a -&gt; MultiToggleS ts l a
+</span><a href="XMonad.Layout.MultiToggle.html#collapse"><span class="hs-identifier hs-var">collapse</span></a></span></span></span></span><span>
+</span><span id="line-147"></span><span>
+</span><span id="line-148"></span><span class="hs-comment">-- | Construct a @MultiToggle@ layout from a transformer table and a base</span><span>
+</span><span id="line-149"></span><span class="hs-comment">-- layout.</span><span>
+</span><span id="line-150"></span><span id="local-6989586621679358352"><span id="local-6989586621679358353"><span id="local-6989586621679358354"><span class="annot"><a href="XMonad.Layout.MultiToggle.html#mkToggle"><span class="hs-identifier hs-type">mkToggle</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">LayoutClass</span></span><span> </span><span class="annot"><a href="#local-6989586621679358354"><span class="hs-identifier hs-type">l</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679358353"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=&gt;</span><span> </span><span class="annot"><a href="#local-6989586621679358352"><span class="hs-identifier hs-type">ts</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="#local-6989586621679358354"><span class="hs-identifier hs-type">l</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679358353"><span class="hs-identifier hs-type">a</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="XMonad.Layout.MultiToggle.html#MultiToggle"><span class="hs-identifier hs-type">MultiToggle</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679358352"><span class="hs-identifier hs-type">ts</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679358354"><span class="hs-identifier hs-type">l</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679358353"><span class="hs-identifier hs-type">a</span></a></span></span></span></span><span>
+</span><span id="line-151"></span><span id="mkToggle"><span class="annot"><span class="annottext">mkToggle :: ts -&gt; l a -&gt; MultiToggle ts l a
+</span><a href="XMonad.Layout.MultiToggle.html#mkToggle"><span class="hs-identifier hs-var hs-var">mkToggle</span></a></span></span><span> </span><span id="local-6989586621679358188"><span class="annot"><span class="annottext">ts
+</span><a href="#local-6989586621679358188"><span class="hs-identifier hs-var">ts</span></a></span></span><span> </span><span id="local-6989586621679358187"><span class="annot"><span class="annottext">l a
+</span><a href="#local-6989586621679358187"><span class="hs-identifier hs-var">l</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">EL l a -&gt; Maybe Int -&gt; ts -&gt; MultiToggle ts l a
+forall ts (l :: * -&gt; *) a.
+EL l a -&gt; Maybe Int -&gt; ts -&gt; MultiToggle ts l a
+</span><a href="XMonad.Layout.MultiToggle.html#MultiToggle"><span class="hs-identifier hs-var">MultiToggle</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">l a -&gt; (l a -&gt; l a) -&gt; EL l a
+forall (l :: * -&gt; *) a (l' :: * -&gt; *).
+LayoutClass l' a =&gt;
+l' a -&gt; (l' a -&gt; l a) -&gt; EL l a
+</span><a href="XMonad.Layout.MultiToggle.html#EL"><span class="hs-identifier hs-var">EL</span></a></span><span> </span><span class="annot"><span class="annottext">l a
+</span><a href="#local-6989586621679358187"><span class="hs-identifier hs-var">l</span></a></span><span> </span><span class="annot"><span class="annottext">l a -&gt; l a
+forall a. a -&gt; a
+</span><span class="hs-identifier hs-var">id</span></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">Maybe Int
+forall a. Maybe a
+</span><span class="hs-identifier hs-var">Nothing</span></span><span> </span><span class="annot"><span class="annottext">ts
+</span><a href="#local-6989586621679358188"><span class="hs-identifier hs-var">ts</span></a></span><span>
+</span><span id="line-152"></span><span>
+</span><span id="line-153"></span><span class="hs-comment">-- | Construct a @MultiToggle@ layout from a single transformer and a base</span><span>
+</span><span id="line-154"></span><span class="hs-comment">-- layout.</span><span>
+</span><span id="line-155"></span><span id="local-6989586621679358184"><span id="local-6989586621679358185"><span id="local-6989586621679358186"><span class="annot"><a href="XMonad.Layout.MultiToggle.html#mkToggle1"><span class="hs-identifier hs-type">mkToggle1</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">LayoutClass</span></span><span> </span><span class="annot"><a href="#local-6989586621679358186"><span class="hs-identifier hs-type">l</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679358185"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=&gt;</span><span> </span><span class="annot"><a href="#local-6989586621679358184"><span class="hs-identifier hs-type">t</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="#local-6989586621679358186"><span class="hs-identifier hs-type">l</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679358185"><span class="hs-identifier hs-type">a</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="XMonad.Layout.MultiToggle.html#MultiToggle"><span class="hs-identifier hs-type">MultiToggle</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="XMonad.Layout.MultiToggle.html#HCons"><span class="hs-identifier hs-type">HCons</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679358184"><span class="hs-identifier hs-type">t</span></a></span><span> </span><span class="annot"><a href="XMonad.Layout.MultiToggle.html#EOT"><span class="hs-identifier hs-type">EOT</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><a href="#local-6989586621679358186"><span class="hs-identifier hs-type">l</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679358185"><span class="hs-identifier hs-type">a</span></a></span></span></span></span><span>
+</span><span id="line-156"></span><span id="mkToggle1"><span class="annot"><span class="annottext">mkToggle1 :: t -&gt; l a -&gt; MultiToggle (HCons t EOT) l a
+</span><a href="XMonad.Layout.MultiToggle.html#mkToggle1"><span class="hs-identifier hs-var hs-var">mkToggle1</span></a></span></span><span> </span><span id="local-6989586621679358183"><span class="annot"><span class="annottext">t
+</span><a href="#local-6989586621679358183"><span class="hs-identifier hs-var">t</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">HCons t EOT -&gt; l a -&gt; MultiToggle (HCons t EOT) l a
+forall (l :: * -&gt; *) a ts.
+LayoutClass l a =&gt;
+ts -&gt; l a -&gt; MultiToggle ts l a
+</span><a href="XMonad.Layout.MultiToggle.html#mkToggle"><span class="hs-identifier hs-var">mkToggle</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">t -&gt; HCons t EOT
+forall a. a -&gt; HCons a EOT
+</span><a href="XMonad.Layout.MultiToggle.html#single"><span class="hs-identifier hs-var">single</span></a></span><span> </span><span class="annot"><span class="annottext">t
+</span><a href="#local-6989586621679358183"><span class="hs-identifier hs-var">t</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-157"></span><span>
+</span><span id="line-158"></span><span class="hs-comment">-- | Marks the end of a transformer list.</span><span>
+</span><span id="line-159"></span><span class="hs-keyword">data</span><span> </span><span id="EOT"><span class="annot"><a href="XMonad.Layout.MultiToggle.html#EOT"><span class="hs-identifier hs-var">EOT</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span id="EOT"><span class="annot"><a href="XMonad.Layout.MultiToggle.html#EOT"><span class="hs-identifier hs-var">EOT</span></a></span></span><span> </span><span class="hs-keyword">deriving</span><span> </span><span class="hs-special">(</span><span id="local-6989586621679358174"><span id="local-6989586621679358176"><span id="local-6989586621679358178"><span id="local-6989586621679358180"><span class="annot"><span class="annottext">ReadPrec [EOT]
+ReadPrec EOT
+Int -&gt; ReadS EOT
+ReadS [EOT]
+(Int -&gt; ReadS EOT)
+-&gt; ReadS [EOT] -&gt; ReadPrec EOT -&gt; ReadPrec [EOT] -&gt; Read EOT
+forall a.
+(Int -&gt; ReadS a)
+-&gt; ReadS [a] -&gt; ReadPrec a -&gt; ReadPrec [a] -&gt; Read a
+readListPrec :: ReadPrec [EOT]
+$creadListPrec :: ReadPrec [EOT]
+readPrec :: ReadPrec EOT
+$creadPrec :: ReadPrec EOT
+readList :: ReadS [EOT]
+$creadList :: ReadS [EOT]
+readsPrec :: Int -&gt; ReadS EOT
+$creadsPrec :: Int -&gt; ReadS EOT
+</span><span class="hs-identifier hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var">Read</span></span></span></span></span></span><span class="hs-special">,</span><span> </span><span id="local-6989586621679358168"><span id="local-6989586621679358170"><span id="local-6989586621679358172"><span class="annot"><span class="annottext">Int -&gt; EOT -&gt; ShowS
+[EOT] -&gt; ShowS
+EOT -&gt; String
+(Int -&gt; EOT -&gt; ShowS)
+-&gt; (EOT -&gt; String) -&gt; ([EOT] -&gt; ShowS) -&gt; Show EOT
+forall a.
+(Int -&gt; a -&gt; ShowS) -&gt; (a -&gt; String) -&gt; ([a] -&gt; ShowS) -&gt; Show a
+showList :: [EOT] -&gt; ShowS
+$cshowList :: [EOT] -&gt; ShowS
+show :: EOT -&gt; String
+$cshow :: EOT -&gt; String
+showsPrec :: Int -&gt; EOT -&gt; ShowS
+$cshowsPrec :: Int -&gt; EOT -&gt; ShowS
+</span><span class="hs-identifier hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var">Show</span></span></span></span></span><span class="hs-special">)</span><span>
+</span><span id="line-160"></span><span class="hs-keyword">data</span><span> </span><span id="HCons"><span class="annot"><a href="XMonad.Layout.MultiToggle.html#HCons"><span class="hs-identifier hs-var">HCons</span></a></span></span><span> </span><span id="local-6989586621679358344"><span class="annot"><a href="#local-6989586621679358344"><span class="hs-identifier hs-type">a</span></a></span></span><span> </span><span id="local-6989586621679358343"><span class="annot"><a href="#local-6989586621679358343"><span class="hs-identifier hs-type">b</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span id="HCons"><span class="annot"><a href="XMonad.Layout.MultiToggle.html#HCons"><span class="hs-identifier hs-var">HCons</span></a></span></span><span> </span><span class="annot"><a href="#local-6989586621679358344"><span class="hs-identifier hs-type">a</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679358343"><span class="hs-identifier hs-type">b</span></a></span><span> </span><span class="hs-keyword">deriving</span><span> </span><span class="hs-special">(</span><span id="local-6989586621679358159"><span id="local-6989586621679358161"><span id="local-6989586621679358163"><span id="local-6989586621679358165"><span class="annot"><span class="annottext">ReadPrec [HCons a b]
+ReadPrec (HCons a b)
+Int -&gt; ReadS (HCons a b)
+ReadS [HCons a b]
+(Int -&gt; ReadS (HCons a b))
+-&gt; ReadS [HCons a b]
+-&gt; ReadPrec (HCons a b)
+-&gt; ReadPrec [HCons a b]
+-&gt; Read (HCons a b)
+forall a.
+(Int -&gt; ReadS a)
+-&gt; ReadS [a] -&gt; ReadPrec a -&gt; ReadPrec [a] -&gt; Read a
+forall a b. (Read a, Read b) =&gt; ReadPrec [HCons a b]
+forall a b. (Read a, Read b) =&gt; ReadPrec (HCons a b)
+forall a b. (Read a, Read b) =&gt; Int -&gt; ReadS (HCons a b)
+forall a b. (Read a, Read b) =&gt; ReadS [HCons a b]
+readListPrec :: ReadPrec [HCons a b]
+$creadListPrec :: forall a b. (Read a, Read b) =&gt; ReadPrec [HCons a b]
+readPrec :: ReadPrec (HCons a b)
+$creadPrec :: forall a b. (Read a, Read b) =&gt; ReadPrec (HCons a b)
+readList :: ReadS [HCons a b]
+$creadList :: forall a b. (Read a, Read b) =&gt; ReadS [HCons a b]
+readsPrec :: Int -&gt; ReadS (HCons a b)
+$creadsPrec :: forall a b. (Read a, Read b) =&gt; Int -&gt; ReadS (HCons a b)
+</span><span class="hs-identifier hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var">Read</span></span></span></span></span></span><span class="hs-special">,</span><span> </span><span id="local-6989586621679358153"><span id="local-6989586621679358155"><span id="local-6989586621679358157"><span class="annot"><span class="annottext">Int -&gt; HCons a b -&gt; ShowS
+[HCons a b] -&gt; ShowS
+HCons a b -&gt; String
+(Int -&gt; HCons a b -&gt; ShowS)
+-&gt; (HCons a b -&gt; String)
+-&gt; ([HCons a b] -&gt; ShowS)
+-&gt; Show (HCons a b)
+forall a.
+(Int -&gt; a -&gt; ShowS) -&gt; (a -&gt; String) -&gt; ([a] -&gt; ShowS) -&gt; Show a
+forall a b. (Show a, Show b) =&gt; Int -&gt; HCons a b -&gt; ShowS
+forall a b. (Show a, Show b) =&gt; [HCons a b] -&gt; ShowS
+forall a b. (Show a, Show b) =&gt; HCons a b -&gt; String
+showList :: [HCons a b] -&gt; ShowS
+$cshowList :: forall a b. (Show a, Show b) =&gt; [HCons a b] -&gt; ShowS
+show :: HCons a b -&gt; String
+$cshow :: forall a b. (Show a, Show b) =&gt; HCons a b -&gt; String
+showsPrec :: Int -&gt; HCons a b -&gt; ShowS
+$cshowsPrec :: forall a b. (Show a, Show b) =&gt; Int -&gt; HCons a b -&gt; ShowS
+</span><span class="hs-identifier hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var">Show</span></span></span></span></span><span class="hs-special">)</span><span>
+</span><span id="line-161"></span><span>
+</span><span id="line-162"></span><span class="hs-keyword">infixr</span><span> </span><span class="hs-number">0</span><span> </span><span class="annot"><a href="XMonad.Layout.MultiToggle.html#%3F%3F"><span class="hs-operator hs-type">??</span></a></span><span>
+</span><span id="line-163"></span><span class="hs-comment">-- | Prepend an element to a heterogeneous list. Used to build transformer</span><span>
+</span><span id="line-164"></span><span class="hs-comment">-- tables for 'mkToggle'.</span><span>
+</span><span id="line-165"></span><span id="local-6989586621679358151"><span id="local-6989586621679358152"><span class="annot"><a href="XMonad.Layout.MultiToggle.html#%3F%3F"><span class="hs-operator hs-type">(??)</span></a></span><span> </span><span class="hs-glyph">::</span><span>  </span><span class="annot"><a href="#local-6989586621679358152"><span class="hs-identifier hs-type">a</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="#local-6989586621679358151"><span class="hs-identifier hs-type">b</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="XMonad.Layout.MultiToggle.html#HCons"><span class="hs-identifier hs-type">HCons</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679358152"><span class="hs-identifier hs-type">a</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679358151"><span class="hs-identifier hs-type">b</span></a></span></span></span><span>
+</span><span id="line-166"></span><span id="%3F%3F"><span class="annot"><span class="annottext">?? :: a -&gt; b -&gt; HCons a b
+</span><a href="XMonad.Layout.MultiToggle.html#%3F%3F"><span class="hs-operator hs-var hs-var">(??)</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">a -&gt; b -&gt; HCons a b
+forall a b. a -&gt; b -&gt; HCons a b
+</span><a href="XMonad.Layout.MultiToggle.html#HCons"><span class="hs-identifier hs-var">HCons</span></a></span><span>
+</span><span id="line-167"></span><span>
+</span><span id="line-168"></span><span class="hs-comment">-- | Construct a singleton transformer table.</span><span>
+</span><span id="line-169"></span><span id="local-6989586621679358351"><span class="annot"><a href="XMonad.Layout.MultiToggle.html#single"><span class="hs-identifier hs-type">single</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><a href="#local-6989586621679358351"><span class="hs-identifier hs-type">a</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="XMonad.Layout.MultiToggle.html#HCons"><span class="hs-identifier hs-type">HCons</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679358351"><span class="hs-identifier hs-type">a</span></a></span><span> </span><span class="annot"><a href="XMonad.Layout.MultiToggle.html#EOT"><span class="hs-identifier hs-type">EOT</span></a></span></span><span>
+</span><span id="line-170"></span><span id="single"><span class="annot"><span class="annottext">single :: a -&gt; HCons a EOT
+</span><a href="XMonad.Layout.MultiToggle.html#single"><span class="hs-identifier hs-var hs-var">single</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">a -&gt; EOT -&gt; HCons a EOT
+forall a b. a -&gt; b -&gt; HCons a b
+</span><a href="XMonad.Layout.MultiToggle.html#%3F%3F"><span class="hs-operator hs-var">??</span></a></span><span> </span><span class="annot"><span class="annottext">EOT
+</span><a href="XMonad.Layout.MultiToggle.html#EOT"><span class="hs-identifier hs-var">EOT</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-171"></span><span>
+</span><span id="line-172"></span><span class="hs-keyword">class</span><span> </span><span id="HList"><span class="annot"><a href="XMonad.Layout.MultiToggle.html#HList"><span class="hs-identifier hs-var">HList</span></a></span></span><span> </span><span id="local-6989586621679358406"><span class="annot"><a href="#local-6989586621679358406"><span class="hs-identifier hs-type">c</span></a></span></span><span> </span><span id="local-6989586621679358405"><span class="annot"><a href="#local-6989586621679358405"><span class="hs-identifier hs-type">a</span></a></span></span><span> </span><span class="hs-keyword">where</span><span>
+</span><span id="line-173"></span><span>    </span><span id="local-6989586621679358341"><span id="find"><span class="annot"><a href="XMonad.Layout.MultiToggle.html#find"><span class="hs-identifier hs-type">find</span></a></span></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="hs-special">(</span><span class="annot"><a href="XMonad.Layout.MultiToggle.html#Transformer"><span class="hs-identifier hs-type">Transformer</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679358341"><span class="hs-identifier hs-type">t</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679358405"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=&gt;</span><span> </span><span class="annot"><a href="#local-6989586621679358406"><span class="hs-identifier hs-type">c</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="#local-6989586621679358341"><span class="hs-identifier hs-type">t</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Maybe</span></span><span> </span><span class="annot"><span class="hs-identifier hs-type">Int</span></span></span><span>
+</span><span id="line-174"></span><span>    </span><span id="local-6989586621679358403"><span id="resolve"><span class="annot"><a href="XMonad.Layout.MultiToggle.html#resolve"><span class="hs-identifier hs-type">resolve</span></a></span></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><a href="#local-6989586621679358406"><span class="hs-identifier hs-type">c</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Int</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="#local-6989586621679358403"><span class="hs-identifier hs-type">b</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="hs-special">(</span><span class="hs-keyword">forall</span><span> </span><span id="local-6989586621679358407"><span class="annot"><a href="#local-6989586621679358407"><span class="hs-identifier hs-type">t</span></a></span></span><span class="hs-operator">.</span><span> </span><span class="hs-special">(</span><span class="annot"><a href="XMonad.Layout.MultiToggle.html#Transformer"><span class="hs-identifier hs-type">Transformer</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679358407"><span class="hs-identifier hs-type">t</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679358405"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=&gt;</span><span> </span><span class="annot"><a href="#local-6989586621679358407"><span class="hs-identifier hs-type">t</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="#local-6989586621679358403"><span class="hs-identifier hs-type">b</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="#local-6989586621679358403"><span class="hs-identifier hs-type">b</span></a></span></span><span>
+</span><span id="line-175"></span><span>
+</span><span id="line-176"></span><span id="local-6989586621679358149"><span class="hs-keyword">instance</span><span> </span><span class="annot"><a href="XMonad.Layout.MultiToggle.html#HList"><span class="hs-identifier hs-type">HList</span></a></span><span> </span><span class="annot"><a href="XMonad.Layout.MultiToggle.html#EOT"><span class="hs-identifier hs-type">EOT</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679358149"><span class="hs-identifier hs-type">w</span></a></span><span> </span><span class="hs-keyword">where</span><span>
+</span><span id="line-177"></span><span>    </span><span id="local-6989586621679358145"><span class="annot"><span class="annottext">find :: EOT -&gt; t -&gt; Maybe Int
+</span><a href="#local-6989586621679358145"><span class="hs-identifier hs-var hs-var hs-var hs-var">find</span></a></span></span><span> </span><span class="annot"><span class="annottext">EOT
+</span><a href="XMonad.Layout.MultiToggle.html#EOT"><span class="hs-identifier hs-var">EOT</span></a></span><span> </span><span class="annot"><span class="annottext">t
+</span><span class="hs-identifier">_</span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Maybe Int
+forall a. Maybe a
+</span><span class="hs-identifier hs-var">Nothing</span></span><span>
+</span><span id="line-178"></span><span>    </span><span id="local-6989586621679358144"><span class="annot"><span class="annottext">resolve :: EOT -&gt; Int -&gt; b -&gt; (forall t. Transformer t w =&gt; t -&gt; b) -&gt; b
+</span><a href="#local-6989586621679358144"><span class="hs-identifier hs-var hs-var hs-var hs-var">resolve</span></a></span></span><span> </span><span class="annot"><span class="annottext">EOT
+</span><a href="XMonad.Layout.MultiToggle.html#EOT"><span class="hs-identifier hs-var">EOT</span></a></span><span> </span><span class="annot"><span class="annottext">Int
+</span><span class="hs-identifier">_</span></span><span> </span><span id="local-6989586621679358143"><span class="annot"><span class="annottext">b
+</span><a href="#local-6989586621679358143"><span class="hs-identifier hs-var">d</span></a></span></span><span> </span><span class="annot"><span class="annottext">forall t. Transformer t w =&gt; t -&gt; b
+</span><span class="hs-identifier">_</span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">b
+</span><a href="#local-6989586621679358143"><span class="hs-identifier hs-var">d</span></a></span></span><span>
+</span><span id="line-179"></span><span>
+</span><span id="line-180"></span><span id="local-6989586621679358140"><span id="local-6989586621679358141"><span id="local-6989586621679358142"><span class="hs-keyword">instance</span><span> </span><span class="hs-special">(</span><span class="annot"><a href="XMonad.Layout.MultiToggle.html#Transformer"><span class="hs-identifier hs-type">Transformer</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679358142"><span class="hs-identifier hs-type">a</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679358141"><span class="hs-identifier hs-type">w</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><a href="XMonad.Layout.MultiToggle.html#HList"><span class="hs-identifier hs-type">HList</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679358140"><span class="hs-identifier hs-type">b</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679358141"><span class="hs-identifier hs-type">w</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=&gt;</span><span> </span><span class="annot"><a href="XMonad.Layout.MultiToggle.html#HList"><span class="hs-identifier hs-type">HList</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="XMonad.Layout.MultiToggle.html#HCons"><span class="hs-identifier hs-type">HCons</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679358142"><span class="hs-identifier hs-type">a</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679358140"><span class="hs-identifier hs-type">b</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><a href="#local-6989586621679358141"><span class="hs-identifier hs-type">w</span></a></span><span> </span><span class="hs-keyword">where</span><span>
+</span><span id="line-181"></span><span>    </span><span id="local-6989586621679358137"><span class="annot"><span class="annottext">find :: HCons a b -&gt; t -&gt; Maybe Int
+</span><a href="#local-6989586621679358137"><span class="hs-identifier hs-var hs-var hs-var hs-var">find</span></a></span></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="XMonad.Layout.MultiToggle.html#HCons"><span class="hs-identifier hs-type">HCons</span></a></span><span> </span><span id="local-6989586621679358136"><span class="annot"><span class="annottext">a
+</span><a href="#local-6989586621679358136"><span class="hs-identifier hs-var">x</span></a></span></span><span> </span><span id="local-6989586621679358135"><span class="annot"><span class="annottext">b
+</span><a href="#local-6989586621679358135"><span class="hs-identifier hs-var">xs</span></a></span></span><span class="hs-special">)</span><span> </span><span id="local-6989586621679358134"><span class="annot"><span class="annottext">t
+</span><a href="#local-6989586621679358134"><span class="hs-identifier hs-var">t</span></a></span></span><span>
+</span><span id="line-182"></span><span>        </span><span class="hs-glyph">|</span><span> </span><span class="annot"><span class="annottext">t
+</span><a href="#local-6989586621679358134"><span class="hs-identifier hs-var">t</span></a></span><span> </span><span class="annot"><span class="annottext">t -&gt; a -&gt; Bool
+forall a b. (Typeable a, Eq a, Typeable b) =&gt; a -&gt; b -&gt; Bool
+</span><a href="XMonad.Layout.MultiToggle.html#geq"><span class="hs-operator hs-var">`geq`</span></a></span><span> </span><span class="annot"><span class="annottext">a
+</span><a href="#local-6989586621679358136"><span class="hs-identifier hs-var">x</span></a></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Int -&gt; Maybe Int
+forall a. a -&gt; Maybe a
+</span><span class="hs-identifier hs-var">Just</span></span><span> </span><span class="annot"><span class="annottext">Int
+</span><span class="hs-number">0</span></span><span>
+</span><span id="line-183"></span><span>        </span><span class="hs-glyph">|</span><span> </span><span class="annot"><span class="annottext">Bool
+</span><span class="hs-identifier hs-var">otherwise</span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">(Int -&gt; Int) -&gt; Maybe Int -&gt; Maybe Int
+forall (f :: * -&gt; *) a b. Functor f =&gt; (a -&gt; b) -&gt; f a -&gt; f b
+</span><span class="hs-identifier hs-var">fmap</span></span><span> </span><span class="annot"><span class="annottext">Int -&gt; Int
+forall a. Enum a =&gt; a -&gt; a
+</span><span class="hs-identifier hs-var">succ</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">b -&gt; t -&gt; Maybe Int
+forall c a t. (HList c a, Transformer t a) =&gt; c -&gt; t -&gt; Maybe Int
+</span><a href="XMonad.Layout.MultiToggle.html#find"><span class="hs-identifier hs-var">find</span></a></span><span> </span><span class="annot"><span class="annottext">b
+</span><a href="#local-6989586621679358135"><span class="hs-identifier hs-var">xs</span></a></span><span> </span><span class="annot"><span class="annottext">t
+</span><a href="#local-6989586621679358134"><span class="hs-identifier hs-var">t</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-184"></span><span>    </span><span id="local-6989586621679358131"><span class="annot"><span class="annottext">resolve :: HCons a b -&gt; Int -&gt; b -&gt; (forall t. Transformer t w =&gt; t -&gt; b) -&gt; b
+</span><a href="#local-6989586621679358131"><span class="hs-identifier hs-var hs-var hs-var hs-var">resolve</span></a></span></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="XMonad.Layout.MultiToggle.html#HCons"><span class="hs-identifier hs-type">HCons</span></a></span><span> </span><span id="local-6989586621679358130"><span class="annot"><span class="annottext">a
+</span><a href="#local-6989586621679358130"><span class="hs-identifier hs-var">x</span></a></span></span><span> </span><span id="local-6989586621679358129"><span class="annot"><span class="annottext">b
+</span><a href="#local-6989586621679358129"><span class="hs-identifier hs-var">xs</span></a></span></span><span class="hs-special">)</span><span> </span><span id="local-6989586621679358128"><span class="annot"><span class="annottext">Int
+</span><a href="#local-6989586621679358128"><span class="hs-identifier hs-var">n</span></a></span></span><span> </span><span id="local-6989586621679358127"><span class="annot"><span class="annottext">b
+</span><a href="#local-6989586621679358127"><span class="hs-identifier hs-var">d</span></a></span></span><span> </span><span id="local-6989586621679358126"><span class="annot"><span class="annottext">forall t. Transformer t w =&gt; t -&gt; b
+</span><a href="#local-6989586621679358126"><span class="hs-identifier hs-var">k</span></a></span></span><span> </span><span class="hs-glyph">=</span><span>
+</span><span id="line-185"></span><span>        </span><span class="hs-keyword">case</span><span> </span><span class="annot"><span class="annottext">Int
+</span><a href="#local-6989586621679358128"><span class="hs-identifier hs-var">n</span></a></span><span> </span><span class="annot"><span class="annottext">Int -&gt; Int -&gt; Ordering
+forall a. Ord a =&gt; a -&gt; a -&gt; Ordering
+</span><span class="hs-operator hs-var">`compare`</span></span><span> </span><span class="annot"><span class="annottext">Int
+</span><span class="hs-number">0</span></span><span> </span><span class="hs-keyword">of</span><span>
+</span><span id="line-186"></span><span>            </span><span class="annot"><span class="annottext">Ordering
+</span><span class="hs-identifier hs-var">LT</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">b
+</span><a href="#local-6989586621679358127"><span class="hs-identifier hs-var">d</span></a></span><span>
+</span><span id="line-187"></span><span>            </span><span class="annot"><span class="annottext">Ordering
+</span><span class="hs-identifier hs-var">EQ</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">a -&gt; b
+forall t. Transformer t w =&gt; t -&gt; b
+</span><a href="#local-6989586621679358126"><span class="hs-identifier hs-var">k</span></a></span><span> </span><span class="annot"><span class="annottext">a
+</span><a href="#local-6989586621679358130"><span class="hs-identifier hs-var">x</span></a></span><span>
+</span><span id="line-188"></span><span>            </span><span class="annot"><span class="annottext">Ordering
+</span><span class="hs-identifier hs-var">GT</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">b -&gt; Int -&gt; b -&gt; (forall t. Transformer t w =&gt; t -&gt; b) -&gt; b
+forall c a b.
+HList c a =&gt;
+c -&gt; Int -&gt; b -&gt; (forall t. Transformer t a =&gt; t -&gt; b) -&gt; b
+</span><a href="XMonad.Layout.MultiToggle.html#resolve"><span class="hs-identifier hs-var">resolve</span></a></span><span> </span><span class="annot"><span class="annottext">b
+</span><a href="#local-6989586621679358129"><span class="hs-identifier hs-var">xs</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Int -&gt; Int
+forall a. Enum a =&gt; a -&gt; a
+</span><span class="hs-identifier hs-var">pred</span></span><span> </span><span class="annot"><span class="annottext">Int
+</span><a href="#local-6989586621679358128"><span class="hs-identifier hs-var">n</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">b
+</span><a href="#local-6989586621679358127"><span class="hs-identifier hs-var">d</span></a></span><span> </span><span class="annot"><span class="annottext">forall t. Transformer t w =&gt; t -&gt; b
+</span><a href="#local-6989586621679358126"><span class="hs-identifier hs-var">k</span></a></span></span></span></span><span>
+</span><span id="line-189"></span><span>
+</span><span id="line-190"></span><span id="local-6989586621679358332"><span id="local-6989586621679358333"><span class="annot"><a href="XMonad.Layout.MultiToggle.html#geq"><span class="hs-identifier hs-type">geq</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">Typeable</span></span><span> </span><span class="annot"><a href="#local-6989586621679358333"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Eq</span></span><span> </span><span class="annot"><a href="#local-6989586621679358333"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Typeable</span></span><span> </span><span class="annot"><a href="#local-6989586621679358332"><span class="hs-identifier hs-type">b</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=&gt;</span><span> </span><span class="annot"><a href="#local-6989586621679358333"><span class="hs-identifier hs-type">a</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="#local-6989586621679358332"><span class="hs-identifier hs-type">b</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Bool</span></span></span></span><span>
+</span><span id="line-191"></span><span id="geq"><span class="annot"><span class="annottext">geq :: a -&gt; b -&gt; Bool
+</span><a href="XMonad.Layout.MultiToggle.html#geq"><span class="hs-identifier hs-var hs-var">geq</span></a></span></span><span> </span><span id="local-6989586621679358123"><span class="annot"><span class="annottext">a
+</span><a href="#local-6989586621679358123"><span class="hs-identifier hs-var">a</span></a></span></span><span> </span><span id="local-6989586621679358122"><span class="annot"><span class="annottext">b
+</span><a href="#local-6989586621679358122"><span class="hs-identifier hs-var">b</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">a -&gt; Maybe a
+forall a. a -&gt; Maybe a
+</span><span class="hs-identifier hs-var">Just</span></span><span> </span><span class="annot"><span class="annottext">a
+</span><a href="#local-6989586621679358123"><span class="hs-identifier hs-var">a</span></a></span><span> </span><span class="annot"><span class="annottext">Maybe a -&gt; Maybe a -&gt; Bool
+forall a. Eq a =&gt; a -&gt; a -&gt; Bool
+</span><span class="hs-operator hs-var">==</span></span><span> </span><span class="annot"><span class="annottext">b -&gt; Maybe a
+forall a b. (Typeable a, Typeable b) =&gt; a -&gt; Maybe b
+</span><span class="hs-identifier hs-var">cast</span></span><span> </span><span class="annot"><span class="annottext">b
+</span><a href="#local-6989586621679358122"><span class="hs-identifier hs-var">b</span></a></span><span>
+</span><span id="line-192"></span><span>
+</span><span id="line-193"></span><span id="local-6989586621679358118"><span id="local-6989586621679358119"><span id="local-6989586621679358120"><span class="hs-keyword">instance</span><span> </span><span id="local-6989586621679358106"><span id="local-6989586621679358109"><span id="local-6989586621679358111"><span id="local-6989586621679358113"><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">Typeable</span></span><span> </span><span class="annot"><a href="#local-6989586621679358120"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Show</span></span><span> </span><span class="annot"><a href="#local-6989586621679358119"><span class="hs-identifier hs-type">ts</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Typeable</span></span><span> </span><span class="annot"><a href="#local-6989586621679358119"><span class="hs-identifier hs-type">ts</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><a href="XMonad.Layout.MultiToggle.html#HList"><span class="hs-identifier hs-type">HList</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679358119"><span class="hs-identifier hs-type">ts</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679358120"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier hs-type">LayoutClass</span></span><span> </span><span class="annot"><a href="#local-6989586621679358118"><span class="hs-identifier hs-type">l</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679358120"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">LayoutClass</span></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="XMonad.Layout.MultiToggle.html#MultiToggle"><span class="hs-identifier hs-type">MultiToggle</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679358119"><span class="hs-identifier hs-type">ts</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679358118"><span class="hs-identifier hs-type">l</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><a href="#local-6989586621679358120"><span class="hs-identifier hs-type">a</span></a></span></span></span></span></span><span> </span><span class="hs-keyword">where</span><span>
+</span><span id="line-194"></span><span>    </span><span id="local-6989586621679358103"><span class="annot"><span class="annottext">description :: MultiToggle ts l a -&gt; String
+</span><span class="hs-identifier hs-var hs-var hs-var hs-var">description</span></span></span><span> </span><span id="local-6989586621679358101"><span class="annot"><span class="annottext">MultiToggle ts l a
+</span><a href="#local-6989586621679358101"><span class="hs-identifier hs-var">mt</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">MultiToggle ts l a -&gt; EL l a
+forall ts (l :: * -&gt; *) a. MultiToggle ts l a -&gt; EL l a
+</span><a href="XMonad.Layout.MultiToggle.html#currLayout"><span class="hs-identifier hs-var hs-var">currLayout</span></a></span><span> </span><span class="annot"><span class="annottext">MultiToggle ts l a
+</span><a href="#local-6989586621679358101"><span class="hs-identifier hs-var">mt</span></a></span><span> </span><span class="annot"><span class="annottext">EL l a
+-&gt; (forall (l' :: * -&gt; *). LayoutClass l' a =&gt; l' a -&gt; String)
+-&gt; String
+forall (l :: * -&gt; *) a b.
+LayoutClass l a =&gt;
+EL l a
+-&gt; (forall (l' :: * -&gt; *). LayoutClass l' a =&gt; l' a -&gt; b) -&gt; b
+</span><a href="XMonad.Layout.MultiToggle.html#unEL"><span class="hs-operator hs-var">`unEL`</span></a></span><span> </span><span class="hs-glyph">\</span><span id="local-6989586621679358100"><span class="annot"><span class="annottext">l' a
+</span><a href="#local-6989586621679358100"><span class="hs-identifier hs-var">l</span></a></span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">l' a -&gt; String
+forall (layout :: * -&gt; *) a.
+LayoutClass layout a =&gt;
+layout a -&gt; String
+</span><span class="hs-identifier hs-var">description</span></span><span> </span><span class="annot"><span class="annottext">l' a
+</span><a href="#local-6989586621679358100"><span class="hs-identifier hs-var">l</span></a></span><span>
+</span><span id="line-195"></span><span>
+</span><span id="line-196"></span><span>    </span><span id="local-6989586621679358099"><span class="annot"><span class="annottext">runLayout :: Workspace String (MultiToggle ts l a) a
+-&gt; Rectangle -&gt; X ([(a, Rectangle)], Maybe (MultiToggle ts l a))
+</span><span class="hs-identifier hs-var hs-var hs-var hs-var">runLayout</span></span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">Workspace</span></span><span> </span><span id="local-6989586621679358096"><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679358096"><span class="hs-identifier hs-var">i</span></a></span></span><span> </span><span id="local-6989586621679358095"><span class="annot"><span class="annottext">MultiToggle ts l a
+</span><a href="#local-6989586621679358095"><span class="hs-identifier hs-var">mt</span></a></span></span><span> </span><span id="local-6989586621679358094"><span class="annot"><span class="annottext">Maybe (Stack a)
+</span><a href="#local-6989586621679358094"><span class="hs-identifier hs-var">s</span></a></span></span><span class="hs-special">)</span><span> </span><span id="local-6989586621679358093"><span class="annot"><span class="annottext">Rectangle
+</span><a href="#local-6989586621679358093"><span class="hs-identifier hs-var">r</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-keyword">case</span><span> </span><span class="annot"><span class="annottext">MultiToggle ts l a -&gt; EL l a
+forall ts (l :: * -&gt; *) a. MultiToggle ts l a -&gt; EL l a
+</span><a href="XMonad.Layout.MultiToggle.html#currLayout"><span class="hs-identifier hs-var hs-var">currLayout</span></a></span><span> </span><span class="annot"><span class="annottext">MultiToggle ts l a
+</span><a href="#local-6989586621679358095"><span class="hs-identifier hs-var">mt</span></a></span><span> </span><span class="hs-keyword">of</span><span>
+</span><span id="line-197"></span><span>        </span><span class="annot"><a href="XMonad.Layout.MultiToggle.html#EL"><span class="hs-identifier hs-type">EL</span></a></span><span> </span><span id="local-6989586621679358092"><span class="annot"><span class="annottext">l' a
+</span><a href="#local-6989586621679358092"><span class="hs-identifier hs-var">l</span></a></span></span><span> </span><span id="local-6989586621679358091"><span class="annot"><span class="annottext">l' a -&gt; l a
+</span><a href="#local-6989586621679358091"><span class="hs-identifier hs-var">det</span></a></span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">(Maybe (l' a) -&gt; Maybe (MultiToggle ts l a))
+-&gt; ([(a, Rectangle)], Maybe (l' a))
+-&gt; ([(a, Rectangle)], Maybe (MultiToggle ts l a))
+forall (f :: * -&gt; *) a b. Functor f =&gt; (a -&gt; b) -&gt; f a -&gt; f b
+</span><span class="hs-identifier hs-var">fmap</span></span><span> </span><span class="annot"><span class="annottext">((Maybe (l' a) -&gt; Maybe (MultiToggle ts l a))
+ -&gt; ([(a, Rectangle)], Maybe (l' a))
+ -&gt; ([(a, Rectangle)], Maybe (MultiToggle ts l a)))
+-&gt; ((l' a -&gt; MultiToggle ts l a)
+    -&gt; Maybe (l' a) -&gt; Maybe (MultiToggle ts l a))
+-&gt; (l' a -&gt; MultiToggle ts l a)
+-&gt; ([(a, Rectangle)], Maybe (l' a))
+-&gt; ([(a, Rectangle)], Maybe (MultiToggle ts l a))
+forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">(l' a -&gt; MultiToggle ts l a)
+-&gt; Maybe (l' a) -&gt; Maybe (MultiToggle ts l a)
+forall (f :: * -&gt; *) a b. Functor f =&gt; (a -&gt; b) -&gt; f a -&gt; f b
+</span><span class="hs-identifier hs-var">fmap</span></span><span> </span><span class="annot"><span class="annottext">((l' a -&gt; MultiToggle ts l a)
+ -&gt; ([(a, Rectangle)], Maybe (l' a))
+ -&gt; ([(a, Rectangle)], Maybe (MultiToggle ts l a)))
+-&gt; (l' a -&gt; MultiToggle ts l a)
+-&gt; ([(a, Rectangle)], Maybe (l' a))
+-&gt; ([(a, Rectangle)], Maybe (MultiToggle ts l a))
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="hs-special">(</span><span class="hs-glyph">\</span><span id="local-6989586621679358090"><span class="annot"><span class="annottext">l' a
+</span><a href="#local-6989586621679358090"><span class="hs-identifier hs-var">x</span></a></span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">MultiToggle ts l a
+</span><a href="#local-6989586621679358095"><span class="hs-identifier hs-var">mt</span></a></span><span> </span><span class="hs-special">{</span><span> </span><span class="annot"><span class="annottext">currLayout :: EL l a
+</span><a href="XMonad.Layout.MultiToggle.html#currLayout"><span class="hs-identifier hs-var">currLayout</span></a></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">l' a -&gt; (l' a -&gt; l a) -&gt; EL l a
+forall (l :: * -&gt; *) a (l' :: * -&gt; *).
+LayoutClass l' a =&gt;
+l' a -&gt; (l' a -&gt; l a) -&gt; EL l a
+</span><a href="XMonad.Layout.MultiToggle.html#EL"><span class="hs-identifier hs-var">EL</span></a></span><span> </span><span class="annot"><span class="annottext">l' a
+</span><a href="#local-6989586621679358090"><span class="hs-identifier hs-var">x</span></a></span><span> </span><span class="annot"><span class="annottext">l' a -&gt; l a
+</span><a href="#local-6989586621679358091"><span class="hs-identifier hs-var">det</span></a></span><span> </span><span class="hs-special">}</span><span class="hs-special">)</span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">(([(a, Rectangle)], Maybe (l' a))
+ -&gt; ([(a, Rectangle)], Maybe (MultiToggle ts l a)))
+-&gt; X ([(a, Rectangle)], Maybe (l' a))
+-&gt; X ([(a, Rectangle)], Maybe (MultiToggle ts l a))
+forall (f :: * -&gt; *) a b. Functor f =&gt; (a -&gt; b) -&gt; f a -&gt; f b
+</span><span class="hs-operator hs-var">&lt;$&gt;</span></span><span>
+</span><span id="line-198"></span><span>            </span><span class="annot"><span class="annottext">Workspace String (l' a) a
+-&gt; Rectangle -&gt; X ([(a, Rectangle)], Maybe (l' a))
+forall (layout :: * -&gt; *) a.
+LayoutClass layout a =&gt;
+Workspace String (layout a) a
+-&gt; Rectangle -&gt; X ([(a, Rectangle)], Maybe (layout a))
+</span><span class="hs-identifier hs-var">runLayout</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">String -&gt; l' a -&gt; Maybe (Stack a) -&gt; Workspace String (l' a) a
+forall i l a. i -&gt; l -&gt; Maybe (Stack a) -&gt; Workspace i l a
+</span><span class="hs-identifier hs-var">Workspace</span></span><span> </span><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679358096"><span class="hs-identifier hs-var">i</span></a></span><span> </span><span class="annot"><span class="annottext">l' a
+</span><a href="#local-6989586621679358092"><span class="hs-identifier hs-var">l</span></a></span><span> </span><span class="annot"><span class="annottext">Maybe (Stack a)
+</span><a href="#local-6989586621679358094"><span class="hs-identifier hs-var">s</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">Rectangle
+</span><a href="#local-6989586621679358093"><span class="hs-identifier hs-var">r</span></a></span><span>
+</span><span id="line-199"></span><span>
+</span><span id="line-200"></span><span>    </span><span id="local-6989586621679358088"><span class="annot"><span class="annottext">handleMessage :: MultiToggle ts l a -&gt; SomeMessage -&gt; X (Maybe (MultiToggle ts l a))
+</span><span class="hs-identifier hs-var hs-var hs-var hs-var">handleMessage</span></span></span><span> </span><span id="local-6989586621679358086"><span class="annot"><span class="annottext">MultiToggle ts l a
+</span><a href="#local-6989586621679358086"><span class="hs-identifier hs-var">mt</span></a></span></span><span> </span><span id="local-6989586621679358085"><span class="annot"><span class="annottext">SomeMessage
+</span><a href="#local-6989586621679358085"><span class="hs-identifier hs-var">m</span></a></span></span><span>
+</span><span id="line-201"></span><span>        </span><span class="hs-glyph">|</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Just</span></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="XMonad.Layout.MultiToggle.html#Toggle"><span class="hs-identifier hs-type">Toggle</span></a></span><span> </span><span id="local-6989586621679358084"><span class="annot"><span class="annottext">t
+</span><a href="#local-6989586621679358084"><span class="hs-identifier hs-var">t</span></a></span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">SomeMessage -&gt; Maybe (Toggle a)
+forall m. Message m =&gt; SomeMessage -&gt; Maybe m
+</span><span class="hs-identifier hs-var">fromMessage</span></span><span> </span><span class="annot"><span class="annottext">SomeMessage
+</span><a href="#local-6989586621679358085"><span class="hs-identifier hs-var">m</span></a></span><span>
+</span><span id="line-202"></span><span>        </span><span class="hs-special">,</span><span> </span><span id="local-6989586621679358082"><span class="annot"><span class="annottext">i :: Maybe Int
+</span><a href="#local-6989586621679358082"><span class="hs-identifier hs-var">i</span></a></span></span><span class="hs-glyph">@</span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">Just</span></span><span> </span><span class="annot"><span class="annottext">Int
+</span><span class="hs-identifier">_</span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">ts -&gt; t -&gt; Maybe Int
+forall c a t. (HList c a, Transformer t a) =&gt; c -&gt; t -&gt; Maybe Int
+</span><a href="XMonad.Layout.MultiToggle.html#find"><span class="hs-identifier hs-var">find</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">MultiToggle ts l a -&gt; ts
+forall ts (l :: * -&gt; *) a. MultiToggle ts l a -&gt; ts
+</span><a href="XMonad.Layout.MultiToggle.html#transformers"><span class="hs-identifier hs-var hs-var">transformers</span></a></span><span> </span><span class="annot"><span class="annottext">MultiToggle ts l a
+</span><a href="#local-6989586621679358086"><span class="hs-identifier hs-var">mt</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">t
+</span><a href="#local-6989586621679358084"><span class="hs-identifier hs-var">t</span></a></span><span>
+</span><span id="line-203"></span><span>            </span><span class="hs-glyph">=</span><span> </span><span class="hs-keyword">case</span><span> </span><span class="annot"><span class="annottext">MultiToggle ts l a -&gt; EL l a
+forall ts (l :: * -&gt; *) a. MultiToggle ts l a -&gt; EL l a
+</span><a href="XMonad.Layout.MultiToggle.html#currLayout"><span class="hs-identifier hs-var hs-var">currLayout</span></a></span><span> </span><span class="annot"><span class="annottext">MultiToggle ts l a
+</span><a href="#local-6989586621679358086"><span class="hs-identifier hs-var">mt</span></a></span><span> </span><span class="hs-keyword">of</span><span>
+</span><span id="line-204"></span><span>                </span><span class="annot"><a href="XMonad.Layout.MultiToggle.html#EL"><span class="hs-identifier hs-type">EL</span></a></span><span> </span><span id="local-6989586621679358081"><span class="annot"><span class="annottext">l' a
+</span><a href="#local-6989586621679358081"><span class="hs-identifier hs-var">l</span></a></span></span><span> </span><span id="local-6989586621679358080"><span class="annot"><span class="annottext">l' a -&gt; l a
+</span><a href="#local-6989586621679358080"><span class="hs-identifier hs-var">det</span></a></span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-205"></span><span>                    </span><span id="local-6989586621679358079"><span class="annot"><span class="annottext">l' a
+</span><a href="#local-6989586621679358079"><span class="hs-identifier hs-var">l'</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">l' a -&gt; Maybe (l' a) -&gt; l' a
+forall a. a -&gt; Maybe a -&gt; a
+</span><span class="hs-identifier hs-var">fromMaybe</span></span><span> </span><span class="annot"><span class="annottext">l' a
+</span><a href="#local-6989586621679358081"><span class="hs-identifier hs-var">l</span></a></span><span> </span><span class="annot"><span class="annottext">(Maybe (l' a) -&gt; l' a) -&gt; X (Maybe (l' a)) -&gt; X (l' a)
+forall (f :: * -&gt; *) a b. Functor f =&gt; (a -&gt; b) -&gt; f a -&gt; f b
+</span><span class="hs-operator hs-var">&lt;$&gt;</span></span><span> </span><span class="annot"><span class="annottext">l' a -&gt; SomeMessage -&gt; X (Maybe (l' a))
+forall (layout :: * -&gt; *) a.
+LayoutClass layout a =&gt;
+layout a -&gt; SomeMessage -&gt; X (Maybe (layout a))
+</span><span class="hs-identifier hs-var">handleMessage</span></span><span> </span><span class="annot"><span class="annottext">l' a
+</span><a href="#local-6989586621679358081"><span class="hs-identifier hs-var">l</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">LayoutMessages -&gt; SomeMessage
+forall a. Message a =&gt; a -&gt; SomeMessage
+</span><span class="hs-identifier hs-var">SomeMessage</span></span><span> </span><span class="annot"><span class="annottext">LayoutMessages
+</span><span class="hs-identifier hs-var">ReleaseResources</span></span><span class="hs-special">)</span><span>
+</span><span id="line-206"></span><span>                    </span><span class="annot"><span class="annottext">Maybe (MultiToggle ts l a) -&gt; X (Maybe (MultiToggle ts l a))
+forall (m :: * -&gt; *) a. Monad m =&gt; a -&gt; m a
+</span><span class="hs-identifier hs-var">return</span></span><span> </span><span class="annot"><span class="annottext">(Maybe (MultiToggle ts l a) -&gt; X (Maybe (MultiToggle ts l a)))
+-&gt; (MultiToggle ts l a -&gt; Maybe (MultiToggle ts l a))
+-&gt; MultiToggle ts l a
+-&gt; X (Maybe (MultiToggle ts l a))
+forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">MultiToggle ts l a -&gt; Maybe (MultiToggle ts l a)
+forall a. a -&gt; Maybe a
+</span><span class="hs-identifier hs-var">Just</span></span><span> </span><span class="annot"><span class="annottext">(MultiToggle ts l a -&gt; X (Maybe (MultiToggle ts l a)))
+-&gt; MultiToggle ts l a -&gt; X (Maybe (MultiToggle ts l a))
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span>
+</span><span id="line-207"></span><span>                        </span><span class="annot"><span class="annottext">MultiToggle ts l a
+</span><a href="#local-6989586621679358086"><span class="hs-identifier hs-var">mt</span></a></span><span> </span><span class="hs-special">{</span><span>
+</span><span id="line-208"></span><span>                            </span><span class="annot"><span class="annottext">currLayout :: EL l a
+</span><a href="XMonad.Layout.MultiToggle.html#currLayout"><span class="hs-identifier hs-var">currLayout</span></a></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-special">(</span><span class="hs-keyword">if</span><span> </span><span class="annot"><span class="annottext">Bool
+</span><a href="#local-6989586621679358076"><span class="hs-identifier hs-var">cur</span></a></span><span> </span><span class="hs-keyword">then</span><span> </span><span class="annot"><span class="annottext">EL l a -&gt; EL l a
+forall a. a -&gt; a
+</span><span class="hs-identifier hs-var">id</span></span><span> </span><span class="hs-keyword">else</span><span> </span><span class="annot"><span class="annottext">t -&gt; EL l a -&gt; EL l a
+forall t a (l :: * -&gt; *).
+(Transformer t a, LayoutClass l a) =&gt;
+t -&gt; EL l a -&gt; EL l a
+</span><a href="XMonad.Layout.MultiToggle.html#transform%27"><span class="hs-identifier hs-var">transform'</span></a></span><span> </span><span class="annot"><span class="annottext">t
+</span><a href="#local-6989586621679358084"><span class="hs-identifier hs-var">t</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">l a -&gt; (l a -&gt; l a) -&gt; EL l a
+forall (l :: * -&gt; *) a (l' :: * -&gt; *).
+LayoutClass l' a =&gt;
+l' a -&gt; (l' a -&gt; l a) -&gt; EL l a
+</span><a href="XMonad.Layout.MultiToggle.html#EL"><span class="hs-identifier hs-var">EL</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">l' a -&gt; l a
+</span><a href="#local-6989586621679358080"><span class="hs-identifier hs-var">det</span></a></span><span> </span><span class="annot"><span class="annottext">l' a
+</span><a href="#local-6989586621679358079"><span class="hs-identifier hs-var">l'</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">l a -&gt; l a
+forall a. a -&gt; a
+</span><span class="hs-identifier hs-var">id</span></span><span class="hs-special">)</span><span class="hs-special">,</span><span>
+</span><span id="line-209"></span><span>                            </span><span class="annot"><span class="annottext">currIndex :: Maybe Int
+</span><a href="XMonad.Layout.MultiToggle.html#currIndex"><span class="hs-identifier hs-var">currIndex</span></a></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-keyword">if</span><span> </span><span class="annot"><span class="annottext">Bool
+</span><a href="#local-6989586621679358076"><span class="hs-identifier hs-var">cur</span></a></span><span> </span><span class="hs-keyword">then</span><span> </span><span class="annot"><span class="annottext">Maybe Int
+forall a. Maybe a
+</span><span class="hs-identifier hs-var">Nothing</span></span><span> </span><span class="hs-keyword">else</span><span> </span><span class="annot"><span class="annottext">Maybe Int
+</span><a href="#local-6989586621679358082"><span class="hs-identifier hs-var">i</span></a></span><span>
+</span><span id="line-210"></span><span>                        </span><span class="hs-special">}</span><span>
+</span><span id="line-211"></span><span>                    </span><span class="hs-keyword">where</span><span> </span><span id="local-6989586621679358076"><span class="annot"><span class="annottext">cur :: Bool
+</span><a href="#local-6989586621679358076"><span class="hs-identifier hs-var hs-var">cur</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Maybe Int
+</span><a href="#local-6989586621679358082"><span class="hs-identifier hs-var">i</span></a></span><span> </span><span class="annot"><span class="annottext">Maybe Int -&gt; Maybe Int -&gt; Bool
+forall a. Eq a =&gt; a -&gt; a -&gt; Bool
+</span><span class="hs-operator hs-var">==</span></span><span> </span><span class="annot"><span class="annottext">MultiToggle ts l a -&gt; Maybe Int
+forall ts (l :: * -&gt; *) a. MultiToggle ts l a -&gt; Maybe Int
+</span><a href="XMonad.Layout.MultiToggle.html#currIndex"><span class="hs-identifier hs-var hs-var">currIndex</span></a></span><span> </span><span class="annot"><span class="annottext">MultiToggle ts l a
+</span><a href="#local-6989586621679358086"><span class="hs-identifier hs-var">mt</span></a></span><span>
+</span><span id="line-212"></span><span>        </span><span class="hs-glyph">|</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Just</span></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="XMonad.Layout.MultiToggle.html#MultiToggleActiveQueryMessage"><span class="hs-identifier hs-type">MultiToggleActiveQueryMessage</span></a></span><span> </span><span id="local-6989586621679358074"><span class="annot"><span class="annottext">t
+</span><a href="#local-6989586621679358074"><span class="hs-identifier hs-var">t</span></a></span></span><span> </span><span id="local-6989586621679358073"><span class="annot"><span class="annottext">IORef (Maybe Bool)
+</span><a href="#local-6989586621679358073"><span class="hs-identifier hs-var">ref</span></a></span></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><a href="XMonad.Layout.MultiToggle.html#MultiToggleActiveQueryMessage"><span class="hs-identifier hs-type">MultiToggleActiveQueryMessage</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679358120"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">SomeMessage -&gt; Maybe (MultiToggleActiveQueryMessage a)
+forall m. Message m =&gt; SomeMessage -&gt; Maybe m
+</span><span class="hs-identifier hs-var">fromMessage</span></span><span> </span><span class="annot"><span class="annottext">SomeMessage
+</span><a href="#local-6989586621679358085"><span class="hs-identifier hs-var">m</span></a></span><span>
+</span><span id="line-213"></span><span>        </span><span class="hs-special">,</span><span> </span><span id="local-6989586621679358072"><span class="annot"><span class="annottext">i :: Maybe Int
+</span><a href="#local-6989586621679358072"><span class="hs-identifier hs-var">i</span></a></span></span><span class="hs-glyph">@</span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">Just</span></span><span> </span><span class="annot"><span class="annottext">Int
+</span><span class="hs-identifier">_</span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">ts -&gt; t -&gt; Maybe Int
+forall c a t. (HList c a, Transformer t a) =&gt; c -&gt; t -&gt; Maybe Int
+</span><a href="XMonad.Layout.MultiToggle.html#find"><span class="hs-identifier hs-var">find</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">MultiToggle ts l a -&gt; ts
+forall ts (l :: * -&gt; *) a. MultiToggle ts l a -&gt; ts
+</span><a href="XMonad.Layout.MultiToggle.html#transformers"><span class="hs-identifier hs-var hs-var">transformers</span></a></span><span> </span><span class="annot"><span class="annottext">MultiToggle ts l a
+</span><a href="#local-6989586621679358086"><span class="hs-identifier hs-var">mt</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">t
+</span><a href="#local-6989586621679358074"><span class="hs-identifier hs-var">t</span></a></span><span>
+</span><span id="line-214"></span><span>            </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Maybe (MultiToggle ts l a)
+forall a. Maybe a
+</span><span class="hs-identifier hs-var">Nothing</span></span><span> </span><span class="annot"><span class="annottext">Maybe (MultiToggle ts l a)
+-&gt; X () -&gt; X (Maybe (MultiToggle ts l a))
+forall (f :: * -&gt; *) a b. Functor f =&gt; a -&gt; f b -&gt; f a
+</span><span class="hs-operator hs-var">&lt;$</span></span><span> </span><span class="annot"><span class="annottext">IO () -&gt; X ()
+forall (m :: * -&gt; *) a. MonadIO m =&gt; IO a -&gt; m a
+</span><span class="hs-identifier hs-var">io</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">IORef (Maybe Bool) -&gt; Maybe Bool -&gt; IO ()
+forall a. IORef a -&gt; a -&gt; IO ()
+</span><span class="hs-identifier hs-var">writeIORef</span></span><span> </span><span class="annot"><span class="annottext">IORef (Maybe Bool)
+</span><a href="#local-6989586621679358073"><span class="hs-identifier hs-var">ref</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Bool -&gt; Maybe Bool
+forall a. a -&gt; Maybe a
+</span><span class="hs-identifier hs-var">Just</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Maybe Int
+</span><a href="#local-6989586621679358072"><span class="hs-identifier hs-var">i</span></a></span><span> </span><span class="annot"><span class="annottext">Maybe Int -&gt; Maybe Int -&gt; Bool
+forall a. Eq a =&gt; a -&gt; a -&gt; Bool
+</span><span class="hs-operator hs-var">==</span></span><span> </span><span class="annot"><span class="annottext">MultiToggle ts l a -&gt; Maybe Int
+forall ts (l :: * -&gt; *) a. MultiToggle ts l a -&gt; Maybe Int
+</span><a href="XMonad.Layout.MultiToggle.html#currIndex"><span class="hs-identifier hs-var hs-var">currIndex</span></a></span><span> </span><span class="annot"><span class="annottext">MultiToggle ts l a
+</span><a href="#local-6989586621679358086"><span class="hs-identifier hs-var">mt</span></a></span><span class="hs-special">)</span><span class="hs-special">)</span><span class="hs-special">)</span><span>
+</span><span id="line-215"></span><span>        </span><span class="hs-glyph">|</span><span> </span><span class="annot"><span class="annottext">Bool
+</span><span class="hs-identifier hs-var">otherwise</span></span><span>
+</span><span id="line-216"></span><span>            </span><span class="hs-glyph">=</span><span> </span><span class="hs-keyword">case</span><span> </span><span class="annot"><span class="annottext">MultiToggle ts l a -&gt; EL l a
+forall ts (l :: * -&gt; *) a. MultiToggle ts l a -&gt; EL l a
+</span><a href="XMonad.Layout.MultiToggle.html#currLayout"><span class="hs-identifier hs-var hs-var">currLayout</span></a></span><span> </span><span class="annot"><span class="annottext">MultiToggle ts l a
+</span><a href="#local-6989586621679358086"><span class="hs-identifier hs-var">mt</span></a></span><span> </span><span class="hs-keyword">of</span><span>
+</span><span id="line-217"></span><span>                </span><span class="annot"><a href="XMonad.Layout.MultiToggle.html#EL"><span class="hs-identifier hs-type">EL</span></a></span><span> </span><span id="local-6989586621679358068"><span class="annot"><span class="annottext">l' a
+</span><a href="#local-6989586621679358068"><span class="hs-identifier hs-var">l</span></a></span></span><span> </span><span id="local-6989586621679358067"><span class="annot"><span class="annottext">l' a -&gt; l a
+</span><a href="#local-6989586621679358067"><span class="hs-identifier hs-var">det</span></a></span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">(l' a -&gt; MultiToggle ts l a)
+-&gt; Maybe (l' a) -&gt; Maybe (MultiToggle ts l a)
+forall (f :: * -&gt; *) a b. Functor f =&gt; (a -&gt; b) -&gt; f a -&gt; f b
+</span><span class="hs-identifier hs-var">fmap</span></span><span> </span><span class="hs-special">(</span><span class="hs-glyph">\</span><span id="local-6989586621679358066"><span class="annot"><span class="annottext">l' a
+</span><a href="#local-6989586621679358066"><span class="hs-identifier hs-var">x</span></a></span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">MultiToggle ts l a
+</span><a href="#local-6989586621679358086"><span class="hs-identifier hs-var">mt</span></a></span><span> </span><span class="hs-special">{</span><span> </span><span class="annot"><span class="annottext">currLayout :: EL l a
+</span><a href="XMonad.Layout.MultiToggle.html#currLayout"><span class="hs-identifier hs-var">currLayout</span></a></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">l' a -&gt; (l' a -&gt; l a) -&gt; EL l a
+forall (l :: * -&gt; *) a (l' :: * -&gt; *).
+LayoutClass l' a =&gt;
+l' a -&gt; (l' a -&gt; l a) -&gt; EL l a
+</span><a href="XMonad.Layout.MultiToggle.html#EL"><span class="hs-identifier hs-var">EL</span></a></span><span> </span><span class="annot"><span class="annottext">l' a
+</span><a href="#local-6989586621679358066"><span class="hs-identifier hs-var">x</span></a></span><span> </span><span class="annot"><span class="annottext">l' a -&gt; l a
+</span><a href="#local-6989586621679358067"><span class="hs-identifier hs-var">det</span></a></span><span> </span><span class="hs-special">}</span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">(Maybe (l' a) -&gt; Maybe (MultiToggle ts l a))
+-&gt; X (Maybe (l' a)) -&gt; X (Maybe (MultiToggle ts l a))
+forall (f :: * -&gt; *) a b. Functor f =&gt; (a -&gt; b) -&gt; f a -&gt; f b
+</span><span class="hs-operator hs-var">&lt;$&gt;</span></span><span>
+</span><span id="line-218"></span><span>                    </span><span class="annot"><span class="annottext">l' a -&gt; SomeMessage -&gt; X (Maybe (l' a))
+forall (layout :: * -&gt; *) a.
+LayoutClass layout a =&gt;
+layout a -&gt; SomeMessage -&gt; X (Maybe (layout a))
+</span><span class="hs-identifier hs-var">handleMessage</span></span><span> </span><span class="annot"><span class="annottext">l' a
+</span><a href="#local-6989586621679358068"><span class="hs-identifier hs-var">l</span></a></span><span> </span><span class="annot"><span class="annottext">SomeMessage
+</span><a href="#local-6989586621679358085"><span class="hs-identifier hs-var">m</span></a></span></span></span></span><span>
+</span><span id="line-219"></span><span>
+</span><span id="line-220"></span><span class="hs-keyword">data</span><span> </span><span id="MultiToggleActiveQueryMessage"><span class="annot"><a href="XMonad.Layout.MultiToggle.html#MultiToggleActiveQueryMessage"><span class="hs-identifier hs-var">MultiToggleActiveQueryMessage</span></a></span></span><span> </span><span id="local-6989586621679358275"><span class="annot"><a href="#local-6989586621679358275"><span class="hs-identifier hs-type">a</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-keyword">forall</span><span> </span><span id="local-6989586621679358276"><span class="annot"><a href="#local-6989586621679358276"><span class="hs-identifier hs-type">t</span></a></span></span><span class="hs-operator">.</span><span> </span><span class="hs-special">(</span><span class="annot"><a href="XMonad.Layout.MultiToggle.html#Transformer"><span class="hs-identifier hs-type">Transformer</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679358276"><span class="hs-identifier hs-type">t</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679358275"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=&gt;</span><span>
+</span><span id="line-221"></span><span>    </span><span id="MultiToggleActiveQueryMessage"><span class="annot"><a href="XMonad.Layout.MultiToggle.html#MultiToggleActiveQueryMessage"><span class="hs-identifier hs-var">MultiToggleActiveQueryMessage</span></a></span></span><span> </span><span class="annot"><a href="#local-6989586621679358276"><span class="hs-identifier hs-type">t</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">IORef</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">Maybe</span></span><span> </span><span class="annot"><span class="hs-identifier hs-type">Bool</span></span><span class="hs-special">)</span><span class="hs-special">)</span><span>
+</span><span id="line-222"></span><span>
+</span><span id="line-223"></span><span id="local-6989586621679358065"><span class="hs-keyword">instance</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">Typeable</span></span><span> </span><span class="annot"><a href="#local-6989586621679358065"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Message</span></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="XMonad.Layout.MultiToggle.html#MultiToggleActiveQueryMessage"><span class="hs-identifier hs-type">MultiToggleActiveQueryMessage</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679358065"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">)</span></span><span>
+</span><span id="line-224"></span><span>
+</span><span id="line-225"></span><span class="hs-comment">-- | Query the state of a 'Transformer' on a given workspace.</span><span>
+</span><span id="line-226"></span><span class="hs-comment">--</span><span>
+</span><span id="line-227"></span><span class="hs-comment">-- To query the current workspace, use something like this:</span><span>
+</span><span id="line-228"></span><span class="hs-comment">--</span><span>
+</span><span id="line-229"></span><span class="hs-comment">-- &gt; withWindowSet (isToggleActive t . W.workspace . W.current)</span><span>
+</span><span id="line-230"></span><span id="local-6989586621679358063"><span class="annot"><a href="XMonad.Layout.MultiToggle.html#isToggleActive"><span class="hs-identifier hs-type">isToggleActive</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><a href="XMonad.Layout.MultiToggle.html#Transformer"><span class="hs-identifier hs-type">Transformer</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679358063"><span class="hs-identifier hs-type">t</span></a></span><span> </span><span class="annot"><span class="hs-identifier hs-type">Window</span></span><span> </span><span class="hs-glyph">=&gt;</span><span> </span><span class="annot"><a href="#local-6989586621679358063"><span class="hs-identifier hs-type">t</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">WindowSpace</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">X</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">Maybe</span></span><span> </span><span class="annot"><span class="hs-identifier hs-type">Bool</span></span><span class="hs-special">)</span></span><span>
+</span><span id="line-231"></span><span id="isToggleActive"><span class="annot"><span class="annottext">isToggleActive :: t -&gt; WindowSpace -&gt; X (Maybe Bool)
+</span><a href="XMonad.Layout.MultiToggle.html#isToggleActive"><span class="hs-identifier hs-var hs-var">isToggleActive</span></a></span></span><span> </span><span id="local-6989586621679358062"><span class="annot"><span class="annottext">t
+</span><a href="#local-6989586621679358062"><span class="hs-identifier hs-var">t</span></a></span></span><span> </span><span id="local-6989586621679358061"><span class="annot"><span class="annottext">WindowSpace
+</span><a href="#local-6989586621679358061"><span class="hs-identifier hs-var">w</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-232"></span><span>    </span><span id="local-6989586621679358060"><span class="annot"><span class="annottext">IORef (Maybe Bool)
+</span><a href="#local-6989586621679358060"><span class="hs-identifier hs-var">ref</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">IO (IORef (Maybe Bool)) -&gt; X (IORef (Maybe Bool))
+forall (m :: * -&gt; *) a. MonadIO m =&gt; IO a -&gt; m a
+</span><span class="hs-identifier hs-var">io</span></span><span> </span><span class="annot"><span class="annottext">(IO (IORef (Maybe Bool)) -&gt; X (IORef (Maybe Bool)))
+-&gt; IO (IORef (Maybe Bool)) -&gt; X (IORef (Maybe Bool))
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">Maybe Bool -&gt; IO (IORef (Maybe Bool))
+forall a. a -&gt; IO (IORef a)
+</span><span class="hs-identifier hs-var">newIORef</span></span><span> </span><span class="annot"><span class="annottext">Maybe Bool
+forall a. Maybe a
+</span><span class="hs-identifier hs-var">Nothing</span></span><span>
+</span><span id="line-233"></span><span>    </span><span class="annot"><span class="annottext">MultiToggleActiveQueryMessage Window -&gt; WindowSpace -&gt; X ()
+forall a. Message a =&gt; a -&gt; WindowSpace -&gt; X ()
+</span><span class="hs-identifier hs-var">sendMessageWithNoRefresh</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">t -&gt; IORef (Maybe Bool) -&gt; MultiToggleActiveQueryMessage Window
+forall a t.
+Transformer t a =&gt;
+t -&gt; IORef (Maybe Bool) -&gt; MultiToggleActiveQueryMessage a
+</span><a href="XMonad.Layout.MultiToggle.html#MultiToggleActiveQueryMessage"><span class="hs-identifier hs-var">MultiToggleActiveQueryMessage</span></a></span><span> </span><span class="annot"><span class="annottext">t
+</span><a href="#local-6989586621679358062"><span class="hs-identifier hs-var">t</span></a></span><span> </span><span class="annot"><span class="annottext">IORef (Maybe Bool)
+</span><a href="#local-6989586621679358060"><span class="hs-identifier hs-var">ref</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">WindowSpace
+</span><a href="#local-6989586621679358061"><span class="hs-identifier hs-var">w</span></a></span><span>
+</span><span id="line-234"></span><span>    </span><span class="annot"><span class="annottext">IO (Maybe Bool) -&gt; X (Maybe Bool)
+forall (m :: * -&gt; *) a. MonadIO m =&gt; IO a -&gt; m a
+</span><span class="hs-identifier hs-var">io</span></span><span> </span><span class="annot"><span class="annottext">(IO (Maybe Bool) -&gt; X (Maybe Bool))
+-&gt; IO (Maybe Bool) -&gt; X (Maybe Bool)
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">IORef (Maybe Bool) -&gt; IO (Maybe Bool)
+forall a. IORef a -&gt; IO a
+</span><span class="hs-identifier hs-var">readIORef</span></span><span> </span><span class="annot"><span class="annottext">IORef (Maybe Bool)
+</span><a href="#local-6989586621679358060"><span class="hs-identifier hs-var">ref</span></a></span><span>
+</span><span id="line-235"></span></pre></body></html>

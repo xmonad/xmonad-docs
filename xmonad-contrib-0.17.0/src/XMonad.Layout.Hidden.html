@@ -1,0 +1,468 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd"><html xmlns="http://www.w3.org/1999/xhtml"><head><link rel="stylesheet" type="text/css" href="style.css" /><script type="text/javascript" src="highlight.js"></script></head><body><pre><span class="hs-pragma">{-# LANGUAGE FlexibleContexts, MultiParamTypeClasses, TypeSynonymInstances, PatternGuards #-}</span><span>
+</span><span id="line-2"></span><span>
+</span><span id="line-3"></span><span class="hs-comment">----------------------------------------------------------------------------</span><span>
+</span><span id="line-4"></span><span class="hs-comment">-- |</span><span>
+</span><span id="line-5"></span><span class="hs-comment">-- Module      :  XMonad.Layout.Hidden</span><span>
+</span><span id="line-6"></span><span class="hs-comment">-- Description :  Hide windows from layouts.</span><span>
+</span><span id="line-7"></span><span class="hs-comment">-- Copyright   :  (c) Peter Jones 2015</span><span>
+</span><span id="line-8"></span><span class="hs-comment">-- License     :  BSD3-style (see LICENSE)</span><span>
+</span><span id="line-9"></span><span class="hs-comment">--</span><span>
+</span><span id="line-10"></span><span class="hs-comment">-- Maintainer  :  pjones@devalot.com</span><span>
+</span><span id="line-11"></span><span class="hs-comment">-- Stability   :  unstable</span><span>
+</span><span id="line-12"></span><span class="hs-comment">-- Portability :  not portable</span><span>
+</span><span id="line-13"></span><span class="hs-comment">--</span><span>
+</span><span id="line-14"></span><span class="hs-comment">-- Similar to &quot;XMonad.Layout.Minimize&quot; but completely removes windows</span><span>
+</span><span id="line-15"></span><span class="hs-comment">-- from the window set so &quot;XMonad.Layout.BoringWindows&quot; isn't</span><span>
+</span><span id="line-16"></span><span class="hs-comment">-- necessary.  Perfect companion to</span><span>
+</span><span id="line-17"></span><span class="hs-comment">-- &quot;XMonad.Layout.BinarySpacePartition&quot; since it can be used to move</span><span>
+</span><span id="line-18"></span><span class="hs-comment">-- windows to another part of the BSP tree.</span><span>
+</span><span id="line-19"></span><span class="hs-comment">--</span><span>
+</span><span id="line-20"></span><span class="hs-comment">-----------------------------------------------------------------------------</span><span>
+</span><span id="line-21"></span><span class="hs-keyword">module</span><span> </span><span class="hs-identifier">XMonad.Layout.Hidden</span><span>
+</span><span id="line-22"></span><span>       </span><span class="hs-special">(</span><span> </span><span class="annot"><span class="hs-comment">-- * Usage</span></span><span>
+</span><span id="line-23"></span><span>         </span><span class="annot"><span class="hs-comment">-- $usage</span></span><span>
+</span><span id="line-24"></span><span>         </span><span class="annot"><a href="XMonad.Layout.Hidden.html#HiddenWindows"><span class="hs-identifier">HiddenWindows</span></a></span><span>
+</span><span id="line-25"></span><span>       </span><span class="hs-special">,</span><span> </span><span class="annot"><a href="XMonad.Layout.Hidden.html#HiddenMsg"><span class="hs-identifier">HiddenMsg</span></a></span><span> </span><span class="hs-special">(</span><span class="hs-glyph">..</span><span class="hs-special">)</span><span>
+</span><span id="line-26"></span><span>       </span><span class="hs-special">,</span><span> </span><span class="annot"><a href="XMonad.Layout.Hidden.html#hiddenWindows"><span class="hs-identifier">hiddenWindows</span></a></span><span>
+</span><span id="line-27"></span><span>       </span><span class="hs-special">,</span><span> </span><span class="annot"><a href="XMonad.Layout.Hidden.html#hideWindow"><span class="hs-identifier">hideWindow</span></a></span><span>
+</span><span id="line-28"></span><span>       </span><span class="hs-special">,</span><span> </span><span class="annot"><a href="XMonad.Layout.Hidden.html#popOldestHiddenWindow"><span class="hs-identifier">popOldestHiddenWindow</span></a></span><span>
+</span><span id="line-29"></span><span>       </span><span class="hs-special">,</span><span> </span><span class="annot"><a href="XMonad.Layout.Hidden.html#popNewestHiddenWindow"><span class="hs-identifier">popNewestHiddenWindow</span></a></span><span>
+</span><span id="line-30"></span><span>       </span><span class="hs-special">,</span><span> </span><span class="annot"><a href="XMonad.Layout.Hidden.html#popHiddenWindow"><span class="hs-identifier">popHiddenWindow</span></a></span><span>
+</span><span id="line-31"></span><span>       </span><span class="hs-special">)</span><span> </span><span class="hs-keyword">where</span><span>
+</span><span id="line-32"></span><span>
+</span><span id="line-33"></span><span class="hs-comment">--------------------------------------------------------------------------------</span><span>
+</span><span id="line-34"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><span class="hs-identifier">XMonad</span></span><span>
+</span><span id="line-35"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><a href="XMonad.Layout.LayoutModifier.html"><span class="hs-identifier">XMonad.Layout.LayoutModifier</span></a></span><span>
+</span><span id="line-36"></span><span class="hs-keyword">import</span><span> </span><span class="hs-keyword">qualified</span><span> </span><span class="annot"><span class="hs-identifier">XMonad.StackSet</span></span><span> </span><span class="hs-keyword">as</span><span> </span><span class="annot"><span class="hs-identifier">W</span></span><span>
+</span><span id="line-37"></span><span>
+</span><span id="line-38"></span><span class="hs-comment">--------------------------------------------------------------------------------</span><span>
+</span><span id="line-39"></span><span class="hs-comment">-- $usage</span><span>
+</span><span id="line-40"></span><span class="hs-comment">-- You can use this module with the following in your @~\/.xmonad\/xmonad.hs@:</span><span>
+</span><span id="line-41"></span><span class="hs-comment">--</span><span>
+</span><span id="line-42"></span><span class="hs-comment">-- &gt; import XMonad.Layout.Hidden</span><span>
+</span><span id="line-43"></span><span class="hs-comment">--</span><span>
+</span><span id="line-44"></span><span class="hs-comment">-- Then edit your @layoutHook@ by adding the @HiddenWindows@ layout modifier:</span><span>
+</span><span id="line-45"></span><span class="hs-comment">--</span><span>
+</span><span id="line-46"></span><span class="hs-comment">-- &gt; myLayout = hiddenWindows (Tall 1 (3/100) (1/2)) ||| Full ||| etc..</span><span>
+</span><span id="line-47"></span><span class="hs-comment">-- &gt; main = xmonad def { layoutHook = myLayout }</span><span>
+</span><span id="line-48"></span><span class="hs-comment">--</span><span>
+</span><span id="line-49"></span><span class="hs-comment">-- For more detailed instructions on editing the layoutHook see:</span><span>
+</span><span id="line-50"></span><span class="hs-comment">--</span><span>
+</span><span id="line-51"></span><span class="hs-comment">-- &quot;XMonad.Doc.Extending#Editing_the_layout_hook&quot;</span><span>
+</span><span id="line-52"></span><span class="hs-comment">--</span><span>
+</span><span id="line-53"></span><span class="hs-comment">-- In the key bindings, do something like:</span><span>
+</span><span id="line-54"></span><span class="hs-comment">--</span><span>
+</span><span id="line-55"></span><span class="hs-comment">-- &gt;        , ((modMask, xK_backslash), withFocused hideWindow)</span><span>
+</span><span id="line-56"></span><span class="hs-comment">-- &gt;        , ((modMask .|. shiftMask, xK_backslash), popOldestHiddenWindow)</span><span>
+</span><span id="line-57"></span><span class="hs-comment">-- &gt;        ...</span><span>
+</span><span id="line-58"></span><span class="hs-comment">--</span><span>
+</span><span id="line-59"></span><span class="hs-comment">-- For detailed instruction on editing the key bindings see:</span><span>
+</span><span id="line-60"></span><span class="hs-comment">--</span><span>
+</span><span id="line-61"></span><span class="hs-comment">-- &quot;XMonad.Doc.Extending#Editing_key_bindings&quot;.</span><span>
+</span><span id="line-62"></span><span>
+</span><span id="line-63"></span><span class="hs-comment">--------------------------------------------------------------------------------</span><span>
+</span><span id="line-64"></span><span class="hs-keyword">newtype</span><span> </span><span id="HiddenWindows"><span class="annot"><a href="XMonad.Layout.Hidden.html#HiddenWindows"><span class="hs-identifier hs-var">HiddenWindows</span></a></span></span><span> </span><span id="local-6989586621679362872"><span class="annot"><a href="#local-6989586621679362872"><span class="hs-identifier hs-type">a</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span id="HiddenWindows"><span class="annot"><a href="XMonad.Layout.Hidden.html#HiddenWindows"><span class="hs-identifier hs-var">HiddenWindows</span></a></span></span><span> </span><span class="hs-special">[</span><span class="annot"><span class="hs-identifier hs-type">Window</span></span><span class="hs-special">]</span><span> </span><span class="hs-keyword">deriving</span><span> </span><span class="hs-special">(</span><span id="local-6989586621679362835"><span id="local-6989586621679362837"><span id="local-6989586621679362839"><span class="annot"><span class="annottext">Int -&gt; HiddenWindows a -&gt; ShowS
+[HiddenWindows a] -&gt; ShowS
+HiddenWindows a -&gt; String
+(Int -&gt; HiddenWindows a -&gt; ShowS)
+-&gt; (HiddenWindows a -&gt; String)
+-&gt; ([HiddenWindows a] -&gt; ShowS)
+-&gt; Show (HiddenWindows a)
+forall a. Int -&gt; HiddenWindows a -&gt; ShowS
+forall a. [HiddenWindows a] -&gt; ShowS
+forall a. HiddenWindows a -&gt; String
+forall a.
+(Int -&gt; a -&gt; ShowS) -&gt; (a -&gt; String) -&gt; ([a] -&gt; ShowS) -&gt; Show a
+showList :: [HiddenWindows a] -&gt; ShowS
+$cshowList :: forall a. [HiddenWindows a] -&gt; ShowS
+show :: HiddenWindows a -&gt; String
+$cshow :: forall a. HiddenWindows a -&gt; String
+showsPrec :: Int -&gt; HiddenWindows a -&gt; ShowS
+$cshowsPrec :: forall a. Int -&gt; HiddenWindows a -&gt; ShowS
+</span><span class="hs-identifier hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var">Show</span></span></span></span></span><span class="hs-special">,</span><span> </span><span id="local-6989586621679362826"><span id="local-6989586621679362828"><span id="local-6989586621679362830"><span id="local-6989586621679362832"><span class="annot"><span class="annottext">ReadPrec [HiddenWindows a]
+ReadPrec (HiddenWindows a)
+Int -&gt; ReadS (HiddenWindows a)
+ReadS [HiddenWindows a]
+(Int -&gt; ReadS (HiddenWindows a))
+-&gt; ReadS [HiddenWindows a]
+-&gt; ReadPrec (HiddenWindows a)
+-&gt; ReadPrec [HiddenWindows a]
+-&gt; Read (HiddenWindows a)
+forall a. ReadPrec [HiddenWindows a]
+forall a. ReadPrec (HiddenWindows a)
+forall a. Int -&gt; ReadS (HiddenWindows a)
+forall a. ReadS [HiddenWindows a]
+forall a.
+(Int -&gt; ReadS a)
+-&gt; ReadS [a] -&gt; ReadPrec a -&gt; ReadPrec [a] -&gt; Read a
+readListPrec :: ReadPrec [HiddenWindows a]
+$creadListPrec :: forall a. ReadPrec [HiddenWindows a]
+readPrec :: ReadPrec (HiddenWindows a)
+$creadPrec :: forall a. ReadPrec (HiddenWindows a)
+readList :: ReadS [HiddenWindows a]
+$creadList :: forall a. ReadS [HiddenWindows a]
+readsPrec :: Int -&gt; ReadS (HiddenWindows a)
+$creadsPrec :: forall a. Int -&gt; ReadS (HiddenWindows a)
+</span><span class="hs-identifier hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var">Read</span></span></span></span></span></span><span class="hs-special">)</span><span>
+</span><span id="line-65"></span><span>
+</span><span id="line-66"></span><span class="hs-comment">--------------------------------------------------------------------------------</span><span>
+</span><span id="line-67"></span><span class="hs-comment">-- | Messages for the @HiddenWindows@ layout modifier.</span><span>
+</span><span id="line-68"></span><span class="hs-keyword">data</span><span> </span><span id="HiddenMsg"><span class="annot"><a href="XMonad.Layout.Hidden.html#HiddenMsg"><span class="hs-identifier hs-var">HiddenMsg</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span id="HideWindow"><span class="annot"><a href="XMonad.Layout.Hidden.html#HideWindow"><span class="hs-identifier hs-var">HideWindow</span></a></span></span><span> </span><span class="annot"><span class="hs-identifier hs-type">Window</span></span><span>                </span><span class="hs-comment">-- ^ Hide a window.</span><span>
+</span><span id="line-69"></span><span>               </span><span class="hs-glyph">|</span><span> </span><span id="PopNewestHiddenWindow"><span class="annot"><a href="XMonad.Layout.Hidden.html#PopNewestHiddenWindow"><span class="hs-identifier hs-var">PopNewestHiddenWindow</span></a></span></span><span>            </span><span class="hs-comment">-- ^ Restore window (FILO).</span><span>
+</span><span id="line-70"></span><span>               </span><span class="hs-glyph">|</span><span> </span><span id="PopOldestHiddenWindow"><span class="annot"><a href="XMonad.Layout.Hidden.html#PopOldestHiddenWindow"><span class="hs-identifier hs-var">PopOldestHiddenWindow</span></a></span></span><span>            </span><span class="hs-comment">-- ^ Restore window (FIFO).</span><span>
+</span><span id="line-71"></span><span>               </span><span class="hs-glyph">|</span><span> </span><span id="PopSpecificHiddenWindow"><span class="annot"><a href="XMonad.Layout.Hidden.html#PopSpecificHiddenWindow"><span class="hs-identifier hs-var">PopSpecificHiddenWindow</span></a></span></span><span> </span><span class="annot"><span class="hs-identifier hs-type">Window</span></span><span>   </span><span class="hs-comment">-- ^ Restore specific window.</span><span>
+</span><span id="line-72"></span><span>               </span><span class="hs-keyword">deriving</span><span> </span><span class="hs-special">(</span><span id="local-6989586621679362817"><span id="local-6989586621679362819"><span class="annot"><span class="annottext">HiddenMsg -&gt; HiddenMsg -&gt; Bool
+(HiddenMsg -&gt; HiddenMsg -&gt; Bool)
+-&gt; (HiddenMsg -&gt; HiddenMsg -&gt; Bool) -&gt; Eq HiddenMsg
+forall a. (a -&gt; a -&gt; Bool) -&gt; (a -&gt; a -&gt; Bool) -&gt; Eq a
+/= :: HiddenMsg -&gt; HiddenMsg -&gt; Bool
+$c/= :: HiddenMsg -&gt; HiddenMsg -&gt; Bool
+== :: HiddenMsg -&gt; HiddenMsg -&gt; Bool
+$c== :: HiddenMsg -&gt; HiddenMsg -&gt; Bool
+</span><span class="hs-identifier hs-var hs-var hs-var hs-var hs-var hs-var">Eq</span></span></span></span><span class="hs-special">)</span><span>
+</span><span id="line-73"></span><span>
+</span><span id="line-74"></span><span class="hs-keyword">instance</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Message</span></span><span> </span><span class="annot"><a href="XMonad.Layout.Hidden.html#HiddenMsg"><span class="hs-identifier hs-type">HiddenMsg</span></a></span><span>
+</span><span id="line-75"></span><span>
+</span><span id="line-76"></span><span class="hs-comment">--------------------------------------------------------------------------------</span><span>
+</span><span id="line-77"></span><span class="hs-keyword">instance</span><span> </span><span id="local-6989586621679362792"><span id="local-6989586621679362795"><span id="local-6989586621679362797"><span id="local-6989586621679362799"><span id="local-6989586621679362801"><span id="local-6989586621679362803"><span id="local-6989586621679362805"><span id="local-6989586621679362808"><span id="local-6989586621679362810"><span class="annot"><a href="XMonad.Layout.LayoutModifier.html#LayoutModifier"><span class="hs-identifier hs-type">LayoutModifier</span></a></span><span> </span><span class="annot"><a href="XMonad.Layout.Hidden.html#HiddenWindows"><span class="hs-identifier hs-type">HiddenWindows</span></a></span><span> </span><span class="annot"><span class="hs-identifier hs-type">Window</span></span></span></span></span></span></span></span></span></span></span><span> </span><span class="hs-keyword">where</span><span>
+</span><span id="line-78"></span><span>  </span><span id="local-6989586621679362790"><span class="annot"><span class="annottext">handleMess :: HiddenWindows Window
+-&gt; SomeMessage -&gt; X (Maybe (HiddenWindows Window))
+</span><a href="XMonad.Layout.LayoutModifier.html#handleMess"><span class="hs-identifier hs-var hs-var hs-var hs-var">handleMess</span></a></span></span><span> </span><span id="local-6989586621679362788"><span class="annot"><span class="annottext">h :: HiddenWindows Window
+</span><a href="#local-6989586621679362788"><span class="hs-identifier hs-var">h</span></a></span></span><span class="hs-glyph">@</span><span class="hs-special">(</span><span class="annot"><a href="XMonad.Layout.Hidden.html#HiddenWindows"><span class="hs-identifier hs-type">HiddenWindows</span></a></span><span> </span><span id="local-6989586621679362787"><span class="annot"><span class="annottext">[Window]
+</span><a href="#local-6989586621679362787"><span class="hs-identifier hs-var">hidden</span></a></span></span><span class="hs-special">)</span><span> </span><span id="local-6989586621679362786"><span class="annot"><span class="annottext">SomeMessage
+</span><a href="#local-6989586621679362786"><span class="hs-identifier hs-var">mess</span></a></span></span><span>
+</span><span id="line-79"></span><span>    </span><span class="hs-glyph">|</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Just</span></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="XMonad.Layout.Hidden.html#HideWindow"><span class="hs-identifier hs-type">HideWindow</span></a></span><span> </span><span id="local-6989586621679362785"><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679362785"><span class="hs-identifier hs-var">win</span></a></span></span><span class="hs-special">)</span><span>              </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">SomeMessage -&gt; Maybe HiddenMsg
+forall m. Message m =&gt; SomeMessage -&gt; Maybe m
+</span><span class="hs-identifier hs-var">fromMessage</span></span><span> </span><span class="annot"><span class="annottext">SomeMessage
+</span><a href="#local-6989586621679362786"><span class="hs-identifier hs-var">mess</span></a></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">HiddenWindows Window -&gt; Window -&gt; X (Maybe (HiddenWindows Window))
+forall a. HiddenWindows a -&gt; Window -&gt; X (Maybe (HiddenWindows a))
+</span><a href="XMonad.Layout.Hidden.html#hideWindowMsg"><span class="hs-identifier hs-var">hideWindowMsg</span></a></span><span> </span><span class="annot"><span class="annottext">HiddenWindows Window
+</span><a href="#local-6989586621679362788"><span class="hs-identifier hs-var">h</span></a></span><span> </span><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679362785"><span class="hs-identifier hs-var">win</span></a></span><span>
+</span><span id="line-80"></span><span>    </span><span class="hs-glyph">|</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Just</span></span><span> </span><span class="annot"><span class="annottext">HiddenMsg
+</span><a href="XMonad.Layout.Hidden.html#PopNewestHiddenWindow"><span class="hs-identifier hs-var">PopNewestHiddenWindow</span></a></span><span>         </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">SomeMessage -&gt; Maybe HiddenMsg
+forall m. Message m =&gt; SomeMessage -&gt; Maybe m
+</span><span class="hs-identifier hs-var">fromMessage</span></span><span> </span><span class="annot"><span class="annottext">SomeMessage
+</span><a href="#local-6989586621679362786"><span class="hs-identifier hs-var">mess</span></a></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">HiddenWindows Window -&gt; X (Maybe (HiddenWindows Window))
+forall a. HiddenWindows a -&gt; X (Maybe (HiddenWindows a))
+</span><a href="XMonad.Layout.Hidden.html#popNewestMsg"><span class="hs-identifier hs-var">popNewestMsg</span></a></span><span> </span><span class="annot"><span class="annottext">HiddenWindows Window
+</span><a href="#local-6989586621679362788"><span class="hs-identifier hs-var">h</span></a></span><span>
+</span><span id="line-81"></span><span>    </span><span class="hs-glyph">|</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Just</span></span><span> </span><span class="annot"><span class="annottext">HiddenMsg
+</span><a href="XMonad.Layout.Hidden.html#PopOldestHiddenWindow"><span class="hs-identifier hs-var">PopOldestHiddenWindow</span></a></span><span>         </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">SomeMessage -&gt; Maybe HiddenMsg
+forall m. Message m =&gt; SomeMessage -&gt; Maybe m
+</span><span class="hs-identifier hs-var">fromMessage</span></span><span> </span><span class="annot"><span class="annottext">SomeMessage
+</span><a href="#local-6989586621679362786"><span class="hs-identifier hs-var">mess</span></a></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">HiddenWindows Window -&gt; X (Maybe (HiddenWindows Window))
+forall a. HiddenWindows a -&gt; X (Maybe (HiddenWindows a))
+</span><a href="XMonad.Layout.Hidden.html#popOldestMsg"><span class="hs-identifier hs-var">popOldestMsg</span></a></span><span> </span><span class="annot"><span class="annottext">HiddenWindows Window
+</span><a href="#local-6989586621679362788"><span class="hs-identifier hs-var">h</span></a></span><span>
+</span><span id="line-82"></span><span>    </span><span class="hs-glyph">|</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Just</span></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="XMonad.Layout.Hidden.html#PopSpecificHiddenWindow"><span class="hs-identifier hs-type">PopSpecificHiddenWindow</span></a></span><span> </span><span id="local-6989586621679362780"><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679362780"><span class="hs-identifier hs-var">win</span></a></span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">SomeMessage -&gt; Maybe HiddenMsg
+forall m. Message m =&gt; SomeMessage -&gt; Maybe m
+</span><span class="hs-identifier hs-var">fromMessage</span></span><span> </span><span class="annot"><span class="annottext">SomeMessage
+</span><a href="#local-6989586621679362786"><span class="hs-identifier hs-var">mess</span></a></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Window -&gt; HiddenWindows Window -&gt; X (Maybe (HiddenWindows Window))
+forall a. Window -&gt; HiddenWindows a -&gt; X (Maybe (HiddenWindows a))
+</span><a href="XMonad.Layout.Hidden.html#popSpecificMsg"><span class="hs-identifier hs-var">popSpecificMsg</span></a></span><span> </span><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679362780"><span class="hs-identifier hs-var">win</span></a></span><span> </span><span class="annot"><span class="annottext">HiddenWindows Window
+</span><a href="#local-6989586621679362788"><span class="hs-identifier hs-var">h</span></a></span><span>
+</span><span id="line-83"></span><span>    </span><span class="hs-glyph">|</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Just</span></span><span> </span><span class="annot"><span class="annottext">LayoutMessages
+</span><span class="hs-identifier hs-var">ReleaseResources</span></span><span>              </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">SomeMessage -&gt; Maybe LayoutMessages
+forall m. Message m =&gt; SomeMessage -&gt; Maybe m
+</span><span class="hs-identifier hs-var">fromMessage</span></span><span> </span><span class="annot"><span class="annottext">SomeMessage
+</span><a href="#local-6989586621679362786"><span class="hs-identifier hs-var">mess</span></a></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">X (Maybe (HiddenWindows Window))
+forall a. X (Maybe a)
+</span><a href="#local-6989586621679362777"><span class="hs-identifier hs-var">doUnhook</span></a></span><span>
+</span><span id="line-84"></span><span>    </span><span class="hs-glyph">|</span><span> </span><span class="annot"><span class="annottext">Bool
+</span><span class="hs-identifier hs-var">otherwise</span></span><span>                                        </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Maybe (HiddenWindows Window) -&gt; X (Maybe (HiddenWindows Window))
+forall (m :: * -&gt; *) a. Monad m =&gt; a -&gt; m a
+</span><span class="hs-identifier hs-var">return</span></span><span> </span><span class="annot"><span class="annottext">Maybe (HiddenWindows Window)
+forall a. Maybe a
+</span><span class="hs-identifier hs-var">Nothing</span></span><span>
+</span><span id="line-85"></span><span>    </span><span class="hs-keyword">where</span><span> </span><span id="local-6989586621679362777"><span class="annot"><span class="annottext">doUnhook :: X (Maybe a)
+</span><a href="#local-6989586621679362777"><span class="hs-identifier hs-var hs-var">doUnhook</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-keyword">do</span><span> </span><span class="annot"><span class="annottext">(Window -&gt; X ()) -&gt; [Window] -&gt; X ()
+forall (t :: * -&gt; *) (m :: * -&gt; *) a b.
+(Foldable t, Monad m) =&gt;
+(a -&gt; m b) -&gt; t a -&gt; m ()
+</span><span class="hs-identifier hs-var">mapM_</span></span><span> </span><span class="annot"><span class="annottext">Window -&gt; X ()
+</span><a href="XMonad.Layout.Hidden.html#restoreWindow"><span class="hs-identifier hs-var">restoreWindow</span></a></span><span> </span><span class="annot"><span class="annottext">[Window]
+</span><a href="#local-6989586621679362787"><span class="hs-identifier hs-var">hidden</span></a></span><span>
+</span><span id="line-86"></span><span>                        </span><span class="annot"><span class="annottext">Maybe a -&gt; X (Maybe a)
+forall (m :: * -&gt; *) a. Monad m =&gt; a -&gt; m a
+</span><span class="hs-identifier hs-var">return</span></span><span> </span><span class="annot"><span class="annottext">Maybe a
+forall a. Maybe a
+</span><span class="hs-identifier hs-var">Nothing</span></span><span>
+</span><span id="line-87"></span><span>
+</span><span id="line-88"></span><span>  </span><span id="local-6989586621679362774"><span class="annot"><span class="annottext">modifierDescription :: HiddenWindows Window -&gt; String
+</span><a href="XMonad.Layout.LayoutModifier.html#modifierDescription"><span class="hs-identifier hs-var hs-var hs-var hs-var">modifierDescription</span></a></span></span><span> </span><span class="annot"><span class="annottext">HiddenWindows Window
+</span><span class="hs-identifier">_</span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot;Hidden&quot;</span></span><span>
+</span><span id="line-89"></span><span>
+</span><span id="line-90"></span><span class="hs-comment">--------------------------------------------------------------------------------</span><span>
+</span><span id="line-91"></span><span class="hs-comment">-- | Apply the @HiddenWindows@ layout modifier.</span><span>
+</span><span id="line-92"></span><span id="local-6989586621679362772"><span class="annot"><a href="XMonad.Layout.Hidden.html#hiddenWindows"><span class="hs-identifier hs-type">hiddenWindows</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">LayoutClass</span></span><span> </span><span class="annot"><a href="#local-6989586621679362772"><span class="hs-identifier hs-type">l</span></a></span><span> </span><span class="annot"><span class="hs-identifier hs-type">Window</span></span><span> </span><span class="hs-glyph">=&gt;</span><span> </span><span class="annot"><a href="#local-6989586621679362772"><span class="hs-identifier hs-type">l</span></a></span><span> </span><span class="annot"><span class="hs-identifier hs-type">Window</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="XMonad.Layout.LayoutModifier.html#ModifiedLayout"><span class="hs-identifier hs-type">ModifiedLayout</span></a></span><span> </span><span class="annot"><a href="XMonad.Layout.Hidden.html#HiddenWindows"><span class="hs-identifier hs-type">HiddenWindows</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679362772"><span class="hs-identifier hs-type">l</span></a></span><span> </span><span class="annot"><span class="hs-identifier hs-type">Window</span></span></span><span>
+</span><span id="line-93"></span><span id="hiddenWindows"><span class="annot"><span class="annottext">hiddenWindows :: l Window -&gt; ModifiedLayout HiddenWindows l Window
+</span><a href="XMonad.Layout.Hidden.html#hiddenWindows"><span class="hs-identifier hs-var hs-var">hiddenWindows</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">HiddenWindows Window
+-&gt; l Window -&gt; ModifiedLayout HiddenWindows l Window
+forall (m :: * -&gt; *) (l :: * -&gt; *) a.
+m a -&gt; l a -&gt; ModifiedLayout m l a
+</span><a href="XMonad.Layout.LayoutModifier.html#ModifiedLayout"><span class="hs-identifier hs-var">ModifiedLayout</span></a></span><span> </span><span class="annot"><span class="annottext">(HiddenWindows Window
+ -&gt; l Window -&gt; ModifiedLayout HiddenWindows l Window)
+-&gt; HiddenWindows Window
+-&gt; l Window
+-&gt; ModifiedLayout HiddenWindows l Window
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">[Window] -&gt; HiddenWindows Window
+forall a. [Window] -&gt; HiddenWindows a
+</span><a href="XMonad.Layout.Hidden.html#HiddenWindows"><span class="hs-identifier hs-var">HiddenWindows</span></a></span><span> </span><span class="hs-special">[</span><span class="hs-special">]</span><span>
+</span><span id="line-94"></span><span>
+</span><span id="line-95"></span><span class="hs-comment">--------------------------------------------------------------------------------</span><span>
+</span><span id="line-96"></span><span class="hs-comment">-- | Remove the given window from the current layout.  It is placed in</span><span>
+</span><span id="line-97"></span><span class="hs-comment">-- list of hidden windows so it can be restored later.</span><span>
+</span><span id="line-98"></span><span class="annot"><a href="XMonad.Layout.Hidden.html#hideWindow"><span class="hs-identifier hs-type">hideWindow</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Window</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">X</span></span><span> </span><span class="hs-special">(</span><span class="hs-special">)</span><span>
+</span><span id="line-99"></span><span id="hideWindow"><span class="annot"><span class="annottext">hideWindow :: Window -&gt; X ()
+</span><a href="XMonad.Layout.Hidden.html#hideWindow"><span class="hs-identifier hs-var hs-var">hideWindow</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">HiddenMsg -&gt; X ()
+forall a. Message a =&gt; a -&gt; X ()
+</span><span class="hs-identifier hs-var">sendMessage</span></span><span> </span><span class="annot"><span class="annottext">(HiddenMsg -&gt; X ()) -&gt; (Window -&gt; HiddenMsg) -&gt; Window -&gt; X ()
+forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">Window -&gt; HiddenMsg
+</span><a href="XMonad.Layout.Hidden.html#HideWindow"><span class="hs-identifier hs-var">HideWindow</span></a></span><span>
+</span><span id="line-100"></span><span>
+</span><span id="line-101"></span><span class="hs-comment">--------------------------------------------------------------------------------</span><span>
+</span><span id="line-102"></span><span class="hs-comment">-- | Restore a previously hidden window.  Using this function will</span><span>
+</span><span id="line-103"></span><span class="hs-comment">-- treat the list of hidden windows as a FIFO queue.  That is, the</span><span>
+</span><span id="line-104"></span><span class="hs-comment">-- first window hidden will be restored.</span><span>
+</span><span id="line-105"></span><span class="annot"><a href="XMonad.Layout.Hidden.html#popOldestHiddenWindow"><span class="hs-identifier hs-type">popOldestHiddenWindow</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">X</span></span><span> </span><span class="hs-special">(</span><span class="hs-special">)</span><span>
+</span><span id="line-106"></span><span id="popOldestHiddenWindow"><span class="annot"><span class="annottext">popOldestHiddenWindow :: X ()
+</span><a href="XMonad.Layout.Hidden.html#popOldestHiddenWindow"><span class="hs-identifier hs-var hs-var">popOldestHiddenWindow</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">HiddenMsg -&gt; X ()
+forall a. Message a =&gt; a -&gt; X ()
+</span><span class="hs-identifier hs-var">sendMessage</span></span><span> </span><span class="annot"><span class="annottext">HiddenMsg
+</span><a href="XMonad.Layout.Hidden.html#PopOldestHiddenWindow"><span class="hs-identifier hs-var">PopOldestHiddenWindow</span></a></span><span>
+</span><span id="line-107"></span><span>
+</span><span id="line-108"></span><span class="hs-comment">--------------------------------------------------------------------------------</span><span>
+</span><span id="line-109"></span><span class="hs-comment">-- | Restore a previously hidden window.  Using this function will</span><span>
+</span><span id="line-110"></span><span class="hs-comment">-- treat the list of hidden windows as a FILO queue.  That is, the</span><span>
+</span><span id="line-111"></span><span class="hs-comment">-- most recently hidden window will be restored.</span><span>
+</span><span id="line-112"></span><span class="annot"><a href="XMonad.Layout.Hidden.html#popNewestHiddenWindow"><span class="hs-identifier hs-type">popNewestHiddenWindow</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">X</span></span><span> </span><span class="hs-special">(</span><span class="hs-special">)</span><span>
+</span><span id="line-113"></span><span id="popNewestHiddenWindow"><span class="annot"><span class="annottext">popNewestHiddenWindow :: X ()
+</span><a href="XMonad.Layout.Hidden.html#popNewestHiddenWindow"><span class="hs-identifier hs-var hs-var">popNewestHiddenWindow</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">HiddenMsg -&gt; X ()
+forall a. Message a =&gt; a -&gt; X ()
+</span><span class="hs-identifier hs-var">sendMessage</span></span><span> </span><span class="annot"><span class="annottext">HiddenMsg
+</span><a href="XMonad.Layout.Hidden.html#PopNewestHiddenWindow"><span class="hs-identifier hs-var">PopNewestHiddenWindow</span></a></span><span>
+</span><span id="line-114"></span><span>
+</span><span id="line-115"></span><span class="annot"><a href="XMonad.Layout.Hidden.html#popHiddenWindow"><span class="hs-identifier hs-type">popHiddenWindow</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Window</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">X</span></span><span> </span><span class="hs-special">(</span><span class="hs-special">)</span><span>
+</span><span id="line-116"></span><span id="popHiddenWindow"><span class="annot"><span class="annottext">popHiddenWindow :: Window -&gt; X ()
+</span><a href="XMonad.Layout.Hidden.html#popHiddenWindow"><span class="hs-identifier hs-var hs-var">popHiddenWindow</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">HiddenMsg -&gt; X ()
+forall a. Message a =&gt; a -&gt; X ()
+</span><span class="hs-identifier hs-var">sendMessage</span></span><span> </span><span class="annot"><span class="annottext">(HiddenMsg -&gt; X ()) -&gt; (Window -&gt; HiddenMsg) -&gt; Window -&gt; X ()
+forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">Window -&gt; HiddenMsg
+</span><a href="XMonad.Layout.Hidden.html#PopSpecificHiddenWindow"><span class="hs-identifier hs-var">PopSpecificHiddenWindow</span></a></span><span>
+</span><span id="line-117"></span><span>
+</span><span id="line-118"></span><span class="hs-comment">--------------------------------------------------------------------------------</span><span>
+</span><span id="line-119"></span><span id="local-6989586621679362892"><span class="annot"><a href="XMonad.Layout.Hidden.html#hideWindowMsg"><span class="hs-identifier hs-type">hideWindowMsg</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><a href="XMonad.Layout.Hidden.html#HiddenWindows"><span class="hs-identifier hs-type">HiddenWindows</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679362892"><span class="hs-identifier hs-type">a</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Window</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">X</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">Maybe</span></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="XMonad.Layout.Hidden.html#HiddenWindows"><span class="hs-identifier hs-type">HiddenWindows</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679362892"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">)</span><span class="hs-special">)</span></span><span>
+</span><span id="line-120"></span><span id="hideWindowMsg"><span class="annot"><span class="annottext">hideWindowMsg :: HiddenWindows a -&gt; Window -&gt; X (Maybe (HiddenWindows a))
+</span><a href="XMonad.Layout.Hidden.html#hideWindowMsg"><span class="hs-identifier hs-var hs-var">hideWindowMsg</span></a></span></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="XMonad.Layout.Hidden.html#HiddenWindows"><span class="hs-identifier hs-type">HiddenWindows</span></a></span><span> </span><span id="local-6989586621679362768"><span class="annot"><span class="annottext">[Window]
+</span><a href="#local-6989586621679362768"><span class="hs-identifier hs-var">hidden</span></a></span></span><span class="hs-special">)</span><span> </span><span id="local-6989586621679362767"><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679362767"><span class="hs-identifier hs-var">win</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-121"></span><span>  </span><span class="annot"><span class="annottext">(XState -&gt; XState) -&gt; X ()
+forall s (m :: * -&gt; *). MonadState s m =&gt; (s -&gt; s) -&gt; m ()
+</span><span class="hs-identifier hs-var">modify</span></span><span> </span><span class="hs-special">(</span><span class="hs-glyph">\</span><span id="local-6989586621679362765"><span class="annot"><span class="annottext">XState
+</span><a href="#local-6989586621679362765"><span class="hs-identifier hs-var">s</span></a></span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">XState
+</span><a href="#local-6989586621679362765"><span class="hs-identifier hs-var">s</span></a></span><span> </span><span class="hs-special">{</span><span> </span><span class="annot"><span class="annottext">windowset :: WindowSet
+</span><span class="hs-identifier hs-var">windowset</span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Window -&gt; WindowSet -&gt; WindowSet
+forall a i l s sd.
+Eq a =&gt;
+a -&gt; StackSet i l a s sd -&gt; StackSet i l a s sd
+</span><span class="hs-identifier hs-var">W.delete'</span></span><span> </span><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679362767"><span class="hs-identifier hs-var">win</span></a></span><span> </span><span class="annot"><span class="annottext">(WindowSet -&gt; WindowSet) -&gt; WindowSet -&gt; WindowSet
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">XState -&gt; WindowSet
+</span><span class="hs-identifier hs-var hs-var">windowset</span></span><span> </span><span class="annot"><span class="annottext">XState
+</span><a href="#local-6989586621679362765"><span class="hs-identifier hs-var">s</span></a></span><span> </span><span class="hs-special">}</span><span class="hs-special">)</span><span>
+</span><span id="line-122"></span><span>  </span><span class="annot"><span class="annottext">Maybe (HiddenWindows a) -&gt; X (Maybe (HiddenWindows a))
+forall (m :: * -&gt; *) a. Monad m =&gt; a -&gt; m a
+</span><span class="hs-identifier hs-var">return</span></span><span> </span><span class="annot"><span class="annottext">(Maybe (HiddenWindows a) -&gt; X (Maybe (HiddenWindows a)))
+-&gt; ([Window] -&gt; Maybe (HiddenWindows a))
+-&gt; [Window]
+-&gt; X (Maybe (HiddenWindows a))
+forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">HiddenWindows a -&gt; Maybe (HiddenWindows a)
+forall a. a -&gt; Maybe a
+</span><span class="hs-identifier hs-var">Just</span></span><span> </span><span class="annot"><span class="annottext">(HiddenWindows a -&gt; Maybe (HiddenWindows a))
+-&gt; ([Window] -&gt; HiddenWindows a)
+-&gt; [Window]
+-&gt; Maybe (HiddenWindows a)
+forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">[Window] -&gt; HiddenWindows a
+forall a. [Window] -&gt; HiddenWindows a
+</span><a href="XMonad.Layout.Hidden.html#HiddenWindows"><span class="hs-identifier hs-var">HiddenWindows</span></a></span><span> </span><span class="annot"><span class="annottext">([Window] -&gt; X (Maybe (HiddenWindows a)))
+-&gt; [Window] -&gt; X (Maybe (HiddenWindows a))
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">[Window]
+</span><a href="#local-6989586621679362768"><span class="hs-identifier hs-var">hidden</span></a></span><span> </span><span class="annot"><span class="annottext">[Window] -&gt; [Window] -&gt; [Window]
+forall a. [a] -&gt; [a] -&gt; [a]
+</span><span class="hs-operator hs-var">++</span></span><span> </span><span class="hs-special">[</span><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679362767"><span class="hs-identifier hs-var">win</span></a></span><span class="hs-special">]</span><span>
+</span><span id="line-123"></span><span>
+</span><span id="line-124"></span><span class="hs-comment">--------------------------------------------------------------------------------</span><span>
+</span><span id="line-125"></span><span id="local-6989586621679362891"><span class="annot"><a href="XMonad.Layout.Hidden.html#popNewestMsg"><span class="hs-identifier hs-type">popNewestMsg</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><a href="XMonad.Layout.Hidden.html#HiddenWindows"><span class="hs-identifier hs-type">HiddenWindows</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679362891"><span class="hs-identifier hs-type">a</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">X</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">Maybe</span></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="XMonad.Layout.Hidden.html#HiddenWindows"><span class="hs-identifier hs-type">HiddenWindows</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679362891"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">)</span><span class="hs-special">)</span></span><span>
+</span><span id="line-126"></span><span id="popNewestMsg"><span class="annot"><span class="annottext">popNewestMsg :: HiddenWindows a -&gt; X (Maybe (HiddenWindows a))
+</span><a href="XMonad.Layout.Hidden.html#popNewestMsg"><span class="hs-identifier hs-var hs-var">popNewestMsg</span></a></span></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="XMonad.Layout.Hidden.html#HiddenWindows"><span class="hs-identifier hs-type">HiddenWindows</span></a></span><span> </span><span class="hs-special">[</span><span class="hs-special">]</span><span class="hs-special">)</span><span>     </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Maybe (HiddenWindows a) -&gt; X (Maybe (HiddenWindows a))
+forall (m :: * -&gt; *) a. Monad m =&gt; a -&gt; m a
+</span><span class="hs-identifier hs-var">return</span></span><span> </span><span class="annot"><span class="annottext">Maybe (HiddenWindows a)
+forall a. Maybe a
+</span><span class="hs-identifier hs-var">Nothing</span></span><span>
+</span><span id="line-127"></span><span class="annot"><a href="XMonad.Layout.Hidden.html#popNewestMsg"><span class="hs-identifier hs-var">popNewestMsg</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="XMonad.Layout.Hidden.html#HiddenWindows"><span class="hs-identifier hs-type">HiddenWindows</span></a></span><span> </span><span id="local-6989586621679362762"><span class="annot"><span class="annottext">[Window]
+</span><a href="#local-6989586621679362762"><span class="hs-identifier hs-var">hidden</span></a></span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-128"></span><span>  </span><span class="hs-keyword">let</span><span> </span><span class="hs-special">(</span><span id="local-6989586621679362761"><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679362761"><span class="hs-identifier hs-var">win</span></a></span></span><span class="hs-special">,</span><span> </span><span id="local-6989586621679362760"><span class="annot"><span class="annottext">[Window]
+</span><a href="#local-6989586621679362760"><span class="hs-identifier hs-var">rest</span></a></span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">[Window] -&gt; Window
+forall a. [a] -&gt; a
+</span><span class="hs-identifier hs-var">last</span></span><span> </span><span class="annot"><span class="annottext">[Window]
+</span><a href="#local-6989586621679362762"><span class="hs-identifier hs-var">hidden</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">[Window] -&gt; [Window]
+forall a. [a] -&gt; [a]
+</span><span class="hs-identifier hs-var">init</span></span><span> </span><span class="annot"><span class="annottext">[Window]
+</span><a href="#local-6989586621679362762"><span class="hs-identifier hs-var">hidden</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-129"></span><span>  </span><span class="annot"><span class="annottext">Window -&gt; X ()
+</span><a href="XMonad.Layout.Hidden.html#restoreWindow"><span class="hs-identifier hs-var">restoreWindow</span></a></span><span> </span><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679362761"><span class="hs-identifier hs-var">win</span></a></span><span>
+</span><span id="line-130"></span><span>  </span><span class="annot"><span class="annottext">Maybe (HiddenWindows a) -&gt; X (Maybe (HiddenWindows a))
+forall (m :: * -&gt; *) a. Monad m =&gt; a -&gt; m a
+</span><span class="hs-identifier hs-var">return</span></span><span> </span><span class="annot"><span class="annottext">(Maybe (HiddenWindows a) -&gt; X (Maybe (HiddenWindows a)))
+-&gt; ([Window] -&gt; Maybe (HiddenWindows a))
+-&gt; [Window]
+-&gt; X (Maybe (HiddenWindows a))
+forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">HiddenWindows a -&gt; Maybe (HiddenWindows a)
+forall a. a -&gt; Maybe a
+</span><span class="hs-identifier hs-var">Just</span></span><span> </span><span class="annot"><span class="annottext">(HiddenWindows a -&gt; Maybe (HiddenWindows a))
+-&gt; ([Window] -&gt; HiddenWindows a)
+-&gt; [Window]
+-&gt; Maybe (HiddenWindows a)
+forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">[Window] -&gt; HiddenWindows a
+forall a. [Window] -&gt; HiddenWindows a
+</span><a href="XMonad.Layout.Hidden.html#HiddenWindows"><span class="hs-identifier hs-var">HiddenWindows</span></a></span><span> </span><span class="annot"><span class="annottext">([Window] -&gt; X (Maybe (HiddenWindows a)))
+-&gt; [Window] -&gt; X (Maybe (HiddenWindows a))
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">[Window]
+</span><a href="#local-6989586621679362760"><span class="hs-identifier hs-var">rest</span></a></span><span>
+</span><span id="line-131"></span><span>
+</span><span id="line-132"></span><span class="hs-comment">--------------------------------------------------------------------------------</span><span>
+</span><span id="line-133"></span><span id="local-6989586621679362757"><span class="annot"><a href="XMonad.Layout.Hidden.html#popOldestMsg"><span class="hs-identifier hs-type">popOldestMsg</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><a href="XMonad.Layout.Hidden.html#HiddenWindows"><span class="hs-identifier hs-type">HiddenWindows</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679362757"><span class="hs-identifier hs-type">a</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">X</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">Maybe</span></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="XMonad.Layout.Hidden.html#HiddenWindows"><span class="hs-identifier hs-type">HiddenWindows</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679362757"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">)</span><span class="hs-special">)</span></span><span>
+</span><span id="line-134"></span><span id="popOldestMsg"><span class="annot"><span class="annottext">popOldestMsg :: HiddenWindows a -&gt; X (Maybe (HiddenWindows a))
+</span><a href="XMonad.Layout.Hidden.html#popOldestMsg"><span class="hs-identifier hs-var hs-var">popOldestMsg</span></a></span></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="XMonad.Layout.Hidden.html#HiddenWindows"><span class="hs-identifier hs-type">HiddenWindows</span></a></span><span> </span><span class="hs-special">[</span><span class="hs-special">]</span><span class="hs-special">)</span><span>         </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Maybe (HiddenWindows a) -&gt; X (Maybe (HiddenWindows a))
+forall (m :: * -&gt; *) a. Monad m =&gt; a -&gt; m a
+</span><span class="hs-identifier hs-var">return</span></span><span> </span><span class="annot"><span class="annottext">Maybe (HiddenWindows a)
+forall a. Maybe a
+</span><span class="hs-identifier hs-var">Nothing</span></span><span>
+</span><span id="line-135"></span><span class="annot"><a href="XMonad.Layout.Hidden.html#popOldestMsg"><span class="hs-identifier hs-var">popOldestMsg</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="XMonad.Layout.Hidden.html#HiddenWindows"><span class="hs-identifier hs-type">HiddenWindows</span></a></span><span> </span><span class="hs-special">(</span><span id="local-6989586621679362756"><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679362756"><span class="hs-identifier hs-var">win</span></a></span></span><span class="annot"><span class="hs-glyph hs-type">:</span></span><span id="local-6989586621679362755"><span class="annot"><span class="annottext">[Window]
+</span><a href="#local-6989586621679362755"><span class="hs-identifier hs-var">rest</span></a></span></span><span class="hs-special">)</span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-136"></span><span>  </span><span class="annot"><span class="annottext">Window -&gt; X ()
+</span><a href="XMonad.Layout.Hidden.html#restoreWindow"><span class="hs-identifier hs-var">restoreWindow</span></a></span><span> </span><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679362756"><span class="hs-identifier hs-var">win</span></a></span><span>
+</span><span id="line-137"></span><span>  </span><span class="annot"><span class="annottext">Maybe (HiddenWindows a) -&gt; X (Maybe (HiddenWindows a))
+forall (m :: * -&gt; *) a. Monad m =&gt; a -&gt; m a
+</span><span class="hs-identifier hs-var">return</span></span><span> </span><span class="annot"><span class="annottext">(Maybe (HiddenWindows a) -&gt; X (Maybe (HiddenWindows a)))
+-&gt; ([Window] -&gt; Maybe (HiddenWindows a))
+-&gt; [Window]
+-&gt; X (Maybe (HiddenWindows a))
+forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">HiddenWindows a -&gt; Maybe (HiddenWindows a)
+forall a. a -&gt; Maybe a
+</span><span class="hs-identifier hs-var">Just</span></span><span> </span><span class="annot"><span class="annottext">(HiddenWindows a -&gt; Maybe (HiddenWindows a))
+-&gt; ([Window] -&gt; HiddenWindows a)
+-&gt; [Window]
+-&gt; Maybe (HiddenWindows a)
+forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">[Window] -&gt; HiddenWindows a
+forall a. [Window] -&gt; HiddenWindows a
+</span><a href="XMonad.Layout.Hidden.html#HiddenWindows"><span class="hs-identifier hs-var">HiddenWindows</span></a></span><span> </span><span class="annot"><span class="annottext">([Window] -&gt; X (Maybe (HiddenWindows a)))
+-&gt; [Window] -&gt; X (Maybe (HiddenWindows a))
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">[Window]
+</span><a href="#local-6989586621679362755"><span class="hs-identifier hs-var">rest</span></a></span><span>
+</span><span id="line-138"></span><span>
+</span><span id="line-139"></span><span class="hs-comment">--------------------------------------------------------------------------------</span><span>
+</span><span id="line-140"></span><span id="local-6989586621679362890"><span class="annot"><a href="XMonad.Layout.Hidden.html#popSpecificMsg"><span class="hs-identifier hs-type">popSpecificMsg</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Window</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="XMonad.Layout.Hidden.html#HiddenWindows"><span class="hs-identifier hs-type">HiddenWindows</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679362890"><span class="hs-identifier hs-type">a</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">X</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">Maybe</span></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="XMonad.Layout.Hidden.html#HiddenWindows"><span class="hs-identifier hs-type">HiddenWindows</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679362890"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">)</span><span class="hs-special">)</span></span><span>
+</span><span id="line-141"></span><span id="popSpecificMsg"><span class="annot"><span class="annottext">popSpecificMsg :: Window -&gt; HiddenWindows a -&gt; X (Maybe (HiddenWindows a))
+</span><a href="XMonad.Layout.Hidden.html#popSpecificMsg"><span class="hs-identifier hs-var hs-var">popSpecificMsg</span></a></span></span><span> </span><span class="annot"><span class="annottext">Window
+</span><span class="hs-identifier">_</span></span><span>   </span><span class="hs-special">(</span><span class="annot"><a href="XMonad.Layout.Hidden.html#HiddenWindows"><span class="hs-identifier hs-type">HiddenWindows</span></a></span><span> </span><span class="hs-special">[</span><span class="hs-special">]</span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Maybe (HiddenWindows a) -&gt; X (Maybe (HiddenWindows a))
+forall (m :: * -&gt; *) a. Monad m =&gt; a -&gt; m a
+</span><span class="hs-identifier hs-var">return</span></span><span> </span><span class="annot"><span class="annottext">Maybe (HiddenWindows a)
+forall a. Maybe a
+</span><span class="hs-identifier hs-var">Nothing</span></span><span>
+</span><span id="line-142"></span><span class="annot"><a href="XMonad.Layout.Hidden.html#popSpecificMsg"><span class="hs-identifier hs-var">popSpecificMsg</span></a></span><span> </span><span id="local-6989586621679362754"><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679362754"><span class="hs-identifier hs-var">win</span></a></span></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="XMonad.Layout.Hidden.html#HiddenWindows"><span class="hs-identifier hs-type">HiddenWindows</span></a></span><span> </span><span id="local-6989586621679362753"><span class="annot"><span class="annottext">[Window]
+</span><a href="#local-6989586621679362753"><span class="hs-identifier hs-var">hiddenWins</span></a></span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-keyword">if</span><span> </span><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679362754"><span class="hs-identifier hs-var">win</span></a></span><span> </span><span class="annot"><span class="annottext">Window -&gt; [Window] -&gt; Bool
+forall (t :: * -&gt; *) a. (Foldable t, Eq a) =&gt; a -&gt; t a -&gt; Bool
+</span><span class="hs-operator hs-var">`elem`</span></span><span> </span><span class="annot"><span class="annottext">[Window]
+</span><a href="#local-6989586621679362753"><span class="hs-identifier hs-var">hiddenWins</span></a></span><span>
+</span><span id="line-143"></span><span>  </span><span class="hs-keyword">then</span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-144"></span><span>    </span><span class="annot"><span class="annottext">Window -&gt; X ()
+</span><a href="XMonad.Layout.Hidden.html#restoreWindow"><span class="hs-identifier hs-var">restoreWindow</span></a></span><span> </span><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679362754"><span class="hs-identifier hs-var">win</span></a></span><span>
+</span><span id="line-145"></span><span>    </span><span class="annot"><span class="annottext">Maybe (HiddenWindows a) -&gt; X (Maybe (HiddenWindows a))
+forall (m :: * -&gt; *) a. Monad m =&gt; a -&gt; m a
+</span><span class="hs-identifier hs-var">return</span></span><span> </span><span class="annot"><span class="annottext">(Maybe (HiddenWindows a) -&gt; X (Maybe (HiddenWindows a)))
+-&gt; ([Window] -&gt; Maybe (HiddenWindows a))
+-&gt; [Window]
+-&gt; X (Maybe (HiddenWindows a))
+forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">HiddenWindows a -&gt; Maybe (HiddenWindows a)
+forall a. a -&gt; Maybe a
+</span><span class="hs-identifier hs-var">Just</span></span><span> </span><span class="annot"><span class="annottext">(HiddenWindows a -&gt; Maybe (HiddenWindows a))
+-&gt; ([Window] -&gt; HiddenWindows a)
+-&gt; [Window]
+-&gt; Maybe (HiddenWindows a)
+forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">[Window] -&gt; HiddenWindows a
+forall a. [Window] -&gt; HiddenWindows a
+</span><a href="XMonad.Layout.Hidden.html#HiddenWindows"><span class="hs-identifier hs-var">HiddenWindows</span></a></span><span> </span><span class="annot"><span class="annottext">([Window] -&gt; X (Maybe (HiddenWindows a)))
+-&gt; [Window] -&gt; X (Maybe (HiddenWindows a))
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">(Window -&gt; Bool) -&gt; [Window] -&gt; [Window]
+forall a. (a -&gt; Bool) -&gt; [a] -&gt; [a]
+</span><span class="hs-identifier hs-var">filter</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Window -&gt; Window -&gt; Bool
+forall a. Eq a =&gt; a -&gt; a -&gt; Bool
+</span><span class="hs-operator hs-var">/=</span></span><span> </span><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679362754"><span class="hs-identifier hs-var">win</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">[Window]
+</span><a href="#local-6989586621679362753"><span class="hs-identifier hs-var">hiddenWins</span></a></span><span>
+</span><span id="line-146"></span><span>  </span><span class="hs-keyword">else</span><span>
+</span><span id="line-147"></span><span>    </span><span class="annot"><span class="annottext">Maybe (HiddenWindows a) -&gt; X (Maybe (HiddenWindows a))
+forall (m :: * -&gt; *) a. Monad m =&gt; a -&gt; m a
+</span><span class="hs-identifier hs-var">return</span></span><span> </span><span class="annot"><span class="annottext">(Maybe (HiddenWindows a) -&gt; X (Maybe (HiddenWindows a)))
+-&gt; ([Window] -&gt; Maybe (HiddenWindows a))
+-&gt; [Window]
+-&gt; X (Maybe (HiddenWindows a))
+forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">HiddenWindows a -&gt; Maybe (HiddenWindows a)
+forall a. a -&gt; Maybe a
+</span><span class="hs-identifier hs-var">Just</span></span><span> </span><span class="annot"><span class="annottext">(HiddenWindows a -&gt; Maybe (HiddenWindows a))
+-&gt; ([Window] -&gt; HiddenWindows a)
+-&gt; [Window]
+-&gt; Maybe (HiddenWindows a)
+forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">[Window] -&gt; HiddenWindows a
+forall a. [Window] -&gt; HiddenWindows a
+</span><a href="XMonad.Layout.Hidden.html#HiddenWindows"><span class="hs-identifier hs-var">HiddenWindows</span></a></span><span> </span><span class="annot"><span class="annottext">([Window] -&gt; X (Maybe (HiddenWindows a)))
+-&gt; [Window] -&gt; X (Maybe (HiddenWindows a))
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">[Window]
+</span><a href="#local-6989586621679362753"><span class="hs-identifier hs-var">hiddenWins</span></a></span><span>
+</span><span id="line-148"></span><span>
+</span><span id="line-149"></span><span class="hs-comment">--------------------------------------------------------------------------------</span><span>
+</span><span id="line-150"></span><span class="annot"><a href="XMonad.Layout.Hidden.html#restoreWindow"><span class="hs-identifier hs-type">restoreWindow</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Window</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">X</span></span><span> </span><span class="hs-special">(</span><span class="hs-special">)</span><span>
+</span><span id="line-151"></span><span id="restoreWindow"><span class="annot"><span class="annottext">restoreWindow :: Window -&gt; X ()
+</span><a href="XMonad.Layout.Hidden.html#restoreWindow"><span class="hs-identifier hs-var hs-var">restoreWindow</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">(WindowSet -&gt; WindowSet) -&gt; X ()
+</span><span class="hs-identifier hs-var">windows</span></span><span> </span><span class="annot"><span class="annottext">((WindowSet -&gt; WindowSet) -&gt; X ())
+-&gt; (Window -&gt; WindowSet -&gt; WindowSet) -&gt; Window -&gt; X ()
+forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">Window -&gt; WindowSet -&gt; WindowSet
+forall a i l s sd.
+Eq a =&gt;
+a -&gt; StackSet i l a s sd -&gt; StackSet i l a s sd
+</span><span class="hs-identifier hs-var">W.insertUp</span></span><span>
+</span><span id="line-152"></span></pre></body></html>
