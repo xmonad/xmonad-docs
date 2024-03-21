@@ -1,0 +1,332 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd"><html xmlns="http://www.w3.org/1999/xhtml"><head><link rel="stylesheet" type="text/css" href="style.css" /><script type="text/javascript" src="highlight.js"></script></head><body><pre><span class="hs-pragma">{-# LANGUAGE ScopedTypeVariables, GeneralizedNewtypeDeriving,
+  FlexibleInstances, MultiParamTypeClasses, FlexibleContexts #-}</span><span>
+</span><span id="line-3"></span><span class="hs-comment">-----------------------------------------------------------------------------</span><span>
+</span><span id="line-4"></span><span class="hs-comment">-- |</span><span>
+</span><span id="line-5"></span><span class="hs-comment">-- Module       : XMonad.Util.WindowState</span><span>
+</span><span id="line-6"></span><span class="hs-comment">-- Description  :  Functions for saving per-window data.</span><span>
+</span><span id="line-7"></span><span class="hs-comment">-- Copyright    : (c) Dmitry Bogatov &lt;KAction@gnu.org&gt;</span><span>
+</span><span id="line-8"></span><span class="hs-comment">-- License      : BSD</span><span>
+</span><span id="line-9"></span><span class="hs-comment">--</span><span>
+</span><span id="line-10"></span><span class="hs-comment">-- Maintainer   : Dmitry Bogatov &lt;KAction@gnu.org&gt;</span><span>
+</span><span id="line-11"></span><span class="hs-comment">-- Stability    : unstable</span><span>
+</span><span id="line-12"></span><span class="hs-comment">-- Portability  : unportable</span><span>
+</span><span id="line-13"></span><span class="hs-comment">--</span><span>
+</span><span id="line-14"></span><span class="hs-comment">-- Functions for saving per-window data.</span><span>
+</span><span id="line-15"></span><span class="hs-comment">-----------------------------------------------------------------------------</span><span>
+</span><span id="line-16"></span><span>
+</span><span id="line-17"></span><span class="hs-keyword">module</span><span> </span><span class="hs-identifier">XMonad.Util.WindowState</span><span> </span><span class="hs-special">(</span><span> </span><span class="annot"><span class="hs-comment">-- * Usage</span></span><span>
+</span><span id="line-18"></span><span>                                 </span><span class="annot"><span class="hs-comment">-- $usage</span></span><span>
+</span><span id="line-19"></span><span>                                 </span><span class="annot"><span class="hs-identifier">get</span></span><span class="hs-special">,</span><span>
+</span><span id="line-20"></span><span>                                 </span><span class="annot"><span class="hs-identifier">put</span></span><span class="hs-special">,</span><span>
+</span><span id="line-21"></span><span>                                 </span><span class="annot"><a href="XMonad.Util.WindowState.html#StateQuery"><span class="hs-identifier">StateQuery</span></a></span><span class="hs-special">(</span><span class="hs-glyph">..</span><span class="hs-special">)</span><span class="hs-special">,</span><span>
+</span><span id="line-22"></span><span>                                 </span><span class="annot"><a href="XMonad.Util.WindowState.html#runStateQuery"><span class="hs-identifier">runStateQuery</span></a></span><span class="hs-special">,</span><span>
+</span><span id="line-23"></span><span>                                 </span><span class="annot"><a href="XMonad.Util.WindowState.html#catchQuery"><span class="hs-identifier">catchQuery</span></a></span><span> </span><span class="hs-special">)</span><span> </span><span class="hs-keyword">where</span><span>
+</span><span id="line-24"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><span class="hs-identifier">XMonad</span></span><span> </span><span class="hs-keyword">hiding</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier">get</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier">put</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier">modify</span></span><span class="hs-special">)</span><span>
+</span><span id="line-25"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><span class="hs-identifier">Control.Monad.Reader</span></span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier">ReaderT</span></span><span class="hs-special">(</span><span class="hs-glyph">..</span><span class="hs-special">)</span><span class="hs-special">)</span><span>
+</span><span id="line-26"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><span class="hs-identifier">Control.Monad.State.Class</span></span><span>
+</span><span id="line-27"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><span class="hs-identifier">Data.Typeable</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier">typeOf</span></span><span class="hs-special">)</span><span>
+</span><span id="line-28"></span><span class="hs-comment">-- $usage</span><span>
+</span><span id="line-29"></span><span class="hs-comment">--</span><span>
+</span><span id="line-30"></span><span class="hs-comment">-- This module allow to store state data with some 'Window'.</span><span>
+</span><span id="line-31"></span><span class="hs-comment">-- It is implemented with XProperties, so resources will be freed when</span><span>
+</span><span id="line-32"></span><span class="hs-comment">-- 'Window' is destoyed.</span><span>
+</span><span id="line-33"></span><span class="hs-comment">--</span><span>
+</span><span id="line-34"></span><span class="hs-comment">-- This module have advantage over &quot;XMonad.Actions.TagWindows&quot; in that it</span><span>
+</span><span id="line-35"></span><span class="hs-comment">-- hides from you implementation details and provides simple type-safe</span><span>
+</span><span id="line-36"></span><span class="hs-comment">-- interface.  Main datatype is &quot;StateQuery&quot;, which is simple wrapper around</span><span>
+</span><span id="line-37"></span><span class="hs-comment">-- &quot;Query&quot;, which is instance of MonadState, with 'put' and 'get' are</span><span>
+</span><span id="line-38"></span><span class="hs-comment">-- functions to acess data, stored in &quot;Window&quot;.</span><span>
+</span><span id="line-39"></span><span class="hs-comment">--</span><span>
+</span><span id="line-40"></span><span class="hs-comment">-- To save some data in window you probably want to do following:</span><span>
+</span><span id="line-41"></span><span class="hs-comment">-- &gt; (runStateQuery  (put $ Just value)  win) :: X ()</span><span>
+</span><span id="line-42"></span><span class="hs-comment">-- To retrive it, you can use</span><span>
+</span><span id="line-43"></span><span class="hs-comment">-- &gt; (runStateQuery get win) :: X (Maybe YourValueType)</span><span>
+</span><span id="line-44"></span><span class="hs-comment">-- &quot;Query&quot; can be promoted to &quot;StateQuery&quot; simply by constructor,</span><span>
+</span><span id="line-45"></span><span class="hs-comment">-- and reverse is 'getQuery'.</span><span>
+</span><span id="line-46"></span><span class="hs-comment">--</span><span>
+</span><span id="line-47"></span><span class="hs-comment">-- For example, I use it to have all X applications @russian@ or @dvorak@</span><span>
+</span><span id="line-48"></span><span class="hs-comment">-- layout, but emacs have only @us@, to not screw keybindings. Use your</span><span>
+</span><span id="line-49"></span><span class="hs-comment">-- imagination!</span><span>
+</span><span id="line-50"></span><span>
+</span><span id="line-51"></span><span class="hs-comment">-- | Wrapper around &quot;Query&quot; with phanom type @s@, representing state, saved in</span><span>
+</span><span id="line-52"></span><span class="hs-comment">-- window.</span><span>
+</span><span id="line-53"></span><span class="hs-keyword">newtype</span><span> </span><span id="StateQuery"><span class="annot"><a href="XMonad.Util.WindowState.html#StateQuery"><span class="hs-identifier hs-var">StateQuery</span></a></span></span><span> </span><span id="local-6989586621679387776"><span class="annot"><a href="#local-6989586621679387776"><span class="hs-identifier hs-type">s</span></a></span></span><span> </span><span id="local-6989586621679387775"><span class="annot"><a href="#local-6989586621679387775"><span class="hs-identifier hs-type">a</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span id="StateQuery"><span class="annot"><a href="XMonad.Util.WindowState.html#StateQuery"><span class="hs-identifier hs-var">StateQuery</span></a></span></span><span> </span><span class="hs-special">{</span><span>
+</span><span id="line-54"></span><span>      </span><span id="getQuery"><span class="annot"><span class="annottext">StateQuery s a -&gt; Query a
+</span><a href="XMonad.Util.WindowState.html#getQuery"><span class="hs-identifier hs-var hs-var">getQuery</span></a></span></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Query</span></span><span> </span><span class="annot"><a href="#local-6989586621679387775"><span class="hs-identifier hs-type">a</span></a></span><span>
+</span><span id="line-55"></span><span>    </span><span class="hs-special">}</span><span> </span><span class="hs-keyword">deriving</span><span> </span><span class="hs-special">(</span><span id="local-6989586621679387726"><span id="local-6989586621679387728"><span id="local-6989586621679387730"><span class="annot"><span class="annottext">Applicative (StateQuery s)
+a -&gt; StateQuery s a
+Applicative (StateQuery s)
+-&gt; (forall a b.
+    StateQuery s a -&gt; (a -&gt; StateQuery s b) -&gt; StateQuery s b)
+-&gt; (forall a b. StateQuery s a -&gt; StateQuery s b -&gt; StateQuery s b)
+-&gt; (forall a. a -&gt; StateQuery s a)
+-&gt; Monad (StateQuery s)
+StateQuery s a -&gt; (a -&gt; StateQuery s b) -&gt; StateQuery s b
+StateQuery s a -&gt; StateQuery s b -&gt; StateQuery s b
+forall s. Applicative (StateQuery s)
+forall a. a -&gt; StateQuery s a
+forall s a. a -&gt; StateQuery s a
+forall a b. StateQuery s a -&gt; StateQuery s b -&gt; StateQuery s b
+forall a b.
+StateQuery s a -&gt; (a -&gt; StateQuery s b) -&gt; StateQuery s b
+forall s a b. StateQuery s a -&gt; StateQuery s b -&gt; StateQuery s b
+forall s a b.
+StateQuery s a -&gt; (a -&gt; StateQuery s b) -&gt; StateQuery s b
+forall (m :: * -&gt; *).
+Applicative m
+-&gt; (forall a b. m a -&gt; (a -&gt; m b) -&gt; m b)
+-&gt; (forall a b. m a -&gt; m b -&gt; m b)
+-&gt; (forall a. a -&gt; m a)
+-&gt; Monad m
+return :: a -&gt; StateQuery s a
+$creturn :: forall s a. a -&gt; StateQuery s a
+&gt;&gt; :: StateQuery s a -&gt; StateQuery s b -&gt; StateQuery s b
+$c&gt;&gt; :: forall s a b. StateQuery s a -&gt; StateQuery s b -&gt; StateQuery s b
+&gt;&gt;= :: StateQuery s a -&gt; (a -&gt; StateQuery s b) -&gt; StateQuery s b
+$c&gt;&gt;= :: forall s a b.
+StateQuery s a -&gt; (a -&gt; StateQuery s b) -&gt; StateQuery s b
+$cp1Monad :: forall s. Applicative (StateQuery s)
+</span><span class="hs-identifier hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var">Monad</span></span></span></span></span><span class="hs-special">,</span><span> </span><span id="local-6989586621679387722"><span class="annot"><span class="annottext">Monad (StateQuery s)
+Monad (StateQuery s)
+-&gt; (forall a. IO a -&gt; StateQuery s a) -&gt; MonadIO (StateQuery s)
+IO a -&gt; StateQuery s a
+forall s. Monad (StateQuery s)
+forall a. IO a -&gt; StateQuery s a
+forall s a. IO a -&gt; StateQuery s a
+forall (m :: * -&gt; *).
+Monad m -&gt; (forall a. IO a -&gt; m a) -&gt; MonadIO m
+liftIO :: IO a -&gt; StateQuery s a
+$cliftIO :: forall s a. IO a -&gt; StateQuery s a
+$cp1MonadIO :: forall s. Monad (StateQuery s)
+</span><span class="hs-identifier hs-var hs-var hs-var hs-var hs-var">MonadIO</span></span></span><span class="hs-special">,</span><span> </span><span id="local-6989586621679387710"><span id="local-6989586621679387712"><span id="local-6989586621679387714"><span id="local-6989586621679387716"><span id="local-6989586621679387718"><span class="annot"><span class="annottext">Functor (StateQuery s)
+a -&gt; StateQuery s a
+Functor (StateQuery s)
+-&gt; (forall a. a -&gt; StateQuery s a)
+-&gt; (forall a b.
+    StateQuery s (a -&gt; b) -&gt; StateQuery s a -&gt; StateQuery s b)
+-&gt; (forall a b c.
+    (a -&gt; b -&gt; c)
+    -&gt; StateQuery s a -&gt; StateQuery s b -&gt; StateQuery s c)
+-&gt; (forall a b. StateQuery s a -&gt; StateQuery s b -&gt; StateQuery s b)
+-&gt; (forall a b. StateQuery s a -&gt; StateQuery s b -&gt; StateQuery s a)
+-&gt; Applicative (StateQuery s)
+StateQuery s a -&gt; StateQuery s b -&gt; StateQuery s b
+StateQuery s a -&gt; StateQuery s b -&gt; StateQuery s a
+StateQuery s (a -&gt; b) -&gt; StateQuery s a -&gt; StateQuery s b
+(a -&gt; b -&gt; c) -&gt; StateQuery s a -&gt; StateQuery s b -&gt; StateQuery s c
+forall s. Functor (StateQuery s)
+forall a. a -&gt; StateQuery s a
+forall s a. a -&gt; StateQuery s a
+forall a b. StateQuery s a -&gt; StateQuery s b -&gt; StateQuery s a
+forall a b. StateQuery s a -&gt; StateQuery s b -&gt; StateQuery s b
+forall a b.
+StateQuery s (a -&gt; b) -&gt; StateQuery s a -&gt; StateQuery s b
+forall s a b. StateQuery s a -&gt; StateQuery s b -&gt; StateQuery s a
+forall s a b. StateQuery s a -&gt; StateQuery s b -&gt; StateQuery s b
+forall s a b.
+StateQuery s (a -&gt; b) -&gt; StateQuery s a -&gt; StateQuery s b
+forall a b c.
+(a -&gt; b -&gt; c) -&gt; StateQuery s a -&gt; StateQuery s b -&gt; StateQuery s c
+forall s a b c.
+(a -&gt; b -&gt; c) -&gt; StateQuery s a -&gt; StateQuery s b -&gt; StateQuery s c
+forall (f :: * -&gt; *).
+Functor f
+-&gt; (forall a. a -&gt; f a)
+-&gt; (forall a b. f (a -&gt; b) -&gt; f a -&gt; f b)
+-&gt; (forall a b c. (a -&gt; b -&gt; c) -&gt; f a -&gt; f b -&gt; f c)
+-&gt; (forall a b. f a -&gt; f b -&gt; f b)
+-&gt; (forall a b. f a -&gt; f b -&gt; f a)
+-&gt; Applicative f
+&lt;* :: StateQuery s a -&gt; StateQuery s b -&gt; StateQuery s a
+$c&lt;* :: forall s a b. StateQuery s a -&gt; StateQuery s b -&gt; StateQuery s a
+*&gt; :: StateQuery s a -&gt; StateQuery s b -&gt; StateQuery s b
+$c*&gt; :: forall s a b. StateQuery s a -&gt; StateQuery s b -&gt; StateQuery s b
+liftA2 :: (a -&gt; b -&gt; c) -&gt; StateQuery s a -&gt; StateQuery s b -&gt; StateQuery s c
+$cliftA2 :: forall s a b c.
+(a -&gt; b -&gt; c) -&gt; StateQuery s a -&gt; StateQuery s b -&gt; StateQuery s c
+&lt;*&gt; :: StateQuery s (a -&gt; b) -&gt; StateQuery s a -&gt; StateQuery s b
+$c&lt;*&gt; :: forall s a b.
+StateQuery s (a -&gt; b) -&gt; StateQuery s a -&gt; StateQuery s b
+pure :: a -&gt; StateQuery s a
+$cpure :: forall s a. a -&gt; StateQuery s a
+$cp1Applicative :: forall s. Functor (StateQuery s)
+</span><span class="hs-identifier hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var">Applicative</span></span></span></span></span></span></span><span class="hs-special">,</span><span> </span><span id="local-6989586621679387705"><span id="local-6989586621679387707"><span class="annot"><span class="annottext">a -&gt; StateQuery s b -&gt; StateQuery s a
+(a -&gt; b) -&gt; StateQuery s a -&gt; StateQuery s b
+(forall a b. (a -&gt; b) -&gt; StateQuery s a -&gt; StateQuery s b)
+-&gt; (forall a b. a -&gt; StateQuery s b -&gt; StateQuery s a)
+-&gt; Functor (StateQuery s)
+forall a b. a -&gt; StateQuery s b -&gt; StateQuery s a
+forall a b. (a -&gt; b) -&gt; StateQuery s a -&gt; StateQuery s b
+forall s a b. a -&gt; StateQuery s b -&gt; StateQuery s a
+forall s a b. (a -&gt; b) -&gt; StateQuery s a -&gt; StateQuery s b
+forall (f :: * -&gt; *).
+(forall a b. (a -&gt; b) -&gt; f a -&gt; f b)
+-&gt; (forall a b. a -&gt; f b -&gt; f a) -&gt; Functor f
+&lt;$ :: a -&gt; StateQuery s b -&gt; StateQuery s a
+$c&lt;$ :: forall s a b. a -&gt; StateQuery s b -&gt; StateQuery s a
+fmap :: (a -&gt; b) -&gt; StateQuery s a -&gt; StateQuery s b
+$cfmap :: forall s a b. (a -&gt; b) -&gt; StateQuery s a -&gt; StateQuery s b
+</span><span class="hs-identifier hs-var hs-var hs-var hs-var hs-var hs-var">Functor</span></span></span></span><span class="hs-special">)</span><span>
+</span><span id="line-56"></span><span>
+</span><span id="line-57"></span><span id="local-6989586621679387773"><span class="annot"><a href="XMonad.Util.WindowState.html#packIntoQuery"><span class="hs-identifier hs-type">packIntoQuery</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">Window</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">X</span></span><span> </span><span class="annot"><a href="#local-6989586621679387773"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Query</span></span><span> </span><span class="annot"><a href="#local-6989586621679387773"><span class="hs-identifier hs-type">a</span></a></span></span><span>
+</span><span id="line-58"></span><span id="packIntoQuery"><span class="annot"><span class="annottext">packIntoQuery :: (Window -&gt; X a) -&gt; Query a
+</span><a href="XMonad.Util.WindowState.html#packIntoQuery"><span class="hs-identifier hs-var hs-var">packIntoQuery</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">ReaderT Window X a -&gt; Query a
+forall a. ReaderT Window X a -&gt; Query a
+</span><span class="hs-identifier hs-var">Query</span></span><span> </span><span class="annot"><span class="annottext">(ReaderT Window X a -&gt; Query a)
+-&gt; ((Window -&gt; X a) -&gt; ReaderT Window X a)
+-&gt; (Window -&gt; X a)
+-&gt; Query a
+forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">(Window -&gt; X a) -&gt; ReaderT Window X a
+forall r (m :: * -&gt; *) a. (r -&gt; m a) -&gt; ReaderT r m a
+</span><span class="hs-identifier hs-var">ReaderT</span></span><span>
+</span><span id="line-59"></span><span>
+</span><span id="line-60"></span><span class="hs-comment">-- | Apply &quot;StateQuery&quot; to &quot;Window&quot;.</span><span>
+</span><span id="line-61"></span><span id="local-6989586621679387698"><span id="local-6989586621679387699"><span class="annot"><a href="XMonad.Util.WindowState.html#runStateQuery"><span class="hs-identifier hs-type">runStateQuery</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><a href="XMonad.Util.WindowState.html#StateQuery"><span class="hs-identifier hs-type">StateQuery</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679387699"><span class="hs-identifier hs-type">s</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679387698"><span class="hs-identifier hs-type">a</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Window</span></span><span> </span><span class="hs-glyph">-&gt;</span><span>  </span><span class="annot"><span class="hs-identifier hs-type">X</span></span><span> </span><span class="annot"><a href="#local-6989586621679387698"><span class="hs-identifier hs-type">a</span></a></span></span></span><span>
+</span><span id="line-62"></span><span id="runStateQuery"><span class="annot"><span class="annottext">runStateQuery :: StateQuery s a -&gt; Window -&gt; X a
+</span><a href="XMonad.Util.WindowState.html#runStateQuery"><span class="hs-identifier hs-var hs-var">runStateQuery</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Query a -&gt; Window -&gt; X a
+forall a. Query a -&gt; Window -&gt; X a
+</span><span class="hs-identifier hs-var">runQuery</span></span><span> </span><span class="annot"><span class="annottext">(Query a -&gt; Window -&gt; X a)
+-&gt; (StateQuery s a -&gt; Query a) -&gt; StateQuery s a -&gt; Window -&gt; X a
+forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">StateQuery s a -&gt; Query a
+forall s a. StateQuery s a -&gt; Query a
+</span><a href="XMonad.Util.WindowState.html#getQuery"><span class="hs-identifier hs-var hs-var">getQuery</span></a></span><span>
+</span><span id="line-63"></span><span>
+</span><span id="line-64"></span><span class="hs-comment">-- | Lifted to &quot;Query&quot; version of 'catchX'</span><span>
+</span><span id="line-65"></span><span id="local-6989586621679387696"><span class="annot"><a href="XMonad.Util.WindowState.html#catchQuery"><span class="hs-identifier hs-type">catchQuery</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Query</span></span><span> </span><span class="annot"><a href="#local-6989586621679387696"><span class="hs-identifier hs-type">a</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Query</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">Maybe</span></span><span> </span><span class="annot"><a href="#local-6989586621679387696"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">)</span></span><span>
+</span><span id="line-66"></span><span id="catchQuery"><span class="annot"><span class="annottext">catchQuery :: Query a -&gt; Query (Maybe a)
+</span><a href="XMonad.Util.WindowState.html#catchQuery"><span class="hs-identifier hs-var hs-var">catchQuery</span></a></span></span><span> </span><span id="local-6989586621679387695"><span class="annot"><span class="annottext">Query a
+</span><a href="#local-6989586621679387695"><span class="hs-identifier hs-var">q</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">(Window -&gt; X (Maybe a)) -&gt; Query (Maybe a)
+forall a. (Window -&gt; X a) -&gt; Query a
+</span><a href="XMonad.Util.WindowState.html#packIntoQuery"><span class="hs-identifier hs-var">packIntoQuery</span></a></span><span> </span><span class="annot"><span class="annottext">((Window -&gt; X (Maybe a)) -&gt; Query (Maybe a))
+-&gt; (Window -&gt; X (Maybe a)) -&gt; Query (Maybe a)
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="hs-glyph">\</span><span id="local-6989586621679387694"><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679387694"><span class="hs-identifier hs-var">win</span></a></span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">X a -&gt; X (Maybe a)
+forall a. X a -&gt; X (Maybe a)
+</span><span class="hs-identifier hs-var">userCode</span></span><span> </span><span class="annot"><span class="annottext">(X a -&gt; X (Maybe a)) -&gt; X a -&gt; X (Maybe a)
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">Query a -&gt; Window -&gt; X a
+forall a. Query a -&gt; Window -&gt; X a
+</span><span class="hs-identifier hs-var">runQuery</span></span><span> </span><span class="annot"><span class="annottext">Query a
+</span><a href="#local-6989586621679387695"><span class="hs-identifier hs-var">q</span></a></span><span> </span><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679387694"><span class="hs-identifier hs-var">win</span></a></span><span>
+</span><span id="line-67"></span><span>
+</span><span id="line-68"></span><span class="hs-comment">-- | Instance of MonadState for StateQuery.</span><span>
+</span><span id="line-69"></span><span id="local-6989586621679387692"><span class="hs-keyword">instance</span><span> </span><span id="local-6989586621679387687"><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">Show</span></span><span> </span><span class="annot"><a href="#local-6989586621679387692"><span class="hs-identifier hs-type">s</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Read</span></span><span> </span><span class="annot"><a href="#local-6989586621679387692"><span class="hs-identifier hs-type">s</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Typeable</span></span><span> </span><span class="annot"><a href="#local-6989586621679387692"><span class="hs-identifier hs-type">s</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">MonadState</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">Maybe</span></span><span> </span><span class="annot"><a href="#local-6989586621679387692"><span class="hs-identifier hs-type">s</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-special">(</span><span class="annot"><a href="XMonad.Util.WindowState.html#StateQuery"><span class="hs-identifier hs-type">StateQuery</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679387692"><span class="hs-identifier hs-type">s</span></a></span><span class="hs-special">)</span></span><span> </span><span class="hs-keyword">where</span><span>
+</span><span id="line-70"></span><span>    </span><span id="local-6989586621679387685"><span class="annot"><span class="annottext">get :: StateQuery s (Maybe s)
+</span><a href="#local-6989586621679387685"><span class="hs-identifier hs-var hs-var hs-var hs-var">get</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Query (Maybe s) -&gt; StateQuery s (Maybe s)
+forall s a. Query a -&gt; StateQuery s a
+</span><a href="XMonad.Util.WindowState.html#StateQuery"><span class="hs-identifier hs-var">StateQuery</span></a></span><span>  </span><span class="annot"><span class="annottext">(Query (Maybe s) -&gt; StateQuery s (Maybe s))
+-&gt; Query (Maybe s) -&gt; StateQuery s (Maybe s)
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">Read s =&gt; String -&gt; Maybe s
+String -&gt; Maybe s
+</span><a href="#local-6989586621679387684"><span class="hs-identifier hs-var">read'</span></a></span><span> </span><span class="annot"><span class="annottext">(String -&gt; Maybe s) -&gt; Query String -&gt; Query (Maybe s)
+forall (f :: * -&gt; *) a b. Functor f =&gt; (a -&gt; b) -&gt; f a -&gt; f b
+</span><span class="hs-operator hs-var">&lt;$&gt;</span></span><span> </span><span class="annot"><span class="annottext">Maybe s -&gt; Query String
+</span><a href="#local-6989586621679387682"><span class="hs-identifier hs-var">get'</span></a></span><span> </span><span class="annot"><span class="annottext">Maybe s
+forall a. HasCallStack =&gt; a
+</span><span class="hs-identifier hs-var">undefined</span></span><span> </span><span class="hs-keyword">where</span><span>
+</span><span id="line-71"></span><span>        </span><span class="annot"><a href="#local-6989586621679387682"><span class="hs-identifier hs-type">get'</span></a></span><span>   </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Maybe</span></span><span> </span><span class="annot"><a href="#local-6989586621679387692"><span class="hs-identifier hs-type">s</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Query</span></span><span> </span><span class="annot"><span class="hs-identifier hs-type">String</span></span><span>
+</span><span id="line-72"></span><span>        </span><span id="local-6989586621679387682"><span class="annot"><span class="annottext">get' :: Maybe s -&gt; Query String
+</span><a href="#local-6989586621679387682"><span class="hs-identifier hs-var hs-var">get'</span></a></span></span><span> </span><span id="local-6989586621679387680"><span class="annot"><span class="annottext">Maybe s
+</span><a href="#local-6989586621679387680"><span class="hs-identifier hs-var">x</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">String -&gt; Query String
+</span><span class="hs-identifier hs-var">stringProperty</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Maybe s -&gt; String
+forall a. Typeable a =&gt; a -&gt; String
+</span><a href="XMonad.Util.WindowState.html#typePropertyName"><span class="hs-identifier hs-var">typePropertyName</span></a></span><span> </span><span class="annot"><span class="annottext">Maybe s
+</span><a href="#local-6989586621679387680"><span class="hs-identifier hs-var">x</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-73"></span><span>        </span><span class="annot"><a href="#local-6989586621679387684"><span class="hs-identifier hs-type">read'</span></a></span><span>  </span><span class="hs-glyph">::</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">Read</span></span><span> </span><span class="annot"><a href="#local-6989586621679387692"><span class="hs-identifier hs-type">s</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">String</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Maybe</span></span><span> </span><span class="annot"><a href="#local-6989586621679387692"><span class="hs-identifier hs-type">s</span></a></span><span>
+</span><span id="line-74"></span><span>        </span><span id="local-6989586621679387684"><span class="annot"><span class="annottext">read' :: String -&gt; Maybe s
+</span><a href="#local-6989586621679387684"><span class="hs-identifier hs-var hs-var">read'</span></a></span></span><span> </span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot;&quot;</span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Maybe s
+forall a. Maybe a
+</span><span class="hs-identifier hs-var">Nothing</span></span><span>
+</span><span id="line-75"></span><span>        </span><span class="annot"><a href="#local-6989586621679387684"><span class="hs-identifier hs-var">read'</span></a></span><span> </span><span id="local-6989586621679387677"><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679387677"><span class="hs-identifier hs-var">s</span></a></span></span><span>  </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">s -&gt; Maybe s
+forall a. a -&gt; Maybe a
+</span><span class="hs-identifier hs-var">Just</span></span><span> </span><span class="annot"><span class="annottext">(s -&gt; Maybe s) -&gt; s -&gt; Maybe s
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">String -&gt; s
+forall a. Read a =&gt; String -&gt; a
+</span><span class="hs-identifier hs-var">read</span></span><span> </span><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679387677"><span class="hs-identifier hs-var">s</span></a></span><span>
+</span><span id="line-76"></span><span>    </span><span id="local-6989586621679387675"><span class="annot"><span class="annottext">put :: Maybe s -&gt; StateQuery s ()
+</span><a href="#local-6989586621679387675"><span class="hs-identifier hs-var hs-var hs-var hs-var">put</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Query () -&gt; StateQuery s ()
+forall s a. Query a -&gt; StateQuery s a
+</span><a href="XMonad.Util.WindowState.html#StateQuery"><span class="hs-identifier hs-var">StateQuery</span></a></span><span> </span><span class="annot"><span class="annottext">(Query () -&gt; StateQuery s ())
+-&gt; ((Window -&gt; X ()) -&gt; Query ())
+-&gt; (Window -&gt; X ())
+-&gt; StateQuery s ()
+forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">(Window -&gt; X ()) -&gt; Query ()
+forall a. (Window -&gt; X a) -&gt; Query a
+</span><a href="XMonad.Util.WindowState.html#packIntoQuery"><span class="hs-identifier hs-var">packIntoQuery</span></a></span><span> </span><span class="annot"><span class="annottext">((Window -&gt; X ()) -&gt; StateQuery s ())
+-&gt; (Maybe s -&gt; Window -&gt; X ()) -&gt; Maybe s -&gt; StateQuery s ()
+forall (f :: * -&gt; *) a b. Functor f =&gt; (a -&gt; b) -&gt; f a -&gt; f b
+</span><span class="hs-operator hs-var">&lt;$&gt;</span></span><span> </span><span class="annot"><span class="annottext">Maybe s -&gt; Window -&gt; X ()
+forall a. (Show a, Typeable a) =&gt; Maybe a -&gt; Window -&gt; X ()
+</span><a href="#local-6989586621679387674"><span class="hs-identifier hs-var">setWindowProperty'</span></a></span><span> </span><span class="hs-keyword">where</span><span>
+</span><span id="line-77"></span><span>        </span><span id="local-6989586621679387674"><span class="annot"><span class="annottext">setWindowProperty' :: Maybe a -&gt; Window -&gt; X ()
+</span><a href="#local-6989586621679387674"><span class="hs-identifier hs-var hs-var">setWindowProperty'</span></a></span></span><span> </span><span id="local-6989586621679387673"><span class="annot"><span class="annottext">Maybe a
+</span><a href="#local-6989586621679387673"><span class="hs-identifier hs-var">val</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">String -&gt; String -&gt; Window -&gt; X ()
+</span><a href="XMonad.Util.WindowState.html#setWindowProperty"><span class="hs-identifier hs-var">setWindowProperty</span></a></span><span> </span><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679387671"><span class="hs-identifier hs-var">prop</span></a></span><span> </span><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679387670"><span class="hs-identifier hs-var">strValue</span></a></span><span> </span><span class="hs-keyword">where</span><span>
+</span><span id="line-78"></span><span>            </span><span id="local-6989586621679387671"><span class="annot"><span class="annottext">prop :: String
+</span><a href="#local-6989586621679387671"><span class="hs-identifier hs-var hs-var">prop</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Maybe a -&gt; String
+forall a. Typeable a =&gt; a -&gt; String
+</span><a href="XMonad.Util.WindowState.html#typePropertyName"><span class="hs-identifier hs-var">typePropertyName</span></a></span><span> </span><span class="annot"><span class="annottext">Maybe a
+</span><a href="#local-6989586621679387673"><span class="hs-identifier hs-var">val</span></a></span><span>
+</span><span id="line-79"></span><span>            </span><span id="local-6989586621679387670"><span class="annot"><span class="annottext">strValue :: String
+</span><a href="#local-6989586621679387670"><span class="hs-identifier hs-var hs-var">strValue</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">String -&gt; (a -&gt; String) -&gt; Maybe a -&gt; String
+forall b a. b -&gt; (a -&gt; b) -&gt; Maybe a -&gt; b
+</span><span class="hs-identifier hs-var">maybe</span></span><span> </span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot;&quot;</span></span><span> </span><span class="annot"><span class="annottext">a -&gt; String
+forall a. Show a =&gt; a -&gt; String
+</span><span class="hs-identifier hs-var">show</span></span><span> </span><span class="annot"><span class="annottext">Maybe a
+</span><a href="#local-6989586621679387673"><span class="hs-identifier hs-var">val</span></a></span></span><span>
+</span><span id="line-80"></span><span>
+</span><span id="line-81"></span><span id="local-6989586621679387755"><span class="annot"><a href="XMonad.Util.WindowState.html#typePropertyName"><span class="hs-identifier hs-type">typePropertyName</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">Typeable</span></span><span> </span><span class="annot"><a href="#local-6989586621679387755"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=&gt;</span><span> </span><span class="annot"><a href="#local-6989586621679387755"><span class="hs-identifier hs-type">a</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">String</span></span></span><span>
+</span><span id="line-82"></span><span id="typePropertyName"><span class="annot"><span class="annottext">typePropertyName :: a -&gt; String
+</span><a href="XMonad.Util.WindowState.html#typePropertyName"><span class="hs-identifier hs-var hs-var">typePropertyName</span></a></span></span><span> </span><span id="local-6989586621679387667"><span class="annot"><span class="annottext">a
+</span><a href="#local-6989586621679387667"><span class="hs-identifier hs-var">x</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot;_XMONAD_WINSTATE__&quot;</span></span><span> </span><span class="annot"><span class="annottext">String -&gt; String -&gt; String
+forall a. [a] -&gt; [a] -&gt; [a]
+</span><span class="hs-operator hs-var">++</span></span><span> </span><span class="annot"><span class="annottext">TypeRep -&gt; String
+forall a. Show a =&gt; a -&gt; String
+</span><span class="hs-identifier hs-var">show</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">a -&gt; TypeRep
+forall a. Typeable a =&gt; a -&gt; TypeRep
+</span><span class="hs-identifier hs-var">typeOf</span></span><span> </span><span class="annot"><span class="annottext">a
+</span><a href="#local-6989586621679387667"><span class="hs-identifier hs-var">x</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-83"></span><span>
+</span><span id="line-84"></span><span class="hs-keyword">type</span><span> </span><span id="PropertyName"><span class="annot"><a href="XMonad.Util.WindowState.html#PropertyName"><span class="hs-identifier hs-var">PropertyName</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="hs-identifier hs-type">String</span></span><span>
+</span><span id="line-85"></span><span class="annot"><a href="XMonad.Util.WindowState.html#setWindowProperty"><span class="hs-identifier hs-type">setWindowProperty</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><a href="XMonad.Util.WindowState.html#PropertyName"><span class="hs-identifier hs-type">PropertyName</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">String</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Window</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">X</span></span><span> </span><span class="hs-special">(</span><span class="hs-special">)</span><span>
+</span><span id="line-86"></span><span id="setWindowProperty"><span class="annot"><span class="annottext">setWindowProperty :: String -&gt; String -&gt; Window -&gt; X ()
+</span><a href="XMonad.Util.WindowState.html#setWindowProperty"><span class="hs-identifier hs-var hs-var">setWindowProperty</span></a></span></span><span> </span><span id="local-6989586621679387665"><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679387665"><span class="hs-identifier hs-var">prop</span></a></span></span><span> </span><span id="local-6989586621679387664"><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679387664"><span class="hs-identifier hs-var">val</span></a></span></span><span> </span><span id="local-6989586621679387663"><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679387663"><span class="hs-identifier hs-var">win</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">(Display -&gt; X ()) -&gt; X ()
+forall a. (Display -&gt; X a) -&gt; X a
+</span><span class="hs-identifier hs-var">withDisplay</span></span><span> </span><span class="annot"><span class="annottext">((Display -&gt; X ()) -&gt; X ()) -&gt; (Display -&gt; X ()) -&gt; X ()
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="hs-glyph">\</span><span id="local-6989586621679387661"><span class="annot"><span class="annottext">Display
+</span><a href="#local-6989586621679387661"><span class="hs-identifier hs-var">d</span></a></span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">IO () -&gt; X ()
+forall (m :: * -&gt; *) a. MonadIO m =&gt; IO a -&gt; m a
+</span><span class="hs-identifier hs-var">io</span></span><span> </span><span class="annot"><span class="annottext">(IO () -&gt; X ()) -&gt; IO () -&gt; X ()
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span>
+</span><span id="line-87"></span><span>                                 </span><span class="annot"><span class="annottext">Display -&gt; String -&gt; Bool -&gt; IO Window
+</span><span class="hs-identifier hs-var">internAtom</span></span><span> </span><span class="annot"><span class="annottext">Display
+</span><a href="#local-6989586621679387661"><span class="hs-identifier hs-var">d</span></a></span><span> </span><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679387665"><span class="hs-identifier hs-var">prop</span></a></span><span> </span><span class="annot"><span class="annottext">Bool
+</span><span class="hs-identifier hs-var">False</span></span><span> </span><span class="annot"><span class="annottext">IO Window -&gt; (Window -&gt; IO ()) -&gt; IO ()
+forall (m :: * -&gt; *) a b. Monad m =&gt; m a -&gt; (a -&gt; m b) -&gt; m b
+</span><span class="hs-operator hs-var">&gt;&gt;=</span></span><span>
+</span><span id="line-88"></span><span>                                 </span><span class="annot"><span class="annottext">Display -&gt; Window -&gt; String -&gt; Window -&gt; IO ()
+</span><span class="hs-identifier hs-var">setTextProperty</span></span><span> </span><span class="annot"><span class="annottext">Display
+</span><a href="#local-6989586621679387661"><span class="hs-identifier hs-var">d</span></a></span><span> </span><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679387663"><span class="hs-identifier hs-var">win</span></a></span><span> </span><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679387664"><span class="hs-identifier hs-var">val</span></a></span><span>
+</span><span id="line-89"></span></pre></body></html>

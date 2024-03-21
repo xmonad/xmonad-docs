@@ -1,0 +1,672 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd"><html xmlns="http://www.w3.org/1999/xhtml"><head><link rel="stylesheet" type="text/css" href="style.css" /><script type="text/javascript" src="highlight.js"></script></head><body><pre><span class="hs-pragma">{-# LANGUAGE MultiParamTypeClasses, TypeSynonymInstances #-}</span><span>
+</span><span id="line-2"></span><span>
+</span><span id="line-3"></span><span class="hs-comment">-----------------------------------------------------------------------------</span><span>
+</span><span id="line-4"></span><span class="hs-comment">-- |</span><span>
+</span><span id="line-5"></span><span class="hs-comment">-- Module      :  XMonad.Layout.MosaicAlt</span><span>
+</span><span id="line-6"></span><span class="hs-comment">-- Description :  An alternative version of &quot;XMonad.Layout.Mosaic&quot;.</span><span>
+</span><span id="line-7"></span><span class="hs-comment">-- Copyright   :  (c) 2007 James Webb</span><span>
+</span><span id="line-8"></span><span class="hs-comment">-- License     :  BSD-style (see xmonad/LICENSE)</span><span>
+</span><span id="line-9"></span><span class="hs-comment">--</span><span>
+</span><span id="line-10"></span><span class="hs-comment">-- Maintainer  :  xmonad#jwebb,sygneca,com</span><span>
+</span><span id="line-11"></span><span class="hs-comment">-- Stability   :  unstable</span><span>
+</span><span id="line-12"></span><span class="hs-comment">-- Portability :  unportable</span><span>
+</span><span id="line-13"></span><span class="hs-comment">--</span><span>
+</span><span id="line-14"></span><span class="hs-comment">-- A layout which gives each window a specified amount of screen space</span><span>
+</span><span id="line-15"></span><span class="hs-comment">-- relative to the others. Compared to the 'Mosaic' layout, this one</span><span>
+</span><span id="line-16"></span><span class="hs-comment">-- divides the space in a more balanced way.</span><span>
+</span><span id="line-17"></span><span class="hs-comment">--</span><span>
+</span><span id="line-18"></span><span class="hs-comment">-----------------------------------------------------------------------------</span><span>
+</span><span id="line-19"></span><span>
+</span><span id="line-20"></span><span class="hs-keyword">module</span><span> </span><span class="hs-identifier">XMonad.Layout.MosaicAlt</span><span> </span><span class="hs-special">(</span><span>
+</span><span id="line-21"></span><span>        </span><span class="annot"><span class="hs-comment">-- * Usage:</span></span><span>
+</span><span id="line-22"></span><span>        </span><span class="annot"><span class="hs-comment">-- $usage</span></span><span>
+</span><span id="line-23"></span><span>        </span><span class="annot"><a href="XMonad.Layout.MosaicAlt.html#MosaicAlt"><span class="hs-identifier">MosaicAlt</span></a></span><span class="hs-special">(</span><span class="hs-glyph">..</span><span class="hs-special">)</span><span>
+</span><span id="line-24"></span><span>        </span><span class="hs-special">,</span><span> </span><span class="annot"><a href="XMonad.Layout.MosaicAlt.html#shrinkWindowAlt"><span class="hs-identifier">shrinkWindowAlt</span></a></span><span>
+</span><span id="line-25"></span><span>        </span><span class="hs-special">,</span><span> </span><span class="annot"><a href="XMonad.Layout.MosaicAlt.html#expandWindowAlt"><span class="hs-identifier">expandWindowAlt</span></a></span><span>
+</span><span id="line-26"></span><span>        </span><span class="hs-special">,</span><span> </span><span class="annot"><a href="XMonad.Layout.MosaicAlt.html#tallWindowAlt"><span class="hs-identifier">tallWindowAlt</span></a></span><span>
+</span><span id="line-27"></span><span>        </span><span class="hs-special">,</span><span> </span><span class="annot"><a href="XMonad.Layout.MosaicAlt.html#wideWindowAlt"><span class="hs-identifier">wideWindowAlt</span></a></span><span>
+</span><span id="line-28"></span><span>        </span><span class="hs-special">,</span><span> </span><span class="annot"><a href="XMonad.Layout.MosaicAlt.html#resetAlt"><span class="hs-identifier">resetAlt</span></a></span><span>
+</span><span id="line-29"></span><span>
+</span><span id="line-30"></span><span>        </span><span class="hs-special">,</span><span> </span><span class="annot"><a href="XMonad.Layout.MosaicAlt.html#Params"><span class="hs-identifier">Params</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><a href="XMonad.Layout.MosaicAlt.html#Param"><span class="hs-identifier">Param</span></a></span><span>
+</span><span id="line-31"></span><span>        </span><span class="hs-special">,</span><span> </span><span class="annot"><a href="XMonad.Layout.MosaicAlt.html#HandleWindowAlt"><span class="hs-identifier">HandleWindowAlt</span></a></span><span>
+</span><span id="line-32"></span><span>    </span><span class="hs-special">)</span><span> </span><span class="hs-keyword">where</span><span>
+</span><span id="line-33"></span><span>
+</span><span id="line-34"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><span class="hs-identifier">XMonad</span></span><span>
+</span><span id="line-35"></span><span class="hs-keyword">import</span><span> </span><span class="hs-keyword">qualified</span><span> </span><span class="annot"><span class="hs-identifier">XMonad.StackSet</span></span><span> </span><span class="hs-keyword">as</span><span> </span><span class="annot"><span class="hs-identifier">W</span></span><span>
+</span><span id="line-36"></span><span class="hs-keyword">import</span><span> </span><span class="hs-keyword">qualified</span><span> </span><span class="annot"><span class="hs-identifier">Data.Map</span></span><span> </span><span class="hs-keyword">as</span><span> </span><span class="annot"><span class="hs-identifier">M</span></span><span>
+</span><span id="line-37"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><a href="XMonad.Prelude.html"><span class="hs-identifier">XMonad.Prelude</span></a></span><span> </span><span class="hs-special">(</span><span> </span><span class="annot"><span class="hs-identifier">sortBy</span></span><span> </span><span class="hs-special">)</span><span>
+</span><span id="line-38"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><span class="hs-identifier">Data.Ratio</span></span><span>
+</span><span id="line-39"></span><span>
+</span><span id="line-40"></span><span class="hs-comment">-- $usage</span><span>
+</span><span id="line-41"></span><span class="hs-comment">-- You can use this module with the following in your @xmonad.hs@:</span><span>
+</span><span id="line-42"></span><span class="hs-comment">--</span><span>
+</span><span id="line-43"></span><span class="hs-comment">-- &gt; import XMonad.Layout.MosaicAlt</span><span>
+</span><span id="line-44"></span><span class="hs-comment">-- &gt; import qualified Data.Map as M</span><span>
+</span><span id="line-45"></span><span class="hs-comment">--</span><span>
+</span><span id="line-46"></span><span class="hs-comment">-- Then edit your @layoutHook@ by adding the MosaicAlt layout:</span><span>
+</span><span id="line-47"></span><span class="hs-comment">--</span><span>
+</span><span id="line-48"></span><span class="hs-comment">-- &gt; myLayout = MosaicAlt M.empty ||| Full ||| etc..</span><span>
+</span><span id="line-49"></span><span class="hs-comment">-- &gt; main = xmonad def { layoutHook = myLayout }</span><span>
+</span><span id="line-50"></span><span class="hs-comment">--</span><span>
+</span><span id="line-51"></span><span class="hs-comment">-- For more detailed instructions on editing the layoutHook see</span><span>
+</span><span id="line-52"></span><span class="hs-comment">-- &lt;https://xmonad.org/TUTORIAL.html#customizing-xmonad the tutorial&gt; and</span><span>
+</span><span id="line-53"></span><span class="hs-comment">-- &quot;XMonad.Doc.Extending#Editing_the_layout_hook&quot;.</span><span>
+</span><span id="line-54"></span><span class="hs-comment">--</span><span>
+</span><span id="line-55"></span><span class="hs-comment">-- In the key-bindings, do something like:</span><span>
+</span><span id="line-56"></span><span class="hs-comment">--</span><span>
+</span><span id="line-57"></span><span class="hs-comment">-- &gt;     , ((modm .|. shiftMask  , xK_a    ), withFocused (sendMessage . expandWindowAlt))</span><span>
+</span><span id="line-58"></span><span class="hs-comment">-- &gt;     , ((modm .|. shiftMask  , xK_z    ), withFocused (sendMessage . shrinkWindowAlt))</span><span>
+</span><span id="line-59"></span><span class="hs-comment">-- &gt;     , ((modm .|. shiftMask  , xK_s    ), withFocused (sendMessage . tallWindowAlt))</span><span>
+</span><span id="line-60"></span><span class="hs-comment">-- &gt;     , ((modm .|. shiftMask  , xK_d    ), withFocused (sendMessage . wideWindowAlt))</span><span>
+</span><span id="line-61"></span><span class="hs-comment">-- &gt;     , ((modm .|. controlMask, xK_space), sendMessage resetAlt)</span><span>
+</span><span id="line-62"></span><span class="hs-comment">-- &gt;     ...</span><span>
+</span><span id="line-63"></span><span class="hs-comment">--</span><span>
+</span><span id="line-64"></span><span class="hs-comment">-- For detailed instruction on editing the key binding see:</span><span>
+</span><span id="line-65"></span><span class="hs-comment">--</span><span>
+</span><span id="line-66"></span><span class="hs-comment">-- &lt;https://xmonad.org/TUTORIAL.html#customizing-xmonad the tutorial&gt;.</span><span>
+</span><span id="line-67"></span><span>
+</span><span id="line-68"></span><span class="hs-keyword">data</span><span> </span><span id="HandleWindowAlt"><span class="annot"><a href="XMonad.Layout.MosaicAlt.html#HandleWindowAlt"><span class="hs-identifier hs-var">HandleWindowAlt</span></a></span></span><span> </span><span class="hs-glyph">=</span><span>
+</span><span id="line-69"></span><span>    </span><span id="ShrinkWindowAlt"><span class="annot"><a href="XMonad.Layout.MosaicAlt.html#ShrinkWindowAlt"><span class="hs-identifier hs-var">ShrinkWindowAlt</span></a></span></span><span> </span><span class="annot"><span class="hs-identifier hs-type">Window</span></span><span>
+</span><span id="line-70"></span><span>    </span><span class="hs-glyph">|</span><span> </span><span id="ExpandWindowAlt"><span class="annot"><a href="XMonad.Layout.MosaicAlt.html#ExpandWindowAlt"><span class="hs-identifier hs-var">ExpandWindowAlt</span></a></span></span><span> </span><span class="annot"><span class="hs-identifier hs-type">Window</span></span><span>
+</span><span id="line-71"></span><span>    </span><span class="hs-glyph">|</span><span> </span><span id="TallWindowAlt"><span class="annot"><a href="XMonad.Layout.MosaicAlt.html#TallWindowAlt"><span class="hs-identifier hs-var">TallWindowAlt</span></a></span></span><span> </span><span class="annot"><span class="hs-identifier hs-type">Window</span></span><span>
+</span><span id="line-72"></span><span>    </span><span class="hs-glyph">|</span><span> </span><span id="WideWindowAlt"><span class="annot"><a href="XMonad.Layout.MosaicAlt.html#WideWindowAlt"><span class="hs-identifier hs-var">WideWindowAlt</span></a></span></span><span> </span><span class="annot"><span class="hs-identifier hs-type">Window</span></span><span>
+</span><span id="line-73"></span><span>    </span><span class="hs-glyph">|</span><span> </span><span id="ResetAlt"><span class="annot"><a href="XMonad.Layout.MosaicAlt.html#ResetAlt"><span class="hs-identifier hs-var">ResetAlt</span></a></span></span><span>
+</span><span id="line-74"></span><span>    </span><span class="hs-keyword">deriving</span><span> </span><span class="hs-special">(</span><span> </span><span id="local-6989586621679402085"><span id="local-6989586621679402092"><span class="annot"><span class="annottext">HandleWindowAlt -&gt; HandleWindowAlt -&gt; Bool
+forall a. (a -&gt; a -&gt; Bool) -&gt; (a -&gt; a -&gt; Bool) -&gt; Eq a
+/= :: HandleWindowAlt -&gt; HandleWindowAlt -&gt; Bool
+$c/= :: HandleWindowAlt -&gt; HandleWindowAlt -&gt; Bool
+== :: HandleWindowAlt -&gt; HandleWindowAlt -&gt; Bool
+$c== :: HandleWindowAlt -&gt; HandleWindowAlt -&gt; Bool
+</span><span class="hs-identifier hs-var hs-var hs-var hs-var hs-var hs-var">Eq</span></span></span></span><span> </span><span class="hs-special">)</span><span>
+</span><span id="line-75"></span><span class="hs-keyword">instance</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Message</span></span><span> </span><span class="annot"><a href="XMonad.Layout.MosaicAlt.html#HandleWindowAlt"><span class="hs-identifier hs-type">HandleWindowAlt</span></a></span><span>
+</span><span id="line-76"></span><span class="annot"><a href="XMonad.Layout.MosaicAlt.html#shrinkWindowAlt"><span class="hs-identifier hs-type">shrinkWindowAlt</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><a href="XMonad.Layout.MosaicAlt.html#expandWindowAlt"><span class="hs-identifier hs-type">expandWindowAlt</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Window</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="XMonad.Layout.MosaicAlt.html#HandleWindowAlt"><span class="hs-identifier hs-type">HandleWindowAlt</span></a></span><span>
+</span><span id="line-77"></span><span class="annot"><a href="XMonad.Layout.MosaicAlt.html#tallWindowAlt"><span class="hs-identifier hs-type">tallWindowAlt</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><a href="XMonad.Layout.MosaicAlt.html#wideWindowAlt"><span class="hs-identifier hs-type">wideWindowAlt</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Window</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="XMonad.Layout.MosaicAlt.html#HandleWindowAlt"><span class="hs-identifier hs-type">HandleWindowAlt</span></a></span><span>
+</span><span id="line-78"></span><span id="shrinkWindowAlt"><span class="annot"><span class="annottext">shrinkWindowAlt :: Window -&gt; HandleWindowAlt
+</span><a href="XMonad.Layout.MosaicAlt.html#shrinkWindowAlt"><span class="hs-identifier hs-var hs-var">shrinkWindowAlt</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Window -&gt; HandleWindowAlt
+</span><a href="XMonad.Layout.MosaicAlt.html#ShrinkWindowAlt"><span class="hs-identifier hs-var">ShrinkWindowAlt</span></a></span><span>
+</span><span id="line-79"></span><span id="expandWindowAlt"><span class="annot"><span class="annottext">expandWindowAlt :: Window -&gt; HandleWindowAlt
+</span><a href="XMonad.Layout.MosaicAlt.html#expandWindowAlt"><span class="hs-identifier hs-var hs-var">expandWindowAlt</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Window -&gt; HandleWindowAlt
+</span><a href="XMonad.Layout.MosaicAlt.html#ExpandWindowAlt"><span class="hs-identifier hs-var">ExpandWindowAlt</span></a></span><span>
+</span><span id="line-80"></span><span id="tallWindowAlt"><span class="annot"><span class="annottext">tallWindowAlt :: Window -&gt; HandleWindowAlt
+</span><a href="XMonad.Layout.MosaicAlt.html#tallWindowAlt"><span class="hs-identifier hs-var hs-var">tallWindowAlt</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Window -&gt; HandleWindowAlt
+</span><a href="XMonad.Layout.MosaicAlt.html#TallWindowAlt"><span class="hs-identifier hs-var">TallWindowAlt</span></a></span><span>
+</span><span id="line-81"></span><span id="wideWindowAlt"><span class="annot"><span class="annottext">wideWindowAlt :: Window -&gt; HandleWindowAlt
+</span><a href="XMonad.Layout.MosaicAlt.html#wideWindowAlt"><span class="hs-identifier hs-var hs-var">wideWindowAlt</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Window -&gt; HandleWindowAlt
+</span><a href="XMonad.Layout.MosaicAlt.html#WideWindowAlt"><span class="hs-identifier hs-var">WideWindowAlt</span></a></span><span>
+</span><span id="line-82"></span><span class="annot"><a href="XMonad.Layout.MosaicAlt.html#resetAlt"><span class="hs-identifier hs-type">resetAlt</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><a href="XMonad.Layout.MosaicAlt.html#HandleWindowAlt"><span class="hs-identifier hs-type">HandleWindowAlt</span></a></span><span>
+</span><span id="line-83"></span><span id="resetAlt"><span class="annot"><span class="annottext">resetAlt :: HandleWindowAlt
+</span><a href="XMonad.Layout.MosaicAlt.html#resetAlt"><span class="hs-identifier hs-var hs-var">resetAlt</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">HandleWindowAlt
+</span><a href="XMonad.Layout.MosaicAlt.html#ResetAlt"><span class="hs-identifier hs-var">ResetAlt</span></a></span><span>
+</span><span id="line-84"></span><span>
+</span><span id="line-85"></span><span class="hs-keyword">data</span><span> </span><span id="Param"><span class="annot"><a href="XMonad.Layout.MosaicAlt.html#Param"><span class="hs-identifier hs-var">Param</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span id="Param"><span class="annot"><a href="XMonad.Layout.MosaicAlt.html#Param"><span class="hs-identifier hs-var">Param</span></a></span></span><span> </span><span class="hs-special">{</span><span> </span><span id="area"><span class="annot"><span class="annottext">Param -&gt; Rational
+</span><a href="XMonad.Layout.MosaicAlt.html#area"><span class="hs-identifier hs-var hs-var">area</span></a></span></span><span class="hs-special">,</span><span> </span><span id="aspect"><span class="annot"><span class="annottext">Param -&gt; Rational
+</span><a href="XMonad.Layout.MosaicAlt.html#aspect"><span class="hs-identifier hs-var hs-var">aspect</span></a></span></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Rational</span></span><span> </span><span class="hs-special">}</span><span> </span><span class="hs-keyword">deriving</span><span> </span><span class="hs-special">(</span><span> </span><span id="local-6989586621679402065"><span id="local-6989586621679402067"><span id="local-6989586621679402075"><span class="annot"><span class="annottext">Int -&gt; Param -&gt; ShowS
+[Param] -&gt; ShowS
+Param -&gt; String
+forall a.
+(Int -&gt; a -&gt; ShowS) -&gt; (a -&gt; String) -&gt; ([a] -&gt; ShowS) -&gt; Show a
+showList :: [Param] -&gt; ShowS
+$cshowList :: [Param] -&gt; ShowS
+show :: Param -&gt; String
+$cshow :: Param -&gt; String
+showsPrec :: Int -&gt; Param -&gt; ShowS
+$cshowsPrec :: Int -&gt; Param -&gt; ShowS
+</span><span class="hs-identifier hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var">Show</span></span></span></span></span><span class="hs-special">,</span><span> </span><span id="local-6989586621679402042"><span id="local-6989586621679402056"><span id="local-6989586621679402059"><span id="local-6989586621679402061"><span class="annot"><span class="annottext">ReadPrec [Param]
+ReadPrec Param
+Int -&gt; ReadS Param
+ReadS [Param]
+forall a.
+(Int -&gt; ReadS a)
+-&gt; ReadS [a] -&gt; ReadPrec a -&gt; ReadPrec [a] -&gt; Read a
+readListPrec :: ReadPrec [Param]
+$creadListPrec :: ReadPrec [Param]
+readPrec :: ReadPrec Param
+$creadPrec :: ReadPrec Param
+readList :: ReadS [Param]
+$creadList :: ReadS [Param]
+readsPrec :: Int -&gt; ReadS Param
+$creadsPrec :: Int -&gt; ReadS Param
+</span><span class="hs-identifier hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var">Read</span></span></span></span></span></span><span> </span><span class="hs-special">)</span><span>
+</span><span id="line-86"></span><span class="hs-keyword">type</span><span> </span><span id="Params"><span class="annot"><a href="XMonad.Layout.MosaicAlt.html#Params"><span class="hs-identifier hs-var">Params</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="hs-identifier hs-type">M.Map</span></span><span> </span><span class="annot"><span class="hs-identifier hs-type">Window</span></span><span> </span><span class="annot"><a href="XMonad.Layout.MosaicAlt.html#Param"><span class="hs-identifier hs-type">Param</span></a></span><span>
+</span><span id="line-87"></span><span class="hs-keyword">newtype</span><span> </span><span id="MosaicAlt"><span class="annot"><a href="XMonad.Layout.MosaicAlt.html#MosaicAlt"><span class="hs-identifier hs-var">MosaicAlt</span></a></span></span><span> </span><span id="local-6989586621679402196"><span class="annot"><a href="#local-6989586621679402196"><span class="hs-identifier hs-type">a</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span id="MosaicAlt"><span class="annot"><a href="XMonad.Layout.MosaicAlt.html#MosaicAlt"><span class="hs-identifier hs-var">MosaicAlt</span></a></span></span><span> </span><span class="annot"><a href="XMonad.Layout.MosaicAlt.html#Params"><span class="hs-identifier hs-type">Params</span></a></span><span> </span><span class="hs-keyword">deriving</span><span> </span><span class="hs-special">(</span><span> </span><span id="local-6989586621679402027"><span id="local-6989586621679402029"><span id="local-6989586621679402036"><span class="annot"><span class="annottext">Int -&gt; MosaicAlt a -&gt; ShowS
+forall a. Int -&gt; MosaicAlt a -&gt; ShowS
+forall a. [MosaicAlt a] -&gt; ShowS
+forall a. MosaicAlt a -&gt; String
+forall a.
+(Int -&gt; a -&gt; ShowS) -&gt; (a -&gt; String) -&gt; ([a] -&gt; ShowS) -&gt; Show a
+showList :: [MosaicAlt a] -&gt; ShowS
+$cshowList :: forall a. [MosaicAlt a] -&gt; ShowS
+show :: MosaicAlt a -&gt; String
+$cshow :: forall a. MosaicAlt a -&gt; String
+showsPrec :: Int -&gt; MosaicAlt a -&gt; ShowS
+$cshowsPrec :: forall a. Int -&gt; MosaicAlt a -&gt; ShowS
+</span><span class="hs-identifier hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var">Show</span></span></span></span></span><span class="hs-special">,</span><span> </span><span id="local-6989586621679402010"><span id="local-6989586621679402019"><span id="local-6989586621679402022"><span id="local-6989586621679402024"><span class="annot"><span class="annottext">ReadPrec [MosaicAlt a]
+ReadPrec (MosaicAlt a)
+ReadS [MosaicAlt a]
+forall a. ReadPrec [MosaicAlt a]
+forall a. ReadPrec (MosaicAlt a)
+forall a. Int -&gt; ReadS (MosaicAlt a)
+forall a. ReadS [MosaicAlt a]
+forall a.
+(Int -&gt; ReadS a)
+-&gt; ReadS [a] -&gt; ReadPrec a -&gt; ReadPrec [a] -&gt; Read a
+readListPrec :: ReadPrec [MosaicAlt a]
+$creadListPrec :: forall a. ReadPrec [MosaicAlt a]
+readPrec :: ReadPrec (MosaicAlt a)
+$creadPrec :: forall a. ReadPrec (MosaicAlt a)
+readList :: ReadS [MosaicAlt a]
+$creadList :: forall a. ReadS [MosaicAlt a]
+readsPrec :: Int -&gt; ReadS (MosaicAlt a)
+$creadsPrec :: forall a. Int -&gt; ReadS (MosaicAlt a)
+</span><span class="hs-identifier hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var">Read</span></span></span></span></span></span><span> </span><span class="hs-special">)</span><span>
+</span><span id="line-88"></span><span>
+</span><span id="line-89"></span><span class="hs-keyword">instance</span><span> </span><span id="local-6989586621679401994"><span id="local-6989586621679401997"><span id="local-6989586621679401999"><span id="local-6989586621679402002"><span class="annot"><span class="hs-identifier hs-type">LayoutClass</span></span><span> </span><span class="annot"><a href="XMonad.Layout.MosaicAlt.html#MosaicAlt"><span class="hs-identifier hs-type">MosaicAlt</span></a></span><span> </span><span class="annot"><span class="hs-identifier hs-type">Window</span></span></span></span></span></span><span> </span><span class="hs-keyword">where</span><span>
+</span><span id="line-90"></span><span>    </span><span id="local-6989586621679401991"><span class="annot"><span class="annottext">description :: MosaicAlt Window -&gt; String
+</span><span class="hs-identifier hs-var hs-var hs-var hs-var">description</span></span></span><span> </span><span class="annot"><span class="annottext">MosaicAlt Window
+</span><span class="hs-identifier">_</span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot;MosaicAlt&quot;</span></span><span>
+</span><span id="line-91"></span><span>    </span><span id="local-6989586621679401987"><span class="annot"><span class="annottext">doLayout :: MosaicAlt Window
+-&gt; Rectangle
+-&gt; Stack Window
+-&gt; X ([(Window, Rectangle)], Maybe (MosaicAlt Window))
+</span><span class="hs-identifier hs-var hs-var hs-var hs-var">doLayout</span></span></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="XMonad.Layout.MosaicAlt.html#MosaicAlt"><span class="hs-identifier hs-type">MosaicAlt</span></a></span><span> </span><span id="local-6989586621679401985"><span class="annot"><span class="annottext">Params
+</span><a href="#local-6989586621679401985"><span class="hs-identifier hs-var">params</span></a></span></span><span class="hs-special">)</span><span> </span><span id="local-6989586621679401984"><span class="annot"><span class="annottext">Rectangle
+</span><a href="#local-6989586621679401984"><span class="hs-identifier hs-var">rect</span></a></span></span><span> </span><span id="local-6989586621679401983"><span class="annot"><span class="annottext">Stack Window
+</span><a href="#local-6989586621679401983"><span class="hs-identifier hs-var">stack</span></a></span></span><span> </span><span class="hs-glyph">=</span><span>
+</span><span id="line-92"></span><span>            </span><span class="annot"><span class="annottext">forall (m :: * -&gt; *) a. Monad m =&gt; a -&gt; m a
+</span><span class="hs-identifier hs-var">return</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Rectangle -&gt; Stack Window -&gt; Params -&gt; [(Window, Rectangle)]
+</span><a href="XMonad.Layout.MosaicAlt.html#arrange"><span class="hs-identifier hs-var">arrange</span></a></span><span> </span><span class="annot"><span class="annottext">Rectangle
+</span><a href="#local-6989586621679401984"><span class="hs-identifier hs-var">rect</span></a></span><span> </span><span class="annot"><span class="annottext">Stack Window
+</span><a href="#local-6989586621679401983"><span class="hs-identifier hs-var">stack</span></a></span><span> </span><span class="annot"><span class="annottext">Params
+</span><a href="#local-6989586621679401981"><span class="hs-identifier hs-var">params'</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">forall a. a -&gt; Maybe a
+</span><span class="hs-identifier hs-var">Just</span></span><span> </span><span class="annot"><span class="annottext">forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">forall a. Params -&gt; MosaicAlt a
+</span><a href="XMonad.Layout.MosaicAlt.html#MosaicAlt"><span class="hs-identifier hs-var">MosaicAlt</span></a></span><span> </span><span class="annot"><span class="annottext">Params
+</span><a href="#local-6989586621679401981"><span class="hs-identifier hs-var">params'</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-93"></span><span>        </span><span class="hs-keyword">where</span><span>
+</span><span id="line-94"></span><span>            </span><span id="local-6989586621679401981"><span class="annot"><span class="annottext">params' :: Params
+</span><a href="#local-6989586621679401981"><span class="hs-identifier hs-var hs-var">params'</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">forall {k}. Ord k =&gt; [k] -&gt; Map k Param -&gt; Map k Param
+</span><a href="#local-6989586621679401977"><span class="hs-identifier hs-var">ins</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">forall a. Stack a -&gt; [a]
+</span><span class="hs-identifier hs-var">W.up</span></span><span> </span><span class="annot"><span class="annottext">Stack Window
+</span><a href="#local-6989586621679401983"><span class="hs-identifier hs-var">stack</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">forall {k}. Ord k =&gt; [k] -&gt; Map k Param -&gt; Map k Param
+</span><a href="#local-6989586621679401977"><span class="hs-identifier hs-var">ins</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">forall a. Stack a -&gt; [a]
+</span><span class="hs-identifier hs-var">W.down</span></span><span> </span><span class="annot"><span class="annottext">Stack Window
+</span><a href="#local-6989586621679401983"><span class="hs-identifier hs-var">stack</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">forall {k}. Ord k =&gt; [k] -&gt; Map k Param -&gt; Map k Param
+</span><a href="#local-6989586621679401977"><span class="hs-identifier hs-var">ins</span></a></span><span> </span><span class="hs-special">[</span><span class="annot"><span class="annottext">forall a. Stack a -&gt; a
+</span><span class="hs-identifier hs-var">W.focus</span></span><span> </span><span class="annot"><span class="annottext">Stack Window
+</span><a href="#local-6989586621679401983"><span class="hs-identifier hs-var">stack</span></a></span><span class="hs-special">]</span><span> </span><span class="annot"><span class="annottext">Params
+</span><a href="#local-6989586621679401985"><span class="hs-identifier hs-var">params</span></a></span><span>
+</span><span id="line-95"></span><span>            </span><span id="local-6989586621679401977"><span class="annot"><span class="annottext">ins :: [k] -&gt; Map k Param -&gt; Map k Param
+</span><a href="#local-6989586621679401977"><span class="hs-identifier hs-var hs-var">ins</span></a></span></span><span> </span><span id="local-6989586621679401966"><span class="annot"><span class="annottext">[k]
+</span><a href="#local-6989586621679401966"><span class="hs-identifier hs-var">wins</span></a></span></span><span> </span><span id="local-6989586621679401965"><span class="annot"><span class="annottext">Map k Param
+</span><a href="#local-6989586621679401965"><span class="hs-keyword hs-var">as</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">forall (t :: * -&gt; *) b a.
+Foldable t =&gt;
+(b -&gt; a -&gt; b) -&gt; b -&gt; t a -&gt; b
+</span><span class="hs-identifier hs-var">foldl</span></span><span> </span><span class="annot"><span class="annottext">forall k a. Ord k =&gt; Map k a -&gt; Map k a -&gt; Map k a
+</span><span class="hs-identifier hs-var">M.union</span></span><span> </span><span class="annot"><span class="annottext">Map k Param
+</span><a href="#local-6989586621679401965"><span class="hs-keyword hs-var">as</span></a></span><span> </span><span class="annot"><span class="annottext">forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">forall a b. (a -&gt; b) -&gt; [a] -&gt; [b]
+</span><span class="hs-identifier hs-var">map</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">forall k a. k -&gt; a -&gt; Map k a
+</span><span class="hs-operator hs-var">`M.singleton`</span></span><span> </span><span class="annot"><span class="annottext">Rational -&gt; Rational -&gt; Param
+</span><a href="XMonad.Layout.MosaicAlt.html#Param"><span class="hs-identifier hs-var">Param</span></a></span><span> </span><span class="annot"><span class="annottext">Rational
+</span><span class="hs-number">1</span></span><span> </span><span class="annot"><span class="annottext">Rational
+</span><span class="hs-number">1.5</span></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">[k]
+</span><a href="#local-6989586621679401966"><span class="hs-identifier hs-var">wins</span></a></span><span>
+</span><span id="line-96"></span><span>
+</span><span id="line-97"></span><span>    </span><span id="local-6989586621679401942"><span class="annot"><span class="annottext">handleMessage :: MosaicAlt Window -&gt; SomeMessage -&gt; X (Maybe (MosaicAlt Window))
+</span><span class="hs-identifier hs-var hs-var hs-var hs-var">handleMessage</span></span></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="XMonad.Layout.MosaicAlt.html#MosaicAlt"><span class="hs-identifier hs-type">MosaicAlt</span></a></span><span> </span><span id="local-6989586621679401940"><span class="annot"><span class="annottext">Params
+</span><a href="#local-6989586621679401940"><span class="hs-identifier hs-var">params</span></a></span></span><span class="hs-special">)</span><span> </span><span id="local-6989586621679401939"><span class="annot"><span class="annottext">SomeMessage
+</span><a href="#local-6989586621679401939"><span class="hs-identifier hs-var">msg</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">forall (m :: * -&gt; *) a. Monad m =&gt; a -&gt; m a
+</span><span class="hs-identifier hs-var">return</span></span><span> </span><span class="annot"><span class="annottext">forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="hs-keyword">case</span><span> </span><span class="annot"><span class="annottext">forall m. Message m =&gt; SomeMessage -&gt; Maybe m
+</span><span class="hs-identifier hs-var">fromMessage</span></span><span> </span><span class="annot"><span class="annottext">SomeMessage
+</span><a href="#local-6989586621679401939"><span class="hs-identifier hs-var">msg</span></a></span><span> </span><span class="hs-keyword">of</span><span>
+</span><span id="line-98"></span><span>        </span><span class="annot"><span class="hs-identifier hs-type">Just</span></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="XMonad.Layout.MosaicAlt.html#ShrinkWindowAlt"><span class="hs-identifier hs-type">ShrinkWindowAlt</span></a></span><span> </span><span id="local-6989586621679401937"><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679401937"><span class="hs-identifier hs-var">w</span></a></span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">forall a. a -&gt; Maybe a
+</span><span class="hs-identifier hs-var">Just</span></span><span> </span><span class="annot"><span class="annottext">forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">forall a. Params -&gt; MosaicAlt a
+</span><a href="XMonad.Layout.MosaicAlt.html#MosaicAlt"><span class="hs-identifier hs-var">MosaicAlt</span></a></span><span> </span><span class="annot"><span class="annottext">forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">Params -&gt; Window -&gt; Rational -&gt; Rational -&gt; Params
+</span><a href="XMonad.Layout.MosaicAlt.html#alter"><span class="hs-identifier hs-var">alter</span></a></span><span> </span><span class="annot"><span class="annottext">Params
+</span><a href="#local-6989586621679401940"><span class="hs-identifier hs-var">params</span></a></span><span> </span><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679401937"><span class="hs-identifier hs-var">w</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Integer
+</span><span class="hs-number">4</span></span><span> </span><span class="annot"><span class="annottext">forall a. Integral a =&gt; a -&gt; a -&gt; Ratio a
+</span><span class="hs-operator hs-var">%</span></span><span> </span><span class="annot"><span class="annottext">Integer
+</span><span class="hs-number">5</span></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">Rational
+</span><span class="hs-number">1</span></span><span>
+</span><span id="line-99"></span><span>        </span><span class="annot"><span class="hs-identifier hs-type">Just</span></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="XMonad.Layout.MosaicAlt.html#ExpandWindowAlt"><span class="hs-identifier hs-type">ExpandWindowAlt</span></a></span><span> </span><span id="local-6989586621679401934"><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679401934"><span class="hs-identifier hs-var">w</span></a></span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">forall a. a -&gt; Maybe a
+</span><span class="hs-identifier hs-var">Just</span></span><span> </span><span class="annot"><span class="annottext">forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">forall a. Params -&gt; MosaicAlt a
+</span><a href="XMonad.Layout.MosaicAlt.html#MosaicAlt"><span class="hs-identifier hs-var">MosaicAlt</span></a></span><span> </span><span class="annot"><span class="annottext">forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">Params -&gt; Window -&gt; Rational -&gt; Rational -&gt; Params
+</span><a href="XMonad.Layout.MosaicAlt.html#alter"><span class="hs-identifier hs-var">alter</span></a></span><span> </span><span class="annot"><span class="annottext">Params
+</span><a href="#local-6989586621679401940"><span class="hs-identifier hs-var">params</span></a></span><span> </span><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679401934"><span class="hs-identifier hs-var">w</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Integer
+</span><span class="hs-number">6</span></span><span> </span><span class="annot"><span class="annottext">forall a. Integral a =&gt; a -&gt; a -&gt; Ratio a
+</span><span class="hs-operator hs-var">%</span></span><span> </span><span class="annot"><span class="annottext">Integer
+</span><span class="hs-number">5</span></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">Rational
+</span><span class="hs-number">1</span></span><span>
+</span><span id="line-100"></span><span>        </span><span class="annot"><span class="hs-identifier hs-type">Just</span></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="XMonad.Layout.MosaicAlt.html#TallWindowAlt"><span class="hs-identifier hs-type">TallWindowAlt</span></a></span><span> </span><span id="local-6989586621679401933"><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679401933"><span class="hs-identifier hs-var">w</span></a></span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">forall a. a -&gt; Maybe a
+</span><span class="hs-identifier hs-var">Just</span></span><span> </span><span class="annot"><span class="annottext">forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">forall a. Params -&gt; MosaicAlt a
+</span><a href="XMonad.Layout.MosaicAlt.html#MosaicAlt"><span class="hs-identifier hs-var">MosaicAlt</span></a></span><span> </span><span class="annot"><span class="annottext">forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">Params -&gt; Window -&gt; Rational -&gt; Rational -&gt; Params
+</span><a href="XMonad.Layout.MosaicAlt.html#alter"><span class="hs-identifier hs-var">alter</span></a></span><span> </span><span class="annot"><span class="annottext">Params
+</span><a href="#local-6989586621679401940"><span class="hs-identifier hs-var">params</span></a></span><span> </span><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679401933"><span class="hs-identifier hs-var">w</span></a></span><span> </span><span class="annot"><span class="annottext">Rational
+</span><span class="hs-number">1</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Integer
+</span><span class="hs-number">3</span></span><span> </span><span class="annot"><span class="annottext">forall a. Integral a =&gt; a -&gt; a -&gt; Ratio a
+</span><span class="hs-operator hs-var">%</span></span><span> </span><span class="annot"><span class="annottext">Integer
+</span><span class="hs-number">4</span></span><span class="hs-special">)</span><span>
+</span><span id="line-101"></span><span>        </span><span class="annot"><span class="hs-identifier hs-type">Just</span></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="XMonad.Layout.MosaicAlt.html#WideWindowAlt"><span class="hs-identifier hs-type">WideWindowAlt</span></a></span><span> </span><span id="local-6989586621679401932"><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679401932"><span class="hs-identifier hs-var">w</span></a></span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">forall a. a -&gt; Maybe a
+</span><span class="hs-identifier hs-var">Just</span></span><span> </span><span class="annot"><span class="annottext">forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">forall a. Params -&gt; MosaicAlt a
+</span><a href="XMonad.Layout.MosaicAlt.html#MosaicAlt"><span class="hs-identifier hs-var">MosaicAlt</span></a></span><span> </span><span class="annot"><span class="annottext">forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">Params -&gt; Window -&gt; Rational -&gt; Rational -&gt; Params
+</span><a href="XMonad.Layout.MosaicAlt.html#alter"><span class="hs-identifier hs-var">alter</span></a></span><span> </span><span class="annot"><span class="annottext">Params
+</span><a href="#local-6989586621679401940"><span class="hs-identifier hs-var">params</span></a></span><span> </span><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679401932"><span class="hs-identifier hs-var">w</span></a></span><span> </span><span class="annot"><span class="annottext">Rational
+</span><span class="hs-number">1</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Integer
+</span><span class="hs-number">5</span></span><span> </span><span class="annot"><span class="annottext">forall a. Integral a =&gt; a -&gt; a -&gt; Ratio a
+</span><span class="hs-operator hs-var">%</span></span><span> </span><span class="annot"><span class="annottext">Integer
+</span><span class="hs-number">4</span></span><span class="hs-special">)</span><span>
+</span><span id="line-102"></span><span>        </span><span class="annot"><span class="hs-identifier hs-type">Just</span></span><span> </span><span class="annot"><span class="annottext">HandleWindowAlt
+</span><a href="XMonad.Layout.MosaicAlt.html#ResetAlt"><span class="hs-identifier hs-var">ResetAlt</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">forall a. a -&gt; Maybe a
+</span><span class="hs-identifier hs-var">Just</span></span><span> </span><span class="annot"><span class="annottext">forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">forall a. Params -&gt; MosaicAlt a
+</span><a href="XMonad.Layout.MosaicAlt.html#MosaicAlt"><span class="hs-identifier hs-var">MosaicAlt</span></a></span><span> </span><span class="annot"><span class="annottext">forall k a. Map k a
+</span><span class="hs-identifier hs-var">M.empty</span></span><span>
+</span><span id="line-103"></span><span>        </span><span class="annot"><span class="annottext">Maybe HandleWindowAlt
+</span><span class="hs-identifier">_</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">forall a. Maybe a
+</span><span class="hs-identifier hs-var">Nothing</span></span><span>
+</span><span id="line-104"></span><span>
+</span><span id="line-105"></span><span class="hs-comment">-- Change requested params for a window.</span><span>
+</span><span id="line-106"></span><span class="annot"><a href="XMonad.Layout.MosaicAlt.html#alter"><span class="hs-identifier hs-type">alter</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><a href="XMonad.Layout.MosaicAlt.html#Params"><span class="hs-identifier hs-type">Params</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Window</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Rational</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Rational</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="XMonad.Layout.MosaicAlt.html#Params"><span class="hs-identifier hs-type">Params</span></a></span><span>
+</span><span id="line-107"></span><span id="alter"><span class="annot"><span class="annottext">alter :: Params -&gt; Window -&gt; Rational -&gt; Rational -&gt; Params
+</span><a href="XMonad.Layout.MosaicAlt.html#alter"><span class="hs-identifier hs-var hs-var">alter</span></a></span></span><span> </span><span id="local-6989586621679401930"><span class="annot"><span class="annottext">Params
+</span><a href="#local-6989586621679401930"><span class="hs-identifier hs-var">params</span></a></span></span><span> </span><span id="local-6989586621679401929"><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679401929"><span class="hs-identifier hs-var">win</span></a></span></span><span> </span><span id="local-6989586621679401928"><span class="annot"><span class="annottext">Rational
+</span><a href="#local-6989586621679401928"><span class="hs-identifier hs-var">arDelta</span></a></span></span><span> </span><span id="local-6989586621679401927"><span class="annot"><span class="annottext">Rational
+</span><a href="#local-6989586621679401927"><span class="hs-identifier hs-var">asDelta</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-keyword">case</span><span> </span><span class="annot"><span class="annottext">forall k a. Ord k =&gt; k -&gt; Map k a -&gt; Maybe a
+</span><span class="hs-identifier hs-var">M.lookup</span></span><span> </span><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679401929"><span class="hs-identifier hs-var">win</span></a></span><span> </span><span class="annot"><span class="annottext">Params
+</span><a href="#local-6989586621679401930"><span class="hs-identifier hs-var">params</span></a></span><span> </span><span class="hs-keyword">of</span><span>
+</span><span id="line-108"></span><span>    </span><span class="annot"><span class="hs-identifier hs-type">Just</span></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="XMonad.Layout.MosaicAlt.html#Param"><span class="hs-identifier hs-type">Param</span></a></span><span> </span><span id="local-6989586621679401925"><span class="annot"><span class="annottext">Rational
+</span><a href="#local-6989586621679401925"><span class="hs-identifier hs-var">ar</span></a></span></span><span> </span><span id="local-6989586621679401924"><span class="annot"><span class="annottext">Rational
+</span><a href="#local-6989586621679401924"><span class="hs-keyword hs-var">as</span></a></span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">forall k a. Ord k =&gt; k -&gt; a -&gt; Map k a -&gt; Map k a
+</span><span class="hs-identifier hs-var">M.insert</span></span><span> </span><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679401929"><span class="hs-identifier hs-var">win</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Rational -&gt; Rational -&gt; Param
+</span><a href="XMonad.Layout.MosaicAlt.html#Param"><span class="hs-identifier hs-var">Param</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Rational
+</span><a href="#local-6989586621679401925"><span class="hs-identifier hs-var">ar</span></a></span><span> </span><span class="annot"><span class="annottext">forall a. Num a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-operator hs-var">*</span></span><span> </span><span class="annot"><span class="annottext">Rational
+</span><a href="#local-6989586621679401928"><span class="hs-identifier hs-var">arDelta</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Rational
+</span><a href="#local-6989586621679401924"><span class="hs-keyword hs-var">as</span></a></span><span> </span><span class="annot"><span class="annottext">forall a. Num a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-operator hs-var">*</span></span><span> </span><span class="annot"><span class="annottext">Rational
+</span><a href="#local-6989586621679401927"><span class="hs-identifier hs-var">asDelta</span></a></span><span class="hs-special">)</span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">Params
+</span><a href="#local-6989586621679401930"><span class="hs-identifier hs-var">params</span></a></span><span>
+</span><span id="line-109"></span><span>    </span><span class="annot"><span class="annottext">Maybe Param
+</span><span class="hs-identifier hs-var">Nothing</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">forall k a. Ord k =&gt; k -&gt; a -&gt; Map k a -&gt; Map k a
+</span><span class="hs-identifier hs-var">M.insert</span></span><span> </span><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679401929"><span class="hs-identifier hs-var">win</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Rational -&gt; Rational -&gt; Param
+</span><a href="XMonad.Layout.MosaicAlt.html#Param"><span class="hs-identifier hs-var">Param</span></a></span><span> </span><span class="annot"><span class="annottext">Rational
+</span><a href="#local-6989586621679401928"><span class="hs-identifier hs-var">arDelta</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Rational
+</span><span class="hs-number">1.5</span></span><span> </span><span class="annot"><span class="annottext">forall a. Num a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-operator hs-var">*</span></span><span> </span><span class="annot"><span class="annottext">Rational
+</span><a href="#local-6989586621679401927"><span class="hs-identifier hs-var">asDelta</span></a></span><span class="hs-special">)</span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">Params
+</span><a href="#local-6989586621679401930"><span class="hs-identifier hs-var">params</span></a></span><span>
+</span><span id="line-110"></span><span>
+</span><span id="line-111"></span><span class="hs-comment">-- Layout algorithm entry point.</span><span>
+</span><span id="line-112"></span><span class="annot"><a href="XMonad.Layout.MosaicAlt.html#arrange"><span class="hs-identifier hs-type">arrange</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Rectangle</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">W.Stack</span></span><span> </span><span class="annot"><span class="hs-identifier hs-type">Window</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="XMonad.Layout.MosaicAlt.html#Params"><span class="hs-identifier hs-type">Params</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="hs-special">[</span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">Window</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Rectangle</span></span><span class="hs-special">)</span><span class="hs-special">]</span><span>
+</span><span id="line-113"></span><span id="arrange"><span class="annot"><span class="annottext">arrange :: Rectangle -&gt; Stack Window -&gt; Params -&gt; [(Window, Rectangle)]
+</span><a href="XMonad.Layout.MosaicAlt.html#arrange"><span class="hs-identifier hs-var hs-var">arrange</span></a></span></span><span> </span><span id="local-6989586621679401921"><span class="annot"><span class="annottext">Rectangle
+</span><a href="#local-6989586621679401921"><span class="hs-identifier hs-var">rect</span></a></span></span><span> </span><span id="local-6989586621679401920"><span class="annot"><span class="annottext">Stack Window
+</span><a href="#local-6989586621679401920"><span class="hs-identifier hs-var">stack</span></a></span></span><span> </span><span id="local-6989586621679401919"><span class="annot"><span class="annottext">Params
+</span><a href="#local-6989586621679401919"><span class="hs-identifier hs-var">params</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">[(Window, Rectangle)]
+</span><a href="#local-6989586621679401918"><span class="hs-identifier hs-var">r</span></a></span><span>
+</span><span id="line-114"></span><span>    </span><span class="hs-keyword">where</span><span>
+</span><span id="line-115"></span><span>        </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Double
+</span><span class="hs-identifier">_</span></span><span class="hs-special">,</span><span> </span><span id="local-6989586621679401918"><span class="annot"><span class="annottext">[(Window, Rectangle)]
+</span><a href="#local-6989586621679401918"><span class="hs-identifier hs-var">r</span></a></span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Int
+-&gt; Rectangle -&gt; Tree -&gt; Params -&gt; (Double, [(Window, Rectangle)])
+</span><a href="XMonad.Layout.MosaicAlt.html#findSplits"><span class="hs-identifier hs-var">findSplits</span></a></span><span> </span><span class="annot"><span class="annottext">Int
+</span><span class="hs-number">3</span></span><span> </span><span class="annot"><span class="annottext">Rectangle
+</span><a href="#local-6989586621679401921"><span class="hs-identifier hs-var">rect</span></a></span><span> </span><span class="annot"><span class="annottext">Tree
+</span><a href="#local-6989586621679401916"><span class="hs-identifier hs-var">tree</span></a></span><span> </span><span class="annot"><span class="annottext">Params
+</span><a href="#local-6989586621679401919"><span class="hs-identifier hs-var">params</span></a></span><span>
+</span><span id="line-116"></span><span>        </span><span id="local-6989586621679401916"><span class="annot"><span class="annottext">tree :: Tree
+</span><a href="#local-6989586621679401916"><span class="hs-identifier hs-var hs-var">tree</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">[Window] -&gt; Params -&gt; Tree
+</span><a href="XMonad.Layout.MosaicAlt.html#makeTree"><span class="hs-identifier hs-var">makeTree</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">forall a. (a -&gt; a -&gt; Ordering) -&gt; [a] -&gt; [a]
+</span><span class="hs-identifier hs-var">sortBy</span></span><span> </span><span class="annot"><span class="annottext">Window -&gt; Window -&gt; Ordering
+</span><a href="#local-6989586621679401914"><span class="hs-identifier hs-var">areaCompare</span></a></span><span> </span><span class="annot"><span class="annottext">[Window]
+</span><a href="#local-6989586621679401913"><span class="hs-identifier hs-var">wins</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">Params
+</span><a href="#local-6989586621679401919"><span class="hs-identifier hs-var">params</span></a></span><span>
+</span><span id="line-117"></span><span>        </span><span id="local-6989586621679401913"><span class="annot"><span class="annottext">wins :: [Window]
+</span><a href="#local-6989586621679401913"><span class="hs-identifier hs-var hs-var">wins</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">forall a. [a] -&gt; [a]
+</span><span class="hs-identifier hs-var">reverse</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">forall a. Stack a -&gt; [a]
+</span><span class="hs-identifier hs-var">W.up</span></span><span> </span><span class="annot"><span class="annottext">Stack Window
+</span><a href="#local-6989586621679401920"><span class="hs-identifier hs-var">stack</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">forall a. [a] -&gt; [a] -&gt; [a]
+</span><span class="hs-operator hs-var">++</span></span><span> </span><span class="annot"><span class="annottext">forall a. Stack a -&gt; a
+</span><span class="hs-identifier hs-var">W.focus</span></span><span> </span><span class="annot"><span class="annottext">Stack Window
+</span><a href="#local-6989586621679401920"><span class="hs-identifier hs-var">stack</span></a></span><span> </span><span class="annot"><span class="annottext">forall a. a -&gt; [a] -&gt; [a]
+</span><span class="hs-glyph hs-var">:</span></span><span> </span><span class="annot"><span class="annottext">forall a. Stack a -&gt; [a]
+</span><span class="hs-identifier hs-var">W.down</span></span><span> </span><span class="annot"><span class="annottext">Stack Window
+</span><a href="#local-6989586621679401920"><span class="hs-identifier hs-var">stack</span></a></span><span>
+</span><span id="line-118"></span><span>        </span><span id="local-6989586621679401914"><span class="annot"><span class="annottext">areaCompare :: Window -&gt; Window -&gt; Ordering
+</span><a href="#local-6989586621679401914"><span class="hs-identifier hs-var hs-var">areaCompare</span></a></span></span><span> </span><span id="local-6989586621679401908"><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679401908"><span class="hs-identifier hs-var">a</span></a></span></span><span> </span><span id="local-6989586621679401907"><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679401907"><span class="hs-identifier hs-var">b</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Window -&gt; Rational
+</span><a href="#local-6989586621679401906"><span class="hs-identifier hs-var">or1</span></a></span><span> </span><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679401907"><span class="hs-identifier hs-var">b</span></a></span><span> </span><span class="annot"><span class="annottext">forall a. Ord a =&gt; a -&gt; a -&gt; Ordering
+</span><span class="hs-operator hs-var">`compare`</span></span><span> </span><span class="annot"><span class="annottext">Window -&gt; Rational
+</span><a href="#local-6989586621679401906"><span class="hs-identifier hs-var">or1</span></a></span><span> </span><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679401908"><span class="hs-identifier hs-var">a</span></a></span><span>
+</span><span id="line-119"></span><span>        </span><span id="local-6989586621679401906"><span class="annot"><span class="annottext">or1 :: Window -&gt; Rational
+</span><a href="#local-6989586621679401906"><span class="hs-identifier hs-var hs-var">or1</span></a></span></span><span> </span><span id="local-6989586621679401901"><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679401901"><span class="hs-identifier hs-var">w</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">forall b a. b -&gt; (a -&gt; b) -&gt; Maybe a -&gt; b
+</span><span class="hs-identifier hs-var">maybe</span></span><span> </span><span class="annot"><span class="annottext">Rational
+</span><span class="hs-number">1</span></span><span> </span><span class="annot"><span class="annottext">Param -&gt; Rational
+</span><a href="XMonad.Layout.MosaicAlt.html#area"><span class="hs-identifier hs-var">area</span></a></span><span> </span><span class="annot"><span class="annottext">forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">forall k a. Ord k =&gt; k -&gt; Map k a -&gt; Maybe a
+</span><span class="hs-identifier hs-var">M.lookup</span></span><span> </span><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679401901"><span class="hs-identifier hs-var">w</span></a></span><span> </span><span class="annot"><span class="annottext">Params
+</span><a href="#local-6989586621679401919"><span class="hs-identifier hs-var">params</span></a></span><span>
+</span><span id="line-120"></span><span>
+</span><span id="line-121"></span><span class="hs-comment">-- Recursively group windows into a binary tree. Aim to balance the tree</span><span>
+</span><span id="line-122"></span><span class="hs-comment">-- according to the total requested area in each branch.</span><span>
+</span><span id="line-123"></span><span class="hs-keyword">data</span><span> </span><span id="Tree"><span class="annot"><a href="XMonad.Layout.MosaicAlt.html#Tree"><span class="hs-identifier hs-var">Tree</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span id="Node"><span class="annot"><a href="XMonad.Layout.MosaicAlt.html#Node"><span class="hs-identifier hs-var">Node</span></a></span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">Rational</span></span><span class="hs-special">,</span><span> </span><span class="annot"><a href="XMonad.Layout.MosaicAlt.html#Tree"><span class="hs-identifier hs-type">Tree</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">Rational</span></span><span class="hs-special">,</span><span> </span><span class="annot"><a href="XMonad.Layout.MosaicAlt.html#Tree"><span class="hs-identifier hs-type">Tree</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">|</span><span> </span><span id="Leaf"><span class="annot"><a href="XMonad.Layout.MosaicAlt.html#Leaf"><span class="hs-identifier hs-var">Leaf</span></a></span></span><span> </span><span class="annot"><span class="hs-identifier hs-type">Window</span></span><span> </span><span class="hs-glyph">|</span><span> </span><span id="None"><span class="annot"><a href="XMonad.Layout.MosaicAlt.html#None"><span class="hs-identifier hs-var">None</span></a></span></span><span>
+</span><span id="line-124"></span><span class="annot"><a href="XMonad.Layout.MosaicAlt.html#makeTree"><span class="hs-identifier hs-type">makeTree</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="hs-special">[</span><span class="annot"><span class="hs-identifier hs-type">Window</span></span><span class="hs-special">]</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="XMonad.Layout.MosaicAlt.html#Params"><span class="hs-identifier hs-type">Params</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="XMonad.Layout.MosaicAlt.html#Tree"><span class="hs-identifier hs-type">Tree</span></a></span><span>
+</span><span id="line-125"></span><span id="makeTree"><span class="annot"><span class="annottext">makeTree :: [Window] -&gt; Params -&gt; Tree
+</span><a href="XMonad.Layout.MosaicAlt.html#makeTree"><span class="hs-identifier hs-var hs-var">makeTree</span></a></span></span><span> </span><span id="local-6989586621679401896"><span class="annot"><span class="annottext">[Window]
+</span><a href="#local-6989586621679401896"><span class="hs-identifier hs-var">wins</span></a></span></span><span> </span><span id="local-6989586621679401895"><span class="annot"><span class="annottext">Params
+</span><a href="#local-6989586621679401895"><span class="hs-identifier hs-var">params</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-keyword">case</span><span> </span><span class="annot"><span class="annottext">[Window]
+</span><a href="#local-6989586621679401896"><span class="hs-identifier hs-var">wins</span></a></span><span> </span><span class="hs-keyword">of</span><span>
+</span><span id="line-126"></span><span>    </span><span class="hs-special">[</span><span class="hs-special">]</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">Tree
+</span><a href="XMonad.Layout.MosaicAlt.html#None"><span class="hs-identifier hs-var">None</span></a></span><span>
+</span><span id="line-127"></span><span>    </span><span class="hs-special">[</span><span id="local-6989586621679401894"><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679401894"><span class="hs-identifier hs-var">x</span></a></span></span><span class="hs-special">]</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">Window -&gt; Tree
+</span><a href="XMonad.Layout.MosaicAlt.html#Leaf"><span class="hs-identifier hs-var">Leaf</span></a></span><span> </span><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679401894"><span class="hs-identifier hs-var">x</span></a></span><span>
+</span><span id="line-128"></span><span>    </span><span class="annot"><span class="annottext">[Window]
+</span><span class="hs-identifier">_</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">(Rational, Tree) -&gt; (Rational, Tree) -&gt; Tree
+</span><a href="XMonad.Layout.MosaicAlt.html#Node"><span class="hs-identifier hs-var">Node</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Rational
+</span><a href="#local-6989586621679401893"><span class="hs-identifier hs-var">aArea</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">[Window] -&gt; Params -&gt; Tree
+</span><a href="XMonad.Layout.MosaicAlt.html#makeTree"><span class="hs-identifier hs-var">makeTree</span></a></span><span> </span><span class="annot"><span class="annottext">[Window]
+</span><a href="#local-6989586621679401892"><span class="hs-identifier hs-var">aWins</span></a></span><span> </span><span class="annot"><span class="annottext">Params
+</span><a href="#local-6989586621679401895"><span class="hs-identifier hs-var">params</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Rational
+</span><a href="#local-6989586621679401891"><span class="hs-identifier hs-var">bArea</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">[Window] -&gt; Params -&gt; Tree
+</span><a href="XMonad.Layout.MosaicAlt.html#makeTree"><span class="hs-identifier hs-var">makeTree</span></a></span><span> </span><span class="annot"><span class="annottext">[Window]
+</span><a href="#local-6989586621679401890"><span class="hs-identifier hs-var">bWins</span></a></span><span> </span><span class="annot"><span class="annottext">Params
+</span><a href="#local-6989586621679401895"><span class="hs-identifier hs-var">params</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-129"></span><span>        </span><span class="hs-keyword">where</span><span> </span><span class="hs-special">(</span><span class="hs-special">(</span><span id="local-6989586621679401892"><span class="annot"><span class="annottext">[Window]
+</span><a href="#local-6989586621679401892"><span class="hs-identifier hs-var">aWins</span></a></span></span><span class="hs-special">,</span><span> </span><span id="local-6989586621679401893"><span class="annot"><span class="annottext">Rational
+</span><a href="#local-6989586621679401893"><span class="hs-identifier hs-var">aArea</span></a></span></span><span class="hs-special">)</span><span class="hs-special">,</span><span> </span><span class="hs-special">(</span><span id="local-6989586621679401890"><span class="annot"><span class="annottext">[Window]
+</span><a href="#local-6989586621679401890"><span class="hs-identifier hs-var">bWins</span></a></span></span><span class="hs-special">,</span><span> </span><span id="local-6989586621679401891"><span class="annot"><span class="annottext">Rational
+</span><a href="#local-6989586621679401891"><span class="hs-identifier hs-var">bArea</span></a></span></span><span class="hs-special">)</span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Params -&gt; [Window] -&gt; (([Window], Rational), ([Window], Rational))
+</span><a href="XMonad.Layout.MosaicAlt.html#areaSplit"><span class="hs-identifier hs-var">areaSplit</span></a></span><span> </span><span class="annot"><span class="annottext">Params
+</span><a href="#local-6989586621679401895"><span class="hs-identifier hs-var">params</span></a></span><span> </span><span class="annot"><span class="annottext">[Window]
+</span><a href="#local-6989586621679401896"><span class="hs-identifier hs-var">wins</span></a></span><span>
+</span><span id="line-130"></span><span>
+</span><span id="line-131"></span><span class="hs-comment">-- Split a list of windows in half by area.</span><span>
+</span><span id="line-132"></span><span class="annot"><a href="XMonad.Layout.MosaicAlt.html#areaSplit"><span class="hs-identifier hs-type">areaSplit</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><a href="XMonad.Layout.MosaicAlt.html#Params"><span class="hs-identifier hs-type">Params</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="hs-special">[</span><span class="annot"><span class="hs-identifier hs-type">Window</span></span><span class="hs-special">]</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="hs-special">(</span><span class="hs-special">(</span><span class="hs-special">[</span><span class="annot"><span class="hs-identifier hs-type">Window</span></span><span class="hs-special">]</span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Rational</span></span><span class="hs-special">)</span><span class="hs-special">,</span><span> </span><span class="hs-special">(</span><span class="hs-special">[</span><span class="annot"><span class="hs-identifier hs-type">Window</span></span><span class="hs-special">]</span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Rational</span></span><span class="hs-special">)</span><span class="hs-special">)</span><span>
+</span><span id="line-133"></span><span id="areaSplit"><span class="annot"><span class="annottext">areaSplit :: Params -&gt; [Window] -&gt; (([Window], Rational), ([Window], Rational))
+</span><a href="XMonad.Layout.MosaicAlt.html#areaSplit"><span class="hs-identifier hs-var hs-var">areaSplit</span></a></span></span><span> </span><span id="local-6989586621679401888"><span class="annot"><span class="annottext">Params
+</span><a href="#local-6989586621679401888"><span class="hs-identifier hs-var">params</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">[Window]
+-&gt; Rational
+-&gt; [Window]
+-&gt; Rational
+-&gt; [Window]
+-&gt; (([Window], Rational), ([Window], Rational))
+</span><a href="#local-6989586621679401887"><span class="hs-identifier hs-var">gather</span></a></span><span> </span><span class="hs-special">[</span><span class="hs-special">]</span><span> </span><span class="annot"><span class="annottext">Rational
+</span><span class="hs-number">0</span></span><span> </span><span class="hs-special">[</span><span class="hs-special">]</span><span> </span><span class="annot"><span class="annottext">Rational
+</span><span class="hs-number">0</span></span><span>
+</span><span id="line-134"></span><span>    </span><span class="hs-keyword">where</span><span>
+</span><span id="line-135"></span><span>        </span><span id="local-6989586621679401887"><span class="annot"><span class="annottext">gather :: [Window]
+-&gt; Rational
+-&gt; [Window]
+-&gt; Rational
+-&gt; [Window]
+-&gt; (([Window], Rational), ([Window], Rational))
+</span><a href="#local-6989586621679401887"><span class="hs-identifier hs-var hs-var">gather</span></a></span></span><span> </span><span id="local-6989586621679401882"><span class="annot"><span class="annottext">[Window]
+</span><a href="#local-6989586621679401882"><span class="hs-identifier hs-var">a</span></a></span></span><span> </span><span id="local-6989586621679401881"><span class="annot"><span class="annottext">Rational
+</span><a href="#local-6989586621679401881"><span class="hs-identifier hs-var">aa</span></a></span></span><span> </span><span id="local-6989586621679401880"><span class="annot"><span class="annottext">[Window]
+</span><a href="#local-6989586621679401880"><span class="hs-identifier hs-var">b</span></a></span></span><span> </span><span id="local-6989586621679401879"><span class="annot"><span class="annottext">Rational
+</span><a href="#local-6989586621679401879"><span class="hs-identifier hs-var">ba</span></a></span></span><span> </span><span class="hs-special">(</span><span id="local-6989586621679401878"><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679401878"><span class="hs-identifier hs-var">r</span></a></span></span><span> </span><span class="annot"><span class="hs-glyph hs-type">:</span></span><span> </span><span id="local-6989586621679401877"><span class="annot"><span class="annottext">[Window]
+</span><a href="#local-6989586621679401877"><span class="hs-identifier hs-var">rs</span></a></span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=</span><span>
+</span><span id="line-136"></span><span>            </span><span class="hs-keyword">if</span><span> </span><span class="annot"><span class="annottext">Rational
+</span><a href="#local-6989586621679401881"><span class="hs-identifier hs-var">aa</span></a></span><span> </span><span class="annot"><span class="annottext">forall a. Ord a =&gt; a -&gt; a -&gt; Bool
+</span><span class="hs-operator hs-var">&lt;=</span></span><span> </span><span class="annot"><span class="annottext">Rational
+</span><a href="#local-6989586621679401879"><span class="hs-identifier hs-var">ba</span></a></span><span>
+</span><span id="line-137"></span><span>                </span><span class="hs-keyword">then</span><span> </span><span class="annot"><span class="annottext">[Window]
+-&gt; Rational
+-&gt; [Window]
+-&gt; Rational
+-&gt; [Window]
+-&gt; (([Window], Rational), ([Window], Rational))
+</span><a href="#local-6989586621679401887"><span class="hs-identifier hs-var">gather</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679401878"><span class="hs-identifier hs-var">r</span></a></span><span> </span><span class="annot"><span class="annottext">forall a. a -&gt; [a] -&gt; [a]
+</span><span class="hs-glyph hs-var">:</span></span><span> </span><span class="annot"><span class="annottext">[Window]
+</span><a href="#local-6989586621679401882"><span class="hs-identifier hs-var">a</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Rational
+</span><a href="#local-6989586621679401881"><span class="hs-identifier hs-var">aa</span></a></span><span> </span><span class="annot"><span class="annottext">forall a. Num a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-operator hs-var">+</span></span><span> </span><span class="annot"><span class="annottext">Window -&gt; Rational
+</span><a href="#local-6989586621679401874"><span class="hs-identifier hs-var">or1</span></a></span><span> </span><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679401878"><span class="hs-identifier hs-var">r</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">[Window]
+</span><a href="#local-6989586621679401880"><span class="hs-identifier hs-var">b</span></a></span><span> </span><span class="annot"><span class="annottext">Rational
+</span><a href="#local-6989586621679401879"><span class="hs-identifier hs-var">ba</span></a></span><span> </span><span class="annot"><span class="annottext">[Window]
+</span><a href="#local-6989586621679401877"><span class="hs-identifier hs-var">rs</span></a></span><span>
+</span><span id="line-138"></span><span>                </span><span class="hs-keyword">else</span><span> </span><span class="annot"><span class="annottext">[Window]
+-&gt; Rational
+-&gt; [Window]
+-&gt; Rational
+-&gt; [Window]
+-&gt; (([Window], Rational), ([Window], Rational))
+</span><a href="#local-6989586621679401887"><span class="hs-identifier hs-var">gather</span></a></span><span> </span><span class="annot"><span class="annottext">[Window]
+</span><a href="#local-6989586621679401882"><span class="hs-identifier hs-var">a</span></a></span><span> </span><span class="annot"><span class="annottext">Rational
+</span><a href="#local-6989586621679401881"><span class="hs-identifier hs-var">aa</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679401878"><span class="hs-identifier hs-var">r</span></a></span><span> </span><span class="annot"><span class="annottext">forall a. a -&gt; [a] -&gt; [a]
+</span><span class="hs-glyph hs-var">:</span></span><span> </span><span class="annot"><span class="annottext">[Window]
+</span><a href="#local-6989586621679401880"><span class="hs-identifier hs-var">b</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Rational
+</span><a href="#local-6989586621679401879"><span class="hs-identifier hs-var">ba</span></a></span><span> </span><span class="annot"><span class="annottext">forall a. Num a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-operator hs-var">+</span></span><span> </span><span class="annot"><span class="annottext">Window -&gt; Rational
+</span><a href="#local-6989586621679401874"><span class="hs-identifier hs-var">or1</span></a></span><span> </span><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679401878"><span class="hs-identifier hs-var">r</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">[Window]
+</span><a href="#local-6989586621679401877"><span class="hs-identifier hs-var">rs</span></a></span><span>
+</span><span id="line-139"></span><span>        </span><span class="annot"><a href="#local-6989586621679401887"><span class="hs-identifier hs-var">gather</span></a></span><span> </span><span id="local-6989586621679401873"><span class="annot"><span class="annottext">[Window]
+</span><a href="#local-6989586621679401873"><span class="hs-identifier hs-var">a</span></a></span></span><span> </span><span id="local-6989586621679401872"><span class="annot"><span class="annottext">Rational
+</span><a href="#local-6989586621679401872"><span class="hs-identifier hs-var">aa</span></a></span></span><span> </span><span id="local-6989586621679401871"><span class="annot"><span class="annottext">[Window]
+</span><a href="#local-6989586621679401871"><span class="hs-identifier hs-var">b</span></a></span></span><span> </span><span id="local-6989586621679401870"><span class="annot"><span class="annottext">Rational
+</span><a href="#local-6989586621679401870"><span class="hs-identifier hs-var">ba</span></a></span></span><span> </span><span class="hs-special">[</span><span class="hs-special">]</span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-special">(</span><span class="hs-special">(</span><span class="annot"><span class="annottext">forall a. [a] -&gt; [a]
+</span><span class="hs-identifier hs-var">reverse</span></span><span> </span><span class="annot"><span class="annottext">[Window]
+</span><a href="#local-6989586621679401873"><span class="hs-identifier hs-var">a</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">Rational
+</span><a href="#local-6989586621679401872"><span class="hs-identifier hs-var">aa</span></a></span><span class="hs-special">)</span><span class="hs-special">,</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">[Window]
+</span><a href="#local-6989586621679401871"><span class="hs-identifier hs-var">b</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">Rational
+</span><a href="#local-6989586621679401870"><span class="hs-identifier hs-var">ba</span></a></span><span class="hs-special">)</span><span class="hs-special">)</span><span>
+</span><span id="line-140"></span><span>        </span><span id="local-6989586621679401874"><span class="annot"><span class="annottext">or1 :: Window -&gt; Rational
+</span><a href="#local-6989586621679401874"><span class="hs-identifier hs-var hs-var">or1</span></a></span></span><span> </span><span id="local-6989586621679401866"><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679401866"><span class="hs-identifier hs-var">w</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">forall b a. b -&gt; (a -&gt; b) -&gt; Maybe a -&gt; b
+</span><span class="hs-identifier hs-var">maybe</span></span><span> </span><span class="annot"><span class="annottext">Rational
+</span><span class="hs-number">1</span></span><span> </span><span class="annot"><span class="annottext">Param -&gt; Rational
+</span><a href="XMonad.Layout.MosaicAlt.html#area"><span class="hs-identifier hs-var">area</span></a></span><span> </span><span class="annot"><span class="annottext">forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">forall k a. Ord k =&gt; k -&gt; Map k a -&gt; Maybe a
+</span><span class="hs-identifier hs-var">M.lookup</span></span><span> </span><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679401866"><span class="hs-identifier hs-var">w</span></a></span><span> </span><span class="annot"><span class="annottext">Params
+</span><a href="#local-6989586621679401888"><span class="hs-identifier hs-var">params</span></a></span><span>
+</span><span id="line-141"></span><span>
+</span><span id="line-142"></span><span class="hs-comment">-- Figure out which ways to split the space, by exhaustive search.</span><span>
+</span><span id="line-143"></span><span class="hs-comment">-- Complexity is quadratic in the number of windows.</span><span>
+</span><span id="line-144"></span><span class="annot"><a href="XMonad.Layout.MosaicAlt.html#findSplits"><span class="hs-identifier hs-type">findSplits</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Int</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Rectangle</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="XMonad.Layout.MosaicAlt.html#Tree"><span class="hs-identifier hs-type">Tree</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="XMonad.Layout.MosaicAlt.html#Params"><span class="hs-identifier hs-type">Params</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">Double</span></span><span class="hs-special">,</span><span> </span><span class="hs-special">[</span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">Window</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Rectangle</span></span><span class="hs-special">)</span><span class="hs-special">]</span><span class="hs-special">)</span><span>
+</span><span id="line-145"></span><span id="findSplits"><span class="annot"><span class="annottext">findSplits :: Int
+-&gt; Rectangle -&gt; Tree -&gt; Params -&gt; (Double, [(Window, Rectangle)])
+</span><a href="XMonad.Layout.MosaicAlt.html#findSplits"><span class="hs-identifier hs-var hs-var">findSplits</span></a></span></span><span> </span><span class="annot"><span class="annottext">Int
+</span><span class="hs-identifier">_</span></span><span> </span><span class="annot"><span class="annottext">Rectangle
+</span><span class="hs-identifier">_</span></span><span> </span><span class="annot"><span class="annottext">Tree
+</span><a href="XMonad.Layout.MosaicAlt.html#None"><span class="hs-identifier hs-var">None</span></a></span><span> </span><span class="annot"><span class="annottext">Params
+</span><span class="hs-identifier">_</span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Double
+</span><span class="hs-number">0</span></span><span class="hs-special">,</span><span> </span><span class="hs-special">[</span><span class="hs-special">]</span><span class="hs-special">)</span><span>
+</span><span id="line-146"></span><span class="annot"><a href="XMonad.Layout.MosaicAlt.html#findSplits"><span class="hs-identifier hs-var">findSplits</span></a></span><span> </span><span class="annot"><span class="annottext">Int
+</span><span class="hs-identifier">_</span></span><span> </span><span id="local-6989586621679401865"><span class="annot"><span class="annottext">Rectangle
+</span><a href="#local-6989586621679401865"><span class="hs-identifier hs-var">rect</span></a></span></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="XMonad.Layout.MosaicAlt.html#Leaf"><span class="hs-identifier hs-type">Leaf</span></a></span><span> </span><span id="local-6989586621679401864"><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679401864"><span class="hs-identifier hs-var">w</span></a></span></span><span class="hs-special">)</span><span> </span><span id="local-6989586621679401863"><span class="annot"><span class="annottext">Params
+</span><a href="#local-6989586621679401863"><span class="hs-identifier hs-var">params</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Rectangle -&gt; Window -&gt; Params -&gt; Double
+</span><a href="XMonad.Layout.MosaicAlt.html#aspectBadness"><span class="hs-identifier hs-var">aspectBadness</span></a></span><span> </span><span class="annot"><span class="annottext">Rectangle
+</span><a href="#local-6989586621679401865"><span class="hs-identifier hs-var">rect</span></a></span><span> </span><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679401864"><span class="hs-identifier hs-var">w</span></a></span><span> </span><span class="annot"><span class="annottext">Params
+</span><a href="#local-6989586621679401863"><span class="hs-identifier hs-var">params</span></a></span><span class="hs-special">,</span><span> </span><span class="hs-special">[</span><span class="hs-special">(</span><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679401864"><span class="hs-identifier hs-var">w</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">Rectangle
+</span><a href="#local-6989586621679401865"><span class="hs-identifier hs-var">rect</span></a></span><span class="hs-special">)</span><span class="hs-special">]</span><span class="hs-special">)</span><span>
+</span><span id="line-147"></span><span class="annot"><a href="XMonad.Layout.MosaicAlt.html#findSplits"><span class="hs-identifier hs-var">findSplits</span></a></span><span> </span><span id="local-6989586621679401861"><span class="annot"><span class="annottext">Int
+</span><a href="#local-6989586621679401861"><span class="hs-identifier hs-var">depth</span></a></span></span><span> </span><span id="local-6989586621679401860"><span class="annot"><span class="annottext">Rectangle
+</span><a href="#local-6989586621679401860"><span class="hs-identifier hs-var">rect</span></a></span></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="XMonad.Layout.MosaicAlt.html#Node"><span class="hs-identifier hs-type">Node</span></a></span><span> </span><span class="hs-special">(</span><span id="local-6989586621679401859"><span class="annot"><span class="annottext">Rational
+</span><a href="#local-6989586621679401859"><span class="hs-identifier hs-var">aArea</span></a></span></span><span class="hs-special">,</span><span> </span><span id="local-6989586621679401858"><span class="annot"><span class="annottext">Tree
+</span><a href="#local-6989586621679401858"><span class="hs-identifier hs-var">aTree</span></a></span></span><span class="hs-special">)</span><span> </span><span class="hs-special">(</span><span id="local-6989586621679401857"><span class="annot"><span class="annottext">Rational
+</span><a href="#local-6989586621679401857"><span class="hs-identifier hs-var">bArea</span></a></span></span><span class="hs-special">,</span><span> </span><span id="local-6989586621679401856"><span class="annot"><span class="annottext">Tree
+</span><a href="#local-6989586621679401856"><span class="hs-identifier hs-var">bTree</span></a></span></span><span class="hs-special">)</span><span class="hs-special">)</span><span> </span><span id="local-6989586621679401855"><span class="annot"><span class="annottext">Params
+</span><a href="#local-6989586621679401855"><span class="hs-identifier hs-var">params</span></a></span></span><span> </span><span class="hs-glyph">=</span><span>
+</span><span id="line-148"></span><span>        </span><span class="hs-keyword">if</span><span> </span><span class="annot"><span class="annottext">Double
+</span><a href="#local-6989586621679401854"><span class="hs-identifier hs-var">hBadness</span></a></span><span> </span><span class="annot"><span class="annottext">forall a. Ord a =&gt; a -&gt; a -&gt; Bool
+</span><span class="hs-operator hs-var">&lt;</span></span><span> </span><span class="annot"><span class="annottext">Double
+</span><a href="#local-6989586621679401852"><span class="hs-identifier hs-var">vBadness</span></a></span><span> </span><span class="hs-keyword">then</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Double
+</span><a href="#local-6989586621679401854"><span class="hs-identifier hs-var">hBadness</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">[(Window, Rectangle)]
+</span><a href="#local-6989586621679401851"><span class="hs-identifier hs-var">hList</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-keyword">else</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Double
+</span><a href="#local-6989586621679401852"><span class="hs-identifier hs-var">vBadness</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">[(Window, Rectangle)]
+</span><a href="#local-6989586621679401850"><span class="hs-identifier hs-var">vList</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-149"></span><span>    </span><span class="hs-keyword">where</span><span>
+</span><span id="line-150"></span><span>        </span><span class="hs-special">(</span><span id="local-6989586621679401854"><span class="annot"><span class="annottext">Double
+</span><a href="#local-6989586621679401854"><span class="hs-identifier hs-var">hBadness</span></a></span></span><span class="hs-special">,</span><span> </span><span id="local-6989586621679401851"><span class="annot"><span class="annottext">[(Window, Rectangle)]
+</span><a href="#local-6989586621679401851"><span class="hs-identifier hs-var">hList</span></a></span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">(Rational -&gt; Rectangle -&gt; (Rectangle, Rectangle))
+-&gt; (Double, [(Window, Rectangle)])
+</span><a href="#local-6989586621679401846"><span class="hs-identifier hs-var">trySplit</span></a></span><span> </span><span class="annot"><span class="annottext">forall r. RealFrac r =&gt; r -&gt; Rectangle -&gt; (Rectangle, Rectangle)
+</span><span class="hs-identifier hs-var">splitHorizontallyBy</span></span><span>
+</span><span id="line-151"></span><span>        </span><span class="hs-special">(</span><span id="local-6989586621679401852"><span class="annot"><span class="annottext">Double
+</span><a href="#local-6989586621679401852"><span class="hs-identifier hs-var">vBadness</span></a></span></span><span class="hs-special">,</span><span> </span><span id="local-6989586621679401850"><span class="annot"><span class="annottext">[(Window, Rectangle)]
+</span><a href="#local-6989586621679401850"><span class="hs-identifier hs-var">vList</span></a></span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">(Rational -&gt; Rectangle -&gt; (Rectangle, Rectangle))
+-&gt; (Double, [(Window, Rectangle)])
+</span><a href="#local-6989586621679401846"><span class="hs-identifier hs-var">trySplit</span></a></span><span> </span><span class="annot"><span class="annottext">forall r. RealFrac r =&gt; r -&gt; Rectangle -&gt; (Rectangle, Rectangle)
+</span><span class="hs-identifier hs-var">splitVerticallyBy</span></span><span>
+</span><span id="line-152"></span><span>        </span><span id="local-6989586621679401846"><span class="annot"><span class="annottext">trySplit :: (Rational -&gt; Rectangle -&gt; (Rectangle, Rectangle))
+-&gt; (Double, [(Window, Rectangle)])
+</span><a href="#local-6989586621679401846"><span class="hs-identifier hs-var hs-var">trySplit</span></a></span></span><span> </span><span id="local-6989586621679401840"><span class="annot"><span class="annottext">Rational -&gt; Rectangle -&gt; (Rectangle, Rectangle)
+</span><a href="#local-6989586621679401840"><span class="hs-identifier hs-var">splitBy</span></a></span></span><span> </span><span class="hs-glyph">=</span><span>
+</span><span id="line-153"></span><span>                </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Double
+</span><a href="#local-6989586621679401839"><span class="hs-identifier hs-var">aBadness</span></a></span><span> </span><span class="annot"><span class="annottext">forall a. Num a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-operator hs-var">+</span></span><span> </span><span class="annot"><span class="annottext">Double
+</span><a href="#local-6989586621679401838"><span class="hs-identifier hs-var">bBadness</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">[(Window, Rectangle)]
+</span><a href="#local-6989586621679401837"><span class="hs-identifier hs-var">aList</span></a></span><span> </span><span class="annot"><span class="annottext">forall a. [a] -&gt; [a] -&gt; [a]
+</span><span class="hs-operator hs-var">++</span></span><span> </span><span class="annot"><span class="annottext">[(Window, Rectangle)]
+</span><a href="#local-6989586621679401836"><span class="hs-identifier hs-var">bList</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-154"></span><span>            </span><span class="hs-keyword">where</span><span>
+</span><span id="line-155"></span><span>                </span><span class="hs-special">(</span><span id="local-6989586621679401839"><span class="annot"><span class="annottext">Double
+</span><a href="#local-6989586621679401839"><span class="hs-identifier hs-var">aBadness</span></a></span></span><span class="hs-special">,</span><span> </span><span id="local-6989586621679401837"><span class="annot"><span class="annottext">[(Window, Rectangle)]
+</span><a href="#local-6989586621679401837"><span class="hs-identifier hs-var">aList</span></a></span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Int
+-&gt; Rectangle -&gt; Tree -&gt; Params -&gt; (Double, [(Window, Rectangle)])
+</span><a href="XMonad.Layout.MosaicAlt.html#findSplits"><span class="hs-identifier hs-var">findSplits</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Int
+</span><a href="#local-6989586621679401861"><span class="hs-identifier hs-var">depth</span></a></span><span> </span><span class="annot"><span class="annottext">forall a. Num a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-glyph hs-var">-</span></span><span> </span><span class="annot"><span class="annottext">Int
+</span><span class="hs-number">1</span></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">Rectangle
+</span><a href="#local-6989586621679401832"><span class="hs-identifier hs-var">aRect</span></a></span><span> </span><span class="annot"><span class="annottext">Tree
+</span><a href="#local-6989586621679401858"><span class="hs-identifier hs-var">aTree</span></a></span><span> </span><span class="annot"><span class="annottext">Params
+</span><a href="#local-6989586621679401855"><span class="hs-identifier hs-var">params</span></a></span><span>
+</span><span id="line-156"></span><span>                </span><span class="hs-special">(</span><span id="local-6989586621679401838"><span class="annot"><span class="annottext">Double
+</span><a href="#local-6989586621679401838"><span class="hs-identifier hs-var">bBadness</span></a></span></span><span class="hs-special">,</span><span> </span><span id="local-6989586621679401836"><span class="annot"><span class="annottext">[(Window, Rectangle)]
+</span><a href="#local-6989586621679401836"><span class="hs-identifier hs-var">bList</span></a></span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Int
+-&gt; Rectangle -&gt; Tree -&gt; Params -&gt; (Double, [(Window, Rectangle)])
+</span><a href="XMonad.Layout.MosaicAlt.html#findSplits"><span class="hs-identifier hs-var">findSplits</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Int
+</span><a href="#local-6989586621679401861"><span class="hs-identifier hs-var">depth</span></a></span><span> </span><span class="annot"><span class="annottext">forall a. Num a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-glyph hs-var">-</span></span><span> </span><span class="annot"><span class="annottext">Int
+</span><span class="hs-number">1</span></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">Rectangle
+</span><a href="#local-6989586621679401829"><span class="hs-identifier hs-var">bRect</span></a></span><span> </span><span class="annot"><span class="annottext">Tree
+</span><a href="#local-6989586621679401856"><span class="hs-identifier hs-var">bTree</span></a></span><span> </span><span class="annot"><span class="annottext">Params
+</span><a href="#local-6989586621679401855"><span class="hs-identifier hs-var">params</span></a></span><span>
+</span><span id="line-157"></span><span>                </span><span class="hs-special">(</span><span id="local-6989586621679401832"><span class="annot"><span class="annottext">Rectangle
+</span><a href="#local-6989586621679401832"><span class="hs-identifier hs-var">aRect</span></a></span></span><span class="hs-special">,</span><span> </span><span id="local-6989586621679401829"><span class="annot"><span class="annottext">Rectangle
+</span><a href="#local-6989586621679401829"><span class="hs-identifier hs-var">bRect</span></a></span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Rational -&gt; Rectangle -&gt; (Rectangle, Rectangle)
+</span><a href="#local-6989586621679401840"><span class="hs-identifier hs-var">splitBy</span></a></span><span> </span><span class="annot"><span class="annottext">Rational
+</span><a href="#local-6989586621679401828"><span class="hs-identifier hs-var">ratio</span></a></span><span> </span><span class="annot"><span class="annottext">Rectangle
+</span><a href="#local-6989586621679401860"><span class="hs-identifier hs-var">rect</span></a></span><span>
+</span><span id="line-158"></span><span>        </span><span id="local-6989586621679401828"><span class="annot"><span class="annottext">ratio :: Rational
+</span><a href="#local-6989586621679401828"><span class="hs-identifier hs-var hs-var">ratio</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Rational
+</span><a href="#local-6989586621679401859"><span class="hs-identifier hs-var">aArea</span></a></span><span> </span><span class="annot"><span class="annottext">forall a. Fractional a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-operator hs-var">/</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Rational
+</span><a href="#local-6989586621679401859"><span class="hs-identifier hs-var">aArea</span></a></span><span> </span><span class="annot"><span class="annottext">forall a. Num a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-operator hs-var">+</span></span><span> </span><span class="annot"><span class="annottext">Rational
+</span><a href="#local-6989586621679401857"><span class="hs-identifier hs-var">bArea</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-159"></span><span>
+</span><span id="line-160"></span><span class="hs-comment">-- Decide how much we like this rectangle.</span><span>
+</span><span id="line-161"></span><span class="annot"><a href="XMonad.Layout.MosaicAlt.html#aspectBadness"><span class="hs-identifier hs-type">aspectBadness</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Rectangle</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Window</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="XMonad.Layout.MosaicAlt.html#Params"><span class="hs-identifier hs-type">Params</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Double</span></span><span>
+</span><span id="line-162"></span><span id="aspectBadness"><span class="annot"><span class="annottext">aspectBadness :: Rectangle -&gt; Window -&gt; Params -&gt; Double
+</span><a href="XMonad.Layout.MosaicAlt.html#aspectBadness"><span class="hs-identifier hs-var hs-var">aspectBadness</span></a></span></span><span> </span><span id="local-6989586621679401823"><span class="annot"><span class="annottext">Rectangle
+</span><a href="#local-6989586621679401823"><span class="hs-identifier hs-var">rect</span></a></span></span><span> </span><span id="local-6989586621679401822"><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679401822"><span class="hs-identifier hs-var">win</span></a></span></span><span> </span><span id="local-6989586621679401821"><span class="annot"><span class="annottext">Params
+</span><a href="#local-6989586621679401821"><span class="hs-identifier hs-var">params</span></a></span></span><span> </span><span class="hs-glyph">=</span><span>
+</span><span id="line-163"></span><span>        </span><span class="hs-special">(</span><span class="hs-keyword">if</span><span> </span><span class="annot"><span class="annottext">Double
+</span><a href="#local-6989586621679401820"><span class="hs-identifier hs-var">a</span></a></span><span> </span><span class="annot"><span class="annottext">forall a. Ord a =&gt; a -&gt; a -&gt; Bool
+</span><span class="hs-operator hs-var">&lt;</span></span><span> </span><span class="annot"><span class="annottext">Double
+</span><span class="hs-number">1</span></span><span> </span><span class="hs-keyword">then</span><span> </span><span class="annot"><span class="annottext">Double
+</span><a href="#local-6989586621679401819"><span class="hs-identifier hs-var">tall</span></a></span><span> </span><span class="hs-keyword">else</span><span> </span><span class="annot"><span class="annottext">Double
+</span><a href="#local-6989586621679401818"><span class="hs-identifier hs-var">wide</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">forall a. Num a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-operator hs-var">*</span></span><span> </span><span class="annot"><span class="annottext">forall a. Floating a =&gt; a -&gt; a
+</span><span class="hs-identifier hs-var">sqrt</span></span><span class="hs-special">(</span><span class="annot"><span class="annottext">Double
+</span><a href="#local-6989586621679401816"><span class="hs-identifier hs-var">w</span></a></span><span> </span><span class="annot"><span class="annottext">forall a. Num a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-operator hs-var">*</span></span><span> </span><span class="annot"><span class="annottext">Double
+</span><a href="#local-6989586621679401815"><span class="hs-identifier hs-var">h</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-164"></span><span>    </span><span class="hs-keyword">where</span><span>
+</span><span id="line-165"></span><span>        </span><span id="local-6989586621679401819"><span class="annot"><span class="annottext">tall :: Double
+</span><a href="#local-6989586621679401819"><span class="hs-identifier hs-var hs-var">tall</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-keyword">if</span><span> </span><span class="annot"><span class="annottext">Double
+</span><a href="#local-6989586621679401816"><span class="hs-identifier hs-var">w</span></a></span><span> </span><span class="annot"><span class="annottext">forall a. Ord a =&gt; a -&gt; a -&gt; Bool
+</span><span class="hs-operator hs-var">&lt;</span></span><span> </span><span class="annot"><span class="annottext">Double
+</span><span class="hs-number">700</span></span><span> </span><span class="hs-keyword">then</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Double
+</span><span class="hs-number">1</span></span><span> </span><span class="annot"><span class="annottext">forall a. Fractional a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-operator hs-var">/</span></span><span> </span><span class="annot"><span class="annottext">Double
+</span><a href="#local-6989586621679401820"><span class="hs-identifier hs-var">a</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">forall a. Num a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-operator hs-var">*</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Double
+</span><span class="hs-number">700</span></span><span> </span><span class="annot"><span class="annottext">forall a. Fractional a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-operator hs-var">/</span></span><span> </span><span class="annot"><span class="annottext">Double
+</span><a href="#local-6989586621679401816"><span class="hs-identifier hs-var">w</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-keyword">else</span><span> </span><span class="annot"><span class="annottext">Double
+</span><span class="hs-number">1</span></span><span> </span><span class="annot"><span class="annottext">forall a. Fractional a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-operator hs-var">/</span></span><span> </span><span class="annot"><span class="annottext">Double
+</span><a href="#local-6989586621679401820"><span class="hs-identifier hs-var">a</span></a></span><span>
+</span><span id="line-166"></span><span>        </span><span id="local-6989586621679401818"><span class="annot"><span class="annottext">wide :: Double
+</span><a href="#local-6989586621679401818"><span class="hs-identifier hs-var hs-var">wide</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-keyword">if</span><span> </span><span class="annot"><span class="annottext">Double
+</span><a href="#local-6989586621679401816"><span class="hs-identifier hs-var">w</span></a></span><span> </span><span class="annot"><span class="annottext">forall a. Ord a =&gt; a -&gt; a -&gt; Bool
+</span><span class="hs-operator hs-var">&lt;</span></span><span> </span><span class="annot"><span class="annottext">Double
+</span><span class="hs-number">700</span></span><span> </span><span class="hs-keyword">then</span><span> </span><span class="annot"><span class="annottext">Double
+</span><a href="#local-6989586621679401820"><span class="hs-identifier hs-var">a</span></a></span><span> </span><span class="hs-keyword">else</span><span> </span><span class="annot"><span class="annottext">Double
+</span><a href="#local-6989586621679401820"><span class="hs-identifier hs-var">a</span></a></span><span> </span><span class="annot"><span class="annottext">forall a. Num a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-operator hs-var">*</span></span><span> </span><span class="annot"><span class="annottext">Double
+</span><a href="#local-6989586621679401816"><span class="hs-identifier hs-var">w</span></a></span><span> </span><span class="annot"><span class="annottext">forall a. Fractional a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-operator hs-var">/</span></span><span> </span><span class="annot"><span class="annottext">Double
+</span><span class="hs-number">700</span></span><span>
+</span><span id="line-167"></span><span>        </span><span id="local-6989586621679401820"><span class="annot"><span class="annottext">a :: Double
+</span><a href="#local-6989586621679401820"><span class="hs-identifier hs-var hs-var">a</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Double
+</span><a href="#local-6989586621679401816"><span class="hs-identifier hs-var">w</span></a></span><span> </span><span class="annot"><span class="annottext">forall a. Fractional a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-operator hs-var">/</span></span><span> </span><span class="annot"><span class="annottext">Double
+</span><a href="#local-6989586621679401815"><span class="hs-identifier hs-var">h</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">forall a. Fractional a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-operator hs-var">/</span></span><span> </span><span class="annot"><span class="annottext">forall a. Fractional a =&gt; Rational -&gt; a
+</span><span class="hs-identifier hs-var">fromRational</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">forall b a. b -&gt; (a -&gt; b) -&gt; Maybe a -&gt; b
+</span><span class="hs-identifier hs-var">maybe</span></span><span> </span><span class="annot"><span class="annottext">Rational
+</span><span class="hs-number">1.5</span></span><span> </span><span class="annot"><span class="annottext">Param -&gt; Rational
+</span><a href="XMonad.Layout.MosaicAlt.html#aspect"><span class="hs-identifier hs-var">aspect</span></a></span><span> </span><span class="annot"><span class="annottext">forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">forall k a. Ord k =&gt; k -&gt; Map k a -&gt; Maybe a
+</span><span class="hs-identifier hs-var">M.lookup</span></span><span> </span><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679401822"><span class="hs-identifier hs-var">win</span></a></span><span> </span><span class="annot"><span class="annottext">Params
+</span><a href="#local-6989586621679401821"><span class="hs-identifier hs-var">params</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-168"></span><span>        </span><span id="local-6989586621679401816"><span class="annot"><span class="annottext">w :: Double
+</span><a href="#local-6989586621679401816"><span class="hs-identifier hs-var hs-var">w</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">forall a b. (Integral a, Num b) =&gt; a -&gt; b
+</span><span class="hs-identifier hs-var">fromIntegral</span></span><span> </span><span class="annot"><span class="annottext">forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">Rectangle -&gt; Dimension
+</span><span class="hs-identifier hs-var">rect_width</span></span><span> </span><span class="annot"><span class="annottext">Rectangle
+</span><a href="#local-6989586621679401823"><span class="hs-identifier hs-var">rect</span></a></span><span>
+</span><span id="line-169"></span><span>        </span><span id="local-6989586621679401815"><span class="annot"><span class="annottext">h :: Double
+</span><a href="#local-6989586621679401815"><span class="hs-identifier hs-var hs-var">h</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">forall a b. (Integral a, Num b) =&gt; a -&gt; b
+</span><span class="hs-identifier hs-var">fromIntegral</span></span><span> </span><span class="annot"><span class="annottext">forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">Rectangle -&gt; Dimension
+</span><span class="hs-identifier hs-var">rect_height</span></span><span> </span><span class="annot"><span class="annottext">Rectangle
+</span><a href="#local-6989586621679401823"><span class="hs-identifier hs-var">rect</span></a></span><span>
+</span><span id="line-170"></span><span>
+</span><span id="line-171"></span><span class="hs-comment">-- vim: sw=4:et</span><span>
+</span><span id="line-172"></span></pre></body></html>

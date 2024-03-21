@@ -1,0 +1,188 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd"><html xmlns="http://www.w3.org/1999/xhtml"><head><link rel="stylesheet" type="text/css" href="style.css" /><script type="text/javascript" src="highlight.js"></script></head><body><pre><span class="hs-comment">-----------------------------------------------------------------------------</span><span>
+</span><span id="line-2"></span><span class="hs-comment">-- |</span><span>
+</span><span id="line-3"></span><span class="hs-comment">-- Module      :  XMonad.Actions.FindEmptyWorkspace</span><span>
+</span><span id="line-4"></span><span class="hs-comment">-- Description :  Find an empty workspace.</span><span>
+</span><span id="line-5"></span><span class="hs-comment">-- Copyright   :  (c) Miikka Koskinen 2007</span><span>
+</span><span id="line-6"></span><span class="hs-comment">-- License     :  BSD3-style (see LICENSE)</span><span>
+</span><span id="line-7"></span><span class="hs-comment">--</span><span>
+</span><span id="line-8"></span><span class="hs-comment">-- Maintainer  :  arcatan@kapsi.fi</span><span>
+</span><span id="line-9"></span><span class="hs-comment">-- Stability   :  stable</span><span>
+</span><span id="line-10"></span><span class="hs-comment">-- Portability :  unportable</span><span>
+</span><span id="line-11"></span><span class="hs-comment">--</span><span>
+</span><span id="line-12"></span><span class="hs-comment">-- Find an empty workspace.</span><span>
+</span><span id="line-13"></span><span class="hs-comment">--</span><span>
+</span><span id="line-14"></span><span class="hs-comment">-----------------------------------------------------------------------------</span><span>
+</span><span id="line-15"></span><span>
+</span><span id="line-16"></span><span class="hs-keyword">module</span><span> </span><span class="hs-identifier">XMonad.Actions.FindEmptyWorkspace</span><span> </span><span class="hs-special">(</span><span>
+</span><span id="line-17"></span><span>    </span><span class="annot"><span class="hs-comment">-- * Usage</span></span><span>
+</span><span id="line-18"></span><span>    </span><span class="annot"><span class="hs-comment">-- $usage</span></span><span>
+</span><span id="line-19"></span><span>    </span><span class="annot"><a href="XMonad.Actions.FindEmptyWorkspace.html#viewEmptyWorkspace"><span class="hs-identifier">viewEmptyWorkspace</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><a href="XMonad.Actions.FindEmptyWorkspace.html#tagToEmptyWorkspace"><span class="hs-identifier">tagToEmptyWorkspace</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><a href="XMonad.Actions.FindEmptyWorkspace.html#sendToEmptyWorkspace"><span class="hs-identifier">sendToEmptyWorkspace</span></a></span><span>
+</span><span id="line-20"></span><span>  </span><span class="hs-special">)</span><span> </span><span class="hs-keyword">where</span><span>
+</span><span id="line-21"></span><span>
+</span><span id="line-22"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><a href="XMonad.Prelude.html"><span class="hs-identifier">XMonad.Prelude</span></a></span><span>
+</span><span id="line-23"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><span class="hs-identifier">XMonad</span></span><span>
+</span><span id="line-24"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><span class="hs-identifier">XMonad.StackSet</span></span><span>
+</span><span id="line-25"></span><span>
+</span><span id="line-26"></span><span class="hs-comment">-- $usage</span><span>
+</span><span id="line-27"></span><span class="hs-comment">--</span><span>
+</span><span id="line-28"></span><span class="hs-comment">-- To use, import this module into your @~\/.xmonad\/xmonad.hs@:</span><span>
+</span><span id="line-29"></span><span class="hs-comment">--</span><span>
+</span><span id="line-30"></span><span class="hs-comment">-- &gt;   import XMonad.Actions.FindEmptyWorkspace</span><span>
+</span><span id="line-31"></span><span class="hs-comment">--</span><span>
+</span><span id="line-32"></span><span class="hs-comment">-- and add the desired keybindings, for example:</span><span>
+</span><span id="line-33"></span><span class="hs-comment">--</span><span>
+</span><span id="line-34"></span><span class="hs-comment">--  &gt;   , ((modm,                xK_m    ), viewEmptyWorkspace)</span><span>
+</span><span id="line-35"></span><span class="hs-comment">--  &gt;   , ((modm .|. shiftMask,  xK_m    ), tagToEmptyWorkspace)</span><span>
+</span><span id="line-36"></span><span class="hs-comment">--</span><span>
+</span><span id="line-37"></span><span class="hs-comment">-- Now you can jump to an empty workspace with @mod-m@. @Mod-shift-m@</span><span>
+</span><span id="line-38"></span><span class="hs-comment">-- will tag the current window to an empty workspace and view it.</span><span>
+</span><span id="line-39"></span><span class="hs-comment">--</span><span>
+</span><span id="line-40"></span><span class="hs-comment">-- For detailed instructions on editing your key bindings, see</span><span>
+</span><span id="line-41"></span><span class="hs-comment">-- &quot;XMonad.Doc.Extending#Editing_key_bindings&quot;.</span><span>
+</span><span id="line-42"></span><span>
+</span><span id="line-43"></span><span class="hs-comment">-- | Find the first hidden empty workspace in a StackSet. Returns</span><span>
+</span><span id="line-44"></span><span class="hs-comment">-- Nothing if all workspaces are in use. Function searches currently</span><span>
+</span><span id="line-45"></span><span class="hs-comment">-- focused workspace, other visible workspaces (when in Xinerama) and</span><span>
+</span><span id="line-46"></span><span class="hs-comment">-- hidden workspaces in this order.</span><span>
+</span><span id="line-47"></span><span id="local-6989586621679368746"><span id="local-6989586621679368747"><span id="local-6989586621679368748"><span id="local-6989586621679368749"><span id="local-6989586621679368750"><span class="annot"><a href="XMonad.Actions.FindEmptyWorkspace.html#findEmptyWorkspace"><span class="hs-identifier hs-type">findEmptyWorkspace</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">StackSet</span></span><span> </span><span class="annot"><a href="#local-6989586621679368750"><span class="hs-identifier hs-type">i</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679368749"><span class="hs-identifier hs-type">l</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679368748"><span class="hs-identifier hs-type">a</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679368747"><span class="hs-identifier hs-type">s</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679368746"><span class="hs-identifier hs-type">sd</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Maybe</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">Workspace</span></span><span> </span><span class="annot"><a href="#local-6989586621679368750"><span class="hs-identifier hs-type">i</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679368749"><span class="hs-identifier hs-type">l</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679368748"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">)</span></span></span></span></span></span><span>
+</span><span id="line-48"></span><span id="findEmptyWorkspace"><span class="annot"><span class="annottext">findEmptyWorkspace :: StackSet i l a s sd -&gt; Maybe (Workspace i l a)
+</span><a href="XMonad.Actions.FindEmptyWorkspace.html#findEmptyWorkspace"><span class="hs-identifier hs-var hs-var">findEmptyWorkspace</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">(Workspace i l a -&gt; Bool)
+-&gt; [Workspace i l a] -&gt; Maybe (Workspace i l a)
+forall (t :: * -&gt; *) a. Foldable t =&gt; (a -&gt; Bool) -&gt; t a -&gt; Maybe a
+</span><span class="hs-identifier hs-var">find</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Maybe (Stack a) -&gt; Bool
+forall a. Maybe a -&gt; Bool
+</span><span class="hs-identifier hs-var">isNothing</span></span><span> </span><span class="annot"><span class="annottext">(Maybe (Stack a) -&gt; Bool)
+-&gt; (Workspace i l a -&gt; Maybe (Stack a)) -&gt; Workspace i l a -&gt; Bool
+forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">Workspace i l a -&gt; Maybe (Stack a)
+forall i l a. Workspace i l a -&gt; Maybe (Stack a)
+</span><span class="hs-identifier hs-var hs-var">stack</span></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">([Workspace i l a] -&gt; Maybe (Workspace i l a))
+-&gt; (StackSet i l a s sd -&gt; [Workspace i l a])
+-&gt; StackSet i l a s sd
+-&gt; Maybe (Workspace i l a)
+forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">StackSet i l a s sd -&gt; [Workspace i l a]
+forall i l a sid sd. StackSet i l a sid sd -&gt; [Workspace i l a]
+</span><a href="#local-6989586621679368721"><span class="hs-identifier hs-var">allWorkspaces</span></a></span><span>
+</span><span id="line-49"></span><span>  </span><span class="hs-keyword">where</span><span>
+</span><span id="line-50"></span><span>    </span><span id="local-6989586621679368721"><span class="annot"><span class="annottext">allWorkspaces :: StackSet i l a sid sd -&gt; [Workspace i l a]
+</span><a href="#local-6989586621679368721"><span class="hs-identifier hs-var hs-var">allWorkspaces</span></a></span></span><span> </span><span id="local-6989586621679368720"><span class="annot"><span class="annottext">StackSet i l a sid sd
+</span><a href="#local-6989586621679368720"><span class="hs-identifier hs-var">ss</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Screen i l a sid sd -&gt; Workspace i l a
+forall i l a sid sd. Screen i l a sid sd -&gt; Workspace i l a
+</span><span class="hs-identifier hs-var hs-var">workspace</span></span><span> </span><span class="annot"><span class="annottext">(Screen i l a sid sd -&gt; Workspace i l a)
+-&gt; (StackSet i l a sid sd -&gt; Screen i l a sid sd)
+-&gt; StackSet i l a sid sd
+-&gt; Workspace i l a
+forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">StackSet i l a sid sd -&gt; Screen i l a sid sd
+forall i l a sid sd. StackSet i l a sid sd -&gt; Screen i l a sid sd
+</span><span class="hs-identifier hs-var hs-var">current</span></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">StackSet i l a sid sd
+</span><a href="#local-6989586621679368720"><span class="hs-identifier hs-var">ss</span></a></span><span> </span><span class="annot"><span class="annottext">Workspace i l a -&gt; [Workspace i l a] -&gt; [Workspace i l a]
+forall a. a -&gt; [a] -&gt; [a]
+</span><span class="hs-glyph hs-var">:</span></span><span>
+</span><span id="line-51"></span><span>                       </span><span class="hs-special">(</span><span class="annot"><span class="annottext">(Screen i l a sid sd -&gt; Workspace i l a)
+-&gt; [Screen i l a sid sd] -&gt; [Workspace i l a]
+forall a b. (a -&gt; b) -&gt; [a] -&gt; [b]
+</span><span class="hs-identifier hs-var">map</span></span><span> </span><span class="annot"><span class="annottext">Screen i l a sid sd -&gt; Workspace i l a
+forall i l a sid sd. Screen i l a sid sd -&gt; Workspace i l a
+</span><span class="hs-identifier hs-var hs-var">workspace</span></span><span> </span><span class="annot"><span class="annottext">([Screen i l a sid sd] -&gt; [Workspace i l a])
+-&gt; (StackSet i l a sid sd -&gt; [Screen i l a sid sd])
+-&gt; StackSet i l a sid sd
+-&gt; [Workspace i l a]
+forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">StackSet i l a sid sd -&gt; [Screen i l a sid sd]
+forall i l a sid sd. StackSet i l a sid sd -&gt; [Screen i l a sid sd]
+</span><span class="hs-identifier hs-var hs-var">visible</span></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">StackSet i l a sid sd
+</span><a href="#local-6989586621679368720"><span class="hs-identifier hs-var">ss</span></a></span><span> </span><span class="annot"><span class="annottext">[Workspace i l a] -&gt; [Workspace i l a] -&gt; [Workspace i l a]
+forall a. [a] -&gt; [a] -&gt; [a]
+</span><span class="hs-operator hs-var">++</span></span><span> </span><span class="annot"><span class="annottext">StackSet i l a sid sd -&gt; [Workspace i l a]
+forall i l a sid sd. StackSet i l a sid sd -&gt; [Workspace i l a]
+</span><span class="hs-identifier hs-var hs-var">hidden</span></span><span> </span><span class="annot"><span class="annottext">StackSet i l a sid sd
+</span><a href="#local-6989586621679368720"><span class="hs-identifier hs-var">ss</span></a></span><span>
+</span><span id="line-52"></span><span>
+</span><span id="line-53"></span><span class="annot"><a href="XMonad.Actions.FindEmptyWorkspace.html#withEmptyWorkspace"><span class="hs-identifier hs-type">withEmptyWorkspace</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">WorkspaceId</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">X</span></span><span> </span><span class="hs-special">(</span><span class="hs-special">)</span><span class="hs-special">)</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">X</span></span><span> </span><span class="hs-special">(</span><span class="hs-special">)</span><span>
+</span><span id="line-54"></span><span id="withEmptyWorkspace"><span class="annot"><span class="annottext">withEmptyWorkspace :: (WorkspaceId -&gt; X ()) -&gt; X ()
+</span><a href="XMonad.Actions.FindEmptyWorkspace.html#withEmptyWorkspace"><span class="hs-identifier hs-var hs-var">withEmptyWorkspace</span></a></span></span><span> </span><span id="local-6989586621679368714"><span class="annot"><span class="annottext">WorkspaceId -&gt; X ()
+</span><a href="#local-6989586621679368714"><span class="hs-identifier hs-var">f</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-55"></span><span>    </span><span id="local-6989586621679368713"><span class="annot"><span class="annottext">WindowSet
+</span><a href="#local-6989586621679368713"><span class="hs-identifier hs-var">ws</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">(XState -&gt; WindowSet) -&gt; X WindowSet
+forall s (m :: * -&gt; *) a. MonadState s m =&gt; (s -&gt; a) -&gt; m a
+</span><span class="hs-identifier hs-var">gets</span></span><span> </span><span class="annot"><span class="annottext">XState -&gt; WindowSet
+</span><span class="hs-identifier hs-var hs-var">windowset</span></span><span>
+</span><span id="line-56"></span><span>    </span><span class="annot"><span class="annottext">Maybe (Workspace WorkspaceId (Layout Window) Window)
+-&gt; (Workspace WorkspaceId (Layout Window) Window -&gt; X ()) -&gt; X ()
+forall (m :: * -&gt; *) a. Monad m =&gt; Maybe a -&gt; (a -&gt; m ()) -&gt; m ()
+</span><span class="hs-identifier hs-var">whenJust</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">WindowSet -&gt; Maybe (Workspace WorkspaceId (Layout Window) Window)
+forall i l a s sd. StackSet i l a s sd -&gt; Maybe (Workspace i l a)
+</span><a href="XMonad.Actions.FindEmptyWorkspace.html#findEmptyWorkspace"><span class="hs-identifier hs-var">findEmptyWorkspace</span></a></span><span> </span><span class="annot"><span class="annottext">WindowSet
+</span><a href="#local-6989586621679368713"><span class="hs-identifier hs-var">ws</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">WorkspaceId -&gt; X ()
+</span><a href="#local-6989586621679368714"><span class="hs-identifier hs-var">f</span></a></span><span> </span><span class="annot"><span class="annottext">(WorkspaceId -&gt; X ())
+-&gt; (Workspace WorkspaceId (Layout Window) Window -&gt; WorkspaceId)
+-&gt; Workspace WorkspaceId (Layout Window) Window
+-&gt; X ()
+forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">Workspace WorkspaceId (Layout Window) Window -&gt; WorkspaceId
+forall i l a. Workspace i l a -&gt; i
+</span><span class="hs-identifier hs-var hs-var">tag</span></span><span class="hs-special">)</span><span>
+</span><span id="line-57"></span><span>
+</span><span id="line-58"></span><span class="hs-comment">-- | Find and view an empty workspace. Do nothing if all workspaces are</span><span>
+</span><span id="line-59"></span><span class="hs-comment">-- in use.</span><span>
+</span><span id="line-60"></span><span class="annot"><a href="XMonad.Actions.FindEmptyWorkspace.html#viewEmptyWorkspace"><span class="hs-identifier hs-type">viewEmptyWorkspace</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">X</span></span><span> </span><span class="hs-special">(</span><span class="hs-special">)</span><span>
+</span><span id="line-61"></span><span id="viewEmptyWorkspace"><span class="annot"><span class="annottext">viewEmptyWorkspace :: X ()
+</span><a href="XMonad.Actions.FindEmptyWorkspace.html#viewEmptyWorkspace"><span class="hs-identifier hs-var hs-var">viewEmptyWorkspace</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">(WorkspaceId -&gt; X ()) -&gt; X ()
+</span><a href="XMonad.Actions.FindEmptyWorkspace.html#withEmptyWorkspace"><span class="hs-identifier hs-var">withEmptyWorkspace</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">(WindowSet -&gt; WindowSet) -&gt; X ()
+</span><span class="hs-identifier hs-var">windows</span></span><span> </span><span class="annot"><span class="annottext">((WindowSet -&gt; WindowSet) -&gt; X ())
+-&gt; (WorkspaceId -&gt; WindowSet -&gt; WindowSet) -&gt; WorkspaceId -&gt; X ()
+forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">WorkspaceId -&gt; WindowSet -&gt; WindowSet
+forall s i l a sd.
+(Eq s, Eq i) =&gt;
+i -&gt; StackSet i l a s sd -&gt; StackSet i l a s sd
+</span><span class="hs-identifier hs-var">view</span></span><span class="hs-special">)</span><span>
+</span><span id="line-62"></span><span>
+</span><span id="line-63"></span><span class="hs-comment">-- | Tag current window to an empty workspace and view it. Do nothing if</span><span>
+</span><span id="line-64"></span><span class="hs-comment">-- all workspaces are in use.</span><span>
+</span><span id="line-65"></span><span class="annot"><a href="XMonad.Actions.FindEmptyWorkspace.html#tagToEmptyWorkspace"><span class="hs-identifier hs-type">tagToEmptyWorkspace</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">X</span></span><span> </span><span class="hs-special">(</span><span class="hs-special">)</span><span>
+</span><span id="line-66"></span><span id="tagToEmptyWorkspace"><span class="annot"><span class="annottext">tagToEmptyWorkspace :: X ()
+</span><a href="XMonad.Actions.FindEmptyWorkspace.html#tagToEmptyWorkspace"><span class="hs-identifier hs-var hs-var">tagToEmptyWorkspace</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">(WorkspaceId -&gt; X ()) -&gt; X ()
+</span><a href="XMonad.Actions.FindEmptyWorkspace.html#withEmptyWorkspace"><span class="hs-identifier hs-var">withEmptyWorkspace</span></a></span><span> </span><span class="annot"><span class="annottext">((WorkspaceId -&gt; X ()) -&gt; X ()) -&gt; (WorkspaceId -&gt; X ()) -&gt; X ()
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="hs-glyph">\</span><span id="local-6989586621679368706"><span class="annot"><span class="annottext">WorkspaceId
+</span><a href="#local-6989586621679368706"><span class="hs-identifier hs-var">w</span></a></span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">(WindowSet -&gt; WindowSet) -&gt; X ()
+</span><span class="hs-identifier hs-var">windows</span></span><span> </span><span class="annot"><span class="annottext">((WindowSet -&gt; WindowSet) -&gt; X ())
+-&gt; (WindowSet -&gt; WindowSet) -&gt; X ()
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">WorkspaceId -&gt; WindowSet -&gt; WindowSet
+forall s i l a sd.
+(Eq s, Eq i) =&gt;
+i -&gt; StackSet i l a s sd -&gt; StackSet i l a s sd
+</span><span class="hs-identifier hs-var">view</span></span><span> </span><span class="annot"><span class="annottext">WorkspaceId
+</span><a href="#local-6989586621679368706"><span class="hs-identifier hs-var">w</span></a></span><span> </span><span class="annot"><span class="annottext">(WindowSet -&gt; WindowSet)
+-&gt; (WindowSet -&gt; WindowSet) -&gt; WindowSet -&gt; WindowSet
+forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">WorkspaceId -&gt; WindowSet -&gt; WindowSet
+forall a s i l sd.
+(Ord a, Eq s, Eq i) =&gt;
+i -&gt; StackSet i l a s sd -&gt; StackSet i l a s sd
+</span><span class="hs-identifier hs-var">shift</span></span><span> </span><span class="annot"><span class="annottext">WorkspaceId
+</span><a href="#local-6989586621679368706"><span class="hs-identifier hs-var">w</span></a></span><span>
+</span><span id="line-67"></span><span>
+</span><span id="line-68"></span><span class="hs-comment">-- | Send current window to an empty workspace. Do nothing if</span><span>
+</span><span id="line-69"></span><span class="hs-comment">-- all workspaces are in use.</span><span>
+</span><span id="line-70"></span><span class="annot"><a href="XMonad.Actions.FindEmptyWorkspace.html#sendToEmptyWorkspace"><span class="hs-identifier hs-type">sendToEmptyWorkspace</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">X</span></span><span> </span><span class="hs-special">(</span><span class="hs-special">)</span><span>
+</span><span id="line-71"></span><span id="sendToEmptyWorkspace"><span class="annot"><span class="annottext">sendToEmptyWorkspace :: X ()
+</span><a href="XMonad.Actions.FindEmptyWorkspace.html#sendToEmptyWorkspace"><span class="hs-identifier hs-var hs-var">sendToEmptyWorkspace</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">(WorkspaceId -&gt; X ()) -&gt; X ()
+</span><a href="XMonad.Actions.FindEmptyWorkspace.html#withEmptyWorkspace"><span class="hs-identifier hs-var">withEmptyWorkspace</span></a></span><span> </span><span class="annot"><span class="annottext">((WorkspaceId -&gt; X ()) -&gt; X ()) -&gt; (WorkspaceId -&gt; X ()) -&gt; X ()
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="hs-glyph">\</span><span id="local-6989586621679368704"><span class="annot"><span class="annottext">WorkspaceId
+</span><a href="#local-6989586621679368704"><span class="hs-identifier hs-var">w</span></a></span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">(WindowSet -&gt; WindowSet) -&gt; X ()
+</span><span class="hs-identifier hs-var">windows</span></span><span> </span><span class="annot"><span class="annottext">((WindowSet -&gt; WindowSet) -&gt; X ())
+-&gt; (WindowSet -&gt; WindowSet) -&gt; X ()
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">WorkspaceId -&gt; WindowSet -&gt; WindowSet
+forall a s i l sd.
+(Ord a, Eq s, Eq i) =&gt;
+i -&gt; StackSet i l a s sd -&gt; StackSet i l a s sd
+</span><span class="hs-identifier hs-var">shift</span></span><span> </span><span class="annot"><span class="annottext">WorkspaceId
+</span><a href="#local-6989586621679368704"><span class="hs-identifier hs-var">w</span></a></span><span>
+</span><span id="line-72"></span></pre></body></html>
