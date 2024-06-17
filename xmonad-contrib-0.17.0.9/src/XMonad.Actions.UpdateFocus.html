@@ -1,0 +1,288 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd"><html xmlns="http://www.w3.org/1999/xhtml"><head><link rel="stylesheet" type="text/css" href="style.css" /><script type="text/javascript" src="highlight.js"></script></head><body><pre><span class="hs-comment">-----------------------------------------------------------------------------</span><span>
+</span><span id="line-2"></span><span class="hs-comment">-- |</span><span>
+</span><span id="line-3"></span><span class="hs-comment">-- Module      :  XMonad.Actions.UpdateFocus</span><span>
+</span><span id="line-4"></span><span class="hs-comment">-- Description :  Updates the focus on mouse move in unfocused windows.</span><span>
+</span><span id="line-5"></span><span class="hs-comment">-- Copyright   :  (c) Daniel Schoepe</span><span>
+</span><span id="line-6"></span><span class="hs-comment">-- License     :  BSD3-style (see LICENSE)</span><span>
+</span><span id="line-7"></span><span class="hs-comment">--</span><span>
+</span><span id="line-8"></span><span class="hs-comment">-- Maintainer  :  Daniel Schoepe &lt;asgaroth_@gmx.de&gt;</span><span>
+</span><span id="line-9"></span><span class="hs-comment">-- Stability   :  unstable</span><span>
+</span><span id="line-10"></span><span class="hs-comment">-- Portability :  unportable</span><span>
+</span><span id="line-11"></span><span class="hs-comment">--</span><span>
+</span><span id="line-12"></span><span class="hs-comment">-- Updates the focus on mouse move in unfocused windows.</span><span>
+</span><span id="line-13"></span><span class="hs-comment">--</span><span>
+</span><span id="line-14"></span><span class="hs-comment">-----------------------------------------------------------------------------</span><span>
+</span><span id="line-15"></span><span>
+</span><span id="line-16"></span><span class="hs-keyword">module</span><span> </span><span class="hs-identifier">XMonad.Actions.UpdateFocus</span><span> </span><span class="hs-special">(</span><span>
+</span><span id="line-17"></span><span>    </span><span class="annot"><span class="hs-comment">-- * Usage</span></span><span>
+</span><span id="line-18"></span><span>    </span><span class="annot"><span class="hs-comment">-- $usage</span></span><span>
+</span><span id="line-19"></span><span>    </span><span class="annot"><a href="XMonad.Actions.UpdateFocus.html#focusOnMouseMove"><span class="hs-identifier">focusOnMouseMove</span></a></span><span class="hs-special">,</span><span>
+</span><span id="line-20"></span><span>    </span><span class="annot"><a href="XMonad.Actions.UpdateFocus.html#adjustEventInput"><span class="hs-identifier">adjustEventInput</span></a></span><span class="hs-special">,</span><span>
+</span><span id="line-21"></span><span>    </span><span class="annot"><a href="XMonad.Actions.UpdateFocus.html#focusUnderPointer"><span class="hs-identifier">focusUnderPointer</span></a></span><span class="hs-special">,</span><span>
+</span><span id="line-22"></span><span class="hs-special">)</span><span> </span><span class="hs-keyword">where</span><span>
+</span><span id="line-23"></span><span>
+</span><span id="line-24"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><span class="hs-identifier">XMonad</span></span><span>
+</span><span id="line-25"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><a href="XMonad.Prelude.html"><span class="hs-identifier">XMonad.Prelude</span></a></span><span>
+</span><span id="line-26"></span><span class="hs-keyword">import</span><span> </span><span class="hs-keyword">qualified</span><span> </span><span class="annot"><span class="hs-identifier">XMonad.StackSet</span></span><span> </span><span class="hs-keyword">as</span><span> </span><span class="annot"><span class="hs-identifier">W</span></span><span>
+</span><span id="line-27"></span><span>
+</span><span id="line-28"></span><span class="hs-comment">-- $usage</span><span>
+</span><span id="line-29"></span><span class="hs-comment">-- To make the focus update on mouse movement within an unfocused window, add the</span><span>
+</span><span id="line-30"></span><span class="hs-comment">-- following to your @~\/.xmonad\/xmonad.hs@:</span><span>
+</span><span id="line-31"></span><span class="hs-comment">--</span><span>
+</span><span id="line-32"></span><span class="hs-comment">-- &gt; import XMonad.Actions.UpdateFocus</span><span>
+</span><span id="line-33"></span><span class="hs-comment">-- &gt; xmonad $ def {</span><span>
+</span><span id="line-34"></span><span class="hs-comment">-- &gt;   ..</span><span>
+</span><span id="line-35"></span><span class="hs-comment">-- &gt;   startupHook = adjustEventInput</span><span>
+</span><span id="line-36"></span><span class="hs-comment">-- &gt;   handleEventHook = focusOnMouseMove</span><span>
+</span><span id="line-37"></span><span class="hs-comment">-- &gt;   ..</span><span>
+</span><span id="line-38"></span><span class="hs-comment">-- &gt; }</span><span>
+</span><span id="line-39"></span><span class="hs-comment">--</span><span>
+</span><span id="line-40"></span><span class="hs-comment">-- This module is probably only useful when focusFollowsMouse is set to True(default).</span><span>
+</span><span id="line-41"></span><span>
+</span><span id="line-42"></span><span class="hs-comment">-- | Changes the focus if the mouse is moved within an unfocused window.</span><span>
+</span><span id="line-43"></span><span class="annot"><a href="XMonad.Actions.UpdateFocus.html#focusOnMouseMove"><span class="hs-identifier hs-type">focusOnMouseMove</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Event</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">X</span></span><span> </span><span class="annot"><span class="hs-identifier hs-type">All</span></span><span>
+</span><span id="line-44"></span><span id="focusOnMouseMove"><span class="annot"><span class="annottext">focusOnMouseMove :: Event -&gt; X All
+</span><a href="XMonad.Actions.UpdateFocus.html#focusOnMouseMove"><span class="hs-identifier hs-var hs-var">focusOnMouseMove</span></a></span></span><span> </span><span class="annot"><span class="hs-identifier hs-type">MotionEvent</span></span><span class="hs-special">{</span><span> </span><span class="annot"><span class="annottext">ev_x :: Event -&gt; CInt
+</span><span class="hs-identifier hs-var">ev_x</span></span><span> </span><span class="hs-glyph">=</span><span> </span><span id="local-6989586621679379511"><span class="annot"><span class="annottext">CInt
+</span><a href="#local-6989586621679379511"><span class="hs-identifier hs-var">x</span></a></span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">ev_y :: Event -&gt; CInt
+</span><span class="hs-identifier hs-var">ev_y</span></span><span> </span><span class="hs-glyph">=</span><span> </span><span id="local-6989586621679379509"><span class="annot"><span class="annottext">CInt
+</span><a href="#local-6989586621679379509"><span class="hs-identifier hs-var">y</span></a></span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">ev_window :: Event -&gt; Window
+</span><span class="hs-identifier hs-var">ev_window</span></span><span> </span><span class="hs-glyph">=</span><span> </span><span id="local-6989586621679379507"><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679379507"><span class="hs-identifier hs-var">root</span></a></span></span><span> </span><span class="hs-special">}</span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-45"></span><span>    </span><span class="hs-comment">-- check only every 15 px to avoid excessive calls to translateCoordinates</span><span>
+</span><span id="line-46"></span><span>    </span><span class="annot"><span class="annottext">Bool -&gt; X () -&gt; X ()
+forall (f :: * -&gt; *). Applicative f =&gt; Bool -&gt; f () -&gt; f ()
+</span><span class="hs-identifier hs-var">when</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">CInt
+</span><a href="#local-6989586621679379511"><span class="hs-identifier hs-var">x</span></a></span><span> </span><span class="annot"><span class="annottext">CInt -&gt; CInt -&gt; CInt
+forall a. Integral a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-operator hs-var">`mod`</span></span><span> </span><span class="annot"><span class="annottext">CInt
+</span><span class="hs-number">15</span></span><span> </span><span class="annot"><span class="annottext">CInt -&gt; CInt -&gt; Bool
+forall a. Eq a =&gt; a -&gt; a -&gt; Bool
+</span><span class="hs-operator hs-var">==</span></span><span> </span><span class="annot"><span class="annottext">CInt
+</span><span class="hs-number">0</span></span><span> </span><span class="annot"><span class="annottext">Bool -&gt; Bool -&gt; Bool
+</span><span class="hs-operator hs-var">||</span></span><span> </span><span class="annot"><span class="annottext">CInt
+</span><a href="#local-6989586621679379509"><span class="hs-identifier hs-var">y</span></a></span><span> </span><span class="annot"><span class="annottext">CInt -&gt; CInt -&gt; CInt
+forall a. Integral a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-operator hs-var">`mod`</span></span><span> </span><span class="annot"><span class="annottext">CInt
+</span><span class="hs-number">15</span></span><span> </span><span class="annot"><span class="annottext">CInt -&gt; CInt -&gt; Bool
+forall a. Eq a =&gt; a -&gt; a -&gt; Bool
+</span><span class="hs-operator hs-var">==</span></span><span> </span><span class="annot"><span class="annottext">CInt
+</span><span class="hs-number">0</span></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">(X () -&gt; X ()) -&gt; X () -&gt; X ()
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-47"></span><span>      </span><span id="local-6989586621679379503"><span class="annot"><span class="annottext">Display
+</span><a href="#local-6989586621679379503"><span class="hs-identifier hs-var">dpy</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">(XConf -&gt; Display) -&gt; X Display
+forall r (m :: * -&gt; *) a. MonadReader r m =&gt; (r -&gt; a) -&gt; m a
+</span><span class="hs-identifier hs-var">asks</span></span><span> </span><span class="annot"><span class="annottext">XConf -&gt; Display
+</span><span class="hs-identifier hs-var hs-var">display</span></span><span>
+</span><span id="line-48"></span><span>      </span><span id="local-6989586621679379500"><span class="annot"><span class="annottext">Maybe Window
+</span><a href="#local-6989586621679379500"><span class="hs-identifier hs-var">foc</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">(WindowSet -&gt; X (Maybe Window)) -&gt; X (Maybe Window)
+forall a. (WindowSet -&gt; X a) -&gt; X a
+</span><span class="hs-identifier hs-var">withWindowSet</span></span><span> </span><span class="annot"><span class="annottext">((WindowSet -&gt; X (Maybe Window)) -&gt; X (Maybe Window))
+-&gt; (WindowSet -&gt; X (Maybe Window)) -&gt; X (Maybe Window)
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">Maybe Window -&gt; X (Maybe Window)
+forall (m :: * -&gt; *) a. Monad m =&gt; a -&gt; m a
+</span><span class="hs-identifier hs-var">return</span></span><span> </span><span class="annot"><span class="annottext">(Maybe Window -&gt; X (Maybe Window))
+-&gt; (WindowSet -&gt; Maybe Window) -&gt; WindowSet -&gt; X (Maybe Window)
+forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">WindowSet -&gt; Maybe Window
+forall i l a s sd. StackSet i l a s sd -&gt; Maybe a
+</span><span class="hs-identifier hs-var">W.peek</span></span><span>
+</span><span id="line-49"></span><span>      </span><span class="hs-comment">-- get the window under the pointer:</span><span>
+</span><span id="line-50"></span><span>      </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Bool
+</span><span class="hs-identifier">_</span></span><span class="hs-special">,</span><span class="annot"><span class="annottext">Position
+</span><span class="hs-identifier">_</span></span><span class="hs-special">,</span><span class="annot"><span class="annottext">Position
+</span><span class="hs-identifier">_</span></span><span class="hs-special">,</span><span id="local-6989586621679379496"><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679379496"><span class="hs-identifier hs-var">w</span></a></span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">IO (Bool, Position, Position, Window)
+-&gt; X (Bool, Position, Position, Window)
+forall (m :: * -&gt; *) a. MonadIO m =&gt; IO a -&gt; m a
+</span><span class="hs-identifier hs-var">io</span></span><span> </span><span class="annot"><span class="annottext">(IO (Bool, Position, Position, Window)
+ -&gt; X (Bool, Position, Position, Window))
+-&gt; IO (Bool, Position, Position, Window)
+-&gt; X (Bool, Position, Position, Window)
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">Display
+-&gt; Window
+-&gt; Window
+-&gt; Position
+-&gt; Position
+-&gt; IO (Bool, Position, Position, Window)
+</span><span class="hs-identifier hs-var">translateCoordinates</span></span><span> </span><span class="annot"><span class="annottext">Display
+</span><a href="#local-6989586621679379503"><span class="hs-identifier hs-var">dpy</span></a></span><span> </span><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679379507"><span class="hs-identifier hs-var">root</span></a></span><span> </span><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679379507"><span class="hs-identifier hs-var">root</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">CInt -&gt; Position
+forall a b. (Integral a, Num b) =&gt; a -&gt; b
+</span><span class="hs-identifier hs-var">fromIntegral</span></span><span> </span><span class="annot"><span class="annottext">CInt
+</span><a href="#local-6989586621679379511"><span class="hs-identifier hs-var">x</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">CInt -&gt; Position
+forall a b. (Integral a, Num b) =&gt; a -&gt; b
+</span><span class="hs-identifier hs-var">fromIntegral</span></span><span> </span><span class="annot"><span class="annottext">CInt
+</span><a href="#local-6989586621679379509"><span class="hs-identifier hs-var">y</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-51"></span><span>      </span><span class="annot"><span class="annottext">Bool -&gt; X () -&gt; X ()
+forall (f :: * -&gt; *). Applicative f =&gt; Bool -&gt; f () -&gt; f ()
+</span><span class="hs-identifier hs-var">when</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Maybe Window
+</span><a href="#local-6989586621679379500"><span class="hs-identifier hs-var">foc</span></a></span><span> </span><span class="annot"><span class="annottext">Maybe Window -&gt; Maybe Window -&gt; Bool
+forall a. Eq a =&gt; a -&gt; a -&gt; Bool
+</span><span class="hs-operator hs-var">/=</span></span><span> </span><span class="annot"><span class="annottext">Window -&gt; Maybe Window
+forall a. a -&gt; Maybe a
+</span><span class="hs-identifier hs-var">Just</span></span><span> </span><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679379496"><span class="hs-identifier hs-var">w</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">(X () -&gt; X ()) -&gt; X () -&gt; X ()
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">Window -&gt; X ()
+</span><span class="hs-identifier hs-var">focus</span></span><span> </span><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679379496"><span class="hs-identifier hs-var">w</span></a></span><span>
+</span><span id="line-52"></span><span>    </span><span class="annot"><span class="annottext">All -&gt; X All
+forall (m :: * -&gt; *) a. Monad m =&gt; a -&gt; m a
+</span><span class="hs-identifier hs-var">return</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Bool -&gt; All
+</span><span class="hs-identifier hs-var">All</span></span><span> </span><span class="annot"><span class="annottext">Bool
+</span><span class="hs-identifier hs-var">True</span></span><span class="hs-special">)</span><span>
+</span><span id="line-53"></span><span class="annot"><a href="XMonad.Actions.UpdateFocus.html#focusOnMouseMove"><span class="hs-identifier hs-var">focusOnMouseMove</span></a></span><span> </span><span class="annot"><span class="annottext">Event
+</span><span class="hs-identifier">_</span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">All -&gt; X All
+forall (m :: * -&gt; *) a. Monad m =&gt; a -&gt; m a
+</span><span class="hs-identifier hs-var">return</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Bool -&gt; All
+</span><span class="hs-identifier hs-var">All</span></span><span> </span><span class="annot"><span class="annottext">Bool
+</span><span class="hs-identifier hs-var">True</span></span><span class="hs-special">)</span><span>
+</span><span id="line-54"></span><span>
+</span><span id="line-55"></span><span class="hs-comment">-- | Adjusts the event mask to pick up pointer movements.</span><span>
+</span><span id="line-56"></span><span class="annot"><a href="XMonad.Actions.UpdateFocus.html#adjustEventInput"><span class="hs-identifier hs-type">adjustEventInput</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">X</span></span><span> </span><span class="hs-special">(</span><span class="hs-special">)</span><span>
+</span><span id="line-57"></span><span id="adjustEventInput"><span class="annot"><span class="annottext">adjustEventInput :: X ()
+</span><a href="XMonad.Actions.UpdateFocus.html#adjustEventInput"><span class="hs-identifier hs-var hs-var">adjustEventInput</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">(Display -&gt; X ()) -&gt; X ()
+forall a. (Display -&gt; X a) -&gt; X a
+</span><span class="hs-identifier hs-var">withDisplay</span></span><span> </span><span class="annot"><span class="annottext">((Display -&gt; X ()) -&gt; X ()) -&gt; (Display -&gt; X ()) -&gt; X ()
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="hs-glyph">\</span><span id="local-6989586621679379489"><span class="annot"><span class="annottext">Display
+</span><a href="#local-6989586621679379489"><span class="hs-identifier hs-var">dpy</span></a></span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-58"></span><span>  </span><span id="local-6989586621679379488"><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679379488"><span class="hs-identifier hs-var">rootw</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">(XConf -&gt; Window) -&gt; X Window
+forall r (m :: * -&gt; *) a. MonadReader r m =&gt; (r -&gt; a) -&gt; m a
+</span><span class="hs-identifier hs-var">asks</span></span><span> </span><span class="annot"><span class="annottext">XConf -&gt; Window
+</span><span class="hs-identifier hs-var hs-var">theRoot</span></span><span>
+</span><span id="line-59"></span><span>  </span><span class="annot"><span class="annottext">IO () -&gt; X ()
+forall (m :: * -&gt; *) a. MonadIO m =&gt; IO a -&gt; m a
+</span><span class="hs-identifier hs-var">io</span></span><span> </span><span class="annot"><span class="annottext">(IO () -&gt; X ()) -&gt; IO () -&gt; X ()
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">Display -&gt; Window -&gt; Window -&gt; IO ()
+</span><span class="hs-identifier hs-var">selectInput</span></span><span> </span><span class="annot"><span class="annottext">Display
+</span><a href="#local-6989586621679379489"><span class="hs-identifier hs-var">dpy</span></a></span><span> </span><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679379488"><span class="hs-identifier hs-var">rootw</span></a></span><span> </span><span class="annot"><span class="annottext">(Window -&gt; IO ()) -&gt; Window -&gt; IO ()
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span>  </span><span class="annot"><span class="annottext">Window
+</span><span class="hs-identifier hs-var">substructureRedirectMask</span></span><span> </span><span class="annot"><span class="annottext">Window -&gt; Window -&gt; Window
+forall a. Bits a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-operator hs-var">.|.</span></span><span> </span><span class="annot"><span class="annottext">Window
+</span><span class="hs-identifier hs-var">substructureNotifyMask</span></span><span>
+</span><span id="line-60"></span><span>                                </span><span class="annot"><span class="annottext">Window -&gt; Window -&gt; Window
+forall a. Bits a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-operator hs-var">.|.</span></span><span> </span><span class="annot"><span class="annottext">Window
+</span><span class="hs-identifier hs-var">enterWindowMask</span></span><span> </span><span class="annot"><span class="annottext">Window -&gt; Window -&gt; Window
+forall a. Bits a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-operator hs-var">.|.</span></span><span> </span><span class="annot"><span class="annottext">Window
+</span><span class="hs-identifier hs-var">leaveWindowMask</span></span><span> </span><span class="annot"><span class="annottext">Window -&gt; Window -&gt; Window
+forall a. Bits a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-operator hs-var">.|.</span></span><span> </span><span class="annot"><span class="annottext">Window
+</span><span class="hs-identifier hs-var">structureNotifyMask</span></span><span>
+</span><span id="line-61"></span><span>                                </span><span class="annot"><span class="annottext">Window -&gt; Window -&gt; Window
+forall a. Bits a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-operator hs-var">.|.</span></span><span> </span><span class="annot"><span class="annottext">Window
+</span><span class="hs-identifier hs-var">buttonPressMask</span></span><span> </span><span class="annot"><span class="annottext">Window -&gt; Window -&gt; Window
+forall a. Bits a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-operator hs-var">.|.</span></span><span> </span><span class="annot"><span class="annottext">Window
+</span><span class="hs-identifier hs-var">pointerMotionMask</span></span><span>
+</span><span id="line-62"></span><span>
+</span><span id="line-63"></span><span class="hs-comment">-- | Focus the window under the mouse pointer, unless we're currently changing</span><span>
+</span><span id="line-64"></span><span class="hs-comment">-- focus with the mouse or dragging. This is the inverse to</span><span>
+</span><span id="line-65"></span><span class="hs-comment">-- &quot;XMonad.Actions.UpdatePointer&quot;: instead of moving the mouse pointer to</span><span>
+</span><span id="line-66"></span><span class="hs-comment">-- match the focus, we change the focus to match the mouse pointer.</span><span>
+</span><span id="line-67"></span><span class="hs-comment">--</span><span>
+</span><span id="line-68"></span><span class="hs-comment">-- This is meant to be used together with</span><span>
+</span><span id="line-69"></span><span class="hs-comment">-- 'XMonad.Actions.UpdatePointer.updatePointer' in individual key bindings.</span><span>
+</span><span id="line-70"></span><span class="hs-comment">-- Bindings that change focus should invoke</span><span>
+</span><span id="line-71"></span><span class="hs-comment">-- 'XMonad.Actions.UpdatePointer.updatePointer' at the end, bindings that</span><span>
+</span><span id="line-72"></span><span class="hs-comment">-- switch workspaces or change layouts should call 'focusUnderPointer' at the</span><span>
+</span><span id="line-73"></span><span class="hs-comment">-- end. Neither should go to 'logHook', as that would override the other.</span><span>
+</span><span id="line-74"></span><span class="hs-comment">--</span><span>
+</span><span id="line-75"></span><span class="hs-comment">-- This is more finicky to set up than 'focusOnMouseMove', but ensures that</span><span>
+</span><span id="line-76"></span><span class="hs-comment">-- focus is updated immediately, without having to touch the mouse.</span><span>
+</span><span id="line-77"></span><span class="annot"><a href="XMonad.Actions.UpdateFocus.html#focusUnderPointer"><span class="hs-identifier hs-type">focusUnderPointer</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">X</span></span><span> </span><span class="hs-special">(</span><span class="hs-special">)</span><span>
+</span><span id="line-78"></span><span id="focusUnderPointer"><span class="annot"><span class="annottext">focusUnderPointer :: X ()
+</span><a href="XMonad.Actions.UpdateFocus.html#focusUnderPointer"><span class="hs-identifier hs-var hs-var">focusUnderPointer</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">X Bool -&gt; X () -&gt; X ()
+</span><span class="hs-identifier hs-var">whenX</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Bool -&gt; Bool
+</span><span class="hs-identifier hs-var">not</span></span><span> </span><span class="annot"><span class="annottext">(Bool -&gt; Bool) -&gt; X Bool -&gt; X Bool
+forall (f :: * -&gt; *) a b. Functor f =&gt; (a -&gt; b) -&gt; f a -&gt; f b
+</span><span class="hs-operator hs-var">&lt;$&gt;</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">(XConf -&gt; Bool) -&gt; X Bool
+forall r (m :: * -&gt; *) a. MonadReader r m =&gt; (r -&gt; a) -&gt; m a
+</span><span class="hs-identifier hs-var">asks</span></span><span> </span><span class="annot"><span class="annottext">XConf -&gt; Bool
+</span><span class="hs-identifier hs-var hs-var">mouseFocused</span></span><span> </span><span class="annot"><span class="annottext">X Bool -&gt; X Bool -&gt; X Bool
+forall (m :: * -&gt; *). Monad m =&gt; m Bool -&gt; m Bool -&gt; m Bool
+</span><span class="hs-operator hs-var">&lt;||&gt;</span></span><span> </span><span class="annot"><span class="annottext">(XState -&gt; Bool) -&gt; X Bool
+forall s (m :: * -&gt; *) a. MonadState s m =&gt; (s -&gt; a) -&gt; m a
+</span><span class="hs-identifier hs-var">gets</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Maybe (Position -&gt; Position -&gt; X (), X ()) -&gt; Bool
+forall a. Maybe a -&gt; Bool
+</span><span class="hs-identifier hs-var">isJust</span></span><span> </span><span class="annot"><span class="annottext">(Maybe (Position -&gt; Position -&gt; X (), X ()) -&gt; Bool)
+-&gt; (XState -&gt; Maybe (Position -&gt; Position -&gt; X (), X ()))
+-&gt; XState
+-&gt; Bool
+forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">XState -&gt; Maybe (Position -&gt; Position -&gt; X (), X ())
+</span><span class="hs-identifier hs-var hs-var">dragging</span></span><span class="hs-special">)</span><span class="hs-special">)</span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">(X () -&gt; X ()) -&gt; X () -&gt; X ()
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-79"></span><span>  </span><span id="local-6989586621679379469"><span class="annot"><span class="annottext">Display
+</span><a href="#local-6989586621679379469"><span class="hs-identifier hs-var">dpy</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">(XConf -&gt; Display) -&gt; X Display
+forall r (m :: * -&gt; *) a. MonadReader r m =&gt; (r -&gt; a) -&gt; m a
+</span><span class="hs-identifier hs-var">asks</span></span><span> </span><span class="annot"><span class="annottext">XConf -&gt; Display
+</span><span class="hs-identifier hs-var hs-var">display</span></span><span>
+</span><span id="line-80"></span><span>  </span><span id="local-6989586621679379468"><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679379468"><span class="hs-identifier hs-var">root</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">(XConf -&gt; Window) -&gt; X Window
+forall r (m :: * -&gt; *) a. MonadReader r m =&gt; (r -&gt; a) -&gt; m a
+</span><span class="hs-identifier hs-var">asks</span></span><span> </span><span class="annot"><span class="annottext">XConf -&gt; Window
+</span><span class="hs-identifier hs-var hs-var">theRoot</span></span><span>
+</span><span id="line-81"></span><span>  </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Bool
+</span><span class="hs-identifier">_</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">Window
+</span><span class="hs-identifier">_</span></span><span class="hs-special">,</span><span> </span><span id="local-6989586621679379467"><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679379467"><span class="hs-identifier hs-var">w'</span></a></span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">CInt
+</span><span class="hs-identifier">_</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">CInt
+</span><span class="hs-identifier">_</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">CInt
+</span><span class="hs-identifier">_</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">CInt
+</span><span class="hs-identifier">_</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">Modifier
+</span><span class="hs-identifier">_</span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">IO (Bool, Window, Window, CInt, CInt, CInt, CInt, Modifier)
+-&gt; X (Bool, Window, Window, CInt, CInt, CInt, CInt, Modifier)
+forall (m :: * -&gt; *) a. MonadIO m =&gt; IO a -&gt; m a
+</span><span class="hs-identifier hs-var">io</span></span><span> </span><span class="annot"><span class="annottext">(IO (Bool, Window, Window, CInt, CInt, CInt, CInt, Modifier)
+ -&gt; X (Bool, Window, Window, CInt, CInt, CInt, CInt, Modifier))
+-&gt; IO (Bool, Window, Window, CInt, CInt, CInt, CInt, Modifier)
+-&gt; X (Bool, Window, Window, CInt, CInt, CInt, CInt, Modifier)
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">Display
+-&gt; Window
+-&gt; IO (Bool, Window, Window, CInt, CInt, CInt, CInt, Modifier)
+</span><span class="hs-identifier hs-var">queryPointer</span></span><span> </span><span class="annot"><span class="annottext">Display
+</span><a href="#local-6989586621679379469"><span class="hs-identifier hs-var">dpy</span></a></span><span> </span><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679379468"><span class="hs-identifier hs-var">root</span></a></span><span>
+</span><span id="line-82"></span><span>  </span><span id="local-6989586621679379465"><span class="annot"><span class="annottext">Maybe Window
+</span><a href="#local-6989586621679379465"><span class="hs-identifier hs-var">w</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">(XState -&gt; Maybe Window) -&gt; X (Maybe Window)
+forall s (m :: * -&gt; *) a. MonadState s m =&gt; (s -&gt; a) -&gt; m a
+</span><span class="hs-identifier hs-var">gets</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">WindowSet -&gt; Maybe Window
+forall i l a s sd. StackSet i l a s sd -&gt; Maybe a
+</span><span class="hs-identifier hs-var">W.peek</span></span><span> </span><span class="annot"><span class="annottext">(WindowSet -&gt; Maybe Window)
+-&gt; (XState -&gt; WindowSet) -&gt; XState -&gt; Maybe Window
+forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">XState -&gt; WindowSet
+</span><span class="hs-identifier hs-var hs-var">windowset</span></span><span class="hs-special">)</span><span>
+</span><span id="line-83"></span><span>  </span><span class="annot"><span class="annottext">Bool -&gt; X () -&gt; X ()
+forall (f :: * -&gt; *). Applicative f =&gt; Bool -&gt; f () -&gt; f ()
+</span><span class="hs-identifier hs-var">when</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679379467"><span class="hs-identifier hs-var">w'</span></a></span><span> </span><span class="annot"><span class="annottext">Window -&gt; Window -&gt; Bool
+forall a. Eq a =&gt; a -&gt; a -&gt; Bool
+</span><span class="hs-operator hs-var">/=</span></span><span> </span><span class="annot"><span class="annottext">Window
+</span><span class="hs-identifier hs-var">none</span></span><span> </span><span class="annot"><span class="annottext">Bool -&gt; Bool -&gt; Bool
+</span><span class="hs-operator hs-var">&amp;&amp;</span></span><span> </span><span class="annot"><span class="annottext">Window -&gt; Maybe Window
+forall a. a -&gt; Maybe a
+</span><span class="hs-identifier hs-var">Just</span></span><span> </span><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679379467"><span class="hs-identifier hs-var">w'</span></a></span><span> </span><span class="annot"><span class="annottext">Maybe Window -&gt; Maybe Window -&gt; Bool
+forall a. Eq a =&gt; a -&gt; a -&gt; Bool
+</span><span class="hs-operator hs-var">/=</span></span><span> </span><span class="annot"><span class="annottext">Maybe Window
+</span><a href="#local-6989586621679379465"><span class="hs-identifier hs-var">w</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Window -&gt; X ()
+</span><span class="hs-identifier hs-var">focus</span></span><span> </span><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679379467"><span class="hs-identifier hs-var">w'</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-84"></span></pre></body></html>
