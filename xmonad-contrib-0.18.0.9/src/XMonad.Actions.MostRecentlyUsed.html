@@ -1,0 +1,642 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd"><html xmlns="http://www.w3.org/1999/xhtml"><head><link rel="stylesheet" type="text/css" href="style.css" /><script type="text/javascript" src="highlight.js"></script></head><body><pre><span class="hs-pragma">{-# LANGUAGE NamedFieldPuns, GeneralizedNewtypeDeriving #-}</span><span>
+</span><span id="line-2"></span><span>
+</span><span id="line-3"></span><span class="hs-comment">-----------------------------------------------------------------------------</span><span>
+</span><span id="line-4"></span><span class="hs-comment">-- |</span><span>
+</span><span id="line-5"></span><span class="hs-comment">-- Module      :  XMonad.Actions.MostRecentlyUsed</span><span>
+</span><span id="line-6"></span><span class="hs-comment">-- Description :  Tab through windows by recency of use.</span><span>
+</span><span id="line-7"></span><span class="hs-comment">-- Copyright   :  (c) 2022 L. S. Leary</span><span>
+</span><span id="line-8"></span><span class="hs-comment">-- License     :  BSD3-style (see LICENSE)</span><span>
+</span><span id="line-9"></span><span class="hs-comment">--</span><span>
+</span><span id="line-10"></span><span class="hs-comment">-- Maintainer  :  @LSLeary (on github)</span><span>
+</span><span id="line-11"></span><span class="hs-comment">-- Stability   :  unstable</span><span>
+</span><span id="line-12"></span><span class="hs-comment">-- Portability :  unportable</span><span>
+</span><span id="line-13"></span><span class="hs-comment">--</span><span>
+</span><span id="line-14"></span><span class="hs-comment">-- Based on the Alt+Tab behaviour common outside of xmonad.</span><span>
+</span><span id="line-15"></span><span class="hs-comment">--</span><span>
+</span><span id="line-16"></span><span class="hs-comment">-----------------------------------------------------------------------------</span><span>
+</span><span id="line-17"></span><span>
+</span><span id="line-18"></span><span class="hs-comment">-- --&lt; Imports &amp; Exports &gt;-- {{{</span><span>
+</span><span id="line-19"></span><span>
+</span><span id="line-20"></span><span class="hs-keyword">module</span><span> </span><span class="hs-identifier">XMonad.Actions.MostRecentlyUsed</span><span> </span><span class="hs-special">(</span><span>
+</span><span id="line-21"></span><span>
+</span><span id="line-22"></span><span>  </span><span class="annot"><span class="hs-comment">-- * Usage</span></span><span>
+</span><span id="line-23"></span><span>  </span><span class="annot"><span class="hs-comment">-- $usage</span></span><span>
+</span><span id="line-24"></span><span>
+</span><span id="line-25"></span><span>  </span><span class="annot"><span class="hs-comment">-- * Interface</span></span><span>
+</span><span id="line-26"></span><span>  </span><span class="annot"><a href="XMonad.Actions.MostRecentlyUsed.html#configureMRU"><span class="hs-identifier">configureMRU</span></a></span><span class="hs-special">,</span><span>
+</span><span id="line-27"></span><span>  </span><span class="annot"><a href="XMonad.Actions.MostRecentlyUsed.html#mostRecentlyUsed"><span class="hs-identifier">mostRecentlyUsed</span></a></span><span class="hs-special">,</span><span>
+</span><span id="line-28"></span><span>  </span><span class="annot"><a href="XMonad.Actions.MostRecentlyUsed.html#withMostRecentlyUsed"><span class="hs-identifier">withMostRecentlyUsed</span></a></span><span class="hs-special">,</span><span>
+</span><span id="line-29"></span><span>  </span><span class="annot"><a href="XMonad.Actions.MostRecentlyUsed.html#Location"><span class="hs-identifier">Location</span></a></span><span class="hs-special">(</span><span class="hs-glyph">..</span><span class="hs-special">)</span><span class="hs-special">,</span><span>
+</span><span id="line-30"></span><span>
+</span><span id="line-31"></span><span>  </span><span class="hs-special">)</span><span> </span><span class="hs-keyword">where</span><span>
+</span><span id="line-32"></span><span>
+</span><span id="line-33"></span><span class="hs-comment">-- base</span><span>
+</span><span id="line-34"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><span class="hs-identifier">Data.List.NonEmpty</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier">nonEmpty</span></span><span class="hs-special">)</span><span>
+</span><span id="line-35"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><span class="hs-identifier">Data.IORef</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier">newIORef</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier">readIORef</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier">writeIORef</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier">modifyIORef</span></span><span class="hs-special">)</span><span>
+</span><span id="line-36"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><span class="hs-identifier">Control.Monad.IO.Class</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier">MonadIO</span></span><span class="hs-special">)</span><span>
+</span><span id="line-37"></span><span>
+</span><span id="line-38"></span><span class="hs-comment">-- mtl</span><span>
+</span><span id="line-39"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><span class="hs-identifier">Control.Monad.Trans</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier">lift</span></span><span class="hs-special">)</span><span>
+</span><span id="line-40"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><span class="hs-identifier">Control.Monad.State</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier">get</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier">put</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier">gets</span></span><span class="hs-special">)</span><span>
+</span><span id="line-41"></span><span>
+</span><span id="line-42"></span><span class="hs-comment">-- containers</span><span>
+</span><span id="line-43"></span><span class="hs-keyword">import</span><span> </span><span class="hs-keyword">qualified</span><span> </span><span class="annot"><span class="hs-identifier">Data.Map.Strict</span></span><span> </span><span class="hs-keyword">as</span><span> </span><span class="annot"><span class="hs-identifier">M</span></span><span>
+</span><span id="line-44"></span><span>
+</span><span id="line-45"></span><span class="hs-comment">-- xmonad</span><span>
+</span><span id="line-46"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><span class="hs-identifier">XMonad</span></span><span>
+</span><span id="line-47"></span><span>  </span><span class="hs-special">(</span><span> </span><span class="annot"><span class="hs-identifier">Window</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier">KeySym</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier">keyPress</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier">io</span></span><span>
+</span><span id="line-48"></span><span>  </span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier">Event</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier">DestroyWindowEvent</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier">UnmapEvent</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier">ev_send_event</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier">ev_window</span></span><span class="hs-special">)</span><span>
+</span><span id="line-49"></span><span>  </span><span class="hs-special">)</span><span>
+</span><span id="line-50"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><span class="hs-identifier">XMonad.Core</span></span><span>
+</span><span id="line-51"></span><span>  </span><span class="hs-special">(</span><span> </span><span class="annot"><span class="hs-identifier">X</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier">XConfig</span></span><span class="hs-special">(</span><span class="hs-glyph">..</span><span class="hs-special">)</span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier">windowset</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier">WorkspaceId</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier">ScreenId</span></span><span>
+</span><span id="line-52"></span><span>  </span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier">ExtensionClass</span></span><span class="hs-special">(</span><span class="hs-glyph">..</span><span class="hs-special">)</span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier">StateExtension</span></span><span class="hs-special">(</span><span class="hs-glyph">..</span><span class="hs-special">)</span><span>
+</span><span id="line-53"></span><span>  </span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier">waitingUnmap</span></span><span>
+</span><span id="line-54"></span><span>  </span><span class="hs-special">)</span><span>
+</span><span id="line-55"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><span class="hs-identifier">XMonad.Operations</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier">screenWorkspace</span></span><span class="hs-special">)</span><span>
+</span><span id="line-56"></span><span class="hs-keyword">import</span><span> </span><span class="hs-keyword">qualified</span><span> </span><span class="annot"><span class="hs-identifier">XMonad.StackSet</span></span><span> </span><span class="hs-keyword">as</span><span> </span><span class="annot"><span class="hs-identifier">W</span></span><span>
+</span><span id="line-57"></span><span>
+</span><span id="line-58"></span><span class="hs-comment">-- xmonad-contrib</span><span>
+</span><span id="line-59"></span><span class="hs-keyword">import</span><span> </span><span class="hs-keyword">qualified</span><span> </span><span class="annot"><a href="XMonad.Util.ExtensibleConf.html"><span class="hs-identifier">XMonad.Util.ExtensibleConf</span></a></span><span>  </span><span class="hs-keyword">as</span><span> </span><span class="annot"><span class="hs-identifier">XC</span></span><span>
+</span><span id="line-60"></span><span class="hs-keyword">import</span><span> </span><span class="hs-keyword">qualified</span><span> </span><span class="annot"><a href="XMonad.Util.ExtensibleState.html"><span class="hs-identifier">XMonad.Util.ExtensibleState</span></a></span><span> </span><span class="hs-keyword">as</span><span> </span><span class="annot"><span class="hs-identifier">XS</span></span><span>
+</span><span id="line-61"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><a href="XMonad.Util.PureX.html"><span class="hs-identifier">XMonad.Util.PureX</span></a></span><span>
+</span><span id="line-62"></span><span>  </span><span class="hs-special">(</span><span class="annot"><a href="XMonad.Util.PureX.html#handlingRefresh"><span class="hs-identifier">handlingRefresh</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><a href="XMonad.Util.PureX.html#curScreenId"><span class="hs-identifier">curScreenId</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><a href="XMonad.Util.PureX.html#curTag"><span class="hs-identifier">curTag</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><a href="XMonad.Util.PureX.html#greedyView"><span class="hs-identifier">greedyView</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><a href="XMonad.Util.PureX.html#view"><span class="hs-identifier">view</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><a href="XMonad.Util.PureX.html#peek"><span class="hs-identifier">peek</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><a href="XMonad.Util.PureX.html#focusWindow"><span class="hs-identifier">focusWindow</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-63"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><a href="XMonad.Util.History.html"><span class="hs-identifier">XMonad.Util.History</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="XMonad.Util.History.html#History"><span class="hs-identifier">History</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><a href="XMonad.Util.History.html#origin"><span class="hs-identifier">origin</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><a href="XMonad.Util.History.html#event"><span class="hs-identifier">event</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><a href="XMonad.Util.History.html#erase"><span class="hs-identifier">erase</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><a href="XMonad.Util.History.html#ledger"><span class="hs-identifier">ledger</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-64"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><a href="XMonad.Actions.Repeatable.html"><span class="hs-identifier">XMonad.Actions.Repeatable</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="XMonad.Actions.Repeatable.html#repeatableSt"><span class="hs-identifier">repeatableSt</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-65"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><a href="XMonad.Prelude.html"><span class="hs-identifier">XMonad.Prelude</span></a></span><span>
+</span><span id="line-66"></span><span>
+</span><span id="line-67"></span><span class="hs-comment">-- }}}</span><span>
+</span><span id="line-68"></span><span>
+</span><span id="line-69"></span><span class="hs-comment">-- --&lt; Core Data Types: WindowHistory &amp; Location &gt;-- {{{</span><span>
+</span><span id="line-70"></span><span>
+</span><span id="line-71"></span><span class="hs-keyword">data</span><span> </span><span id="WindowHistory"><span class="annot"><a href="XMonad.Actions.MostRecentlyUsed.html#WindowHistory"><span class="hs-identifier hs-var">WindowHistory</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span id="WinHist"><span class="annot"><a href="XMonad.Actions.MostRecentlyUsed.html#WinHist"><span class="hs-identifier hs-var">WinHist</span></a></span></span><span>
+</span><span id="line-72"></span><span>  </span><span class="hs-special">{</span><span> </span><span id="busy"><span class="annot"><span class="annottext">WindowHistory -&gt; Bool
+</span><a href="XMonad.Actions.MostRecentlyUsed.html#busy"><span class="hs-identifier hs-var hs-var">busy</span></a></span></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="hs-glyph">!</span><span class="annot"><span class="hs-identifier hs-type">Bool</span></span><span>
+</span><span id="line-73"></span><span>  </span><span class="hs-special">,</span><span> </span><span id="hist"><span class="annot"><span class="annottext">WindowHistory -&gt; History Window Location
+</span><a href="XMonad.Actions.MostRecentlyUsed.html#hist"><span class="hs-identifier hs-var hs-var">hist</span></a></span></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="hs-glyph">!</span><span class="hs-special">(</span><span class="annot"><a href="XMonad.Util.History.html#History"><span class="hs-identifier hs-type">History</span></a></span><span> </span><span class="annot"><span class="hs-identifier hs-type">Window</span></span><span> </span><span class="annot"><a href="XMonad.Actions.MostRecentlyUsed.html#Location"><span class="hs-identifier hs-type">Location</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-74"></span><span>  </span><span class="hs-special">}</span><span> </span><span class="hs-keyword">deriving</span><span> </span><span class="hs-special">(</span><span id="local-6989586621679439733"><span id="local-6989586621679439735"><span id="local-6989586621679439745"><span class="annot"><span class="annottext">Int -&gt; WindowHistory -&gt; ShowS
+[WindowHistory] -&gt; ShowS
+WindowHistory -&gt; WorkspaceId
+forall a.
+(Int -&gt; a -&gt; ShowS)
+-&gt; (a -&gt; WorkspaceId) -&gt; ([a] -&gt; ShowS) -&gt; Show a
+showList :: [WindowHistory] -&gt; ShowS
+$cshowList :: [WindowHistory] -&gt; ShowS
+show :: WindowHistory -&gt; WorkspaceId
+$cshow :: WindowHistory -&gt; WorkspaceId
+showsPrec :: Int -&gt; WindowHistory -&gt; ShowS
+$cshowsPrec :: Int -&gt; WindowHistory -&gt; ShowS
+</span><span class="hs-identifier hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var">Show</span></span></span></span></span><span class="hs-special">,</span><span> </span><span id="local-6989586621679439708"><span id="local-6989586621679439724"><span id="local-6989586621679439727"><span id="local-6989586621679439729"><span class="annot"><span class="annottext">ReadPrec [WindowHistory]
+ReadPrec WindowHistory
+Int -&gt; ReadS WindowHistory
+ReadS [WindowHistory]
+forall a.
+(Int -&gt; ReadS a)
+-&gt; ReadS [a] -&gt; ReadPrec a -&gt; ReadPrec [a] -&gt; Read a
+readListPrec :: ReadPrec [WindowHistory]
+$creadListPrec :: ReadPrec [WindowHistory]
+readPrec :: ReadPrec WindowHistory
+$creadPrec :: ReadPrec WindowHistory
+readList :: ReadS [WindowHistory]
+$creadList :: ReadS [WindowHistory]
+readsPrec :: Int -&gt; ReadS WindowHistory
+$creadsPrec :: Int -&gt; ReadS WindowHistory
+</span><span class="hs-identifier hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var">Read</span></span></span></span></span></span><span class="hs-special">)</span><span>
+</span><span id="line-75"></span><span>
+</span><span id="line-76"></span><span class="hs-keyword">instance</span><span> </span><span class="annot"><span class="hs-identifier hs-type">ExtensionClass</span></span><span> </span><span class="annot"><a href="XMonad.Actions.MostRecentlyUsed.html#WindowHistory"><span class="hs-identifier hs-type">WindowHistory</span></a></span><span> </span><span class="hs-keyword">where</span><span>
+</span><span id="line-77"></span><span>  </span><span id="local-6989586621679439699"><span class="annot"><span class="annottext">initialValue :: WindowHistory
+</span><span class="hs-identifier hs-var hs-var hs-var hs-var">initialValue</span></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><a href="XMonad.Actions.MostRecentlyUsed.html#WinHist"><span class="hs-identifier hs-type">WinHist</span></a></span><span>
+</span><span id="line-78"></span><span>    </span><span class="hs-special">{</span><span> </span><span class="annot"><span class="annottext">busy :: Bool
+</span><a href="XMonad.Actions.MostRecentlyUsed.html#busy"><span class="hs-identifier hs-var">busy</span></a></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Bool
+</span><span class="hs-identifier hs-var">False</span></span><span>
+</span><span id="line-79"></span><span>    </span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">hist :: History Window Location
+</span><a href="XMonad.Actions.MostRecentlyUsed.html#hist"><span class="hs-identifier hs-var">hist</span></a></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">forall k a. History k a
+</span><a href="XMonad.Util.History.html#origin"><span class="hs-identifier hs-var">origin</span></a></span><span>
+</span><span id="line-80"></span><span>    </span><span class="hs-special">}</span><span>
+</span><span id="line-81"></span><span>  </span><span id="local-6989586621679439694"><span class="annot"><span class="annottext">extensionType :: WindowHistory -&gt; StateExtension
+</span><span class="hs-identifier hs-var hs-var hs-var hs-var">extensionType</span></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">forall a. (Read a, Show a, ExtensionClass a) =&gt; a -&gt; StateExtension
+</span><span class="hs-identifier hs-var">PersistentExtension</span></span><span>
+</span><span id="line-82"></span><span>
+</span><span id="line-83"></span><span class="hs-keyword">data</span><span> </span><span id="Location"><span class="annot"><a href="XMonad.Actions.MostRecentlyUsed.html#Location"><span class="hs-identifier hs-var">Location</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span id="Location"><span class="annot"><a href="XMonad.Actions.MostRecentlyUsed.html#Location"><span class="hs-identifier hs-var">Location</span></a></span></span><span>
+</span><span id="line-84"></span><span>  </span><span class="hs-special">{</span><span> </span><span id="workspace"><span class="annot"><span class="annottext">Location -&gt; WorkspaceId
+</span><a href="XMonad.Actions.MostRecentlyUsed.html#workspace"><span class="hs-identifier hs-var hs-var">workspace</span></a></span></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="hs-glyph">!</span><span class="annot"><span class="hs-identifier hs-type">WorkspaceId</span></span><span>
+</span><span id="line-85"></span><span>  </span><span class="hs-special">,</span><span> </span><span id="screen"><span class="annot"><span class="annottext">Location -&gt; ScreenId
+</span><a href="XMonad.Actions.MostRecentlyUsed.html#screen"><span class="hs-identifier hs-var hs-var">screen</span></a></span></span><span>    </span><span class="hs-glyph">::</span><span> </span><span class="hs-glyph">!</span><span class="annot"><span class="hs-identifier hs-type">ScreenId</span></span><span>
+</span><span id="line-86"></span><span>  </span><span class="hs-special">}</span><span> </span><span class="hs-keyword">deriving</span><span> </span><span class="hs-special">(</span><span id="local-6989586621679439677"><span id="local-6989586621679439679"><span id="local-6989586621679439687"><span class="annot"><span class="annottext">Int -&gt; Location -&gt; ShowS
+[Location] -&gt; ShowS
+Location -&gt; WorkspaceId
+forall a.
+(Int -&gt; a -&gt; ShowS)
+-&gt; (a -&gt; WorkspaceId) -&gt; ([a] -&gt; ShowS) -&gt; Show a
+showList :: [Location] -&gt; ShowS
+$cshowList :: [Location] -&gt; ShowS
+show :: Location -&gt; WorkspaceId
+$cshow :: Location -&gt; WorkspaceId
+showsPrec :: Int -&gt; Location -&gt; ShowS
+$cshowsPrec :: Int -&gt; Location -&gt; ShowS
+</span><span class="hs-identifier hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var">Show</span></span></span></span></span><span class="hs-special">,</span><span> </span><span id="local-6989586621679439655"><span id="local-6989586621679439669"><span id="local-6989586621679439672"><span id="local-6989586621679439674"><span class="annot"><span class="annottext">ReadPrec [Location]
+ReadPrec Location
+Int -&gt; ReadS Location
+ReadS [Location]
+forall a.
+(Int -&gt; ReadS a)
+-&gt; ReadS [a] -&gt; ReadPrec a -&gt; ReadPrec [a] -&gt; Read a
+readListPrec :: ReadPrec [Location]
+$creadListPrec :: ReadPrec [Location]
+readPrec :: ReadPrec Location
+$creadPrec :: ReadPrec Location
+readList :: ReadS [Location]
+$creadList :: ReadS [Location]
+readsPrec :: Int -&gt; ReadS Location
+$creadsPrec :: Int -&gt; ReadS Location
+</span><span class="hs-identifier hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var">Read</span></span></span></span></span></span><span class="hs-special">,</span><span> </span><span id="local-6989586621679439647"><span id="local-6989586621679439651"><span class="annot"><span class="annottext">Location -&gt; Location -&gt; Bool
+forall a. (a -&gt; a -&gt; Bool) -&gt; (a -&gt; a -&gt; Bool) -&gt; Eq a
+/= :: Location -&gt; Location -&gt; Bool
+$c/= :: Location -&gt; Location -&gt; Bool
+== :: Location -&gt; Location -&gt; Bool
+$c== :: Location -&gt; Location -&gt; Bool
+</span><span class="hs-identifier hs-var hs-var hs-var hs-var hs-var hs-var">Eq</span></span></span></span><span class="hs-special">,</span><span> </span><span id="local-6989586621679439619"><span id="local-6989586621679439621"><span id="local-6989586621679439624"><span id="local-6989586621679439627"><span id="local-6989586621679439630"><span id="local-6989586621679439635"><span id="local-6989586621679439642"><span class="annot"><span class="annottext">Eq Location
+Location -&gt; Location -&gt; Bool
+Location -&gt; Location -&gt; Ordering
+Location -&gt; Location -&gt; Location
+forall a.
+Eq a
+-&gt; (a -&gt; a -&gt; Ordering)
+-&gt; (a -&gt; a -&gt; Bool)
+-&gt; (a -&gt; a -&gt; Bool)
+-&gt; (a -&gt; a -&gt; Bool)
+-&gt; (a -&gt; a -&gt; Bool)
+-&gt; (a -&gt; a -&gt; a)
+-&gt; (a -&gt; a -&gt; a)
+-&gt; Ord a
+min :: Location -&gt; Location -&gt; Location
+$cmin :: Location -&gt; Location -&gt; Location
+max :: Location -&gt; Location -&gt; Location
+$cmax :: Location -&gt; Location -&gt; Location
+&gt;= :: Location -&gt; Location -&gt; Bool
+$c&gt;= :: Location -&gt; Location -&gt; Bool
+&gt; :: Location -&gt; Location -&gt; Bool
+$c&gt; :: Location -&gt; Location -&gt; Bool
+&lt;= :: Location -&gt; Location -&gt; Bool
+$c&lt;= :: Location -&gt; Location -&gt; Bool
+&lt; :: Location -&gt; Location -&gt; Bool
+$c&lt; :: Location -&gt; Location -&gt; Bool
+compare :: Location -&gt; Location -&gt; Ordering
+$ccompare :: Location -&gt; Location -&gt; Ordering
+</span><span class="hs-identifier hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var">Ord</span></span></span></span></span></span></span></span></span><span class="hs-special">)</span><span>
+</span><span id="line-87"></span><span>
+</span><span id="line-88"></span><span class="hs-comment">-- }}}</span><span>
+</span><span id="line-89"></span><span>
+</span><span id="line-90"></span><span class="hs-comment">-- --&lt; Interface &gt;-- {{{</span><span>
+</span><span id="line-91"></span><span>
+</span><span id="line-92"></span><span class="hs-comment">-- $usage</span><span>
+</span><span id="line-93"></span><span class="hs-comment">--</span><span>
+</span><span id="line-94"></span><span class="hs-comment">-- 'configureMRU' must be applied to your config in order for 'mostRecentlyUsed'</span><span>
+</span><span id="line-95"></span><span class="hs-comment">-- to work.</span><span>
+</span><span id="line-96"></span><span class="hs-comment">--</span><span>
+</span><span id="line-97"></span><span class="hs-comment">-- &gt; main :: IO ()</span><span>
+</span><span id="line-98"></span><span class="hs-comment">-- &gt; main = xmonad . configureMRU . ... $ def</span><span>
+</span><span id="line-99"></span><span class="hs-comment">-- &gt;   { ...</span><span>
+</span><span id="line-100"></span><span class="hs-comment">-- &gt;   }</span><span>
+</span><span id="line-101"></span><span class="hs-comment">--</span><span>
+</span><span id="line-102"></span><span class="hs-comment">-- Once that's done, it can be used normally in keybinds:</span><span>
+</span><span id="line-103"></span><span class="hs-comment">--</span><span>
+</span><span id="line-104"></span><span class="hs-comment">-- &gt; , ((mod1Mask, xK_Tab), mostRecentlyUsed [xK_Alt_L, xK_Alt_R] xK_Tab)</span><span>
+</span><span id="line-105"></span><span class="hs-comment">--</span><span>
+</span><span id="line-106"></span><span class="hs-comment">-- N.B.: This example assumes that 'mod1Mask' corresponds to alt, which is not</span><span>
+</span><span id="line-107"></span><span class="hs-comment">-- always the case, depending on how your system is configured.</span><span>
+</span><span id="line-108"></span><span>
+</span><span id="line-109"></span><span class="hs-comment">-- | Configure xmonad to support 'mostRecentlyUsed'.</span><span>
+</span><span id="line-110"></span><span id="local-6989586621679440044"><span class="annot"><a href="XMonad.Actions.MostRecentlyUsed.html#configureMRU"><span class="hs-identifier hs-type">configureMRU</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">XConfig</span></span><span> </span><span class="annot"><a href="#local-6989586621679440044"><span class="hs-identifier hs-type">l</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">XConfig</span></span><span> </span><span class="annot"><a href="#local-6989586621679440044"><span class="hs-identifier hs-type">l</span></a></span></span><span>
+</span><span id="line-111"></span><span id="configureMRU"><span class="annot"><span class="annottext">configureMRU :: forall (l :: * -&gt; *). XConfig l -&gt; XConfig l
+</span><a href="XMonad.Actions.MostRecentlyUsed.html#configureMRU"><span class="hs-identifier hs-var hs-var">configureMRU</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">forall a (l :: * -&gt; *).
+(Semigroup a, Typeable a) =&gt;
+(XConfig l -&gt; XConfig l) -&gt; a -&gt; XConfig l -&gt; XConfig l
+</span><a href="XMonad.Util.ExtensibleConf.html#once"><span class="hs-identifier hs-var">XC.once</span></a></span><span> </span><span class="annot"><span class="annottext">forall (l :: * -&gt; *). XConfig l -&gt; XConfig l
+</span><a href="#local-6989586621679439612"><span class="hs-identifier hs-var">f</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">() -&gt; MRU
+</span><a href="XMonad.Actions.MostRecentlyUsed.html#MRU"><span class="hs-identifier hs-var">MRU</span></a></span><span> </span><span class="hs-special">(</span><span class="hs-special">)</span><span class="hs-special">)</span><span> </span><span class="hs-keyword">where</span><span>
+</span><span id="line-112"></span><span>  </span><span id="local-6989586621679439612"><span class="annot"><span class="annottext">f :: XConfig l -&gt; XConfig l
+</span><a href="#local-6989586621679439612"><span class="hs-identifier hs-var hs-var">f</span></a></span></span><span> </span><span id="local-6989586621679439601"><span class="annot"><span class="annottext">XConfig l
+</span><a href="#local-6989586621679439601"><span class="hs-identifier hs-var">cnf</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">XConfig l
+</span><a href="#local-6989586621679439601"><span class="hs-identifier hs-var">cnf</span></a></span><span>
+</span><span id="line-113"></span><span>    </span><span class="hs-special">{</span><span> </span><span class="annot"><span class="annottext">logHook :: X ()
+</span><span class="hs-identifier hs-var">logHook</span></span><span>         </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">forall (l :: * -&gt; *). XConfig l -&gt; X ()
+</span><span class="hs-identifier hs-var">logHook</span></span><span>         </span><span class="annot"><span class="annottext">XConfig l
+</span><a href="#local-6989586621679439601"><span class="hs-identifier hs-var">cnf</span></a></span><span> </span><span class="annot"><span class="annottext">forall a. Semigroup a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-operator hs-var">&lt;&gt;</span></span><span> </span><span class="annot"><span class="annottext">X ()
+</span><a href="XMonad.Actions.MostRecentlyUsed.html#logWinHist"><span class="hs-identifier hs-var">logWinHist</span></a></span><span>
+</span><span id="line-114"></span><span>    </span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">handleEventHook :: Event -&gt; X All
+</span><span class="hs-identifier hs-var">handleEventHook</span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">forall (l :: * -&gt; *). XConfig l -&gt; Event -&gt; X All
+</span><span class="hs-identifier hs-var">handleEventHook</span></span><span> </span><span class="annot"><span class="annottext">XConfig l
+</span><a href="#local-6989586621679439601"><span class="hs-identifier hs-var">cnf</span></a></span><span> </span><span class="annot"><span class="annottext">forall a. Semigroup a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-operator hs-var">&lt;&gt;</span></span><span> </span><span class="annot"><span class="annottext">Event -&gt; X All
+</span><a href="XMonad.Actions.MostRecentlyUsed.html#winHistEH"><span class="hs-identifier hs-var">winHistEH</span></a></span><span>
+</span><span id="line-115"></span><span>    </span><span class="hs-special">}</span><span>
+</span><span id="line-116"></span><span class="hs-keyword">newtype</span><span> </span><span id="MRU"><span class="annot"><a href="XMonad.Actions.MostRecentlyUsed.html#MRU"><span class="hs-identifier hs-var">MRU</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span id="MRU"><span class="annot"><a href="XMonad.Actions.MostRecentlyUsed.html#MRU"><span class="hs-identifier hs-var">MRU</span></a></span></span><span> </span><span class="hs-special">(</span><span class="hs-special">)</span><span> </span><span class="hs-keyword">deriving</span><span> </span><span id="local-6989586621679439585"><span id="local-6989586621679439591"><span id="local-6989586621679439595"><span class="annot"><span class="annottext">NonEmpty MRU -&gt; MRU
+MRU -&gt; MRU -&gt; MRU
+forall b. Integral b =&gt; b -&gt; MRU -&gt; MRU
+forall a.
+(a -&gt; a -&gt; a)
+-&gt; (NonEmpty a -&gt; a)
+-&gt; (forall b. Integral b =&gt; b -&gt; a -&gt; a)
+-&gt; Semigroup a
+stimes :: forall b. Integral b =&gt; b -&gt; MRU -&gt; MRU
+$cstimes :: forall b. Integral b =&gt; b -&gt; MRU -&gt; MRU
+sconcat :: NonEmpty MRU -&gt; MRU
+$csconcat :: NonEmpty MRU -&gt; MRU
+&lt;&gt; :: MRU -&gt; MRU -&gt; MRU
+$c&lt;&gt; :: MRU -&gt; MRU -&gt; MRU
+</span><span class="hs-identifier hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var">Semigroup</span></span></span></span></span><span>
+</span><span id="line-117"></span><span>
+</span><span id="line-118"></span><span class="hs-comment">-- | An action to browse through the history of focused windows, taking</span><span>
+</span><span id="line-119"></span><span class="hs-comment">--   another step back with each tap of the key.</span><span>
+</span><span id="line-120"></span><span class="annot"><a href="XMonad.Actions.MostRecentlyUsed.html#mostRecentlyUsed"><span class="hs-identifier hs-type">mostRecentlyUsed</span></a></span><span>
+</span><span id="line-121"></span><span>  </span><span class="hs-glyph">::</span><span> </span><span class="hs-special">[</span><span class="annot"><span class="hs-identifier hs-type">KeySym</span></span><span class="hs-special">]</span><span> </span><span class="hs-comment">-- ^ The 'KeySym's corresponding to the modifier to which the</span><span>
+</span><span id="line-122"></span><span>              </span><span class="hs-comment">--   action is bound.</span><span>
+</span><span id="line-123"></span><span>  </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">KeySym</span></span><span>   </span><span class="hs-comment">-- ^ The 'KeySym' corresponding to the key to which the action</span><span>
+</span><span id="line-124"></span><span>              </span><span class="hs-comment">--   is bound.</span><span>
+</span><span id="line-125"></span><span>  </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">X</span></span><span> </span><span class="hs-special">(</span><span class="hs-special">)</span><span>
+</span><span id="line-126"></span><span id="mostRecentlyUsed"><span class="annot"><span class="annottext">mostRecentlyUsed :: [Window] -&gt; Window -&gt; X ()
+</span><a href="XMonad.Actions.MostRecentlyUsed.html#mostRecentlyUsed"><span class="hs-identifier hs-var hs-var">mostRecentlyUsed</span></a></span></span><span> </span><span id="local-6989586621679439579"><span class="annot"><span class="annottext">[Window]
+</span><a href="#local-6989586621679439579"><span class="hs-identifier hs-var">mods</span></a></span></span><span> </span><span id="local-6989586621679439578"><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679439578"><span class="hs-identifier hs-var">key</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-127"></span><span>  </span><span class="hs-special">(</span><span id="local-6989586621679439577"><span class="annot"><span class="annottext">X Any -&gt; X ()
+</span><a href="#local-6989586621679439577"><span class="hs-identifier hs-var">toUndo</span></a></span></span><span class="hs-special">,</span><span> </span><span id="local-6989586621679439576"><span class="annot"><span class="annottext">X Any
+</span><a href="#local-6989586621679439576"><span class="hs-identifier hs-var">undo</span></a></span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">forall (m :: * -&gt; *) a.
+(MonadIO m, Monoid a) =&gt;
+m (m a -&gt; m (), m a)
+</span><a href="#local-6989586621679439575"><span class="hs-identifier hs-var">undoer</span></a></span><span>
+</span><span id="line-128"></span><span>  </span><span class="hs-keyword">let</span><span> </span><span id="local-6989586621679439569"><span class="annot"><span class="annottext">undoably :: X t -&gt; (t -&gt; X Any) -&gt; t -&gt; X ()
+</span><a href="#local-6989586621679439569"><span class="hs-identifier hs-var hs-var">undoably</span></a></span></span><span> </span><span id="local-6989586621679439568"><span class="annot"><span class="annottext">X t
+</span><a href="#local-6989586621679439568"><span class="hs-identifier hs-var">curThing</span></a></span></span><span> </span><span id="local-6989586621679439567"><span class="annot"><span class="annottext">t -&gt; X Any
+</span><a href="#local-6989586621679439567"><span class="hs-identifier hs-var">withThing</span></a></span></span><span> </span><span id="local-6989586621679439566"><span class="annot"><span class="annottext">t
+</span><a href="#local-6989586621679439566"><span class="hs-identifier hs-var">thing</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">X t
+</span><a href="#local-6989586621679439568"><span class="hs-identifier hs-var">curThing</span></a></span><span> </span><span class="annot"><span class="annottext">forall (m :: * -&gt; *) a b. Monad m =&gt; m a -&gt; (a -&gt; m b) -&gt; m b
+</span><span class="hs-operator hs-var">&gt;&gt;=</span></span><span> </span><span class="hs-glyph">\</span><span id="local-6989586621679439565"><span class="annot"><span class="annottext">t
+</span><a href="#local-6989586621679439565"><span class="hs-identifier hs-var">cur</span></a></span></span><span> </span><span class="hs-glyph">-&gt;</span><span>
+</span><span id="line-129"></span><span>        </span><span class="annot"><span class="annottext">forall (f :: * -&gt; *). Applicative f =&gt; Bool -&gt; f () -&gt; f ()
+</span><span class="hs-identifier hs-var">when</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">t
+</span><a href="#local-6989586621679439565"><span class="hs-identifier hs-var">cur</span></a></span><span> </span><span class="annot"><span class="annottext">forall a. Eq a =&gt; a -&gt; a -&gt; Bool
+</span><span class="hs-operator hs-var">/=</span></span><span> </span><span class="annot"><span class="annottext">t
+</span><a href="#local-6989586621679439566"><span class="hs-identifier hs-var">thing</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">t -&gt; X Any
+</span><a href="#local-6989586621679439567"><span class="hs-identifier hs-var">withThing</span></a></span><span> </span><span class="annot"><span class="annottext">t
+</span><a href="#local-6989586621679439566"><span class="hs-identifier hs-var">thing</span></a></span><span> </span><span class="annot"><span class="annottext">forall (m :: * -&gt; *) a b. Monad m =&gt; m a -&gt; m b -&gt; m b
+</span><span class="hs-operator hs-var">&gt;&gt;</span></span><span> </span><span class="annot"><span class="annottext">X Any -&gt; X ()
+</span><a href="#local-6989586621679439577"><span class="hs-identifier hs-var">toUndo</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">t -&gt; X Any
+</span><a href="#local-6989586621679439567"><span class="hs-identifier hs-var">withThing</span></a></span><span> </span><span class="annot"><span class="annottext">t
+</span><a href="#local-6989586621679439565"><span class="hs-identifier hs-var">cur</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-130"></span><span>  </span><span class="annot"><span class="annottext">[Window] -&gt; Window -&gt; (Window -&gt; Location -&gt; X ()) -&gt; X ()
+</span><a href="XMonad.Actions.MostRecentlyUsed.html#withMostRecentlyUsed"><span class="hs-identifier hs-var">withMostRecentlyUsed</span></a></span><span> </span><span class="annot"><span class="annottext">[Window]
+</span><a href="#local-6989586621679439579"><span class="hs-identifier hs-var">mods</span></a></span><span> </span><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679439578"><span class="hs-identifier hs-var">key</span></a></span><span> </span><span class="annot"><span class="annottext">forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="hs-glyph">\</span><span id="local-6989586621679439562"><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679439562"><span class="hs-identifier hs-var">win</span></a></span></span><span> </span><span class="annot"><a href="XMonad.Actions.MostRecentlyUsed.html#Location"><span class="hs-identifier hs-type">Location</span></a></span><span class="hs-special">{</span><span id="local-6989586621679439561"><span class="annot"><span class="annottext">WorkspaceId
+workspace :: WorkspaceId
+workspace :: Location -&gt; WorkspaceId
+</span><a href="#local-6989586621679439561"><span class="hs-identifier hs-var hs-var">workspace</span></a></span></span><span class="hs-special">,</span><span id="local-6989586621679439560"><span class="annot"><span class="annottext">ScreenId
+screen :: ScreenId
+screen :: Location -&gt; ScreenId
+</span><a href="#local-6989586621679439560"><span class="hs-identifier hs-var hs-var">screen</span></a></span></span><span class="hs-special">}</span><span> </span><span class="hs-glyph">-&gt;</span><span>
+</span><span id="line-131"></span><span>    </span><span class="annot"><span class="annottext">X () -&gt; X ()
+</span><a href="XMonad.Util.PureX.html#handlingRefresh"><span class="hs-identifier hs-var">handlingRefresh</span></a></span><span> </span><span class="annot"><span class="annottext">forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-132"></span><span>      </span><span class="annot"><span class="annottext">X Any
+</span><a href="#local-6989586621679439576"><span class="hs-identifier hs-var">undo</span></a></span><span>
+</span><span id="line-133"></span><span>      </span><span class="annot"><span class="annottext">forall {t}. Eq t =&gt; X t -&gt; (t -&gt; X Any) -&gt; t -&gt; X ()
+</span><a href="#local-6989586621679439569"><span class="hs-identifier hs-var">undoably</span></a></span><span> </span><span class="annot"><span class="annottext">forall (m :: * -&gt; *). XLike m =&gt; m ScreenId
+</span><a href="XMonad.Util.PureX.html#curScreenId"><span class="hs-identifier hs-var">curScreenId</span></a></span><span> </span><span class="annot"><span class="annottext">ScreenId -&gt; X Any
+</span><a href="#local-6989586621679439559"><span class="hs-identifier hs-var">viewScreen</span></a></span><span> </span><span class="annot"><span class="annottext">ScreenId
+</span><a href="#local-6989586621679439560"><span class="hs-identifier hs-var">screen</span></a></span><span>
+</span><span id="line-134"></span><span>      </span><span class="annot"><span class="annottext">forall {t}. Eq t =&gt; X t -&gt; (t -&gt; X Any) -&gt; t -&gt; X ()
+</span><a href="#local-6989586621679439569"><span class="hs-identifier hs-var">undoably</span></a></span><span> </span><span class="annot"><span class="annottext">forall (m :: * -&gt; *). XLike m =&gt; m WorkspaceId
+</span><a href="XMonad.Util.PureX.html#curTag"><span class="hs-identifier hs-var">curTag</span></a></span><span>      </span><span class="annot"><span class="annottext">forall (m :: * -&gt; *). XLike m =&gt; WorkspaceId -&gt; m Any
+</span><a href="XMonad.Util.PureX.html#greedyView"><span class="hs-identifier hs-var">greedyView</span></a></span><span> </span><span class="annot"><span class="annottext">WorkspaceId
+</span><a href="#local-6989586621679439561"><span class="hs-identifier hs-var">workspace</span></a></span><span>
+</span><span id="line-135"></span><span>      </span><span id="local-6989586621679439558"><span class="annot"><span class="annottext">Maybe WorkspaceId
+</span><a href="#local-6989586621679439558"><span class="hs-identifier hs-var">mi</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">forall s (m :: * -&gt; *) a. MonadState s m =&gt; (s -&gt; a) -&gt; m a
+</span><span class="hs-identifier hs-var">gets</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">forall a i l s sd. Eq a =&gt; a -&gt; StackSet i l a s sd -&gt; Maybe i
+</span><span class="hs-identifier hs-var">W.findTag</span></span><span> </span><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679439562"><span class="hs-identifier hs-var">win</span></a></span><span> </span><span class="annot"><span class="annottext">forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">XState -&gt; WindowSet
+</span><span class="hs-identifier hs-var">windowset</span></span><span class="hs-special">)</span><span>
+</span><span id="line-136"></span><span>      </span><span class="annot"><span class="annottext">forall (t :: * -&gt; *) (f :: * -&gt; *) a b.
+(Foldable t, Applicative f) =&gt;
+t a -&gt; (a -&gt; f b) -&gt; f ()
+</span><span class="hs-identifier hs-var">for_</span></span><span> </span><span class="annot"><span class="annottext">Maybe WorkspaceId
+</span><a href="#local-6989586621679439558"><span class="hs-identifier hs-var">mi</span></a></span><span> </span><span class="annot"><span class="annottext">forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="hs-glyph">\</span><span id="local-6989586621679439554"><span class="annot"><span class="annottext">WorkspaceId
+</span><a href="#local-6989586621679439554"><span class="hs-identifier hs-var">i</span></a></span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-137"></span><span>        </span><span class="annot"><span class="annottext">forall {t}. Eq t =&gt; X t -&gt; (t -&gt; X Any) -&gt; t -&gt; X ()
+</span><a href="#local-6989586621679439569"><span class="hs-identifier hs-var">undoably</span></a></span><span> </span><span class="annot"><span class="annottext">forall (m :: * -&gt; *). XLike m =&gt; m WorkspaceId
+</span><a href="XMonad.Util.PureX.html#curTag"><span class="hs-identifier hs-var">curTag</span></a></span><span> </span><span class="annot"><span class="annottext">forall (m :: * -&gt; *). XLike m =&gt; WorkspaceId -&gt; m Any
+</span><a href="XMonad.Util.PureX.html#greedyView"><span class="hs-identifier hs-var">greedyView</span></a></span><span> </span><span class="annot"><span class="annottext">WorkspaceId
+</span><a href="#local-6989586621679439554"><span class="hs-identifier hs-var">i</span></a></span><span>
+</span><span id="line-138"></span><span>        </span><span id="local-6989586621679439553"><span class="annot"><span class="annottext">Maybe Window
+</span><a href="#local-6989586621679439553"><span class="hs-identifier hs-var">mfw</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">forall (m :: * -&gt; *). XLike m =&gt; m (Maybe Window)
+</span><a href="XMonad.Util.PureX.html#peek"><span class="hs-identifier hs-var">peek</span></a></span><span>
+</span><span id="line-139"></span><span>        </span><span class="annot"><span class="annottext">forall (t :: * -&gt; *) (f :: * -&gt; *) a b.
+(Foldable t, Applicative f) =&gt;
+t a -&gt; (a -&gt; f b) -&gt; f ()
+</span><span class="hs-identifier hs-var">for_</span></span><span> </span><span class="annot"><span class="annottext">Maybe Window
+</span><a href="#local-6989586621679439553"><span class="hs-identifier hs-var">mfw</span></a></span><span> </span><span class="annot"><span class="annottext">forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="hs-glyph">\</span><span id="local-6989586621679439552"><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679439552"><span class="hs-identifier hs-var">fw</span></a></span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-140"></span><span>          </span><span class="annot"><span class="annottext">forall {t}. Eq t =&gt; X t -&gt; (t -&gt; X Any) -&gt; t -&gt; X ()
+</span><a href="#local-6989586621679439569"><span class="hs-identifier hs-var">undoably</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">forall (f :: * -&gt; *) a. Applicative f =&gt; a -&gt; f a
+</span><span class="hs-identifier hs-var">pure</span></span><span> </span><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679439552"><span class="hs-identifier hs-var">fw</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">forall (m :: * -&gt; *). XLike m =&gt; Window -&gt; m Any
+</span><a href="XMonad.Util.PureX.html#focusWindow"><span class="hs-identifier hs-var">focusWindow</span></a></span><span> </span><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679439562"><span class="hs-identifier hs-var">win</span></a></span><span>
+</span><span id="line-141"></span><span>  </span><span class="hs-keyword">where</span><span>
+</span><span id="line-142"></span><span>    </span><span id="local-6989586621679440026"><span id="local-6989586621679440027"><span class="annot"><a href="#local-6989586621679439575"><span class="hs-identifier hs-type">undoer</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">MonadIO</span></span><span> </span><span class="annot"><a href="#local-6989586621679440027"><span class="hs-identifier hs-type">m</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Monoid</span></span><span> </span><span class="annot"><a href="#local-6989586621679440026"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=&gt;</span><span> </span><span class="annot"><a href="#local-6989586621679440027"><span class="hs-identifier hs-type">m</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="#local-6989586621679440027"><span class="hs-identifier hs-type">m</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679440026"><span class="hs-identifier hs-type">a</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="#local-6989586621679440027"><span class="hs-identifier hs-type">m</span></a></span><span> </span><span class="hs-special">(</span><span class="hs-special">)</span><span class="hs-special">,</span><span> </span><span class="annot"><a href="#local-6989586621679440027"><span class="hs-identifier hs-type">m</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679440026"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">)</span></span></span><span>
+</span><span id="line-143"></span><span>    </span><span id="local-6989586621679439575"><span class="annot"><span class="annottext">undoer :: forall (m :: * -&gt; *) a.
+(MonadIO m, Monoid a) =&gt;
+m (m a -&gt; m (), m a)
+</span><a href="#local-6989586621679439575"><span class="hs-identifier hs-var hs-var">undoer</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-144"></span><span>      </span><span id="local-6989586621679439538"><span class="annot"><span class="annottext">IORef (m a)
+</span><a href="#local-6989586621679439538"><span class="hs-identifier hs-var">ref</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">forall (m :: * -&gt; *) a. MonadIO m =&gt; IO a -&gt; m a
+</span><span class="hs-identifier hs-var">io</span></span><span> </span><span class="annot"><span class="annottext">forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">forall a. a -&gt; IO (IORef a)
+</span><span class="hs-identifier hs-var">newIORef</span></span><span> </span><span class="annot"><span class="annottext">forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">forall (f :: * -&gt; *) a. Applicative f =&gt; a -&gt; f a
+</span><span class="hs-identifier hs-var">pure</span></span><span> </span><span class="annot"><span class="annottext">forall a. Monoid a =&gt; a
+</span><span class="hs-identifier hs-var">mempty</span></span><span>
+</span><span id="line-145"></span><span>      </span><span class="hs-keyword">let</span><span> </span><span id="local-6989586621679439534"><span class="annot"><span class="annottext">toUndo :: m a -&gt; m ()
+</span><a href="#local-6989586621679439534"><span class="hs-identifier hs-var hs-var">toUndo</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">forall (m :: * -&gt; *) a. MonadIO m =&gt; IO a -&gt; m a
+</span><span class="hs-identifier hs-var">io</span></span><span> </span><span class="annot"><span class="annottext">forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">forall a. IORef a -&gt; (a -&gt; a) -&gt; IO ()
+</span><span class="hs-identifier hs-var">modifyIORef</span></span><span> </span><span class="annot"><span class="annottext">IORef (m a)
+</span><a href="#local-6989586621679439538"><span class="hs-identifier hs-var">ref</span></a></span><span> </span><span class="annot"><span class="annottext">forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">forall (f :: * -&gt; *) a b c.
+Applicative f =&gt;
+(a -&gt; b -&gt; c) -&gt; f a -&gt; f b -&gt; f c
+</span><span class="hs-identifier hs-var">liftA2</span></span><span> </span><span class="annot"><span class="annottext">forall a. Semigroup a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-operator hs-var">(&lt;&gt;)</span></span><span>
+</span><span id="line-146"></span><span>          </span><span id="local-6989586621679439526"><span class="annot"><span class="annottext">undo :: m a
+</span><a href="#local-6989586621679439526"><span class="hs-identifier hs-var hs-var">undo</span></a></span></span><span>   </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">forall (m :: * -&gt; *) a. Monad m =&gt; m (m a) -&gt; m a
+</span><span class="hs-identifier hs-var">join</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">forall (m :: * -&gt; *) a. MonadIO m =&gt; IO a -&gt; m a
+</span><span class="hs-identifier hs-var">io</span></span><span> </span><span class="annot"><span class="annottext">forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">forall a. IORef a -&gt; IO a
+</span><span class="hs-identifier hs-var">readIORef</span></span><span> </span><span class="annot"><span class="annottext">IORef (m a)
+</span><a href="#local-6989586621679439538"><span class="hs-identifier hs-var">ref</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-147"></span><span>                </span><span class="annot"><span class="annottext">forall (f :: * -&gt; *) a b. Applicative f =&gt; f a -&gt; f b -&gt; f a
+</span><span class="hs-operator hs-var">&lt;*</span></span><span> </span><span class="annot"><span class="annottext">forall (m :: * -&gt; *) a. MonadIO m =&gt; IO a -&gt; m a
+</span><span class="hs-identifier hs-var">io</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">forall a. IORef a -&gt; a -&gt; IO ()
+</span><span class="hs-identifier hs-var">writeIORef</span></span><span> </span><span class="annot"><span class="annottext">IORef (m a)
+</span><a href="#local-6989586621679439538"><span class="hs-identifier hs-var">ref</span></a></span><span> </span><span class="annot"><span class="annottext">forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">forall (f :: * -&gt; *) a. Applicative f =&gt; a -&gt; f a
+</span><span class="hs-identifier hs-var">pure</span></span><span> </span><span class="annot"><span class="annottext">forall a. Monoid a =&gt; a
+</span><span class="hs-identifier hs-var">mempty</span></span><span class="hs-special">)</span><span>
+</span><span id="line-148"></span><span>      </span><span class="annot"><span class="annottext">forall (f :: * -&gt; *) a. Applicative f =&gt; a -&gt; f a
+</span><span class="hs-identifier hs-var">pure</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">m a -&gt; m ()
+</span><a href="#local-6989586621679439534"><span class="hs-identifier hs-var">toUndo</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">m a
+</span><a href="#local-6989586621679439526"><span class="hs-identifier hs-var">undo</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-149"></span><span>    </span><span class="annot"><a href="#local-6989586621679439559"><span class="hs-identifier hs-type">viewScreen</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">ScreenId</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">X</span></span><span> </span><span class="annot"><span class="hs-identifier hs-type">Any</span></span><span>
+</span><span id="line-150"></span><span>    </span><span id="local-6989586621679439559"><span class="annot"><span class="annottext">viewScreen :: ScreenId -&gt; X Any
+</span><a href="#local-6989586621679439559"><span class="hs-identifier hs-var hs-var">viewScreen</span></a></span></span><span> </span><span id="local-6989586621679439524"><span class="annot"><span class="annottext">ScreenId
+</span><a href="#local-6989586621679439524"><span class="hs-identifier hs-var">scr</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">ScreenId -&gt; X (Maybe WorkspaceId)
+</span><span class="hs-identifier hs-var">screenWorkspace</span></span><span> </span><span class="annot"><span class="annottext">ScreenId
+</span><a href="#local-6989586621679439524"><span class="hs-identifier hs-var">scr</span></a></span><span> </span><span class="annot"><span class="annottext">forall (m :: * -&gt; *) a b. Monad m =&gt; m a -&gt; (a -&gt; m b) -&gt; m b
+</span><span class="hs-operator hs-var">&gt;&gt;=</span></span><span> </span><span class="annot"><span class="annottext">forall (t :: * -&gt; *) m a.
+(Foldable t, Monoid m) =&gt;
+(a -&gt; m) -&gt; t a -&gt; m
+</span><span class="hs-identifier hs-var">foldMap</span></span><span> </span><span class="annot"><span class="annottext">forall (m :: * -&gt; *). XLike m =&gt; WorkspaceId -&gt; m Any
+</span><a href="XMonad.Util.PureX.html#view"><span class="hs-identifier hs-var">view</span></a></span><span>
+</span><span id="line-151"></span><span>
+</span><span id="line-152"></span><span class="hs-comment">-- | A version of 'mostRecentlyUsed' that allows you to customise exactly what</span><span>
+</span><span id="line-153"></span><span class="hs-comment">--   is done with each window you tab through (the default being to visit its</span><span>
+</span><span id="line-154"></span><span class="hs-comment">--   previous 'Location' and give it focus).</span><span>
+</span><span id="line-155"></span><span class="annot"><a href="XMonad.Actions.MostRecentlyUsed.html#withMostRecentlyUsed"><span class="hs-identifier hs-type">withMostRecentlyUsed</span></a></span><span>
+</span><span id="line-156"></span><span>  </span><span class="hs-glyph">::</span><span> </span><span class="hs-special">[</span><span class="annot"><span class="hs-identifier hs-type">KeySym</span></span><span class="hs-special">]</span><span>                     </span><span class="hs-comment">-- ^ The 'KeySym's corresponding to the</span><span>
+</span><span id="line-157"></span><span>                                  </span><span class="hs-comment">--   modifier to which the action is bound.</span><span>
+</span><span id="line-158"></span><span>  </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">KeySym</span></span><span>                       </span><span class="hs-comment">-- ^ The 'KeySym' corresponding to the key to</span><span>
+</span><span id="line-159"></span><span>                                  </span><span class="hs-comment">--   which the action is bound.</span><span>
+</span><span id="line-160"></span><span>  </span><span class="hs-glyph">-&gt;</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">Window</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="XMonad.Actions.MostRecentlyUsed.html#Location"><span class="hs-identifier hs-type">Location</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">X</span></span><span> </span><span class="hs-special">(</span><span class="hs-special">)</span><span class="hs-special">)</span><span> </span><span class="hs-comment">-- ^ The function applied to each window.</span><span>
+</span><span id="line-161"></span><span>  </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">X</span></span><span> </span><span class="hs-special">(</span><span class="hs-special">)</span><span>
+</span><span id="line-162"></span><span id="withMostRecentlyUsed"><span class="annot"><span class="annottext">withMostRecentlyUsed :: [Window] -&gt; Window -&gt; (Window -&gt; Location -&gt; X ()) -&gt; X ()
+</span><a href="XMonad.Actions.MostRecentlyUsed.html#withMostRecentlyUsed"><span class="hs-identifier hs-var hs-var">withMostRecentlyUsed</span></a></span></span><span> </span><span id="local-6989586621679439522"><span class="annot"><span class="annottext">[Window]
+</span><a href="#local-6989586621679439522"><span class="hs-identifier hs-var">mods</span></a></span></span><span> </span><span id="local-6989586621679439521"><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679439521"><span class="hs-identifier hs-var">tab</span></a></span></span><span> </span><span id="local-6989586621679439520"><span class="annot"><span class="annottext">Window -&gt; Location -&gt; X ()
+</span><a href="#local-6989586621679439520"><span class="hs-identifier hs-var">preview</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-163"></span><span>  </span><span id="local-6989586621679439519"><span class="annot"><span class="annottext">wh :: WindowHistory
+</span><a href="#local-6989586621679439519"><span class="hs-identifier hs-var">wh</span></a></span></span><span class="hs-glyph">@</span><span class="annot"><a href="XMonad.Actions.MostRecentlyUsed.html#WinHist"><span class="hs-identifier hs-type">WinHist</span></a></span><span class="hs-special">{</span><span id="local-6989586621679439518"><span class="annot"><span class="annottext">Bool
+busy :: Bool
+busy :: WindowHistory -&gt; Bool
+</span><a href="#local-6989586621679439518"><span class="hs-identifier hs-var hs-var">busy</span></a></span></span><span class="hs-special">,</span><span id="local-6989586621679439517"><span class="annot"><span class="annottext">History Window Location
+hist :: History Window Location
+hist :: WindowHistory -&gt; History Window Location
+</span><a href="#local-6989586621679439517"><span class="hs-identifier hs-var hs-var">hist</span></a></span></span><span class="hs-special">}</span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">forall a (m :: * -&gt; *). (ExtensionClass a, XLike m) =&gt; m a
+</span><a href="XMonad.Util.ExtensibleState.html#get"><span class="hs-identifier hs-var">XS.get</span></a></span><span>
+</span><span id="line-164"></span><span>  </span><span class="annot"><span class="annottext">forall (f :: * -&gt; *). Applicative f =&gt; Bool -&gt; f () -&gt; f ()
+</span><span class="hs-identifier hs-var">unless</span></span><span> </span><span class="annot"><span class="annottext">Bool
+</span><a href="#local-6989586621679439518"><span class="hs-identifier hs-var">busy</span></a></span><span> </span><span class="annot"><span class="annottext">forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-165"></span><span>    </span><span class="annot"><span class="annottext">forall a (m :: * -&gt; *). (ExtensionClass a, XLike m) =&gt; a -&gt; m ()
+</span><a href="XMonad.Util.ExtensibleState.html#put"><span class="hs-identifier hs-var">XS.put</span></a></span><span> </span><span class="annot"><span class="annottext">WindowHistory
+</span><a href="#local-6989586621679439519"><span class="hs-identifier hs-var">wh</span></a></span><span class="hs-special">{</span><span> </span><span class="annot"><span class="annottext">busy :: Bool
+</span><a href="XMonad.Actions.MostRecentlyUsed.html#busy"><span class="hs-identifier hs-var">busy</span></a></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Bool
+</span><span class="hs-identifier hs-var">True</span></span><span> </span><span class="hs-special">}</span><span>
+</span><span id="line-166"></span><span>
+</span><span id="line-167"></span><span>    </span><span class="annot"><span class="annottext">forall (t :: * -&gt; *) (f :: * -&gt; *) a b.
+(Foldable t, Applicative f) =&gt;
+t a -&gt; (a -&gt; f b) -&gt; f ()
+</span><span class="hs-identifier hs-var">for_</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">forall a. [a] -&gt; Maybe (NonEmpty a)
+</span><span class="hs-identifier hs-var">nonEmpty</span></span><span> </span><span class="annot"><span class="annottext">forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">forall k a. History k a -&gt; [(k, a)]
+</span><a href="XMonad.Util.History.html#ledger"><span class="hs-identifier hs-var">ledger</span></a></span><span> </span><span class="annot"><span class="annottext">History Window Location
+</span><a href="#local-6989586621679439517"><span class="hs-identifier hs-var">hist</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="hs-glyph">\</span><span id="local-6989586621679439513"><span class="annot"><span class="annottext">NonEmpty (Window, Location)
+</span><a href="#local-6989586621679439513"><span class="hs-identifier hs-var">ne</span></a></span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-168"></span><span>      </span><span id="local-6989586621679439512"><span class="annot"><span class="annottext">Maybe Window
+</span><a href="#local-6989586621679439512"><span class="hs-identifier hs-var">mfw</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">forall s (m :: * -&gt; *) a. MonadState s m =&gt; (s -&gt; a) -&gt; m a
+</span><span class="hs-identifier hs-var">gets</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">forall i l a s sd. StackSet i l a s sd -&gt; Maybe a
+</span><span class="hs-identifier hs-var">W.peek</span></span><span> </span><span class="annot"><span class="annottext">forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">XState -&gt; WindowSet
+</span><span class="hs-identifier hs-var">windowset</span></span><span class="hs-special">)</span><span>
+</span><span id="line-169"></span><span>      </span><span class="hs-keyword">let</span><span> </span><span id="local-6989586621679439507"><span class="annot"><span class="annottext">iSt :: Stream (Window, Location)
+</span><a href="#local-6989586621679439507"><span class="hs-identifier hs-var hs-var">iSt</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-keyword">case</span><span> </span><span class="annot"><span class="annottext">forall a. NonEmpty a -&gt; Stream a
+</span><a href="XMonad.Prelude.html#cycleS"><span class="hs-identifier hs-var">cycleS</span></a></span><span> </span><span class="annot"><span class="annottext">NonEmpty (Window, Location)
+</span><a href="#local-6989586621679439513"><span class="hs-identifier hs-var">ne</span></a></span><span> </span><span class="hs-keyword">of</span><span>
+</span><span id="line-170"></span><span>            </span><span class="hs-special">(</span><span id="local-6989586621679439505"><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679439505"><span class="hs-identifier hs-var">w</span></a></span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">Location
+</span><span class="hs-identifier">_</span></span><span class="hs-special">)</span><span> </span><span class="annot"><a href="XMonad.Prelude.html#%3A~"><span class="hs-operator hs-type">:~</span></a></span><span> </span><span id="local-6989586621679439503"><span class="annot"><span class="annottext">Stream (Window, Location)
+</span><a href="#local-6989586621679439503"><span class="hs-identifier hs-var">s</span></a></span></span><span> </span><span class="hs-glyph">|</span><span> </span><span class="annot"><span class="annottext">Maybe Window
+</span><a href="#local-6989586621679439512"><span class="hs-identifier hs-var">mfw</span></a></span><span> </span><span class="annot"><span class="annottext">forall a. Eq a =&gt; a -&gt; a -&gt; Bool
+</span><span class="hs-operator hs-var">==</span></span><span> </span><span class="annot"><span class="annottext">forall a. a -&gt; Maybe a
+</span><span class="hs-identifier hs-var">Just</span></span><span> </span><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679439505"><span class="hs-identifier hs-var">w</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">Stream (Window, Location)
+</span><a href="#local-6989586621679439503"><span class="hs-identifier hs-var">s</span></a></span><span>
+</span><span id="line-171"></span><span>            </span><span id="local-6989586621679439502"><span class="annot"><span class="annottext">Stream (Window, Location)
+</span><a href="#local-6989586621679439502"><span class="hs-identifier hs-var">s</span></a></span></span><span>                           </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">Stream (Window, Location)
+</span><a href="#local-6989586621679439502"><span class="hs-identifier hs-var">s</span></a></span><span>
+</span><span id="line-172"></span><span>      </span><span class="annot"><span class="annottext">forall a s.
+Monoid a =&gt;
+s
+-&gt; [Window]
+-&gt; Window
+-&gt; (EventType -&gt; Window -&gt; StateT s X a)
+-&gt; X (a, s)
+</span><a href="XMonad.Actions.Repeatable.html#repeatableSt"><span class="hs-identifier hs-var">repeatableSt</span></a></span><span> </span><span class="annot"><span class="annottext">Stream (Window, Location)
+</span><a href="#local-6989586621679439507"><span class="hs-identifier hs-var">iSt</span></a></span><span> </span><span class="annot"><span class="annottext">[Window]
+</span><a href="#local-6989586621679439522"><span class="hs-identifier hs-var">mods</span></a></span><span> </span><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679439521"><span class="hs-identifier hs-var">tab</span></a></span><span> </span><span class="annot"><span class="annottext">forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="hs-glyph">\</span><span id="local-6989586621679439501"><span class="annot"><span class="annottext">EventType
+</span><a href="#local-6989586621679439501"><span class="hs-identifier hs-var">t</span></a></span></span><span> </span><span id="local-6989586621679439500"><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679439500"><span class="hs-identifier hs-var">s</span></a></span></span><span> </span><span class="hs-glyph">-&gt;</span><span>
+</span><span id="line-173"></span><span>        </span><span class="annot"><span class="annottext">forall (f :: * -&gt; *). Applicative f =&gt; Bool -&gt; f () -&gt; f ()
+</span><span class="hs-identifier hs-var">when</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">EventType
+</span><a href="#local-6989586621679439501"><span class="hs-identifier hs-var">t</span></a></span><span> </span><span class="annot"><span class="annottext">forall a. Eq a =&gt; a -&gt; a -&gt; Bool
+</span><span class="hs-operator hs-var">==</span></span><span> </span><span class="annot"><span class="annottext">EventType
+</span><span class="hs-identifier hs-var">keyPress</span></span><span> </span><span class="annot"><span class="annottext">Bool -&gt; Bool -&gt; Bool
+</span><span class="hs-operator hs-var">&amp;&amp;</span></span><span> </span><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679439500"><span class="hs-identifier hs-var">s</span></a></span><span> </span><span class="annot"><span class="annottext">forall a. Eq a =&gt; a -&gt; a -&gt; Bool
+</span><span class="hs-operator hs-var">==</span></span><span> </span><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679439521"><span class="hs-identifier hs-var">tab</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">StateT (Stream (Window, Location)) X (Window, Location)
+</span><a href="#local-6989586621679439498"><span class="hs-identifier hs-var">pop</span></a></span><span> </span><span class="annot"><span class="annottext">forall (m :: * -&gt; *) a b. Monad m =&gt; m a -&gt; (a -&gt; m b) -&gt; m b
+</span><span class="hs-operator hs-var">&gt;&gt;=</span></span><span> </span><span class="annot"><span class="annottext">forall (t :: (* -&gt; *) -&gt; * -&gt; *) (m :: * -&gt; *) a.
+(MonadTrans t, Monad m) =&gt;
+m a -&gt; t m a
+</span><span class="hs-identifier hs-var">lift</span></span><span> </span><span class="annot"><span class="annottext">forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">forall a b c. (a -&gt; b -&gt; c) -&gt; (a, b) -&gt; c
+</span><span class="hs-identifier hs-var">uncurry</span></span><span> </span><span class="annot"><span class="annottext">Window -&gt; Location -&gt; X ()
+</span><a href="#local-6989586621679439520"><span class="hs-identifier hs-var">preview</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-174"></span><span>
+</span><span id="line-175"></span><span>    </span><span class="annot"><span class="annottext">forall a (m :: * -&gt; *).
+(ExtensionClass a, XLike m) =&gt;
+(a -&gt; a) -&gt; m ()
+</span><a href="XMonad.Util.ExtensibleState.html#modify"><span class="hs-identifier hs-var">XS.modify</span></a></span><span> </span><span class="annot"><span class="annottext">forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="hs-glyph">\</span><span id="local-6989586621679439495"><span class="annot"><span class="annottext">ws :: WindowHistory
+</span><a href="#local-6989586621679439495"><span class="hs-identifier hs-var">ws</span></a></span></span><span class="hs-glyph">@</span><span class="annot"><a href="XMonad.Actions.MostRecentlyUsed.html#WinHist"><span class="hs-identifier hs-type">WinHist</span></a></span><span class="hs-special">{</span><span class="hs-special">}</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">WindowHistory
+</span><a href="#local-6989586621679439495"><span class="hs-identifier hs-var">ws</span></a></span><span class="hs-special">{</span><span> </span><span class="annot"><span class="annottext">busy :: Bool
+</span><a href="XMonad.Actions.MostRecentlyUsed.html#busy"><span class="hs-identifier hs-var">busy</span></a></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Bool
+</span><span class="hs-identifier hs-var">False</span></span><span> </span><span class="hs-special">}</span><span>
+</span><span id="line-176"></span><span>    </span><span class="annot"><span class="annottext">X ()
+</span><a href="XMonad.Actions.MostRecentlyUsed.html#logWinHist"><span class="hs-identifier hs-var">logWinHist</span></a></span><span>
+</span><span id="line-177"></span><span>  </span><span class="hs-keyword">where</span><span>
+</span><span id="line-178"></span><span>    </span><span id="local-6989586621679439498"><span class="annot"><span class="annottext">pop :: StateT (Stream (Window, Location)) X (Window, Location)
+</span><a href="#local-6989586621679439498"><span class="hs-identifier hs-var hs-var">pop</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-179"></span><span>      </span><span id="local-6989586621679439488"><span class="annot"><span class="annottext">(Window, Location)
+</span><a href="#local-6989586621679439488"><span class="hs-identifier hs-var">h</span></a></span></span><span> </span><span class="annot"><a href="XMonad.Prelude.html#%3A~"><span class="hs-operator hs-type">:~</span></a></span><span> </span><span id="local-6989586621679439487"><span class="annot"><span class="annottext">Stream (Window, Location)
+</span><a href="#local-6989586621679439487"><span class="hs-identifier hs-var">t</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">forall s (m :: * -&gt; *). MonadState s m =&gt; m s
+</span><span class="hs-identifier hs-var">get</span></span><span>
+</span><span id="line-180"></span><span>      </span><span class="annot"><span class="annottext">forall s (m :: * -&gt; *). MonadState s m =&gt; s -&gt; m ()
+</span><span class="hs-identifier hs-var">put</span></span><span> </span><span class="annot"><span class="annottext">Stream (Window, Location)
+</span><a href="#local-6989586621679439487"><span class="hs-identifier hs-var">t</span></a></span><span> </span><span class="annot"><span class="annottext">forall (f :: * -&gt; *) a b. Functor f =&gt; f a -&gt; b -&gt; f b
+</span><span class="hs-operator hs-var">$&gt;</span></span><span> </span><span class="annot"><span class="annottext">(Window, Location)
+</span><a href="#local-6989586621679439488"><span class="hs-identifier hs-var">h</span></a></span><span>
+</span><span id="line-181"></span><span>
+</span><span id="line-182"></span><span class="hs-comment">-- }}}</span><span>
+</span><span id="line-183"></span><span>
+</span><span id="line-184"></span><span class="hs-comment">-- --&lt; Raw Config &gt;-- {{{</span><span>
+</span><span id="line-185"></span><span>
+</span><span id="line-186"></span><span class="annot"><a href="XMonad.Actions.MostRecentlyUsed.html#logWinHist"><span class="hs-identifier hs-type">logWinHist</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">X</span></span><span> </span><span class="hs-special">(</span><span class="hs-special">)</span><span>
+</span><span id="line-187"></span><span id="logWinHist"><span class="annot"><span class="annottext">logWinHist :: X ()
+</span><a href="XMonad.Actions.MostRecentlyUsed.html#logWinHist"><span class="hs-identifier hs-var hs-var">logWinHist</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-188"></span><span>  </span><span id="local-6989586621679439485"><span class="annot"><span class="annottext">wh :: WindowHistory
+</span><a href="#local-6989586621679439485"><span class="hs-identifier hs-var">wh</span></a></span></span><span class="hs-glyph">@</span><span class="annot"><a href="XMonad.Actions.MostRecentlyUsed.html#WinHist"><span class="hs-identifier hs-type">WinHist</span></a></span><span class="hs-special">{</span><span id="local-6989586621679439484"><span class="annot"><span class="annottext">Bool
+busy :: Bool
+busy :: WindowHistory -&gt; Bool
+</span><a href="#local-6989586621679439484"><span class="hs-identifier hs-var hs-var">busy</span></a></span></span><span class="hs-special">,</span><span id="local-6989586621679439483"><span class="annot"><span class="annottext">History Window Location
+hist :: History Window Location
+hist :: WindowHistory -&gt; History Window Location
+</span><a href="#local-6989586621679439483"><span class="hs-identifier hs-var hs-var">hist</span></a></span></span><span class="hs-special">}</span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">forall a (m :: * -&gt; *). (ExtensionClass a, XLike m) =&gt; m a
+</span><a href="XMonad.Util.ExtensibleState.html#get"><span class="hs-identifier hs-var">XS.get</span></a></span><span>
+</span><span id="line-189"></span><span>  </span><span class="annot"><span class="annottext">forall (f :: * -&gt; *). Applicative f =&gt; Bool -&gt; f () -&gt; f ()
+</span><span class="hs-identifier hs-var">unless</span></span><span> </span><span class="annot"><span class="annottext">Bool
+</span><a href="#local-6989586621679439484"><span class="hs-identifier hs-var">busy</span></a></span><span> </span><span class="annot"><span class="annottext">forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-190"></span><span>    </span><span id="local-6989586621679439482"><span class="annot"><span class="annottext">Screen WorkspaceId (Layout Window) Window ScreenId ScreenDetail
+</span><a href="#local-6989586621679439482"><span class="hs-identifier hs-var">cs</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">forall s (m :: * -&gt; *) a. MonadState s m =&gt; (s -&gt; a) -&gt; m a
+</span><span class="hs-identifier hs-var">gets</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">forall i l a sid sd. StackSet i l a sid sd -&gt; Screen i l a sid sd
+</span><span class="hs-identifier hs-var">W.current</span></span><span> </span><span class="annot"><span class="annottext">forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">XState -&gt; WindowSet
+</span><span class="hs-identifier hs-var">windowset</span></span><span class="hs-special">)</span><span>
+</span><span id="line-191"></span><span>    </span><span class="hs-keyword">let</span><span> </span><span id="local-6989586621679439480"><span class="annot"><span class="annottext">cws :: Workspace WorkspaceId (Layout Window) Window
+</span><a href="#local-6989586621679439480"><span class="hs-identifier hs-var hs-var">cws</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">forall i l a sid sd. Screen i l a sid sd -&gt; Workspace i l a
+</span><span class="hs-identifier hs-var">W.workspace</span></span><span> </span><span class="annot"><span class="annottext">Screen WorkspaceId (Layout Window) Window ScreenId ScreenDetail
+</span><a href="#local-6989586621679439482"><span class="hs-identifier hs-var">cs</span></a></span><span>
+</span><span id="line-192"></span><span>    </span><span class="annot"><span class="annottext">forall (t :: * -&gt; *) (f :: * -&gt; *) a b.
+(Foldable t, Applicative f) =&gt;
+t a -&gt; (a -&gt; f b) -&gt; f ()
+</span><span class="hs-identifier hs-var">for_</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">forall i l a. Workspace i l a -&gt; Maybe (Stack a)
+</span><span class="hs-identifier hs-var">W.stack</span></span><span> </span><span class="annot"><span class="annottext">Workspace WorkspaceId (Layout Window) Window
+</span><a href="#local-6989586621679439480"><span class="hs-identifier hs-var">cws</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="hs-glyph">\</span><span id="local-6989586621679439477"><span class="annot"><span class="annottext">Stack Window
+</span><a href="#local-6989586621679439477"><span class="hs-identifier hs-var">st</span></a></span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-193"></span><span>      </span><span class="hs-keyword">let</span><span> </span><span id="local-6989586621679439476"><span class="annot"><span class="annottext">location :: Location
+</span><a href="#local-6989586621679439476"><span class="hs-identifier hs-var hs-var">location</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><a href="XMonad.Actions.MostRecentlyUsed.html#Location"><span class="hs-identifier hs-type">Location</span></a></span><span class="hs-special">{</span><span> </span><span class="annot"><span class="annottext">workspace :: WorkspaceId
+</span><a href="XMonad.Actions.MostRecentlyUsed.html#workspace"><span class="hs-identifier hs-var">workspace</span></a></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">forall i l a. Workspace i l a -&gt; i
+</span><span class="hs-identifier hs-var">W.tag</span></span><span> </span><span class="annot"><span class="annottext">Workspace WorkspaceId (Layout Window) Window
+</span><a href="#local-6989586621679439480"><span class="hs-identifier hs-var">cws</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">screen :: ScreenId
+</span><a href="XMonad.Actions.MostRecentlyUsed.html#screen"><span class="hs-identifier hs-var">screen</span></a></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">forall i l a sid sd. Screen i l a sid sd -&gt; sid
+</span><span class="hs-identifier hs-var">W.screen</span></span><span> </span><span class="annot"><span class="annottext">Screen WorkspaceId (Layout Window) Window ScreenId ScreenDetail
+</span><a href="#local-6989586621679439482"><span class="hs-identifier hs-var">cs</span></a></span><span> </span><span class="hs-special">}</span><span>
+</span><span id="line-194"></span><span>      </span><span class="annot"><span class="annottext">forall a (m :: * -&gt; *). (ExtensionClass a, XLike m) =&gt; a -&gt; m ()
+</span><a href="XMonad.Util.ExtensibleState.html#put"><span class="hs-identifier hs-var">XS.put</span></a></span><span> </span><span class="annot"><span class="annottext">WindowHistory
+</span><a href="#local-6989586621679439485"><span class="hs-identifier hs-var">wh</span></a></span><span class="hs-special">{</span><span> </span><span class="annot"><span class="annottext">hist :: History Window Location
+</span><a href="XMonad.Actions.MostRecentlyUsed.html#hist"><span class="hs-identifier hs-var">hist</span></a></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">forall k a. Ord k =&gt; k -&gt; a -&gt; History k a -&gt; History k a
+</span><a href="XMonad.Util.History.html#event"><span class="hs-identifier hs-var">event</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">forall a. Stack a -&gt; a
+</span><span class="hs-identifier hs-var">W.focus</span></span><span> </span><span class="annot"><span class="annottext">Stack Window
+</span><a href="#local-6989586621679439477"><span class="hs-identifier hs-var">st</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">Location
+</span><a href="#local-6989586621679439476"><span class="hs-identifier hs-var">location</span></a></span><span> </span><span class="annot"><span class="annottext">History Window Location
+</span><a href="#local-6989586621679439483"><span class="hs-identifier hs-var">hist</span></a></span><span> </span><span class="hs-special">}</span><span>
+</span><span id="line-195"></span><span>
+</span><span id="line-196"></span><span class="annot"><a href="XMonad.Actions.MostRecentlyUsed.html#winHistEH"><span class="hs-identifier hs-type">winHistEH</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Event</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">X</span></span><span> </span><span class="annot"><span class="hs-identifier hs-type">All</span></span><span>
+</span><span id="line-197"></span><span id="winHistEH"><span class="annot"><span class="annottext">winHistEH :: Event -&gt; X All
+</span><a href="XMonad.Actions.MostRecentlyUsed.html#winHistEH"><span class="hs-identifier hs-var hs-var">winHistEH</span></a></span></span><span> </span><span id="local-6989586621679439472"><span class="annot"><span class="annottext">Event
+</span><a href="#local-6989586621679439472"><span class="hs-identifier hs-var">ev</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Bool -&gt; All
+</span><span class="hs-identifier hs-var">All</span></span><span> </span><span class="annot"><span class="annottext">Bool
+</span><span class="hs-identifier hs-var">True</span></span><span> </span><span class="annot"><span class="annottext">forall (f :: * -&gt; *) a b. Functor f =&gt; a -&gt; f b -&gt; f a
+</span><span class="hs-operator hs-var">&lt;$</span></span><span> </span><span class="hs-keyword">case</span><span> </span><span class="annot"><span class="annottext">Event
+</span><a href="#local-6989586621679439472"><span class="hs-identifier hs-var">ev</span></a></span><span> </span><span class="hs-keyword">of</span><span>
+</span><span id="line-198"></span><span>  </span><span class="annot"><span class="hs-identifier hs-type">UnmapEvent</span></span><span class="hs-special">{</span><span> </span><span class="annot"><span class="annottext">ev_send_event :: Event -&gt; Bool
+</span><span class="hs-identifier hs-var">ev_send_event</span></span><span> </span><span class="hs-glyph">=</span><span> </span><span id="local-6989586621679439469"><span class="annot"><span class="annottext">Bool
+</span><a href="#local-6989586621679439469"><span class="hs-identifier hs-var">synth</span></a></span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">ev_window :: Event -&gt; Window
+</span><span class="hs-identifier hs-var">ev_window</span></span><span> </span><span class="hs-glyph">=</span><span> </span><span id="local-6989586621679439468"><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679439468"><span class="hs-identifier hs-var">w</span></a></span></span><span> </span><span class="hs-special">}</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-199"></span><span>    </span><span id="local-6989586621679439467"><span class="annot"><span class="annottext">Int
+</span><a href="#local-6989586621679439467"><span class="hs-identifier hs-var">e</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">forall s (m :: * -&gt; *) a. MonadState s m =&gt; (s -&gt; a) -&gt; m a
+</span><span class="hs-identifier hs-var">gets</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">forall a. a -&gt; Maybe a -&gt; a
+</span><span class="hs-identifier hs-var">fromMaybe</span></span><span> </span><span class="annot"><span class="annottext">Int
+</span><span class="hs-number">0</span></span><span> </span><span class="annot"><span class="annottext">forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">forall k a. Ord k =&gt; k -&gt; Map k a -&gt; Maybe a
+</span><span class="hs-identifier hs-var">M.lookup</span></span><span> </span><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679439468"><span class="hs-identifier hs-var">w</span></a></span><span> </span><span class="annot"><span class="annottext">forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">XState -&gt; Map Window Int
+</span><span class="hs-identifier hs-var">waitingUnmap</span></span><span class="hs-special">)</span><span>
+</span><span id="line-200"></span><span>    </span><span class="annot"><span class="annottext">forall (f :: * -&gt; *). Applicative f =&gt; Bool -&gt; f () -&gt; f ()
+</span><span class="hs-identifier hs-var">when</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Bool
+</span><a href="#local-6989586621679439469"><span class="hs-identifier hs-var">synth</span></a></span><span> </span><span class="annot"><span class="annottext">Bool -&gt; Bool -&gt; Bool
+</span><span class="hs-operator hs-var">||</span></span><span> </span><span class="annot"><span class="annottext">Int
+</span><a href="#local-6989586621679439467"><span class="hs-identifier hs-var">e</span></a></span><span> </span><span class="annot"><span class="annottext">forall a. Eq a =&gt; a -&gt; a -&gt; Bool
+</span><span class="hs-operator hs-var">==</span></span><span> </span><span class="annot"><span class="annottext">Int
+</span><span class="hs-number">0</span></span><span class="hs-special">)</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">forall {m :: * -&gt; *}. XLike m =&gt; Window -&gt; m ()
+</span><a href="#local-6989586621679439463"><span class="hs-identifier hs-var">collect</span></a></span><span> </span><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679439468"><span class="hs-identifier hs-var">w</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-201"></span><span>  </span><span class="annot"><span class="hs-identifier hs-type">DestroyWindowEvent</span></span><span class="hs-special">{</span><span>                </span><span class="annot"><span class="annottext">ev_window :: Event -&gt; Window
+</span><span class="hs-identifier hs-var">ev_window</span></span><span> </span><span class="hs-glyph">=</span><span> </span><span id="local-6989586621679439462"><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679439462"><span class="hs-identifier hs-var">w</span></a></span></span><span> </span><span class="hs-special">}</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">forall {m :: * -&gt; *}. XLike m =&gt; Window -&gt; m ()
+</span><a href="#local-6989586621679439463"><span class="hs-identifier hs-var">collect</span></a></span><span> </span><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679439462"><span class="hs-identifier hs-var">w</span></a></span><span>
+</span><span id="line-202"></span><span>  </span><span class="annot"><span class="annottext">Event
+</span><span class="hs-identifier">_</span></span><span>                                                  </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">forall (f :: * -&gt; *) a. Applicative f =&gt; a -&gt; f a
+</span><span class="hs-identifier hs-var">pure</span></span><span> </span><span class="hs-special">(</span><span class="hs-special">)</span><span>
+</span><span id="line-203"></span><span>  </span><span class="hs-keyword">where</span><span> </span><span id="local-6989586621679439463"><span class="annot"><span class="annottext">collect :: Window -&gt; m ()
+</span><a href="#local-6989586621679439463"><span class="hs-identifier hs-var hs-var">collect</span></a></span></span><span> </span><span id="local-6989586621679439457"><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679439457"><span class="hs-identifier hs-var">w</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">forall a (m :: * -&gt; *).
+(ExtensionClass a, XLike m) =&gt;
+(a -&gt; a) -&gt; m ()
+</span><a href="XMonad.Util.ExtensibleState.html#modify"><span class="hs-identifier hs-var">XS.modify</span></a></span><span> </span><span class="annot"><span class="annottext">forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="hs-glyph">\</span><span id="local-6989586621679439456"><span class="annot"><span class="annottext">wh :: WindowHistory
+</span><a href="#local-6989586621679439456"><span class="hs-identifier hs-var">wh</span></a></span></span><span class="hs-glyph">@</span><span class="annot"><a href="XMonad.Actions.MostRecentlyUsed.html#WinHist"><span class="hs-identifier hs-type">WinHist</span></a></span><span class="hs-special">{</span><span id="local-6989586621679439455"><span class="annot"><span class="annottext">History Window Location
+hist :: History Window Location
+hist :: WindowHistory -&gt; History Window Location
+</span><a href="#local-6989586621679439455"><span class="hs-identifier hs-var hs-var">hist</span></a></span></span><span class="hs-special">}</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">WindowHistory
+</span><a href="#local-6989586621679439456"><span class="hs-identifier hs-var">wh</span></a></span><span class="hs-special">{</span><span> </span><span class="annot"><span class="annottext">hist :: History Window Location
+</span><a href="XMonad.Actions.MostRecentlyUsed.html#hist"><span class="hs-identifier hs-var">hist</span></a></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">forall k a. Ord k =&gt; k -&gt; History k a -&gt; History k a
+</span><a href="XMonad.Util.History.html#erase"><span class="hs-identifier hs-var">erase</span></a></span><span> </span><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679439457"><span class="hs-identifier hs-var">w</span></a></span><span> </span><span class="annot"><span class="annottext">History Window Location
+</span><a href="#local-6989586621679439455"><span class="hs-identifier hs-var">hist</span></a></span><span> </span><span class="hs-special">}</span><span>
+</span><span id="line-204"></span><span>
+</span><span id="line-205"></span><span class="hs-comment">-- }}}</span><span>
+</span><span id="line-206"></span></pre></body></html>

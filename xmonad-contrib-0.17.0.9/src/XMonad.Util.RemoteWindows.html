@@ -1,0 +1,210 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd"><html xmlns="http://www.w3.org/1999/xhtml"><head><link rel="stylesheet" type="text/css" href="style.css" /><script type="text/javascript" src="highlight.js"></script></head><body><pre><span class="hs-pragma">{-# LANGUAGE LambdaCase #-}</span><span>
+</span><span id="line-2"></span><span class="hs-comment">-----------------------------------------------------------------------------</span><span>
+</span><span id="line-3"></span><span class="hs-comment">-- |</span><span>
+</span><span id="line-4"></span><span class="hs-comment">-- Module      :  XMonad.Util.RemoteWindows</span><span>
+</span><span id="line-5"></span><span class="hs-comment">-- Description :  A module to find out whether the window is remote or local.</span><span>
+</span><span id="line-6"></span><span class="hs-comment">-- Copyright   :  (c) Anton Vorontsov &lt;anton@enomsg.org&gt; 2014</span><span>
+</span><span id="line-7"></span><span class="hs-comment">-- License     :  BSD-style (as xmonad)</span><span>
+</span><span id="line-8"></span><span class="hs-comment">--</span><span>
+</span><span id="line-9"></span><span class="hs-comment">-- Maintainer  :  Anton Vorontsov &lt;anton@enomsg.org&gt;</span><span>
+</span><span id="line-10"></span><span class="hs-comment">-- Stability   :  unstable</span><span>
+</span><span id="line-11"></span><span class="hs-comment">-- Portability :  unportable</span><span>
+</span><span id="line-12"></span><span class="hs-comment">--</span><span>
+</span><span id="line-13"></span><span class="hs-comment">-- This module implements a proper way of finding out whether the window</span><span>
+</span><span id="line-14"></span><span class="hs-comment">-- is remote or local.</span><span>
+</span><span id="line-15"></span><span class="hs-comment">--</span><span>
+</span><span id="line-16"></span><span class="hs-comment">-- Just checking for a hostname and WM_CLIENT_MACHINE being equal is often</span><span>
+</span><span id="line-17"></span><span class="hs-comment">-- not enough because the hostname is a changing subject (without any</span><span>
+</span><span id="line-18"></span><span class="hs-comment">-- established notification mechanisms), and thus WM_CLIENT_MACHINE and</span><span>
+</span><span id="line-19"></span><span class="hs-comment">-- the hostname can diverge even for a local window.</span><span>
+</span><span id="line-20"></span><span class="hs-comment">--</span><span>
+</span><span id="line-21"></span><span class="hs-comment">-- This module solves the problem. As soon as there is a new window</span><span>
+</span><span id="line-22"></span><span class="hs-comment">-- created, we check the hostname and WM_CLIENT_MACHINE, and then we cache</span><span>
+</span><span id="line-23"></span><span class="hs-comment">-- the result into the XMONAD_REMOTE property.</span><span>
+</span><span id="line-24"></span><span class="hs-comment">--</span><span>
+</span><span id="line-25"></span><span class="hs-comment">-- Notice that XMonad itself does not know anything about hostnames, nor</span><span>
+</span><span id="line-26"></span><span class="hs-comment">-- does it have any dependency on Network.* modules. For this module it is</span><span>
+</span><span id="line-27"></span><span class="hs-comment">-- not a problem: you can provide a mean to get the hostname through your</span><span>
+</span><span id="line-28"></span><span class="hs-comment">-- config file (see usage). Or, if you don't like the hassle of handling</span><span>
+</span><span id="line-29"></span><span class="hs-comment">-- dynamic hostnames (suppose your hostname never changes), it is also</span><span>
+</span><span id="line-30"></span><span class="hs-comment">-- fine: this module will fallback to using environment variables.</span><span>
+</span><span id="line-31"></span><span class="hs-comment">--</span><span>
+</span><span id="line-32"></span><span class="hs-comment">-----------------------------------------------------------------------------</span><span>
+</span><span id="line-33"></span><span>
+</span><span id="line-34"></span><span class="hs-keyword">module</span><span> </span><span class="hs-identifier">XMonad.Util.RemoteWindows</span><span>
+</span><span id="line-35"></span><span>    </span><span class="hs-special">(</span><span> </span><span class="annot"><span class="hs-comment">-- $usage</span></span><span>
+</span><span id="line-36"></span><span>      </span><span class="annot"><a href="XMonad.Util.RemoteWindows.html#isLocalWindow"><span class="hs-identifier">isLocalWindow</span></a></span><span>
+</span><span id="line-37"></span><span>    </span><span class="hs-special">,</span><span> </span><span class="annot"><a href="XMonad.Util.RemoteWindows.html#manageRemote"><span class="hs-identifier">manageRemote</span></a></span><span>
+</span><span id="line-38"></span><span>    </span><span class="hs-special">,</span><span> </span><span class="annot"><a href="XMonad.Util.RemoteWindows.html#manageRemoteG"><span class="hs-identifier">manageRemoteG</span></a></span><span>
+</span><span id="line-39"></span><span>    </span><span class="hs-special">)</span><span> </span><span class="hs-keyword">where</span><span>
+</span><span id="line-40"></span><span>
+</span><span id="line-41"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><span class="hs-identifier">XMonad</span></span><span>
+</span><span id="line-42"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><a href="XMonad.Util.WindowProperties.html"><span class="hs-identifier">XMonad.Util.WindowProperties</span></a></span><span>
+</span><span id="line-43"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><a href="XMonad.Prelude.html"><span class="hs-identifier">XMonad.Prelude</span></a></span><span>
+</span><span id="line-44"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><span class="hs-identifier">System.Posix.Env</span></span><span>
+</span><span id="line-45"></span><span>
+</span><span id="line-46"></span><span class="hs-comment">-- $usage</span><span>
+</span><span id="line-47"></span><span class="hs-comment">-- You can use this module with the following in your @~\/.xmonad\/xmonad.hs@:</span><span>
+</span><span id="line-48"></span><span class="hs-comment">--</span><span>
+</span><span id="line-49"></span><span class="hs-comment">-- &gt; import XMonad</span><span>
+</span><span id="line-50"></span><span class="hs-comment">-- &gt; import XMonad.Util.RemoteWindows</span><span>
+</span><span id="line-51"></span><span class="hs-comment">-- &gt; import Network.BSD</span><span>
+</span><span id="line-52"></span><span class="hs-comment">-- &gt;</span><span>
+</span><span id="line-53"></span><span class="hs-comment">-- &gt; main = xmonad def</span><span>
+</span><span id="line-54"></span><span class="hs-comment">-- &gt;    { manageHook = manageRemote =&lt;&lt; io getHostName }</span><span>
+</span><span id="line-55"></span><span>
+</span><span id="line-56"></span><span class="annot"><a href="XMonad.Util.RemoteWindows.html#guessHostName"><span class="hs-identifier hs-type">guessHostName</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">IO</span></span><span> </span><span class="annot"><span class="hs-identifier hs-type">String</span></span><span>
+</span><span id="line-57"></span><span id="guessHostName"><span class="annot"><span class="annottext">guessHostName :: IO String
+</span><a href="XMonad.Util.RemoteWindows.html#guessHostName"><span class="hs-identifier hs-var hs-var">guessHostName</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">[Maybe String] -&gt; String
+forall {a}. [Maybe [a]] -&gt; [a]
+</span><a href="#local-6989586621679414603"><span class="hs-identifier hs-var">pickOneMaybe</span></a></span><span> </span><span class="annot"><span class="annottext">([Maybe String] -&gt; String) -&gt; IO [Maybe String] -&gt; IO String
+forall (f :: * -&gt; *) a b. Functor f =&gt; (a -&gt; b) -&gt; f a -&gt; f b
+</span><span class="hs-operator hs-var">&lt;$&gt;</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">String -&gt; IO (Maybe String)
+</span><span class="hs-identifier hs-var">getEnv</span></span><span> </span><span class="annot"><span class="annottext">(String -&gt; IO (Maybe String)) -&gt; [String] -&gt; IO [Maybe String]
+forall (t :: * -&gt; *) (m :: * -&gt; *) a b.
+(Traversable t, Monad m) =&gt;
+(a -&gt; m b) -&gt; t a -&gt; m (t b)
+</span><span class="hs-operator hs-var">`mapM`</span></span><span> </span><span class="annot"><span class="annottext">[String]
+</span><a href="#local-6989586621679414599"><span class="hs-identifier hs-var">vars</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-58"></span><span>  </span><span class="hs-keyword">where</span><span>
+</span><span id="line-59"></span><span>    </span><span id="local-6989586621679414603"><span class="annot"><span class="annottext">pickOneMaybe :: [Maybe [a]] -&gt; [a]
+</span><a href="#local-6989586621679414603"><span class="hs-identifier hs-var hs-var">pickOneMaybe</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">[[a]] -&gt; [a]
+forall a. [a] -&gt; a
+</span><span class="hs-identifier hs-var">last</span></span><span> </span><span class="annot"><span class="annottext">([[a]] -&gt; [a]) -&gt; ([Maybe [a]] -&gt; [[a]]) -&gt; [Maybe [a]] -&gt; [a]
+forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">[a]
+forall (m :: * -&gt; *) a. MonadPlus m =&gt; m a
+</span><span class="hs-identifier hs-var">mzero</span></span><span class="annot"><span class="annottext">[a] -&gt; [[a]] -&gt; [[a]]
+forall a. a -&gt; [a] -&gt; [a]
+</span><span class="hs-glyph hs-var">:</span></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">([[a]] -&gt; [[a]]) -&gt; ([Maybe [a]] -&gt; [[a]]) -&gt; [Maybe [a]] -&gt; [[a]]
+forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">Int -&gt; [[a]] -&gt; [[a]]
+forall a. Int -&gt; [a] -&gt; [a]
+</span><span class="hs-identifier hs-var">take</span></span><span> </span><span class="annot"><span class="annottext">Int
+</span><span class="hs-number">1</span></span><span> </span><span class="annot"><span class="annottext">([[a]] -&gt; [[a]]) -&gt; ([Maybe [a]] -&gt; [[a]]) -&gt; [Maybe [a]] -&gt; [[a]]
+forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">[Maybe [a]] -&gt; [[a]]
+forall a. [Maybe a] -&gt; [a]
+</span><span class="hs-identifier hs-var">catMaybes</span></span><span>
+</span><span id="line-60"></span><span>    </span><span id="local-6989586621679414599"><span class="annot"><span class="annottext">vars :: [String]
+</span><a href="#local-6989586621679414599"><span class="hs-identifier hs-var hs-var">vars</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-special">[</span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot;XAUTHLOCALHOSTNAME&quot;</span></span><span class="hs-special">,</span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot;HOST&quot;</span></span><span class="hs-special">,</span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot;HOSTNAME&quot;</span></span><span class="hs-special">]</span><span>
+</span><span id="line-61"></span><span>
+</span><span id="line-62"></span><span class="annot"><a href="XMonad.Util.RemoteWindows.html#setRemoteProp"><span class="hs-identifier hs-type">setRemoteProp</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Window</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">String</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">X</span></span><span> </span><span class="hs-special">(</span><span class="hs-special">)</span><span>
+</span><span id="line-63"></span><span id="setRemoteProp"><span class="annot"><span class="annottext">setRemoteProp :: Window -&gt; String -&gt; X ()
+</span><a href="XMonad.Util.RemoteWindows.html#setRemoteProp"><span class="hs-identifier hs-var hs-var">setRemoteProp</span></a></span></span><span> </span><span id="local-6989586621679414590"><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679414590"><span class="hs-identifier hs-var">w</span></a></span></span><span> </span><span id="local-6989586621679414589"><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679414589"><span class="hs-identifier hs-var">host</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-64"></span><span>    </span><span id="local-6989586621679414588"><span class="annot"><span class="annottext">Display
+</span><a href="#local-6989586621679414588"><span class="hs-identifier hs-var">d</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">(XConf -&gt; Display) -&gt; X Display
+forall r (m :: * -&gt; *) a. MonadReader r m =&gt; (r -&gt; a) -&gt; m a
+</span><span class="hs-identifier hs-var">asks</span></span><span> </span><span class="annot"><span class="annottext">XConf -&gt; Display
+</span><span class="hs-identifier hs-var hs-var">display</span></span><span>
+</span><span id="line-65"></span><span>    </span><span id="local-6989586621679414585"><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679414585"><span class="hs-identifier hs-var">p</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">String -&gt; X Window
+</span><span class="hs-identifier hs-var">getAtom</span></span><span> </span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot;XMONAD_REMOTE&quot;</span></span><span>
+</span><span id="line-66"></span><span>    </span><span id="local-6989586621679414583"><span class="annot"><span class="annottext">Bool
+</span><a href="#local-6989586621679414583"><span class="hs-identifier hs-var">v</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">Property -&gt; Window -&gt; X Bool
+</span><a href="XMonad.Util.WindowProperties.html#hasProperty"><span class="hs-identifier hs-var">hasProperty</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">String -&gt; Property
+</span><a href="XMonad.Util.WindowProperties.html#Machine"><span class="hs-identifier hs-var">Machine</span></a></span><span> </span><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679414589"><span class="hs-identifier hs-var">host</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679414590"><span class="hs-identifier hs-var">w</span></a></span><span>
+</span><span id="line-67"></span><span>    </span><span class="annot"><span class="annottext">IO () -&gt; X ()
+forall (m :: * -&gt; *) a. MonadIO m =&gt; IO a -&gt; m a
+</span><span class="hs-identifier hs-var">io</span></span><span> </span><span class="annot"><span class="annottext">(IO () -&gt; X ()) -&gt; IO () -&gt; X ()
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">Display -&gt; Window -&gt; Window -&gt; Window -&gt; CInt -&gt; [CLong] -&gt; IO ()
+</span><span class="hs-identifier hs-var">changeProperty32</span></span><span> </span><span class="annot"><span class="annottext">Display
+</span><a href="#local-6989586621679414588"><span class="hs-identifier hs-var">d</span></a></span><span> </span><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679414590"><span class="hs-identifier hs-var">w</span></a></span><span> </span><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679414585"><span class="hs-identifier hs-var">p</span></a></span><span> </span><span class="annot"><span class="annottext">Window
+</span><span class="hs-identifier hs-var">cARDINAL</span></span><span> </span><span class="annot"><span class="annottext">CInt
+</span><span class="hs-identifier hs-var">propModeReplace</span></span><span>
+</span><span id="line-68"></span><span>                          </span><span class="hs-special">[</span><span class="annot"><span class="annottext">Int -&gt; CLong
+forall a b. (Integral a, Num b) =&gt; a -&gt; b
+</span><span class="hs-identifier hs-var">fromIntegral</span></span><span> </span><span class="annot"><span class="annottext">(Int -&gt; CLong) -&gt; (Bool -&gt; Int) -&gt; Bool -&gt; CLong
+forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">Bool -&gt; Int
+forall a. Enum a =&gt; a -&gt; Int
+</span><span class="hs-identifier hs-var">fromEnum</span></span><span> </span><span class="annot"><span class="annottext">(Bool -&gt; CLong) -&gt; Bool -&gt; CLong
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">Bool -&gt; Bool
+</span><span class="hs-identifier hs-var">not</span></span><span> </span><span class="annot"><span class="annottext">Bool
+</span><a href="#local-6989586621679414583"><span class="hs-identifier hs-var">v</span></a></span><span class="hs-special">]</span><span>
+</span><span id="line-69"></span><span>
+</span><span id="line-70"></span><span class="hs-comment">-- | Given a window, tell if it is a local or a remote process. Normally,</span><span>
+</span><span id="line-71"></span><span class="hs-comment">-- it checks XMONAD_REMOTE property. If it does not exist (i.e. the</span><span>
+</span><span id="line-72"></span><span class="hs-comment">-- manageRemote hook was not deployed in user's config), it falls back to</span><span>
+</span><span id="line-73"></span><span class="hs-comment">-- checking environment variables and assuming that hostname never</span><span>
+</span><span id="line-74"></span><span class="hs-comment">-- changes.</span><span>
+</span><span id="line-75"></span><span class="annot"><a href="XMonad.Util.RemoteWindows.html#isLocalWindow"><span class="hs-identifier hs-type">isLocalWindow</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Window</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">X</span></span><span> </span><span class="annot"><span class="hs-identifier hs-type">Bool</span></span><span>
+</span><span id="line-76"></span><span id="isLocalWindow"><span class="annot"><span class="annottext">isLocalWindow :: Window -&gt; X Bool
+</span><a href="XMonad.Util.RemoteWindows.html#isLocalWindow"><span class="hs-identifier hs-var hs-var">isLocalWindow</span></a></span></span><span> </span><span id="local-6989586621679414574"><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679414574"><span class="hs-identifier hs-var">w</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">String -&gt; Window -&gt; X (Maybe [CLong])
+</span><a href="XMonad.Util.WindowProperties.html#getProp32s"><span class="hs-identifier hs-var">getProp32s</span></a></span><span> </span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot;XMONAD_REMOTE&quot;</span></span><span> </span><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679414574"><span class="hs-identifier hs-var">w</span></a></span><span> </span><span class="annot"><span class="annottext">X (Maybe [CLong]) -&gt; (Maybe [CLong] -&gt; X Bool) -&gt; X Bool
+forall (m :: * -&gt; *) a b. Monad m =&gt; m a -&gt; (a -&gt; m b) -&gt; m b
+</span><span class="hs-operator hs-var">&gt;&gt;=</span></span><span> </span><span class="hs-glyph">\</span><span class="hs-glyph">case</span><span>
+</span><span id="line-77"></span><span>    </span><span class="annot"><span class="hs-identifier hs-type">Just</span></span><span> </span><span class="hs-special">[</span><span id="local-6989586621679414572"><span class="annot"><span class="annottext">CLong
+</span><a href="#local-6989586621679414572"><span class="hs-identifier hs-var">y</span></a></span></span><span class="hs-special">]</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">Bool -&gt; X Bool
+forall (m :: * -&gt; *) a. Monad m =&gt; a -&gt; m a
+</span><span class="hs-identifier hs-var">return</span></span><span> </span><span class="annot"><span class="annottext">(Bool -&gt; X Bool) -&gt; Bool -&gt; X Bool
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">CLong
+</span><a href="#local-6989586621679414572"><span class="hs-identifier hs-var">y</span></a></span><span> </span><span class="annot"><span class="annottext">CLong -&gt; CLong -&gt; Bool
+forall a. Eq a =&gt; a -&gt; a -&gt; Bool
+</span><span class="hs-operator hs-var">==</span></span><span> </span><span class="annot"><span class="annottext">CLong
+</span><span class="hs-number">0</span></span><span>
+</span><span id="line-78"></span><span>    </span><span class="annot"><span class="annottext">Maybe [CLong]
+</span><span class="hs-identifier">_</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">IO String -&gt; X String
+forall (m :: * -&gt; *) a. MonadIO m =&gt; IO a -&gt; m a
+</span><span class="hs-identifier hs-var">io</span></span><span> </span><span class="annot"><span class="annottext">IO String
+</span><a href="XMonad.Util.RemoteWindows.html#guessHostName"><span class="hs-identifier hs-var">guessHostName</span></a></span><span> </span><span class="annot"><span class="annottext">X String -&gt; (String -&gt; X Bool) -&gt; X Bool
+forall (m :: * -&gt; *) a b. Monad m =&gt; m a -&gt; (a -&gt; m b) -&gt; m b
+</span><span class="hs-operator hs-var">&gt;&gt;=</span></span><span> </span><span class="hs-glyph">\</span><span id="local-6989586621679414571"><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679414571"><span class="hs-identifier hs-var">host</span></a></span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">Property -&gt; Window -&gt; X Bool
+</span><a href="XMonad.Util.WindowProperties.html#hasProperty"><span class="hs-identifier hs-var">hasProperty</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">String -&gt; Property
+</span><a href="XMonad.Util.WindowProperties.html#Machine"><span class="hs-identifier hs-var">Machine</span></a></span><span> </span><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679414571"><span class="hs-identifier hs-var">host</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679414574"><span class="hs-identifier hs-var">w</span></a></span><span>
+</span><span id="line-79"></span><span>
+</span><span id="line-80"></span><span class="hs-comment">-- | Use this hook to let XMonad properly track remote/local windows. For</span><span>
+</span><span id="line-81"></span><span class="hs-comment">-- example, @manageHook = manageRemote =&lt;&lt; io getHostName@.</span><span>
+</span><span id="line-82"></span><span class="annot"><a href="XMonad.Util.RemoteWindows.html#manageRemote"><span class="hs-identifier hs-type">manageRemote</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">String</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">ManageHook</span></span><span>
+</span><span id="line-83"></span><span id="manageRemote"><span class="annot"><span class="annottext">manageRemote :: String -&gt; ManageHook
+</span><a href="XMonad.Util.RemoteWindows.html#manageRemote"><span class="hs-identifier hs-var hs-var">manageRemote</span></a></span></span><span> </span><span id="local-6989586621679414570"><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679414570"><span class="hs-identifier hs-var">host</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Query Window
+forall r (m :: * -&gt; *). MonadReader r m =&gt; m r
+</span><span class="hs-identifier hs-var">ask</span></span><span> </span><span class="annot"><span class="annottext">Query Window -&gt; (Window -&gt; ManageHook) -&gt; ManageHook
+forall (m :: * -&gt; *) a b. Monad m =&gt; m a -&gt; (a -&gt; m b) -&gt; m b
+</span><span class="hs-operator hs-var">&gt;&gt;=</span></span><span> </span><span class="hs-glyph">\</span><span id="local-6989586621679414568"><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679414568"><span class="hs-identifier hs-var">w</span></a></span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">X () -&gt; Query ()
+forall a. X a -&gt; Query a
+</span><span class="hs-identifier hs-var">liftX</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Window -&gt; String -&gt; X ()
+</span><a href="XMonad.Util.RemoteWindows.html#setRemoteProp"><span class="hs-identifier hs-var">setRemoteProp</span></a></span><span> </span><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679414568"><span class="hs-identifier hs-var">w</span></a></span><span> </span><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679414570"><span class="hs-identifier hs-var">host</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">Query () -&gt; ManageHook -&gt; ManageHook
+forall (m :: * -&gt; *) a b. Monad m =&gt; m a -&gt; m b -&gt; m b
+</span><span class="hs-operator hs-var">&gt;&gt;</span></span><span> </span><span class="annot"><span class="annottext">Endo WindowSet -&gt; ManageHook
+forall (m :: * -&gt; *) a. Monad m =&gt; a -&gt; m a
+</span><span class="hs-identifier hs-var">return</span></span><span> </span><span class="annot"><span class="annottext">Endo WindowSet
+forall a. Monoid a =&gt; a
+</span><span class="hs-identifier hs-var">mempty</span></span><span>
+</span><span id="line-84"></span><span>
+</span><span id="line-85"></span><span class="hs-comment">-- | Use this hook if you want to manage XMONAD_REMOTE properties, but</span><span>
+</span><span id="line-86"></span><span class="hs-comment">-- don't want to use an external getHostName in your config. That way you</span><span>
+</span><span id="line-87"></span><span class="hs-comment">-- are retreating to environment variables.</span><span>
+</span><span id="line-88"></span><span class="annot"><a href="XMonad.Util.RemoteWindows.html#manageRemoteG"><span class="hs-identifier hs-type">manageRemoteG</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">ManageHook</span></span><span>
+</span><span id="line-89"></span><span id="manageRemoteG"><span class="annot"><span class="annottext">manageRemoteG :: ManageHook
+</span><a href="XMonad.Util.RemoteWindows.html#manageRemoteG"><span class="hs-identifier hs-var hs-var">manageRemoteG</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">String -&gt; ManageHook
+</span><a href="XMonad.Util.RemoteWindows.html#manageRemote"><span class="hs-identifier hs-var">manageRemote</span></a></span><span> </span><span class="annot"><span class="annottext">(String -&gt; ManageHook) -&gt; Query String -&gt; ManageHook
+forall (m :: * -&gt; *) a b. Monad m =&gt; (a -&gt; m b) -&gt; m a -&gt; m b
+</span><span class="hs-operator hs-var">=&lt;&lt;</span></span><span> </span><span class="annot"><span class="annottext">IO String -&gt; Query String
+forall (m :: * -&gt; *) a. MonadIO m =&gt; IO a -&gt; m a
+</span><span class="hs-identifier hs-var">io</span></span><span> </span><span class="annot"><span class="annottext">IO String
+</span><a href="XMonad.Util.RemoteWindows.html#guessHostName"><span class="hs-identifier hs-var">guessHostName</span></a></span><span>
+</span><span id="line-90"></span></pre></body></html>

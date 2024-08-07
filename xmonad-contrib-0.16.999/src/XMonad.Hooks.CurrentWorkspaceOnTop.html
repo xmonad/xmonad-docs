@@ -1,0 +1,222 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd"><html xmlns="http://www.w3.org/1999/xhtml"><head><link rel="stylesheet" type="text/css" href="style.css" /><script type="text/javascript" src="highlight.js"></script></head><body><pre><span class="hs-comment">----------------------------------------------------------------------------</span><span>
+</span><span id="line-2"></span><span class="hs-comment">-- |</span><span>
+</span><span id="line-3"></span><span class="hs-comment">-- Module      :  XMonad.Hooks.CurrentWorkspaceOnTop</span><span>
+</span><span id="line-4"></span><span class="hs-comment">-- Description :  Ensure that windows on the current workspace are on top.</span><span>
+</span><span id="line-5"></span><span class="hs-comment">-- Copyright   :  (c) Jan Vornberger 2009</span><span>
+</span><span id="line-6"></span><span class="hs-comment">-- License     :  BSD3-style (see LICENSE)</span><span>
+</span><span id="line-7"></span><span class="hs-comment">--</span><span>
+</span><span id="line-8"></span><span class="hs-comment">-- Maintainer  :  jan.vornberger@informatik.uni-oldenburg.de</span><span>
+</span><span id="line-9"></span><span class="hs-comment">-- Stability   :  unstable</span><span>
+</span><span id="line-10"></span><span class="hs-comment">-- Portability :  not portable</span><span>
+</span><span id="line-11"></span><span class="hs-comment">--</span><span>
+</span><span id="line-12"></span><span class="hs-comment">-- Ensures that the windows of the current workspace are always in front</span><span>
+</span><span id="line-13"></span><span class="hs-comment">-- of windows that are located on other visible screens. This becomes important</span><span>
+</span><span id="line-14"></span><span class="hs-comment">-- if you use decoration and drag windows from one screen to another. Using this</span><span>
+</span><span id="line-15"></span><span class="hs-comment">-- module, the dragged window will always be in front of other windows.</span><span>
+</span><span id="line-16"></span><span class="hs-comment">--</span><span>
+</span><span id="line-17"></span><span class="hs-comment">-----------------------------------------------------------------------------</span><span>
+</span><span id="line-18"></span><span>
+</span><span id="line-19"></span><span class="hs-keyword">module</span><span> </span><span class="hs-identifier">XMonad.Hooks.CurrentWorkspaceOnTop</span><span> </span><span class="hs-special">(</span><span>
+</span><span id="line-20"></span><span>    </span><span class="annot"><span class="hs-comment">-- * Usage</span></span><span>
+</span><span id="line-21"></span><span>    </span><span class="annot"><span class="hs-comment">-- $usage</span></span><span>
+</span><span id="line-22"></span><span>    </span><span class="annot"><a href="XMonad.Hooks.CurrentWorkspaceOnTop.html#currentWorkspaceOnTop"><span class="hs-identifier">currentWorkspaceOnTop</span></a></span><span>
+</span><span id="line-23"></span><span>    </span><span class="hs-special">)</span><span> </span><span class="hs-keyword">where</span><span>
+</span><span id="line-24"></span><span>
+</span><span id="line-25"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><span class="hs-identifier">XMonad</span></span><span>
+</span><span id="line-26"></span><span class="hs-keyword">import</span><span> </span><span class="hs-keyword">qualified</span><span> </span><span class="annot"><span class="hs-identifier">XMonad.StackSet</span></span><span> </span><span class="hs-keyword">as</span><span> </span><span class="annot"><span class="hs-identifier">S</span></span><span>
+</span><span id="line-27"></span><span class="hs-keyword">import</span><span> </span><span class="hs-keyword">qualified</span><span> </span><span class="annot"><a href="XMonad.Util.ExtensibleState.html"><span class="hs-identifier">XMonad.Util.ExtensibleState</span></a></span><span> </span><span class="hs-keyword">as</span><span> </span><span class="annot"><span class="hs-identifier">XS</span></span><span>
+</span><span id="line-28"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><a href="XMonad.Prelude.html"><span class="hs-identifier">XMonad.Prelude</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier">unless</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier">when</span></span><span class="hs-special">)</span><span>
+</span><span id="line-29"></span><span class="hs-keyword">import</span><span> </span><span class="hs-keyword">qualified</span><span> </span><span class="annot"><span class="hs-identifier">Data.Map</span></span><span> </span><span class="hs-keyword">as</span><span> </span><span class="annot"><span class="hs-identifier">M</span></span><span>
+</span><span id="line-30"></span><span>
+</span><span id="line-31"></span><span class="hs-comment">-- $usage</span><span>
+</span><span id="line-32"></span><span class="hs-comment">-- You can use this module with the following in your @~\/.xmonad\/xmonad.hs@:</span><span>
+</span><span id="line-33"></span><span class="hs-comment">--</span><span>
+</span><span id="line-34"></span><span class="hs-comment">-- &gt; import XMonad.Hooks.CurrentWorkspaceOnTop</span><span>
+</span><span id="line-35"></span><span class="hs-comment">-- &gt;</span><span>
+</span><span id="line-36"></span><span class="hs-comment">-- &gt; main = xmonad $ def {</span><span>
+</span><span id="line-37"></span><span class="hs-comment">-- &gt;    ...</span><span>
+</span><span id="line-38"></span><span class="hs-comment">-- &gt;    logHook = currentWorkspaceOnTop</span><span>
+</span><span id="line-39"></span><span class="hs-comment">-- &gt;    ...</span><span>
+</span><span id="line-40"></span><span class="hs-comment">-- &gt;  }</span><span>
+</span><span id="line-41"></span><span class="hs-comment">--</span><span>
+</span><span id="line-42"></span><span>
+</span><span id="line-43"></span><span class="hs-keyword">newtype</span><span> </span><span id="CWOTState"><span class="annot"><a href="XMonad.Hooks.CurrentWorkspaceOnTop.html#CWOTState"><span class="hs-identifier hs-var">CWOTState</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span id="CWOTS"><span class="annot"><a href="XMonad.Hooks.CurrentWorkspaceOnTop.html#CWOTS"><span class="hs-identifier hs-var">CWOTS</span></a></span></span><span> </span><span class="annot"><span class="hs-identifier hs-type">String</span></span><span>
+</span><span id="line-44"></span><span>
+</span><span id="line-45"></span><span class="hs-keyword">instance</span><span> </span><span id="local-6989586621679377243"><span class="annot"><span class="hs-identifier hs-type">ExtensionClass</span></span><span> </span><span class="annot"><a href="XMonad.Hooks.CurrentWorkspaceOnTop.html#CWOTState"><span class="hs-identifier hs-type">CWOTState</span></a></span></span><span> </span><span class="hs-keyword">where</span><span>
+</span><span id="line-46"></span><span>  </span><span id="local-6989586621679377241"><span class="annot"><span class="annottext">initialValue :: CWOTState
+</span><span class="hs-identifier hs-var hs-var hs-var hs-var">initialValue</span></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">String -&gt; CWOTState
+</span><a href="XMonad.Hooks.CurrentWorkspaceOnTop.html#CWOTS"><span class="hs-identifier hs-var">CWOTS</span></a></span><span> </span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot;&quot;</span></span><span>
+</span><span id="line-47"></span><span>
+</span><span id="line-48"></span><span class="annot"><a href="XMonad.Hooks.CurrentWorkspaceOnTop.html#currentWorkspaceOnTop"><span class="hs-identifier hs-type">currentWorkspaceOnTop</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">X</span></span><span> </span><span class="hs-special">(</span><span class="hs-special">)</span><span>
+</span><span id="line-49"></span><span id="currentWorkspaceOnTop"><span class="annot"><span class="annottext">currentWorkspaceOnTop :: X ()
+</span><a href="XMonad.Hooks.CurrentWorkspaceOnTop.html#currentWorkspaceOnTop"><span class="hs-identifier hs-var hs-var">currentWorkspaceOnTop</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">(Display -&gt; X ()) -&gt; X ()
+forall a. (Display -&gt; X a) -&gt; X a
+</span><span class="hs-identifier hs-var">withDisplay</span></span><span> </span><span class="annot"><span class="annottext">((Display -&gt; X ()) -&gt; X ()) -&gt; (Display -&gt; X ()) -&gt; X ()
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="hs-glyph">\</span><span id="local-6989586621679377238"><span class="annot"><span class="annottext">Display
+</span><a href="#local-6989586621679377238"><span class="hs-identifier hs-var">d</span></a></span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-50"></span><span>    </span><span id="local-6989586621679377237"><span class="annot"><span class="annottext">WindowSet
+</span><a href="#local-6989586621679377237"><span class="hs-identifier hs-var">ws</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">(XState -&gt; WindowSet) -&gt; X WindowSet
+forall s (m :: * -&gt; *) a. MonadState s m =&gt; (s -&gt; a) -&gt; m a
+</span><span class="hs-identifier hs-var">gets</span></span><span> </span><span class="annot"><span class="annottext">XState -&gt; WindowSet
+</span><span class="hs-identifier hs-var hs-var">windowset</span></span><span>
+</span><span id="line-51"></span><span>    </span><span class="hs-special">(</span><span class="annot"><a href="XMonad.Hooks.CurrentWorkspaceOnTop.html#CWOTS"><span class="hs-identifier hs-type">CWOTS</span></a></span><span> </span><span id="local-6989586621679377234"><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679377234"><span class="hs-identifier hs-var">lastTag</span></a></span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">X CWOTState
+forall a (m :: * -&gt; *). (ExtensionClass a, XLike m) =&gt; m a
+</span><a href="XMonad.Util.ExtensibleState.html#get"><span class="hs-identifier hs-var">XS.get</span></a></span><span>
+</span><span id="line-52"></span><span>    </span><span class="hs-keyword">let</span><span> </span><span id="local-6989586621679377232"><span class="annot"><span class="annottext">curTag :: String
+</span><a href="#local-6989586621679377232"><span class="hs-identifier hs-var hs-var">curTag</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Workspace String (Layout Window) Window -&gt; String
+forall i l a. Workspace i l a -&gt; i
+</span><span class="hs-identifier hs-var hs-var">S.tag</span></span><span> </span><span class="annot"><span class="annottext">(Workspace String (Layout Window) Window -&gt; String)
+-&gt; (WindowSet -&gt; Workspace String (Layout Window) Window)
+-&gt; WindowSet
+-&gt; String
+forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">Screen String (Layout Window) Window ScreenId ScreenDetail
+-&gt; Workspace String (Layout Window) Window
+forall i l a sid sd. Screen i l a sid sd -&gt; Workspace i l a
+</span><span class="hs-identifier hs-var hs-var">S.workspace</span></span><span> </span><span class="annot"><span class="annottext">(Screen String (Layout Window) Window ScreenId ScreenDetail
+ -&gt; Workspace String (Layout Window) Window)
+-&gt; (WindowSet
+    -&gt; Screen String (Layout Window) Window ScreenId ScreenDetail)
+-&gt; WindowSet
+-&gt; Workspace String (Layout Window) Window
+forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">WindowSet
+-&gt; Screen String (Layout Window) Window ScreenId ScreenDetail
+forall i l a sid sd. StackSet i l a sid sd -&gt; Screen i l a sid sd
+</span><span class="hs-identifier hs-var hs-var">S.current</span></span><span> </span><span class="annot"><span class="annottext">(WindowSet -&gt; String) -&gt; WindowSet -&gt; String
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">WindowSet
+</span><a href="#local-6989586621679377237"><span class="hs-identifier hs-var">ws</span></a></span><span>
+</span><span id="line-53"></span><span>    </span><span class="annot"><span class="annottext">Bool -&gt; X () -&gt; X ()
+forall (f :: * -&gt; *). Applicative f =&gt; Bool -&gt; f () -&gt; f ()
+</span><span class="hs-identifier hs-var">when</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679377232"><span class="hs-identifier hs-var">curTag</span></a></span><span> </span><span class="annot"><span class="annottext">String -&gt; String -&gt; Bool
+forall a. Eq a =&gt; a -&gt; a -&gt; Bool
+</span><span class="hs-operator hs-var">/=</span></span><span> </span><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679377234"><span class="hs-identifier hs-var">lastTag</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">(X () -&gt; X ()) -&gt; X () -&gt; X ()
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-54"></span><span>        </span><span class="hs-comment">-- the following is more or less a reimplementation of what's happening in &quot;XMonad.Operation&quot;</span><span>
+</span><span id="line-55"></span><span>        </span><span class="hs-keyword">let</span><span> </span><span id="local-6989586621679377226"><span class="annot"><span class="annottext">s :: Screen String (Layout Window) Window ScreenId ScreenDetail
+</span><a href="#local-6989586621679377226"><span class="hs-identifier hs-var hs-var">s</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">WindowSet
+-&gt; Screen String (Layout Window) Window ScreenId ScreenDetail
+forall i l a sid sd. StackSet i l a sid sd -&gt; Screen i l a sid sd
+</span><span class="hs-identifier hs-var hs-var">S.current</span></span><span> </span><span class="annot"><span class="annottext">WindowSet
+</span><a href="#local-6989586621679377237"><span class="hs-identifier hs-var">ws</span></a></span><span>
+</span><span id="line-56"></span><span>            </span><span id="local-6989586621679377225"><span class="annot"><span class="annottext">wsp :: Workspace String (Layout Window) Window
+</span><a href="#local-6989586621679377225"><span class="hs-identifier hs-var hs-var">wsp</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Screen String (Layout Window) Window ScreenId ScreenDetail
+-&gt; Workspace String (Layout Window) Window
+forall i l a sid sd. Screen i l a sid sd -&gt; Workspace i l a
+</span><span class="hs-identifier hs-var hs-var">S.workspace</span></span><span> </span><span class="annot"><span class="annottext">Screen String (Layout Window) Window ScreenId ScreenDetail
+</span><a href="#local-6989586621679377226"><span class="hs-identifier hs-var">s</span></a></span><span>
+</span><span id="line-57"></span><span>            </span><span id="local-6989586621679377224"><span class="annot"><span class="annottext">viewrect :: Rectangle
+</span><a href="#local-6989586621679377224"><span class="hs-identifier hs-var hs-var">viewrect</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">ScreenDetail -&gt; Rectangle
+</span><span class="hs-identifier hs-var hs-var">screenRect</span></span><span> </span><span class="annot"><span class="annottext">(ScreenDetail -&gt; Rectangle) -&gt; ScreenDetail -&gt; Rectangle
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">Screen String (Layout Window) Window ScreenId ScreenDetail
+-&gt; ScreenDetail
+forall i l a sid sd. Screen i l a sid sd -&gt; sd
+</span><span class="hs-identifier hs-var hs-var">S.screenDetail</span></span><span> </span><span class="annot"><span class="annottext">Screen String (Layout Window) Window ScreenId ScreenDetail
+</span><a href="#local-6989586621679377226"><span class="hs-identifier hs-var">s</span></a></span><span>
+</span><span id="line-58"></span><span>            </span><span id="local-6989586621679377221"><span class="annot"><span class="annottext">tmpStack :: Maybe (Stack Window)
+</span><a href="#local-6989586621679377221"><span class="hs-identifier hs-var hs-var">tmpStack</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Workspace String (Layout Window) Window -&gt; Maybe (Stack Window)
+forall i l a. Workspace i l a -&gt; Maybe (Stack a)
+</span><span class="hs-identifier hs-var hs-var">S.stack</span></span><span> </span><span class="annot"><span class="annottext">Workspace String (Layout Window) Window
+</span><a href="#local-6989586621679377225"><span class="hs-identifier hs-var">wsp</span></a></span><span> </span><span class="annot"><span class="annottext">Maybe (Stack Window)
+-&gt; (Stack Window -&gt; Maybe (Stack Window)) -&gt; Maybe (Stack Window)
+forall (m :: * -&gt; *) a b. Monad m =&gt; m a -&gt; (a -&gt; m b) -&gt; m b
+</span><span class="hs-operator hs-var">&gt;&gt;=</span></span><span> </span><span class="annot"><span class="annottext">(Window -&gt; Bool) -&gt; Stack Window -&gt; Maybe (Stack Window)
+forall a. (a -&gt; Bool) -&gt; Stack a -&gt; Maybe (Stack a)
+</span><span class="hs-identifier hs-var">S.filter</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Window -&gt; Map Window RationalRect -&gt; Bool
+forall k a. Ord k =&gt; k -&gt; Map k a -&gt; Bool
+</span><span class="hs-operator hs-var">`M.notMember`</span></span><span> </span><span class="annot"><span class="annottext">WindowSet -&gt; Map Window RationalRect
+forall i l a sid sd. StackSet i l a sid sd -&gt; Map a RationalRect
+</span><span class="hs-identifier hs-var hs-var">S.floating</span></span><span> </span><span class="annot"><span class="annottext">WindowSet
+</span><a href="#local-6989586621679377237"><span class="hs-identifier hs-var">ws</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-59"></span><span>        </span><span class="hs-special">(</span><span id="local-6989586621679377216"><span class="annot"><span class="annottext">[(Window, Rectangle)]
+</span><a href="#local-6989586621679377216"><span class="hs-identifier hs-var">rs</span></a></span></span><span class="hs-special">,</span><span> </span><span id="local-6989586621679377215"><span class="annot"><span class="annottext">Maybe (Layout Window)
+</span><a href="#local-6989586621679377215"><span class="hs-identifier hs-var">ml'</span></a></span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">Workspace String (Layout Window) Window
+-&gt; Rectangle -&gt; X ([(Window, Rectangle)], Maybe (Layout Window))
+forall (layout :: * -&gt; *) a.
+LayoutClass layout a =&gt;
+Workspace String (layout a) a
+-&gt; Rectangle -&gt; X ([(a, Rectangle)], Maybe (layout a))
+</span><span class="hs-identifier hs-var">runLayout</span></span><span> </span><span class="annot"><span class="annottext">Workspace String (Layout Window) Window
+</span><a href="#local-6989586621679377225"><span class="hs-identifier hs-var">wsp</span></a></span><span> </span><span class="hs-special">{</span><span> </span><span class="annot"><span class="annottext">stack :: Maybe (Stack Window)
+</span><span class="hs-identifier hs-var">S.stack</span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Maybe (Stack Window)
+</span><a href="#local-6989586621679377221"><span class="hs-identifier hs-var">tmpStack</span></a></span><span> </span><span class="hs-special">}</span><span> </span><span class="annot"><span class="annottext">Rectangle
+</span><a href="#local-6989586621679377224"><span class="hs-identifier hs-var">viewrect</span></a></span><span>
+</span><span id="line-60"></span><span>        </span><span class="annot"><span class="annottext">String -&gt; Maybe (Layout Window) -&gt; X ()
+</span><span class="hs-identifier hs-var">updateLayout</span></span><span> </span><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679377232"><span class="hs-identifier hs-var">curTag</span></a></span><span> </span><span class="annot"><span class="annottext">Maybe (Layout Window)
+</span><a href="#local-6989586621679377215"><span class="hs-identifier hs-var">ml'</span></a></span><span>
+</span><span id="line-61"></span><span>        </span><span class="hs-keyword">let</span><span> </span><span id="local-6989586621679377212"><span class="annot"><span class="annottext">this :: WindowSet
+</span><a href="#local-6989586621679377212"><span class="hs-identifier hs-var hs-var">this</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">String -&gt; WindowSet -&gt; WindowSet
+forall s i l a sd.
+(Eq s, Eq i) =&gt;
+i -&gt; StackSet i l a s sd -&gt; StackSet i l a s sd
+</span><span class="hs-identifier hs-var">S.view</span></span><span> </span><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679377232"><span class="hs-identifier hs-var">curTag</span></a></span><span> </span><span class="annot"><span class="annottext">WindowSet
+</span><a href="#local-6989586621679377237"><span class="hs-identifier hs-var">ws</span></a></span><span>
+</span><span id="line-62"></span><span>            </span><span id="local-6989586621679377210"><span class="annot"><span class="annottext">fltWins :: [Window]
+</span><a href="#local-6989586621679377210"><span class="hs-identifier hs-var hs-var">fltWins</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">(Window -&gt; Bool) -&gt; [Window] -&gt; [Window]
+forall a. (a -&gt; Bool) -&gt; [a] -&gt; [a]
+</span><span class="hs-identifier hs-var">filter</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Window -&gt; Map Window RationalRect -&gt; Bool
+forall k a. Ord k =&gt; k -&gt; Map k a -&gt; Bool
+</span><span class="hs-operator hs-var">`M.member`</span></span><span> </span><span class="annot"><span class="annottext">WindowSet -&gt; Map Window RationalRect
+forall i l a sid sd. StackSet i l a sid sd -&gt; Map a RationalRect
+</span><span class="hs-identifier hs-var hs-var">S.floating</span></span><span> </span><span class="annot"><span class="annottext">WindowSet
+</span><a href="#local-6989586621679377237"><span class="hs-identifier hs-var">ws</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">([Window] -&gt; [Window]) -&gt; [Window] -&gt; [Window]
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">WindowSet -&gt; [Window]
+forall i l a s sd. StackSet i l a s sd -&gt; [a]
+</span><span class="hs-identifier hs-var">S.index</span></span><span> </span><span class="annot"><span class="annottext">WindowSet
+</span><a href="#local-6989586621679377212"><span class="hs-identifier hs-var">this</span></a></span><span>
+</span><span id="line-63"></span><span>            </span><span id="local-6989586621679377207"><span class="annot"><span class="annottext">wins :: [Window]
+</span><a href="#local-6989586621679377207"><span class="hs-identifier hs-var hs-var">wins</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">[Window]
+</span><a href="#local-6989586621679377210"><span class="hs-identifier hs-var">fltWins</span></a></span><span> </span><span class="annot"><span class="annottext">[Window] -&gt; [Window] -&gt; [Window]
+forall a. [a] -&gt; [a] -&gt; [a]
+</span><span class="hs-operator hs-var">++</span></span><span> </span><span class="annot"><span class="annottext">((Window, Rectangle) -&gt; Window)
+-&gt; [(Window, Rectangle)] -&gt; [Window]
+forall a b. (a -&gt; b) -&gt; [a] -&gt; [b]
+</span><span class="hs-identifier hs-var">map</span></span><span> </span><span class="annot"><span class="annottext">(Window, Rectangle) -&gt; Window
+forall a b. (a, b) -&gt; a
+</span><span class="hs-identifier hs-var">fst</span></span><span> </span><span class="annot"><span class="annottext">[(Window, Rectangle)]
+</span><a href="#local-6989586621679377216"><span class="hs-identifier hs-var">rs</span></a></span><span>  </span><span class="hs-comment">-- order: first all floating windows, then the order the layout returned</span><span>
+</span><span id="line-64"></span><span>        </span><span class="hs-comment">-- end of reimplementation</span><span>
+</span><span id="line-65"></span><span>
+</span><span id="line-66"></span><span>        </span><span class="annot"><span class="annottext">Bool -&gt; X () -&gt; X ()
+forall (f :: * -&gt; *). Applicative f =&gt; Bool -&gt; f () -&gt; f ()
+</span><span class="hs-identifier hs-var">unless</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">[Window] -&gt; Bool
+forall (t :: * -&gt; *) a. Foldable t =&gt; t a -&gt; Bool
+</span><span class="hs-identifier hs-var">null</span></span><span> </span><span class="annot"><span class="annottext">[Window]
+</span><a href="#local-6989586621679377207"><span class="hs-identifier hs-var">wins</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">(X () -&gt; X ()) -&gt; X () -&gt; X ()
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-67"></span><span>            </span><span class="annot"><span class="annottext">IO () -&gt; X ()
+forall (m :: * -&gt; *) a. MonadIO m =&gt; IO a -&gt; m a
+</span><span class="hs-identifier hs-var">io</span></span><span> </span><span class="annot"><span class="annottext">(IO () -&gt; X ()) -&gt; IO () -&gt; X ()
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">Display -&gt; Window -&gt; IO ()
+</span><span class="hs-identifier hs-var">raiseWindow</span></span><span> </span><span class="annot"><span class="annottext">Display
+</span><a href="#local-6989586621679377238"><span class="hs-identifier hs-var">d</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">[Window] -&gt; Window
+forall a. [a] -&gt; a
+</span><span class="hs-identifier hs-var">head</span></span><span> </span><span class="annot"><span class="annottext">[Window]
+</span><a href="#local-6989586621679377207"><span class="hs-identifier hs-var">wins</span></a></span><span class="hs-special">)</span><span>  </span><span class="hs-comment">-- raise first window of current workspace to the very top,</span><span>
+</span><span id="line-68"></span><span>            </span><span class="annot"><span class="annottext">IO () -&gt; X ()
+forall (m :: * -&gt; *) a. MonadIO m =&gt; IO a -&gt; m a
+</span><span class="hs-identifier hs-var">io</span></span><span> </span><span class="annot"><span class="annottext">(IO () -&gt; X ()) -&gt; IO () -&gt; X ()
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">Display -&gt; [Window] -&gt; IO ()
+</span><span class="hs-identifier hs-var">restackWindows</span></span><span> </span><span class="annot"><span class="annottext">Display
+</span><a href="#local-6989586621679377238"><span class="hs-identifier hs-var">d</span></a></span><span> </span><span class="annot"><span class="annottext">[Window]
+</span><a href="#local-6989586621679377207"><span class="hs-identifier hs-var">wins</span></a></span><span>      </span><span class="hs-comment">-- then use restackWindows to let all other windows from the workspace follow</span><span>
+</span><span id="line-69"></span><span>        </span><span class="annot"><span class="annottext">CWOTState -&gt; X ()
+forall a (m :: * -&gt; *). (ExtensionClass a, XLike m) =&gt; a -&gt; m ()
+</span><a href="XMonad.Util.ExtensibleState.html#put"><span class="hs-identifier hs-var">XS.put</span></a></span><span class="hs-special">(</span><span class="annot"><span class="annottext">String -&gt; CWOTState
+</span><a href="XMonad.Hooks.CurrentWorkspaceOnTop.html#CWOTS"><span class="hs-identifier hs-var">CWOTS</span></a></span><span> </span><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679377232"><span class="hs-identifier hs-var">curTag</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-70"></span></pre></body></html>
