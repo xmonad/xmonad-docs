@@ -1,0 +1,1236 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd"><html xmlns="http://www.w3.org/1999/xhtml"><head><link rel="stylesheet" type="text/css" href="style.css" /><script type="text/javascript" src="highlight.js"></script></head><body><pre><span class="hs-pragma">{-# LANGUAGE FlexibleContexts, TypeApplications, TupleSections  #-}</span><span>
+</span><span id="line-2"></span><span class="hs-comment">-----------------------------------------------------------------------------</span><span>
+</span><span id="line-3"></span><span class="hs-comment">-- |</span><span>
+</span><span id="line-4"></span><span class="hs-comment">-- Module      :  XMonad.Hooks.StatusBar</span><span>
+</span><span id="line-5"></span><span class="hs-comment">-- Description :  Composable and dynamic status bars.</span><span>
+</span><span id="line-6"></span><span class="hs-comment">-- Copyright   :  (c) Yecine Megdiche &lt;yecine.megdiche@gmail.com&gt;</span><span>
+</span><span id="line-7"></span><span class="hs-comment">-- License     :  BSD3-style (see LICENSE)</span><span>
+</span><span id="line-8"></span><span class="hs-comment">--</span><span>
+</span><span id="line-9"></span><span class="hs-comment">-- Maintainer  :  Yecine Megdiche &lt;yecine.megdiche@gmail.com&gt;</span><span>
+</span><span id="line-10"></span><span class="hs-comment">-- Stability   :  unstable</span><span>
+</span><span id="line-11"></span><span class="hs-comment">-- Portability :  unportable</span><span>
+</span><span id="line-12"></span><span class="hs-comment">--</span><span>
+</span><span id="line-13"></span><span class="hs-comment">-- xmonad calls the logHook with every internal state update, which is</span><span>
+</span><span id="line-14"></span><span class="hs-comment">-- useful for (among other things) outputting status information to an</span><span>
+</span><span id="line-15"></span><span class="hs-comment">-- external status bar program such as xmobar or dzen.</span><span>
+</span><span id="line-16"></span><span class="hs-comment">--</span><span>
+</span><span id="line-17"></span><span class="hs-comment">-- This module provides a composable interface for (re)starting these status</span><span>
+</span><span id="line-18"></span><span class="hs-comment">-- bars and logging to them, either using pipes or X properties. There's also</span><span>
+</span><span id="line-19"></span><span class="hs-comment">-- &quot;XMonad.Hooks.StatusBar.PP&quot; which provides an abstraction and some</span><span>
+</span><span id="line-20"></span><span class="hs-comment">-- utilities for customization what is logged to a status bar. Together, these</span><span>
+</span><span id="line-21"></span><span class="hs-comment">-- are a modern replacement for &quot;XMonad.Hooks.DynamicLog&quot;, which is now just a</span><span>
+</span><span id="line-22"></span><span class="hs-comment">-- compatibility wrapper.</span><span>
+</span><span id="line-23"></span><span class="hs-comment">--</span><span>
+</span><span id="line-24"></span><span class="hs-comment">-----------------------------------------------------------------------------</span><span>
+</span><span id="line-25"></span><span>
+</span><span id="line-26"></span><span class="hs-keyword">module</span><span> </span><span class="hs-identifier">XMonad.Hooks.StatusBar</span><span> </span><span class="hs-special">(</span><span>
+</span><span id="line-27"></span><span>  </span><span class="annot"><span class="hs-comment">-- * Usage</span></span><span>
+</span><span id="line-28"></span><span>  </span><span class="annot"><span class="hs-comment">-- $usage</span></span><span>
+</span><span id="line-29"></span><span>  </span><span class="annot"><a href="XMonad.Hooks.StatusBar.html#StatusBarConfig"><span class="hs-identifier">StatusBarConfig</span></a></span><span class="hs-special">(</span><span class="hs-glyph">..</span><span class="hs-special">)</span><span class="hs-special">,</span><span>
+</span><span id="line-30"></span><span>  </span><span class="annot"><a href="XMonad.Hooks.StatusBar.html#withSB"><span class="hs-identifier">withSB</span></a></span><span class="hs-special">,</span><span>
+</span><span id="line-31"></span><span>  </span><span class="annot"><a href="XMonad.Hooks.StatusBar.html#withEasySB"><span class="hs-identifier">withEasySB</span></a></span><span class="hs-special">,</span><span>
+</span><span id="line-32"></span><span>  </span><span class="annot"><a href="XMonad.Hooks.StatusBar.html#defToggleStrutsKey"><span class="hs-identifier">defToggleStrutsKey</span></a></span><span class="hs-special">,</span><span>
+</span><span id="line-33"></span><span>
+</span><span id="line-34"></span><span>  </span><span class="annot"><span class="hs-comment">-- * Available Configs</span></span><span>
+</span><span id="line-35"></span><span>  </span><span class="annot"><span class="hs-comment">-- $availableconfigs</span></span><span>
+</span><span id="line-36"></span><span>  </span><span class="annot"><a href="XMonad.Hooks.StatusBar.html#statusBarProp"><span class="hs-identifier">statusBarProp</span></a></span><span class="hs-special">,</span><span>
+</span><span id="line-37"></span><span>  </span><span class="annot"><a href="XMonad.Hooks.StatusBar.html#statusBarPropTo"><span class="hs-identifier">statusBarPropTo</span></a></span><span class="hs-special">,</span><span>
+</span><span id="line-38"></span><span>  </span><span class="annot"><a href="XMonad.Hooks.StatusBar.html#statusBarGeneric"><span class="hs-identifier">statusBarGeneric</span></a></span><span class="hs-special">,</span><span>
+</span><span id="line-39"></span><span>  </span><span class="annot"><a href="XMonad.Hooks.StatusBar.html#statusBarPipe"><span class="hs-identifier">statusBarPipe</span></a></span><span class="hs-special">,</span><span>
+</span><span id="line-40"></span><span>
+</span><span id="line-41"></span><span>  </span><span class="annot"><span class="hs-comment">-- * Multiple Status Bars</span></span><span>
+</span><span id="line-42"></span><span>  </span><span class="annot"><span class="hs-comment">-- $multiple</span></span><span>
+</span><span id="line-43"></span><span>
+</span><span id="line-44"></span><span>  </span><span class="annot"><span class="hs-comment">-- * Dynamic Status Bars</span></span><span>
+</span><span id="line-45"></span><span>  </span><span class="annot"><span class="hs-comment">-- $dynamic</span></span><span>
+</span><span id="line-46"></span><span>  </span><span class="annot"><a href="XMonad.Hooks.StatusBar.html#dynamicSBs"><span class="hs-identifier">dynamicSBs</span></a></span><span class="hs-special">,</span><span>
+</span><span id="line-47"></span><span>  </span><span class="annot"><a href="XMonad.Hooks.StatusBar.html#dynamicEasySBs"><span class="hs-identifier">dynamicEasySBs</span></a></span><span class="hs-special">,</span><span>
+</span><span id="line-48"></span><span>
+</span><span id="line-49"></span><span>  </span><span class="annot"><span class="hs-comment">-- * Property Logging utilities</span></span><span>
+</span><span id="line-50"></span><span>  </span><span class="annot"><a href="XMonad.Hooks.StatusBar.html#xmonadPropLog"><span class="hs-identifier">xmonadPropLog</span></a></span><span class="hs-special">,</span><span>
+</span><span id="line-51"></span><span>  </span><span class="annot"><a href="XMonad.Hooks.StatusBar.html#xmonadPropLog%27"><span class="hs-identifier">xmonadPropLog'</span></a></span><span class="hs-special">,</span><span>
+</span><span id="line-52"></span><span>  </span><span class="annot"><a href="XMonad.Hooks.StatusBar.html#xmonadDefProp"><span class="hs-identifier">xmonadDefProp</span></a></span><span class="hs-special">,</span><span>
+</span><span id="line-53"></span><span>
+</span><span id="line-54"></span><span>  </span><span class="annot"><span class="hs-comment">-- * Managing status bar Processes</span></span><span>
+</span><span id="line-55"></span><span>  </span><span class="annot"><span class="hs-comment">-- $sbprocess</span></span><span>
+</span><span id="line-56"></span><span>  </span><span class="annot"><a href="XMonad.Hooks.StatusBar.html#spawnStatusBar"><span class="hs-identifier">spawnStatusBar</span></a></span><span class="hs-special">,</span><span>
+</span><span id="line-57"></span><span>  </span><span class="annot"><a href="XMonad.Hooks.StatusBar.html#killStatusBar"><span class="hs-identifier">killStatusBar</span></a></span><span class="hs-special">,</span><span>
+</span><span id="line-58"></span><span>  </span><span class="annot"><a href="XMonad.Hooks.StatusBar.html#killAllStatusBars"><span class="hs-identifier">killAllStatusBars</span></a></span><span class="hs-special">,</span><span>
+</span><span id="line-59"></span><span>  </span><span class="hs-special">)</span><span> </span><span class="hs-keyword">where</span><span>
+</span><span id="line-60"></span><span>
+</span><span id="line-61"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><span class="hs-identifier">Control.Exception</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier">SomeException</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier">try</span></span><span class="hs-special">)</span><span>
+</span><span id="line-62"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><span class="hs-identifier">Data.IORef</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier">newIORef</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier">readIORef</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier">writeIORef</span></span><span class="hs-special">)</span><span>
+</span><span id="line-63"></span><span class="hs-keyword">import</span><span> </span><span class="hs-keyword">qualified</span><span> </span><span class="annot"><span class="hs-identifier">Codec.Binary.UTF8.String</span></span><span> </span><span class="hs-keyword">as</span><span> </span><span class="annot"><span class="hs-identifier">UTF8</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier">encode</span></span><span class="hs-special">)</span><span>
+</span><span id="line-64"></span><span class="hs-keyword">import</span><span> </span><span class="hs-keyword">qualified</span><span> </span><span class="annot"><span class="hs-identifier">Data.Map</span></span><span> </span><span class="hs-keyword">as</span><span> </span><span class="annot"><span class="hs-identifier">M</span></span><span>
+</span><span id="line-65"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><span class="hs-identifier">System.IO</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier">hClose</span></span><span class="hs-special">)</span><span>
+</span><span id="line-66"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><span class="hs-identifier">System.Posix.Signals</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier">sigTERM</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier">signalProcessGroup</span></span><span class="hs-special">)</span><span>
+</span><span id="line-67"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><span class="hs-identifier">System.Posix.Types</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier">ProcessID</span></span><span class="hs-special">)</span><span>
+</span><span id="line-68"></span><span>
+</span><span id="line-69"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><span class="hs-identifier">Foreign.C</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier">CChar</span></span><span class="hs-special">)</span><span>
+</span><span id="line-70"></span><span>
+</span><span id="line-71"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><span class="hs-identifier">XMonad</span></span><span>
+</span><span id="line-72"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><a href="XMonad.Prelude.html"><span class="hs-identifier">XMonad.Prelude</span></a></span><span>
+</span><span id="line-73"></span><span>
+</span><span id="line-74"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><a href="XMonad.Util.Run.html"><span class="hs-identifier">XMonad.Util.Run</span></a></span><span>
+</span><span id="line-75"></span><span class="hs-keyword">import</span><span> </span><span class="hs-keyword">qualified</span><span> </span><span class="annot"><a href="XMonad.Util.ExtensibleState.html"><span class="hs-identifier">XMonad.Util.ExtensibleState</span></a></span><span> </span><span class="hs-keyword">as</span><span> </span><span class="annot"><span class="hs-identifier">XS</span></span><span>
+</span><span id="line-76"></span><span>
+</span><span id="line-77"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><a href="XMonad.Layout.LayoutModifier.html"><span class="hs-identifier">XMonad.Layout.LayoutModifier</span></a></span><span>
+</span><span id="line-78"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><a href="XMonad.Hooks.ManageDocks.html"><span class="hs-identifier">XMonad.Hooks.ManageDocks</span></a></span><span>
+</span><span id="line-79"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><a href="XMonad.Hooks.Rescreen.html"><span class="hs-identifier">XMonad.Hooks.Rescreen</span></a></span><span>
+</span><span id="line-80"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><a href="XMonad.Hooks.StatusBar.PP.html"><span class="hs-identifier">XMonad.Hooks.StatusBar.PP</span></a></span><span>
+</span><span id="line-81"></span><span class="hs-keyword">import</span><span> </span><span class="hs-keyword">qualified</span><span> </span><span class="annot"><span class="hs-identifier">XMonad.StackSet</span></span><span> </span><span class="hs-keyword">as</span><span> </span><span class="annot"><span class="hs-identifier">W</span></span><span>
+</span><span id="line-82"></span><span>
+</span><span id="line-83"></span><span class="hs-comment">-- $usage</span><span>
+</span><span id="line-84"></span><span class="hs-comment">-- You can use this module with the following in your @~\/.xmonad\/xmonad.hs@:</span><span>
+</span><span id="line-85"></span><span class="hs-comment">--</span><span>
+</span><span id="line-86"></span><span class="hs-comment">-- &gt; import XMonad</span><span>
+</span><span id="line-87"></span><span class="hs-comment">-- &gt; import XMonad.Hooks.StatusBar</span><span>
+</span><span id="line-88"></span><span class="hs-comment">-- &gt; import XMonad.Hooks.StatusBar.PP</span><span>
+</span><span id="line-89"></span><span class="hs-comment">--</span><span>
+</span><span id="line-90"></span><span class="hs-comment">-- The easiest way to use this module with xmobar, as well as any other</span><span>
+</span><span id="line-91"></span><span class="hs-comment">-- status bar that supports property logging, is to use 'statusBarProp'</span><span>
+</span><span id="line-92"></span><span class="hs-comment">-- with 'withEasySB'; these take care of the necessary plumbing:</span><span>
+</span><span id="line-93"></span><span class="hs-comment">--</span><span>
+</span><span id="line-94"></span><span class="hs-comment">-- &gt; mySB = statusBarProp &quot;xmobar&quot; (pure xmobarPP)</span><span>
+</span><span id="line-95"></span><span class="hs-comment">-- &gt; main = xmonad $ withEasySB mySB defToggleStrutsKey def</span><span>
+</span><span id="line-96"></span><span class="hs-comment">--</span><span>
+</span><span id="line-97"></span><span class="hs-comment">-- You can read more about X11 properties</span><span>
+</span><span id="line-98"></span><span class="hs-comment">-- [here](https://en.wikipedia.org/wiki/X_Window_System_core_protocol#Properties)</span><span>
+</span><span id="line-99"></span><span class="hs-comment">-- or</span><span>
+</span><span id="line-100"></span><span class="hs-comment">-- [here](https://tronche.com/gui/x/xlib/window-information/properties-and-atoms.html),</span><span>
+</span><span id="line-101"></span><span class="hs-comment">-- although you don't have to understand them in order to use the functions</span><span>
+</span><span id="line-102"></span><span class="hs-comment">-- mentioned above.</span><span>
+</span><span id="line-103"></span><span class="hs-comment">--</span><span>
+</span><span id="line-104"></span><span class="hs-comment">-- Most users will, however, want to customize the logging and integrate it</span><span>
+</span><span id="line-105"></span><span class="hs-comment">-- into their existing custom xmonad configuration. The 'withSB'</span><span>
+</span><span id="line-106"></span><span class="hs-comment">-- function is more appropriate in this case: it doesn't touch your</span><span>
+</span><span id="line-107"></span><span class="hs-comment">-- keybindings, layout modifiers, or event hooks; instead, you're expected</span><span>
+</span><span id="line-108"></span><span class="hs-comment">-- to configure &quot;XMonad.Hooks.ManageDocks&quot; yourself. Here's what that might</span><span>
+</span><span id="line-109"></span><span class="hs-comment">-- look like:</span><span>
+</span><span id="line-110"></span><span class="hs-comment">--</span><span>
+</span><span id="line-111"></span><span class="hs-comment">-- &gt; mySB = statusBarProp &quot;xmobar&quot; (pure myPP)</span><span>
+</span><span id="line-112"></span><span class="hs-comment">-- &gt; main = xmonad . withSB mySB . ewmh . docks $ def {...}</span><span>
+</span><span id="line-113"></span><span class="hs-comment">--</span><span>
+</span><span id="line-114"></span><span class="hs-comment">-- You then have to tell your status bar to read from the @_XMONAD_LOG@ property</span><span>
+</span><span id="line-115"></span><span class="hs-comment">-- of the root window.  In the case of xmobar, this is achieved by simply using</span><span>
+</span><span id="line-116"></span><span class="hs-comment">-- the @XMonadLog@ plugin instead of @StdinReader@ in your @.xmobarrc@:</span><span>
+</span><span id="line-117"></span><span class="hs-comment">--</span><span>
+</span><span id="line-118"></span><span class="hs-comment">-- &gt; Config { ...</span><span>
+</span><span id="line-119"></span><span class="hs-comment">-- &gt;        , commands = [ Run XMonadLog, ... ]</span><span>
+</span><span id="line-120"></span><span class="hs-comment">-- &gt;        , template = &quot;%XMonadLog% }{ ...&quot;</span><span>
+</span><span id="line-121"></span><span class="hs-comment">-- &gt;        }</span><span>
+</span><span id="line-122"></span><span class="hs-comment">--</span><span>
+</span><span id="line-123"></span><span class="hs-comment">-- If you don't have an @.xmobarrc@, create it; the @XMonadLog@ plugin is not</span><span>
+</span><span id="line-124"></span><span class="hs-comment">-- part of the default xmobar configuration and your status bar will not show</span><span>
+</span><span id="line-125"></span><span class="hs-comment">-- workspace information otherwise!</span><span>
+</span><span id="line-126"></span><span class="hs-comment">--</span><span>
+</span><span id="line-127"></span><span class="hs-comment">-- With 'statusBarProp', you need to use property logging. Make sure the</span><span>
+</span><span id="line-128"></span><span class="hs-comment">-- status bar you use supports reading a property string from the root window,</span><span>
+</span><span id="line-129"></span><span class="hs-comment">-- or use some kind of wrapper that reads the property and pipes it into the</span><span>
+</span><span id="line-130"></span><span class="hs-comment">-- bar (e.g. @xmonadpropread | dzen2@, see @scripts/xmonadpropread.hs@). The</span><span>
+</span><span id="line-131"></span><span class="hs-comment">-- default property is @_XMONAD_LOG@, which is conveniently saved in 'xmonadDefProp'.</span><span>
+</span><span id="line-132"></span><span class="hs-comment">-- You can use another property by using the function 'statusBarPropTo'.</span><span>
+</span><span id="line-133"></span><span class="hs-comment">--</span><span>
+</span><span id="line-134"></span><span class="hs-comment">-- If your status bar does not support property-based logging, you may also try</span><span>
+</span><span id="line-135"></span><span class="hs-comment">-- 'statusBarPipe'.</span><span>
+</span><span id="line-136"></span><span class="hs-comment">-- It can be used in the same way as 'statusBarProp' above (for xmobar, you now</span><span>
+</span><span id="line-137"></span><span class="hs-comment">-- have to use the @StdinReader@ plugin in your @.xmobarrc@).  Instead of</span><span>
+</span><span id="line-138"></span><span class="hs-comment">-- writing to a property, this function opens a pipe and makes the given status</span><span>
+</span><span id="line-139"></span><span class="hs-comment">-- bar read from that pipe.</span><span>
+</span><span id="line-140"></span><span class="hs-comment">-- Please be aware that this kind of setup is very bug-prone and hence is</span><span>
+</span><span id="line-141"></span><span class="hs-comment">-- discouraged: if anything goes wrong with the bar, xmonad will freeze!</span><span>
+</span><span id="line-142"></span><span class="hs-comment">--</span><span>
+</span><span id="line-143"></span><span class="hs-comment">-- Also note that 'statusBarPipe' returns 'IO StatusBarConfig', so</span><span>
+</span><span id="line-144"></span><span class="hs-comment">-- you need to evaluate it before passing it to 'withSB' or 'withEasySB':</span><span>
+</span><span id="line-145"></span><span class="hs-comment">--</span><span>
+</span><span id="line-146"></span><span class="hs-comment">-- &gt; main = do</span><span>
+</span><span id="line-147"></span><span class="hs-comment">-- &gt;   mySB &lt;- statusBarPipe &quot;xmobar&quot; (pure myPP)</span><span>
+</span><span id="line-148"></span><span class="hs-comment">-- &gt;   xmonad $ withSB mySB myConf</span><span>
+</span><span id="line-149"></span><span>
+</span><span id="line-150"></span><span>
+</span><span id="line-151"></span><span class="hs-comment">-- $plumbing</span><span>
+</span><span id="line-152"></span><span class="hs-comment">-- If you do not want to use any of the &quot;batteries included&quot; functions above,</span><span>
+</span><span id="line-153"></span><span class="hs-comment">-- you can also add all of the necessary plumbing yourself (the source of</span><span>
+</span><span id="line-154"></span><span class="hs-comment">-- 'withSB' might come in handy here).</span><span>
+</span><span id="line-155"></span><span class="hs-comment">--</span><span>
+</span><span id="line-156"></span><span class="hs-comment">-- 'xmonadPropLog' allows you to write a string to the @_XMONAD_LOG@ property of</span><span>
+</span><span id="line-157"></span><span class="hs-comment">-- the root window.  Together with 'dynamicLogString', you can now simply set</span><span>
+</span><span id="line-158"></span><span class="hs-comment">-- your 'logHook' to the appropriate function; for instance:</span><span>
+</span><span id="line-159"></span><span class="hs-comment">--</span><span>
+</span><span id="line-160"></span><span class="hs-comment">-- &gt; main = xmonad $ def {</span><span>
+</span><span id="line-161"></span><span class="hs-comment">-- &gt;    ...</span><span>
+</span><span id="line-162"></span><span class="hs-comment">-- &gt;    , logHook = xmonadPropLog =&lt;&lt; dynamicLogString myPP</span><span>
+</span><span id="line-163"></span><span class="hs-comment">-- &gt;    ...</span><span>
+</span><span id="line-164"></span><span class="hs-comment">-- &gt;    }</span><span>
+</span><span id="line-165"></span><span class="hs-comment">--</span><span>
+</span><span id="line-166"></span><span class="hs-comment">-- If you want to define your own property name, use 'xmonadPropLog'' instead of</span><span>
+</span><span id="line-167"></span><span class="hs-comment">-- 'xmonadPropLog'.</span><span>
+</span><span id="line-168"></span><span class="hs-comment">--</span><span>
+</span><span id="line-169"></span><span class="hs-comment">-- If you just want to use the default pretty-printing format, you can replace</span><span>
+</span><span id="line-170"></span><span class="hs-comment">-- @myPP@ with 'def' in the above 'logHook'.</span><span>
+</span><span id="line-171"></span><span class="hs-comment">--</span><span>
+</span><span id="line-172"></span><span class="hs-comment">-- Note that setting 'logHook' only sets up xmonad's output; you are</span><span>
+</span><span id="line-173"></span><span class="hs-comment">-- responsible for starting your own status bar program and making sure it reads</span><span>
+</span><span id="line-174"></span><span class="hs-comment">-- from the property that xmonad writes to.  To start your bar, simply put it</span><span>
+</span><span id="line-175"></span><span class="hs-comment">-- into your 'startupHook'.  You will also have also have to add 'docks' and</span><span>
+</span><span id="line-176"></span><span class="hs-comment">-- 'avoidStruts' to your config.  Putting all of this together would look</span><span>
+</span><span id="line-177"></span><span class="hs-comment">-- something like</span><span>
+</span><span id="line-178"></span><span class="hs-comment">--</span><span>
+</span><span id="line-179"></span><span class="hs-comment">-- &gt; import XMonad.Util.SpawnOnce (spawnOnce)</span><span>
+</span><span id="line-180"></span><span class="hs-comment">-- &gt; import XMonad.Hooks.ManageDocks (avoidStruts, docks)</span><span>
+</span><span id="line-181"></span><span class="hs-comment">-- &gt;</span><span>
+</span><span id="line-182"></span><span class="hs-comment">-- &gt; main = do</span><span>
+</span><span id="line-183"></span><span class="hs-comment">-- &gt;     xmonad $ docks $ def {</span><span>
+</span><span id="line-184"></span><span class="hs-comment">-- &gt;       ...</span><span>
+</span><span id="line-185"></span><span class="hs-comment">-- &gt;       , logHook     = xmonadPropLog =&lt;&lt; dynamicLogString myPP</span><span>
+</span><span id="line-186"></span><span class="hs-comment">-- &gt;       , startupHook = spawnOnce &quot;xmobar&quot;</span><span>
+</span><span id="line-187"></span><span class="hs-comment">-- &gt;       , layoutHook  = avoidStruts myLayout</span><span>
+</span><span id="line-188"></span><span class="hs-comment">-- &gt;       ...</span><span>
+</span><span id="line-189"></span><span class="hs-comment">-- &gt;       }</span><span>
+</span><span id="line-190"></span><span class="hs-comment">-- &gt; myPP = def { ... }</span><span>
+</span><span id="line-191"></span><span class="hs-comment">-- &gt; myLayout = ...</span><span>
+</span><span id="line-192"></span><span class="hs-comment">--</span><span>
+</span><span id="line-193"></span><span class="hs-comment">-- If you want a keybinding to toggle your bar, you will also need to add this</span><span>
+</span><span id="line-194"></span><span class="hs-comment">-- to the rest of your keybindings.</span><span>
+</span><span id="line-195"></span><span class="hs-comment">--</span><span>
+</span><span id="line-196"></span><span class="hs-comment">-- The above has the problem that xmobar will not get restarted whenever you</span><span>
+</span><span id="line-197"></span><span class="hs-comment">-- restart xmonad ('XMonad.Util.SpawnOnce.spawnOnce' will simply prevent your</span><span>
+</span><span id="line-198"></span><span class="hs-comment">-- chosen status bar from spawning again). Using 'statusBarProp', however, takes</span><span>
+</span><span id="line-199"></span><span class="hs-comment">-- care of the necessary plumbing /and/ keeps track of the started status bars, so</span><span>
+</span><span id="line-200"></span><span class="hs-comment">-- they can be correctly restarted with xmonad. This is achieved using</span><span>
+</span><span id="line-201"></span><span class="hs-comment">-- 'spawnStatusBar' to start them and 'killStatusBar' to kill</span><span>
+</span><span id="line-202"></span><span class="hs-comment">-- previously started bars.</span><span>
+</span><span id="line-203"></span><span class="hs-comment">--</span><span>
+</span><span id="line-204"></span><span class="hs-comment">-- Even if you don't use a status bar, you can still use 'dynamicLogString' to</span><span>
+</span><span id="line-205"></span><span class="hs-comment">-- show on-screen notifications in response to some events. For example, to show</span><span>
+</span><span id="line-206"></span><span class="hs-comment">-- the current layout when it changes, you could make a keybinding to cycle the</span><span>
+</span><span id="line-207"></span><span class="hs-comment">-- layout and display the current status:</span><span>
+</span><span id="line-208"></span><span class="hs-comment">--</span><span>
+</span><span id="line-209"></span><span class="hs-comment">-- &gt; ((mod1Mask, xK_a), sendMessage NextLayout &gt;&gt; (dynamicLogString myPP &gt;&gt;= xmessage))</span><span>
+</span><span id="line-210"></span><span class="hs-comment">--</span><span>
+</span><span id="line-211"></span><span class="hs-comment">-- If you use a status bar that does not support reading from a property</span><span>
+</span><span id="line-212"></span><span class="hs-comment">-- (like dzen), and you don't want to use the 'statusBar' function, you can,</span><span>
+</span><span id="line-213"></span><span class="hs-comment">-- again, also manually add all of the required components, like this:</span><span>
+</span><span id="line-214"></span><span class="hs-comment">--</span><span>
+</span><span id="line-215"></span><span class="hs-comment">-- &gt; import XMonad.Util.Run (hPutStrLn, spawnPipe)</span><span>
+</span><span id="line-216"></span><span class="hs-comment">-- &gt;</span><span>
+</span><span id="line-217"></span><span class="hs-comment">-- &gt; main = do</span><span>
+</span><span id="line-218"></span><span class="hs-comment">-- &gt;     h &lt;- spawnPipe &quot;dzen2 -options -foo -bar&quot;</span><span>
+</span><span id="line-219"></span><span class="hs-comment">-- &gt;     xmonad $ def {</span><span>
+</span><span id="line-220"></span><span class="hs-comment">-- &gt;       ...</span><span>
+</span><span id="line-221"></span><span class="hs-comment">-- &gt;       , logHook = dynamicLogWithPP $ def { ppOutput = hPutStrLn h }</span><span>
+</span><span id="line-222"></span><span class="hs-comment">-- &gt;       ...</span><span>
+</span><span id="line-223"></span><span class="hs-comment">-- &gt;       }</span><span>
+</span><span id="line-224"></span><span class="hs-comment">--</span><span>
+</span><span id="line-225"></span><span class="hs-comment">-- In the above, note that if you use @spawnPipe@ you need to redefine the</span><span>
+</span><span id="line-226"></span><span class="hs-comment">-- 'ppOutput' field of your pretty-printer; by default the status will be</span><span>
+</span><span id="line-227"></span><span class="hs-comment">-- printed to stdout rather than the pipe you create. This was meant to be</span><span>
+</span><span id="line-228"></span><span class="hs-comment">-- used together with running xmonad piped to a status bar like so: @xmonad |</span><span>
+</span><span id="line-229"></span><span class="hs-comment">-- dzen2@, and is what the old 'XMonad.Hooks.DynamicLog.dynamicLog' assumes,</span><span>
+</span><span id="line-230"></span><span class="hs-comment">-- but it isn't recommended in modern setups. Applications launched from</span><span>
+</span><span id="line-231"></span><span class="hs-comment">-- xmonad inherit its stdout and stderr, and will print their own garbage to</span><span>
+</span><span id="line-232"></span><span class="hs-comment">-- the status bar.</span><span>
+</span><span id="line-233"></span><span>
+</span><span id="line-234"></span><span>
+</span><span id="line-235"></span><span class="hs-comment">-- | This datataype abstracts a status bar to provide a common interface</span><span>
+</span><span id="line-236"></span><span class="hs-comment">-- functions like 'statusBarPipe' or 'statusBarProp'. Once defined, a status</span><span>
+</span><span id="line-237"></span><span class="hs-comment">-- bar can be incorporated in 'XConfig' by using 'withSB' or</span><span>
+</span><span id="line-238"></span><span class="hs-comment">-- 'withEasySB', which take care of the necessary plumbing.</span><span>
+</span><span id="line-239"></span><span class="hs-keyword">data</span><span> </span><span id="StatusBarConfig"><span class="annot"><a href="XMonad.Hooks.StatusBar.html#StatusBarConfig"><span class="hs-identifier hs-var">StatusBarConfig</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span id="StatusBarConfig"><span class="annot"><a href="XMonad.Hooks.StatusBar.html#StatusBarConfig"><span class="hs-identifier hs-var">StatusBarConfig</span></a></span></span><span>  </span><span class="hs-special">{</span><span> </span><span id="sbLogHook"><span class="annot"><span class="annottext">StatusBarConfig -&gt; X ()
+</span><a href="XMonad.Hooks.StatusBar.html#sbLogHook"><span class="hs-identifier hs-var hs-var">sbLogHook</span></a></span></span><span>     </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">X</span></span><span> </span><span class="hs-special">(</span><span class="hs-special">)</span><span>
+</span><span id="line-240"></span><span>                                        </span><span class="hs-comment">-- ^ What and how to log to the status bar.</span><span>
+</span><span id="line-241"></span><span>                                        </span><span class="hs-special">,</span><span> </span><span id="sbStartupHook"><span class="annot"><span class="annottext">StatusBarConfig -&gt; X ()
+</span><a href="XMonad.Hooks.StatusBar.html#sbStartupHook"><span class="hs-identifier hs-var hs-var">sbStartupHook</span></a></span></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">X</span></span><span> </span><span class="hs-special">(</span><span class="hs-special">)</span><span>
+</span><span id="line-242"></span><span>                                        </span><span class="hs-comment">-- ^ How to start the status bar.</span><span>
+</span><span id="line-243"></span><span>                                        </span><span class="hs-special">,</span><span> </span><span id="sbCleanupHook"><span class="annot"><span class="annottext">StatusBarConfig -&gt; X ()
+</span><a href="XMonad.Hooks.StatusBar.html#sbCleanupHook"><span class="hs-identifier hs-var hs-var">sbCleanupHook</span></a></span></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">X</span></span><span> </span><span class="hs-special">(</span><span class="hs-special">)</span><span>
+</span><span id="line-244"></span><span>                                        </span><span class="hs-comment">-- ^ How to kill the status bar.</span><span>
+</span><span id="line-245"></span><span>                                        </span><span class="hs-special">}</span><span>
+</span><span id="line-246"></span><span>
+</span><span id="line-247"></span><span class="hs-keyword">instance</span><span> </span><span id="local-6989586621679399121"><span id="local-6989586621679399123"><span class="annot"><span class="hs-identifier hs-type">Semigroup</span></span><span> </span><span class="annot"><a href="XMonad.Hooks.StatusBar.html#StatusBarConfig"><span class="hs-identifier hs-type">StatusBarConfig</span></a></span></span></span><span> </span><span class="hs-keyword">where</span><span>
+</span><span id="line-248"></span><span>    </span><span class="annot"><a href="XMonad.Hooks.StatusBar.html#StatusBarConfig"><span class="hs-identifier hs-type">StatusBarConfig</span></a></span><span> </span><span id="local-6989586621679399119"><span class="annot"><span class="annottext">X ()
+</span><a href="#local-6989586621679399119"><span class="hs-identifier hs-var">l</span></a></span></span><span> </span><span id="local-6989586621679399118"><span class="annot"><span class="annottext">X ()
+</span><a href="#local-6989586621679399118"><span class="hs-identifier hs-var">s</span></a></span></span><span> </span><span id="local-6989586621679399117"><span class="annot"><span class="annottext">X ()
+</span><a href="#local-6989586621679399117"><span class="hs-identifier hs-var">c</span></a></span></span><span> </span><span id="local-6989586621679399116"><span class="annot"><span class="annottext">&lt;&gt; :: StatusBarConfig -&gt; StatusBarConfig -&gt; StatusBarConfig
+</span><span class="hs-operator hs-var hs-var hs-var hs-var">&lt;&gt;</span></span></span><span> </span><span class="annot"><a href="XMonad.Hooks.StatusBar.html#StatusBarConfig"><span class="hs-identifier hs-type">StatusBarConfig</span></a></span><span> </span><span id="local-6989586621679399115"><span class="annot"><span class="annottext">X ()
+</span><a href="#local-6989586621679399115"><span class="hs-identifier hs-var">l'</span></a></span></span><span> </span><span id="local-6989586621679399114"><span class="annot"><span class="annottext">X ()
+</span><a href="#local-6989586621679399114"><span class="hs-identifier hs-var">s'</span></a></span></span><span> </span><span id="local-6989586621679399113"><span class="annot"><span class="annottext">X ()
+</span><a href="#local-6989586621679399113"><span class="hs-identifier hs-var">c'</span></a></span></span><span> </span><span class="hs-glyph">=</span><span>
+</span><span id="line-249"></span><span>      </span><span class="annot"><span class="annottext">X () -&gt; X () -&gt; X () -&gt; StatusBarConfig
+</span><a href="XMonad.Hooks.StatusBar.html#StatusBarConfig"><span class="hs-identifier hs-var">StatusBarConfig</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">X ()
+</span><a href="#local-6989586621679399119"><span class="hs-identifier hs-var">l</span></a></span><span> </span><span class="annot"><span class="annottext">X () -&gt; X () -&gt; X ()
+forall a. Semigroup a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-operator hs-var">&lt;&gt;</span></span><span> </span><span class="annot"><span class="annottext">X ()
+</span><a href="#local-6989586621679399115"><span class="hs-identifier hs-var">l'</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">X ()
+</span><a href="#local-6989586621679399118"><span class="hs-identifier hs-var">s</span></a></span><span> </span><span class="annot"><span class="annottext">X () -&gt; X () -&gt; X ()
+forall a. Semigroup a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-operator hs-var">&lt;&gt;</span></span><span> </span><span class="annot"><span class="annottext">X ()
+</span><a href="#local-6989586621679399114"><span class="hs-identifier hs-var">s'</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">X ()
+</span><a href="#local-6989586621679399117"><span class="hs-identifier hs-var">c</span></a></span><span> </span><span class="annot"><span class="annottext">X () -&gt; X () -&gt; X ()
+forall a. Semigroup a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-operator hs-var">&lt;&gt;</span></span><span> </span><span class="annot"><span class="annottext">X ()
+</span><a href="#local-6989586621679399113"><span class="hs-identifier hs-var">c'</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-250"></span><span>
+</span><span id="line-251"></span><span class="hs-keyword">instance</span><span> </span><span id="local-6989586621679399107"><span id="local-6989586621679399109"><span class="annot"><span class="hs-identifier hs-type">Monoid</span></span><span> </span><span class="annot"><a href="XMonad.Hooks.StatusBar.html#StatusBarConfig"><span class="hs-identifier hs-type">StatusBarConfig</span></a></span></span></span><span> </span><span class="hs-keyword">where</span><span>
+</span><span id="line-252"></span><span>    </span><span id="local-6989586621679399105"><span class="annot"><span class="annottext">mempty :: StatusBarConfig
+</span><span class="hs-identifier hs-var hs-var hs-var hs-var">mempty</span></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">X () -&gt; X () -&gt; X () -&gt; StatusBarConfig
+</span><a href="XMonad.Hooks.StatusBar.html#StatusBarConfig"><span class="hs-identifier hs-var">StatusBarConfig</span></a></span><span> </span><span class="annot"><span class="annottext">X ()
+forall a. Monoid a =&gt; a
+</span><span class="hs-identifier hs-var">mempty</span></span><span> </span><span class="annot"><span class="annottext">X ()
+forall a. Monoid a =&gt; a
+</span><span class="hs-identifier hs-var">mempty</span></span><span> </span><span class="annot"><span class="annottext">X ()
+forall a. Monoid a =&gt; a
+</span><span class="hs-identifier hs-var">mempty</span></span><span>
+</span><span id="line-253"></span><span>
+</span><span id="line-254"></span><span class="hs-comment">-- | Per default, all the hooks do nothing.</span><span>
+</span><span id="line-255"></span><span class="hs-keyword">instance</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Default</span></span><span> </span><span class="annot"><a href="XMonad.Hooks.StatusBar.html#StatusBarConfig"><span class="hs-identifier hs-type">StatusBarConfig</span></a></span><span> </span><span class="hs-keyword">where</span><span>
+</span><span id="line-256"></span><span>    </span><span id="local-6989586621679399102"><span class="annot"><span class="annottext">def :: StatusBarConfig
+</span><span class="hs-identifier hs-var hs-var hs-var hs-var">def</span></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">StatusBarConfig
+forall a. Monoid a =&gt; a
+</span><span class="hs-identifier hs-var">mempty</span></span><span>
+</span><span id="line-257"></span><span>
+</span><span id="line-258"></span><span class="hs-comment">-- | Incorporates a 'StatusBarConfig' into an 'XConfig' by taking care of the</span><span>
+</span><span id="line-259"></span><span class="hs-comment">-- necessary plumbing (starting, restarting and logging to it).</span><span>
+</span><span id="line-260"></span><span class="hs-comment">--</span><span>
+</span><span id="line-261"></span><span class="hs-comment">-- Using this function multiple times to combine status bars may result in</span><span>
+</span><span id="line-262"></span><span class="hs-comment">-- only one status bar working properly. See the section on using multiple</span><span>
+</span><span id="line-263"></span><span class="hs-comment">-- status bars for more details.</span><span>
+</span><span id="line-264"></span><span id="local-6989586621679399287"><span class="annot"><a href="XMonad.Hooks.StatusBar.html#withSB"><span class="hs-identifier hs-type">withSB</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">LayoutClass</span></span><span> </span><span class="annot"><a href="#local-6989586621679399287"><span class="hs-identifier hs-type">l</span></a></span><span> </span><span class="annot"><span class="hs-identifier hs-type">Window</span></span><span>
+</span><span id="line-265"></span><span>       </span><span class="hs-glyph">=&gt;</span><span> </span><span class="annot"><a href="XMonad.Hooks.StatusBar.html#StatusBarConfig"><span class="hs-identifier hs-type">StatusBarConfig</span></a></span><span>    </span><span class="hs-comment">-- ^ The status bar config</span><span>
+</span><span id="line-266"></span><span>       </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">XConfig</span></span><span> </span><span class="annot"><a href="#local-6989586621679399287"><span class="hs-identifier hs-type">l</span></a></span><span>          </span><span class="hs-comment">-- ^ The base config</span><span>
+</span><span id="line-267"></span><span>       </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">XConfig</span></span><span> </span><span class="annot"><a href="#local-6989586621679399287"><span class="hs-identifier hs-type">l</span></a></span></span><span>
+</span><span id="line-268"></span><span id="withSB"><span class="annot"><span class="annottext">withSB :: StatusBarConfig -&gt; XConfig l -&gt; XConfig l
+</span><a href="XMonad.Hooks.StatusBar.html#withSB"><span class="hs-identifier hs-var hs-var">withSB</span></a></span></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="XMonad.Hooks.StatusBar.html#StatusBarConfig"><span class="hs-identifier hs-type">StatusBarConfig</span></a></span><span> </span><span id="local-6989586621679399099"><span class="annot"><span class="annottext">X ()
+</span><a href="#local-6989586621679399099"><span class="hs-identifier hs-var">lh</span></a></span></span><span> </span><span id="local-6989586621679399098"><span class="annot"><span class="annottext">X ()
+</span><a href="#local-6989586621679399098"><span class="hs-identifier hs-var">sh</span></a></span></span><span> </span><span id="local-6989586621679399097"><span class="annot"><span class="annottext">X ()
+</span><a href="#local-6989586621679399097"><span class="hs-identifier hs-var">ch</span></a></span></span><span class="hs-special">)</span><span> </span><span id="local-6989586621679399096"><span class="annot"><span class="annottext">XConfig l
+</span><a href="#local-6989586621679399096"><span class="hs-identifier hs-var">conf</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">XConfig l
+</span><a href="#local-6989586621679399096"><span class="hs-identifier hs-var">conf</span></a></span><span>
+</span><span id="line-269"></span><span>    </span><span class="hs-special">{</span><span> </span><span class="annot"><span class="annottext">logHook :: X ()
+</span><span class="hs-identifier hs-var">logHook</span></span><span>     </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">XConfig l -&gt; X ()
+forall (l :: * -&gt; *). XConfig l -&gt; X ()
+</span><span class="hs-identifier hs-var hs-var">logHook</span></span><span> </span><span class="annot"><span class="annottext">XConfig l
+</span><a href="#local-6989586621679399096"><span class="hs-identifier hs-var">conf</span></a></span><span> </span><span class="annot"><span class="annottext">X () -&gt; X () -&gt; X ()
+forall (f :: * -&gt; *) a b. Applicative f =&gt; f a -&gt; f b -&gt; f b
+</span><span class="hs-operator hs-var">*&gt;</span></span><span> </span><span class="annot"><span class="annottext">X ()
+</span><a href="#local-6989586621679399099"><span class="hs-identifier hs-var">lh</span></a></span><span>
+</span><span id="line-270"></span><span>    </span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">startupHook :: X ()
+</span><span class="hs-identifier hs-var">startupHook</span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">XConfig l -&gt; X ()
+forall (l :: * -&gt; *). XConfig l -&gt; X ()
+</span><span class="hs-identifier hs-var hs-var">startupHook</span></span><span> </span><span class="annot"><span class="annottext">XConfig l
+</span><a href="#local-6989586621679399096"><span class="hs-identifier hs-var">conf</span></a></span><span> </span><span class="annot"><span class="annottext">X () -&gt; X () -&gt; X ()
+forall (f :: * -&gt; *) a b. Applicative f =&gt; f a -&gt; f b -&gt; f b
+</span><span class="hs-operator hs-var">*&gt;</span></span><span> </span><span class="annot"><span class="annottext">X ()
+</span><a href="#local-6989586621679399097"><span class="hs-identifier hs-var">ch</span></a></span><span> </span><span class="annot"><span class="annottext">X () -&gt; X () -&gt; X ()
+forall (f :: * -&gt; *) a b. Applicative f =&gt; f a -&gt; f b -&gt; f b
+</span><span class="hs-operator hs-var">*&gt;</span></span><span> </span><span class="annot"><span class="annottext">X ()
+</span><a href="#local-6989586621679399098"><span class="hs-identifier hs-var">sh</span></a></span><span>
+</span><span id="line-271"></span><span>    </span><span class="hs-special">}</span><span>
+</span><span id="line-272"></span><span>
+</span><span id="line-273"></span><span class="hs-comment">-- | Like 'withSB', but takes an extra key to toggle struts. It also</span><span>
+</span><span id="line-274"></span><span class="hs-comment">-- applies the 'avoidStruts' layout modifier and the 'docks' combinator.</span><span>
+</span><span id="line-275"></span><span class="hs-comment">--</span><span>
+</span><span id="line-276"></span><span class="hs-comment">-- Using this function multiple times to combine status bars may result in</span><span>
+</span><span id="line-277"></span><span class="hs-comment">-- only one status bar working properly. See the section on using multiple</span><span>
+</span><span id="line-278"></span><span class="hs-comment">-- status bars for more details.</span><span>
+</span><span id="line-279"></span><span id="local-6989586621679399093"><span class="annot"><a href="XMonad.Hooks.StatusBar.html#withEasySB"><span class="hs-identifier hs-type">withEasySB</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">LayoutClass</span></span><span> </span><span class="annot"><a href="#local-6989586621679399093"><span class="hs-identifier hs-type">l</span></a></span><span> </span><span class="annot"><span class="hs-identifier hs-type">Window</span></span><span>
+</span><span id="line-280"></span><span>           </span><span class="hs-glyph">=&gt;</span><span> </span><span class="annot"><a href="XMonad.Hooks.StatusBar.html#StatusBarConfig"><span class="hs-identifier hs-type">StatusBarConfig</span></a></span><span> </span><span class="hs-comment">-- ^ The status bar config</span><span>
+</span><span id="line-281"></span><span>           </span><span class="hs-glyph">-&gt;</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">XConfig</span></span><span> </span><span class="annot"><span class="hs-identifier hs-type">Layout</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">KeyMask</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier hs-type">KeySym</span></span><span class="hs-special">)</span><span class="hs-special">)</span><span>
+</span><span id="line-282"></span><span>                              </span><span class="hs-comment">-- ^ The key binding</span><span>
+</span><span id="line-283"></span><span>           </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">XConfig</span></span><span> </span><span class="annot"><a href="#local-6989586621679399093"><span class="hs-identifier hs-type">l</span></a></span><span>       </span><span class="hs-comment">-- ^ The base config</span><span>
+</span><span id="line-284"></span><span>           </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">XConfig</span></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="XMonad.Layout.LayoutModifier.html#ModifiedLayout"><span class="hs-identifier hs-type">ModifiedLayout</span></a></span><span> </span><span class="annot"><a href="XMonad.Hooks.ManageDocks.html#AvoidStruts"><span class="hs-identifier hs-type">AvoidStruts</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679399093"><span class="hs-identifier hs-type">l</span></a></span><span class="hs-special">)</span></span><span>
+</span><span id="line-285"></span><span id="withEasySB"><span class="annot"><span class="annottext">withEasySB :: StatusBarConfig
+-&gt; (XConfig Layout -&gt; (KeyMask, KeySym))
+-&gt; XConfig l
+-&gt; XConfig (ModifiedLayout AvoidStruts l)
+</span><a href="XMonad.Hooks.StatusBar.html#withEasySB"><span class="hs-identifier hs-var hs-var">withEasySB</span></a></span></span><span> </span><span id="local-6989586621679399092"><span class="annot"><span class="annottext">StatusBarConfig
+</span><a href="#local-6989586621679399092"><span class="hs-identifier hs-var">sb</span></a></span></span><span> </span><span id="local-6989586621679399091"><span class="annot"><span class="annottext">XConfig Layout -&gt; (KeyMask, KeySym)
+</span><a href="#local-6989586621679399091"><span class="hs-identifier hs-var">k</span></a></span></span><span> </span><span id="local-6989586621679399090"><span class="annot"><span class="annottext">XConfig l
+</span><a href="#local-6989586621679399090"><span class="hs-identifier hs-var">conf</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">XConfig (ModifiedLayout AvoidStruts l)
+-&gt; XConfig (ModifiedLayout AvoidStruts l)
+forall (a :: * -&gt; *). XConfig a -&gt; XConfig a
+</span><a href="XMonad.Hooks.ManageDocks.html#docks"><span class="hs-identifier hs-var">docks</span></a></span><span> </span><span class="annot"><span class="annottext">(XConfig (ModifiedLayout AvoidStruts l)
+ -&gt; XConfig (ModifiedLayout AvoidStruts l))
+-&gt; (XConfig (ModifiedLayout AvoidStruts l)
+    -&gt; XConfig (ModifiedLayout AvoidStruts l))
+-&gt; XConfig (ModifiedLayout AvoidStruts l)
+-&gt; XConfig (ModifiedLayout AvoidStruts l)
+forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">StatusBarConfig
+-&gt; XConfig (ModifiedLayout AvoidStruts l)
+-&gt; XConfig (ModifiedLayout AvoidStruts l)
+forall (l :: * -&gt; *).
+LayoutClass l KeySym =&gt;
+StatusBarConfig -&gt; XConfig l -&gt; XConfig l
+</span><a href="XMonad.Hooks.StatusBar.html#withSB"><span class="hs-identifier hs-var">withSB</span></a></span><span> </span><span class="annot"><span class="annottext">StatusBarConfig
+</span><a href="#local-6989586621679399092"><span class="hs-identifier hs-var">sb</span></a></span><span> </span><span class="annot"><span class="annottext">(XConfig (ModifiedLayout AvoidStruts l)
+ -&gt; XConfig (ModifiedLayout AvoidStruts l))
+-&gt; XConfig (ModifiedLayout AvoidStruts l)
+-&gt; XConfig (ModifiedLayout AvoidStruts l)
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">XConfig l
+</span><a href="#local-6989586621679399090"><span class="hs-identifier hs-var">conf</span></a></span><span>
+</span><span id="line-286"></span><span>    </span><span class="hs-special">{</span><span> </span><span class="annot"><span class="annottext">layoutHook :: ModifiedLayout AvoidStruts l KeySym
+</span><span class="hs-identifier hs-var">layoutHook</span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">l KeySym -&gt; ModifiedLayout AvoidStruts l KeySym
+forall (l :: * -&gt; *) a.
+LayoutClass l a =&gt;
+l a -&gt; ModifiedLayout AvoidStruts l a
+</span><a href="XMonad.Hooks.ManageDocks.html#avoidStruts"><span class="hs-identifier hs-var">avoidStruts</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">XConfig l -&gt; l KeySym
+forall (l :: * -&gt; *). XConfig l -&gt; l KeySym
+</span><span class="hs-identifier hs-var hs-var">layoutHook</span></span><span> </span><span class="annot"><span class="annottext">XConfig l
+</span><a href="#local-6989586621679399090"><span class="hs-identifier hs-var">conf</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-287"></span><span>    </span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">keys :: XConfig Layout -&gt; Map (KeyMask, KeySym) (X ())
+</span><span class="hs-identifier hs-var">keys</span></span><span>       </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Map (KeyMask, KeySym) (X ())
+-&gt; Map (KeyMask, KeySym) (X ()) -&gt; Map (KeyMask, KeySym) (X ())
+forall a. Semigroup a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-operator hs-var">(&lt;&gt;)</span></span><span> </span><span class="annot"><span class="annottext">(Map (KeyMask, KeySym) (X ())
+ -&gt; Map (KeyMask, KeySym) (X ()) -&gt; Map (KeyMask, KeySym) (X ()))
+-&gt; (XConfig Layout -&gt; Map (KeyMask, KeySym) (X ()))
+-&gt; XConfig Layout
+-&gt; Map (KeyMask, KeySym) (X ())
+-&gt; Map (KeyMask, KeySym) (X ())
+forall (f :: * -&gt; *) a b. Functor f =&gt; (a -&gt; b) -&gt; f a -&gt; f b
+</span><span class="hs-operator hs-var">&lt;$&gt;</span></span><span> </span><span class="annot"><span class="annottext">XConfig Layout -&gt; Map (KeyMask, KeySym) (X ())
+</span><a href="#local-6989586621679399083"><span class="hs-identifier hs-var">keys'</span></a></span><span> </span><span class="annot"><span class="annottext">(XConfig Layout
+ -&gt; Map (KeyMask, KeySym) (X ()) -&gt; Map (KeyMask, KeySym) (X ()))
+-&gt; (XConfig Layout -&gt; Map (KeyMask, KeySym) (X ()))
+-&gt; XConfig Layout
+-&gt; Map (KeyMask, KeySym) (X ())
+forall (f :: * -&gt; *) a b. Applicative f =&gt; f (a -&gt; b) -&gt; f a -&gt; f b
+</span><span class="hs-operator hs-var">&lt;*&gt;</span></span><span> </span><span class="annot"><span class="annottext">XConfig l -&gt; XConfig Layout -&gt; Map (KeyMask, KeySym) (X ())
+forall (l :: * -&gt; *).
+XConfig l -&gt; XConfig Layout -&gt; Map (KeyMask, KeySym) (X ())
+</span><span class="hs-identifier hs-var hs-var">keys</span></span><span> </span><span class="annot"><span class="annottext">XConfig l
+</span><a href="#local-6989586621679399090"><span class="hs-identifier hs-var">conf</span></a></span><span>
+</span><span id="line-288"></span><span>    </span><span class="hs-special">}</span><span>
+</span><span id="line-289"></span><span>  </span><span class="hs-keyword">where</span><span>
+</span><span id="line-290"></span><span>    </span><span id="local-6989586621679399082"><span class="annot"><span class="annottext">k' :: XConfig Layout -&gt; (KeyMask, KeySym)
+</span><a href="#local-6989586621679399082"><span class="hs-identifier hs-var hs-var">k'</span></a></span></span><span> </span><span id="local-6989586621679399081"><span class="annot"><span class="annottext">XConfig Layout
+</span><a href="#local-6989586621679399081"><span class="hs-identifier hs-var">conf'</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-keyword">case</span><span> </span><span class="annot"><span class="annottext">XConfig Layout -&gt; (KeyMask, KeySym)
+</span><a href="#local-6989586621679399091"><span class="hs-identifier hs-var">k</span></a></span><span> </span><span class="annot"><span class="annottext">XConfig Layout
+</span><a href="#local-6989586621679399081"><span class="hs-identifier hs-var">conf'</span></a></span><span> </span><span class="hs-keyword">of</span><span>
+</span><span id="line-291"></span><span>        </span><span class="hs-special">(</span><span class="annot"><span class="annottext">KeyMask
+</span><span class="hs-number">0</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">KeySym
+</span><span class="hs-number">0</span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">-&gt;</span><span>
+</span><span id="line-292"></span><span>            </span><span class="hs-comment">-- This usually means the user passed 'def' for the keybinding</span><span>
+</span><span id="line-293"></span><span>            </span><span class="hs-comment">-- function, and is otherwise meaningless to harmful depending on</span><span>
+</span><span id="line-294"></span><span>            </span><span class="hs-comment">-- whether 383ffb7 has been applied to xmonad or not. So do what</span><span>
+</span><span id="line-295"></span><span>            </span><span class="hs-comment">-- they probably intend.</span><span>
+</span><span id="line-296"></span><span>            </span><span class="hs-comment">--</span><span>
+</span><span id="line-297"></span><span>            </span><span class="hs-comment">-- A user who wants no keybinding function should probably use</span><span>
+</span><span id="line-298"></span><span>            </span><span class="hs-comment">-- 'withSB' instead, especially since NoSymbol didn't do anything</span><span>
+</span><span id="line-299"></span><span>            </span><span class="hs-comment">-- sane before 383ffb7. ++bsa</span><span>
+</span><span id="line-300"></span><span>            </span><span class="annot"><span class="annottext">XConfig Layout -&gt; (KeyMask, KeySym)
+forall (t :: * -&gt; *). XConfig t -&gt; (KeyMask, KeySym)
+</span><a href="XMonad.Hooks.StatusBar.html#defToggleStrutsKey"><span class="hs-identifier hs-var">defToggleStrutsKey</span></a></span><span> </span><span class="annot"><span class="annottext">XConfig Layout
+</span><a href="#local-6989586621679399081"><span class="hs-identifier hs-var">conf'</span></a></span><span>
+</span><span id="line-301"></span><span>        </span><span id="local-6989586621679399080"><span class="annot"><span class="annottext">(KeyMask, KeySym)
+</span><a href="#local-6989586621679399080"><span class="hs-identifier hs-var">key</span></a></span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">(KeyMask, KeySym)
+</span><a href="#local-6989586621679399080"><span class="hs-identifier hs-var">key</span></a></span><span>
+</span><span id="line-302"></span><span>    </span><span id="local-6989586621679399083"><span class="annot"><span class="annottext">keys' :: XConfig Layout -&gt; Map (KeyMask, KeySym) (X ())
+</span><a href="#local-6989586621679399083"><span class="hs-identifier hs-var hs-var">keys'</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">(KeyMask, KeySym) -&gt; X () -&gt; Map (KeyMask, KeySym) (X ())
+forall k a. k -&gt; a -&gt; Map k a
+</span><span class="hs-operator hs-var">`M.singleton`</span></span><span> </span><span class="annot"><span class="annottext">ToggleStruts -&gt; X ()
+forall a. Message a =&gt; a -&gt; X ()
+</span><span class="hs-identifier hs-var">sendMessage</span></span><span> </span><span class="annot"><span class="annottext">ToggleStruts
+</span><a href="XMonad.Hooks.ManageDocks.html#ToggleStruts"><span class="hs-identifier hs-var">ToggleStruts</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">((KeyMask, KeySym) -&gt; Map (KeyMask, KeySym) (X ()))
+-&gt; (XConfig Layout -&gt; (KeyMask, KeySym))
+-&gt; XConfig Layout
+-&gt; Map (KeyMask, KeySym) (X ())
+forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">XConfig Layout -&gt; (KeyMask, KeySym)
+</span><a href="#local-6989586621679399082"><span class="hs-identifier hs-var">k'</span></a></span><span>
+</span><span id="line-303"></span><span>
+</span><span id="line-304"></span><span class="hs-comment">-- | Default @mod-b@ key binding for 'withEasySB'</span><span>
+</span><span id="line-305"></span><span id="local-6989586621679399272"><span class="annot"><a href="XMonad.Hooks.StatusBar.html#defToggleStrutsKey"><span class="hs-identifier hs-type">defToggleStrutsKey</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">XConfig</span></span><span> </span><span class="annot"><a href="#local-6989586621679399272"><span class="hs-identifier hs-type">t</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">KeyMask</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier hs-type">KeySym</span></span><span class="hs-special">)</span></span><span>
+</span><span id="line-306"></span><span id="defToggleStrutsKey"><span class="annot"><span class="annottext">defToggleStrutsKey :: XConfig t -&gt; (KeyMask, KeySym)
+</span><a href="XMonad.Hooks.StatusBar.html#defToggleStrutsKey"><span class="hs-identifier hs-var hs-var">defToggleStrutsKey</span></a></span></span><span> </span><span class="annot"><span class="hs-identifier hs-type">XConfig</span></span><span class="hs-special">{</span><span class="annot"><span class="annottext">modMask :: forall (l :: * -&gt; *). XConfig l -&gt; KeyMask
+</span><span class="hs-identifier hs-var">modMask</span></span><span> </span><span class="hs-glyph">=</span><span> </span><span id="local-6989586621679399074"><span class="annot"><span class="annottext">KeyMask
+</span><a href="#local-6989586621679399074"><span class="hs-identifier hs-var">modm</span></a></span></span><span class="hs-special">}</span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">KeyMask
+</span><a href="#local-6989586621679399074"><span class="hs-identifier hs-var">modm</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">KeySym
+</span><span class="hs-identifier hs-var">xK_b</span></span><span class="hs-special">)</span><span>
+</span><span id="line-307"></span><span>
+</span><span id="line-308"></span><span class="hs-comment">-- | Creates a 'StatusBarConfig' that uses property logging to @_XMONAD_LOG@, which</span><span>
+</span><span id="line-309"></span><span class="hs-comment">-- is set in 'xmonadDefProp'</span><span>
+</span><span id="line-310"></span><span class="annot"><a href="XMonad.Hooks.StatusBar.html#statusBarProp"><span class="hs-identifier hs-type">statusBarProp</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">String</span></span><span> </span><span class="hs-comment">-- ^ The command line to launch the status bar</span><span>
+</span><span id="line-311"></span><span>              </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">X</span></span><span> </span><span class="annot"><a href="XMonad.Hooks.StatusBar.PP.html#PP"><span class="hs-identifier hs-type">PP</span></a></span><span>   </span><span class="hs-comment">-- ^ The pretty printing options</span><span>
+</span><span id="line-312"></span><span>              </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="XMonad.Hooks.StatusBar.html#StatusBarConfig"><span class="hs-identifier hs-type">StatusBarConfig</span></a></span><span>
+</span><span id="line-313"></span><span id="statusBarProp"><span class="annot"><span class="annottext">statusBarProp :: String -&gt; X PP -&gt; StatusBarConfig
+</span><a href="XMonad.Hooks.StatusBar.html#statusBarProp"><span class="hs-identifier hs-var hs-var">statusBarProp</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">String -&gt; String -&gt; X PP -&gt; StatusBarConfig
+</span><a href="XMonad.Hooks.StatusBar.html#statusBarPropTo"><span class="hs-identifier hs-var">statusBarPropTo</span></a></span><span> </span><span class="annot"><span class="annottext">String
+</span><a href="XMonad.Hooks.StatusBar.html#xmonadDefProp"><span class="hs-identifier hs-var">xmonadDefProp</span></a></span><span>
+</span><span id="line-314"></span><span>
+</span><span id="line-315"></span><span class="hs-comment">-- | Like 'statusBarProp', but lets you define the property</span><span>
+</span><span id="line-316"></span><span class="annot"><a href="XMonad.Hooks.StatusBar.html#statusBarPropTo"><span class="hs-identifier hs-type">statusBarPropTo</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">String</span></span><span> </span><span class="hs-comment">-- ^ Property to write the string to</span><span>
+</span><span id="line-317"></span><span>                </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">String</span></span><span> </span><span class="hs-comment">-- ^ The command line to launch the status bar</span><span>
+</span><span id="line-318"></span><span>                </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">X</span></span><span> </span><span class="annot"><a href="XMonad.Hooks.StatusBar.PP.html#PP"><span class="hs-identifier hs-type">PP</span></a></span><span>   </span><span class="hs-comment">-- ^ The pretty printing options</span><span>
+</span><span id="line-319"></span><span>                </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="XMonad.Hooks.StatusBar.html#StatusBarConfig"><span class="hs-identifier hs-type">StatusBarConfig</span></a></span><span>
+</span><span id="line-320"></span><span id="statusBarPropTo"><span class="annot"><span class="annottext">statusBarPropTo :: String -&gt; String -&gt; X PP -&gt; StatusBarConfig
+</span><a href="XMonad.Hooks.StatusBar.html#statusBarPropTo"><span class="hs-identifier hs-var hs-var">statusBarPropTo</span></a></span></span><span> </span><span id="local-6989586621679399072"><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679399072"><span class="hs-identifier hs-var">prop</span></a></span></span><span> </span><span id="local-6989586621679399071"><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679399071"><span class="hs-identifier hs-var">cmd</span></a></span></span><span> </span><span id="local-6989586621679399070"><span class="annot"><span class="annottext">X PP
+</span><a href="#local-6989586621679399070"><span class="hs-identifier hs-var">pp</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">String -&gt; X () -&gt; StatusBarConfig
+</span><a href="XMonad.Hooks.StatusBar.html#statusBarGeneric"><span class="hs-identifier hs-var">statusBarGeneric</span></a></span><span> </span><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679399071"><span class="hs-identifier hs-var">cmd</span></a></span><span> </span><span class="annot"><span class="annottext">(X () -&gt; StatusBarConfig) -&gt; X () -&gt; StatusBarConfig
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span>
+</span><span id="line-321"></span><span>    </span><span class="annot"><span class="annottext">String -&gt; String -&gt; X ()
+</span><a href="XMonad.Hooks.StatusBar.html#xmonadPropLog%27"><span class="hs-identifier hs-var">xmonadPropLog'</span></a></span><span> </span><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679399072"><span class="hs-identifier hs-var">prop</span></a></span><span> </span><span class="annot"><span class="annottext">(String -&gt; X ()) -&gt; X String -&gt; X ()
+forall (m :: * -&gt; *) a b. Monad m =&gt; (a -&gt; m b) -&gt; m a -&gt; m b
+</span><span class="hs-operator hs-var">=&lt;&lt;</span></span><span> </span><span class="annot"><span class="annottext">PP -&gt; X String
+</span><a href="XMonad.Hooks.StatusBar.PP.html#dynamicLogString"><span class="hs-identifier hs-var">dynamicLogString</span></a></span><span> </span><span class="annot"><span class="annottext">(PP -&gt; X String) -&gt; X PP -&gt; X String
+forall (m :: * -&gt; *) a b. Monad m =&gt; (a -&gt; m b) -&gt; m a -&gt; m b
+</span><span class="hs-operator hs-var">=&lt;&lt;</span></span><span> </span><span class="annot"><span class="annottext">X PP
+</span><a href="#local-6989586621679399070"><span class="hs-identifier hs-var">pp</span></a></span><span>
+</span><span id="line-322"></span><span>
+</span><span id="line-323"></span><span class="hs-comment">-- | A generic 'StatusBarConfig' that launches a status bar but takes a</span><span>
+</span><span id="line-324"></span><span class="hs-comment">-- generic @X ()@ logging function instead of a 'PP'. This has several uses:</span><span>
+</span><span id="line-325"></span><span class="hs-comment">--</span><span>
+</span><span id="line-326"></span><span class="hs-comment">-- * With 'xmonadPropLog' or 'xmonadPropLog'' in the logging function, a</span><span>
+</span><span id="line-327"></span><span class="hs-comment">--   custom non-'PP'-based logger can be used for logging into an @xmobar@.</span><span>
+</span><span id="line-328"></span><span class="hs-comment">--</span><span>
+</span><span id="line-329"></span><span class="hs-comment">-- * With 'mempty' as the logging function, it's possible to manage a status</span><span>
+</span><span id="line-330"></span><span class="hs-comment">--   bar that reads information from EWMH properties like @taffybar@.</span><span>
+</span><span id="line-331"></span><span class="hs-comment">--</span><span>
+</span><span id="line-332"></span><span class="hs-comment">-- * With 'mempty' as the logging function, any other dock like @trayer@ or</span><span>
+</span><span id="line-333"></span><span class="hs-comment">--   @stalonetray@ can be managed by this module.</span><span>
+</span><span id="line-334"></span><span class="annot"><a href="XMonad.Hooks.StatusBar.html#statusBarGeneric"><span class="hs-identifier hs-type">statusBarGeneric</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">String</span></span><span> </span><span class="hs-comment">-- ^ The command line to launch the status bar</span><span>
+</span><span id="line-335"></span><span>                 </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">X</span></span><span> </span><span class="hs-special">(</span><span class="hs-special">)</span><span>   </span><span class="hs-comment">-- ^ What and how to log to the status bar ('sbLogHook')</span><span>
+</span><span id="line-336"></span><span>                 </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="XMonad.Hooks.StatusBar.html#StatusBarConfig"><span class="hs-identifier hs-type">StatusBarConfig</span></a></span><span>
+</span><span id="line-337"></span><span id="statusBarGeneric"><span class="annot"><span class="annottext">statusBarGeneric :: String -&gt; X () -&gt; StatusBarConfig
+</span><a href="XMonad.Hooks.StatusBar.html#statusBarGeneric"><span class="hs-identifier hs-var hs-var">statusBarGeneric</span></a></span></span><span> </span><span id="local-6989586621679399067"><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679399067"><span class="hs-identifier hs-var">cmd</span></a></span></span><span> </span><span id="local-6989586621679399066"><span class="annot"><span class="annottext">X ()
+</span><a href="#local-6989586621679399066"><span class="hs-identifier hs-var">lh</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">StatusBarConfig
+forall a. Default a =&gt; a
+</span><span class="hs-identifier hs-var">def</span></span><span>
+</span><span id="line-338"></span><span>    </span><span class="hs-special">{</span><span> </span><span class="annot"><span class="annottext">sbLogHook :: X ()
+</span><a href="XMonad.Hooks.StatusBar.html#sbLogHook"><span class="hs-identifier hs-var">sbLogHook</span></a></span><span>     </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">X ()
+</span><a href="#local-6989586621679399066"><span class="hs-identifier hs-var">lh</span></a></span><span>
+</span><span id="line-339"></span><span>    </span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">sbStartupHook :: X ()
+</span><a href="XMonad.Hooks.StatusBar.html#sbStartupHook"><span class="hs-identifier hs-var">sbStartupHook</span></a></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">String -&gt; X ()
+</span><a href="XMonad.Hooks.StatusBar.html#spawnStatusBar"><span class="hs-identifier hs-var">spawnStatusBar</span></a></span><span> </span><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679399067"><span class="hs-identifier hs-var">cmd</span></a></span><span>
+</span><span id="line-340"></span><span>    </span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">sbCleanupHook :: X ()
+</span><a href="XMonad.Hooks.StatusBar.html#sbCleanupHook"><span class="hs-identifier hs-var">sbCleanupHook</span></a></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">String -&gt; X ()
+</span><a href="XMonad.Hooks.StatusBar.html#killStatusBar"><span class="hs-identifier hs-var">killStatusBar</span></a></span><span> </span><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679399067"><span class="hs-identifier hs-var">cmd</span></a></span><span>
+</span><span id="line-341"></span><span>    </span><span class="hs-special">}</span><span>
+</span><span id="line-342"></span><span>
+</span><span id="line-343"></span><span class="hs-comment">-- | Like 'statusBarProp', but uses pipe-based logging instead.</span><span>
+</span><span id="line-344"></span><span class="annot"><a href="XMonad.Hooks.StatusBar.html#statusBarPipe"><span class="hs-identifier hs-type">statusBarPipe</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">String</span></span><span> </span><span class="hs-comment">-- ^ The command line to launch the status bar</span><span>
+</span><span id="line-345"></span><span>              </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">X</span></span><span> </span><span class="annot"><a href="XMonad.Hooks.StatusBar.PP.html#PP"><span class="hs-identifier hs-type">PP</span></a></span><span>   </span><span class="hs-comment">-- ^ The pretty printing options</span><span>
+</span><span id="line-346"></span><span>              </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">IO</span></span><span> </span><span class="annot"><a href="XMonad.Hooks.StatusBar.html#StatusBarConfig"><span class="hs-identifier hs-type">StatusBarConfig</span></a></span><span>
+</span><span id="line-347"></span><span id="statusBarPipe"><span class="annot"><span class="annottext">statusBarPipe :: String -&gt; X PP -&gt; IO StatusBarConfig
+</span><a href="XMonad.Hooks.StatusBar.html#statusBarPipe"><span class="hs-identifier hs-var hs-var">statusBarPipe</span></a></span></span><span> </span><span id="local-6989586621679399065"><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679399065"><span class="hs-identifier hs-var">cmd</span></a></span></span><span> </span><span id="local-6989586621679399064"><span class="annot"><span class="annottext">X PP
+</span><a href="#local-6989586621679399064"><span class="hs-identifier hs-var">xpp</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-348"></span><span>    </span><span id="local-6989586621679399063"><span class="annot"><span class="annottext">IORef (Maybe Handle)
+</span><a href="#local-6989586621679399063"><span class="hs-identifier hs-var">hRef</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">Maybe Handle -&gt; IO (IORef (Maybe Handle))
+forall a. a -&gt; IO (IORef a)
+</span><span class="hs-identifier hs-var">newIORef</span></span><span> </span><span class="annot"><span class="annottext">Maybe Handle
+forall a. Maybe a
+</span><span class="hs-identifier hs-var">Nothing</span></span><span>
+</span><span id="line-349"></span><span>    </span><span class="annot"><span class="annottext">StatusBarConfig -&gt; IO StatusBarConfig
+forall (m :: * -&gt; *) a. Monad m =&gt; a -&gt; m a
+</span><span class="hs-identifier hs-var">return</span></span><span> </span><span class="annot"><span class="annottext">(StatusBarConfig -&gt; IO StatusBarConfig)
+-&gt; StatusBarConfig -&gt; IO StatusBarConfig
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">StatusBarConfig
+forall a. Default a =&gt; a
+</span><span class="hs-identifier hs-var">def</span></span><span>
+</span><span id="line-350"></span><span>        </span><span class="hs-special">{</span><span> </span><span class="annot"><span class="annottext">sbStartupHook :: X ()
+</span><a href="XMonad.Hooks.StatusBar.html#sbStartupHook"><span class="hs-identifier hs-var">sbStartupHook</span></a></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">IO () -&gt; X ()
+forall (m :: * -&gt; *) a. MonadIO m =&gt; IO a -&gt; m a
+</span><span class="hs-identifier hs-var">io</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">IORef (Maybe Handle) -&gt; Maybe Handle -&gt; IO ()
+forall a. IORef a -&gt; a -&gt; IO ()
+</span><span class="hs-identifier hs-var">writeIORef</span></span><span> </span><span class="annot"><span class="annottext">IORef (Maybe Handle)
+</span><a href="#local-6989586621679399063"><span class="hs-identifier hs-var">hRef</span></a></span><span> </span><span class="annot"><span class="annottext">(Maybe Handle -&gt; IO ())
+-&gt; (Handle -&gt; Maybe Handle) -&gt; Handle -&gt; IO ()
+forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">Handle -&gt; Maybe Handle
+forall a. a -&gt; Maybe a
+</span><span class="hs-identifier hs-var">Just</span></span><span> </span><span class="annot"><span class="annottext">(Handle -&gt; IO ()) -&gt; IO Handle -&gt; IO ()
+forall (m :: * -&gt; *) a b. Monad m =&gt; (a -&gt; m b) -&gt; m a -&gt; m b
+</span><span class="hs-operator hs-var">=&lt;&lt;</span></span><span> </span><span class="annot"><span class="annottext">String -&gt; IO Handle
+forall (m :: * -&gt; *). MonadIO m =&gt; String -&gt; m Handle
+</span><a href="XMonad.Util.Run.html#spawnPipe"><span class="hs-identifier hs-var">spawnPipe</span></a></span><span> </span><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679399065"><span class="hs-identifier hs-var">cmd</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-351"></span><span>        </span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">sbLogHook :: X ()
+</span><a href="XMonad.Hooks.StatusBar.html#sbLogHook"><span class="hs-identifier hs-var">sbLogHook</span></a></span><span>     </span><span class="hs-glyph">=</span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-352"></span><span>              </span><span id="local-6989586621679399060"><span class="annot"><span class="annottext">Maybe Handle
+</span><a href="#local-6989586621679399060"><span class="hs-identifier hs-var">h'</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">IO (Maybe Handle) -&gt; X (Maybe Handle)
+forall (m :: * -&gt; *) a. MonadIO m =&gt; IO a -&gt; m a
+</span><span class="hs-identifier hs-var">io</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">IORef (Maybe Handle) -&gt; IO (Maybe Handle)
+forall a. IORef a -&gt; IO a
+</span><span class="hs-identifier hs-var">readIORef</span></span><span> </span><span class="annot"><span class="annottext">IORef (Maybe Handle)
+</span><a href="#local-6989586621679399063"><span class="hs-identifier hs-var">hRef</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-353"></span><span>              </span><span class="annot"><span class="annottext">Maybe Handle -&gt; (Handle -&gt; X ()) -&gt; X ()
+forall (m :: * -&gt; *) a. Monad m =&gt; Maybe a -&gt; (a -&gt; m ()) -&gt; m ()
+</span><span class="hs-identifier hs-var">whenJust</span></span><span> </span><span class="annot"><span class="annottext">Maybe Handle
+</span><a href="#local-6989586621679399060"><span class="hs-identifier hs-var">h'</span></a></span><span> </span><span class="annot"><span class="annottext">((Handle -&gt; X ()) -&gt; X ()) -&gt; (Handle -&gt; X ()) -&gt; X ()
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="hs-glyph">\</span><span id="local-6989586621679399058"><span class="annot"><span class="annottext">Handle
+</span><a href="#local-6989586621679399058"><span class="hs-identifier hs-var">h</span></a></span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">IO () -&gt; X ()
+forall (m :: * -&gt; *) a. MonadIO m =&gt; IO a -&gt; m a
+</span><span class="hs-identifier hs-var">io</span></span><span> </span><span class="annot"><span class="annottext">(IO () -&gt; X ()) -&gt; (String -&gt; IO ()) -&gt; String -&gt; X ()
+forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">Handle -&gt; String -&gt; IO ()
+</span><span class="hs-identifier hs-var">hPutStrLn</span></span><span> </span><span class="annot"><span class="annottext">Handle
+</span><a href="#local-6989586621679399058"><span class="hs-identifier hs-var">h</span></a></span><span> </span><span class="annot"><span class="annottext">(String -&gt; X ()) -&gt; X String -&gt; X ()
+forall (m :: * -&gt; *) a b. Monad m =&gt; (a -&gt; m b) -&gt; m a -&gt; m b
+</span><span class="hs-operator hs-var">=&lt;&lt;</span></span><span> </span><span class="annot"><span class="annottext">PP -&gt; X String
+</span><a href="XMonad.Hooks.StatusBar.PP.html#dynamicLogString"><span class="hs-identifier hs-var">dynamicLogString</span></a></span><span> </span><span class="annot"><span class="annottext">(PP -&gt; X String) -&gt; X PP -&gt; X String
+forall (m :: * -&gt; *) a b. Monad m =&gt; (a -&gt; m b) -&gt; m a -&gt; m b
+</span><span class="hs-operator hs-var">=&lt;&lt;</span></span><span> </span><span class="annot"><span class="annottext">X PP
+</span><a href="#local-6989586621679399064"><span class="hs-identifier hs-var">xpp</span></a></span><span>
+</span><span id="line-354"></span><span>        </span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">sbCleanupHook :: X ()
+</span><a href="XMonad.Hooks.StatusBar.html#sbCleanupHook"><span class="hs-identifier hs-var">sbCleanupHook</span></a></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">IO () -&gt; X ()
+forall (m :: * -&gt; *) a. MonadIO m =&gt; IO a -&gt; m a
+</span><span class="hs-identifier hs-var">io</span></span><span>
+</span><span id="line-355"></span><span>                          </span><span class="annot"><span class="annottext">(IO () -&gt; X ()) -&gt; IO () -&gt; X ()
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span>   </span><span class="annot"><span class="annottext">IORef (Maybe Handle) -&gt; IO (Maybe Handle)
+forall a. IORef a -&gt; IO a
+</span><span class="hs-identifier hs-var">readIORef</span></span><span> </span><span class="annot"><span class="annottext">IORef (Maybe Handle)
+</span><a href="#local-6989586621679399063"><span class="hs-identifier hs-var">hRef</span></a></span><span>
+</span><span id="line-356"></span><span>                          </span><span class="annot"><span class="annottext">IO (Maybe Handle) -&gt; (Maybe Handle -&gt; IO ()) -&gt; IO ()
+forall (m :: * -&gt; *) a b. Monad m =&gt; m a -&gt; (a -&gt; m b) -&gt; m b
+</span><span class="hs-operator hs-var">&gt;&gt;=</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Maybe Handle -&gt; (Handle -&gt; IO ()) -&gt; IO ()
+forall (m :: * -&gt; *) a. Monad m =&gt; Maybe a -&gt; (a -&gt; m ()) -&gt; m ()
+</span><span class="hs-operator hs-var">`whenJust`</span></span><span> </span><span class="annot"><span class="annottext">Handle -&gt; IO ()
+</span><span class="hs-identifier hs-var">hClose</span></span><span class="hs-special">)</span><span>
+</span><span id="line-357"></span><span>                          </span><span class="annot"><span class="annottext">IO () -&gt; IO () -&gt; IO ()
+forall (m :: * -&gt; *) a b. Monad m =&gt; m a -&gt; m b -&gt; m b
+</span><span class="hs-operator hs-var">&gt;&gt;</span></span><span>  </span><span class="annot"><span class="annottext">IORef (Maybe Handle) -&gt; Maybe Handle -&gt; IO ()
+forall a. IORef a -&gt; a -&gt; IO ()
+</span><span class="hs-identifier hs-var">writeIORef</span></span><span> </span><span class="annot"><span class="annottext">IORef (Maybe Handle)
+</span><a href="#local-6989586621679399063"><span class="hs-identifier hs-var">hRef</span></a></span><span> </span><span class="annot"><span class="annottext">Maybe Handle
+forall a. Maybe a
+</span><span class="hs-identifier hs-var">Nothing</span></span><span>
+</span><span id="line-358"></span><span>        </span><span class="hs-special">}</span><span>
+</span><span id="line-359"></span><span>
+</span><span id="line-360"></span><span>
+</span><span id="line-361"></span><span class="hs-comment">-- $multiple</span><span>
+</span><span id="line-362"></span><span class="hs-comment">-- 'StatusBarConfig' is a 'Monoid', which means that multiple status bars can</span><span>
+</span><span id="line-363"></span><span class="hs-comment">-- be combined together using '&lt;&gt;' or 'mconcat' and passed to 'withSB'.</span><span>
+</span><span id="line-364"></span><span class="hs-comment">--</span><span>
+</span><span id="line-365"></span><span class="hs-comment">-- Here's an example of what such declarative configuration of multiple status</span><span>
+</span><span id="line-366"></span><span class="hs-comment">-- bars may look like:</span><span>
+</span><span id="line-367"></span><span class="hs-comment">--</span><span>
+</span><span id="line-368"></span><span class="hs-comment">-- &gt; -- Make sure to setup the xmobar configs accordingly</span><span>
+</span><span id="line-369"></span><span class="hs-comment">-- &gt; xmobarTop    = statusBarPropTo &quot;_XMONAD_LOG_1&quot; &quot;xmobar -x 0 ~/.config/xmobar/xmobarrc_top&quot;    (pure ppTop)</span><span>
+</span><span id="line-370"></span><span class="hs-comment">-- &gt; xmobarBottom = statusBarPropTo &quot;_XMONAD_LOG_2&quot; &quot;xmobar -x 0 ~/.config/xmobar/xmobarrc_bottom&quot; (pure ppBottom)</span><span>
+</span><span id="line-371"></span><span class="hs-comment">-- &gt; xmobar1      = statusBarPropTo &quot;_XMONAD_LOG_3&quot; &quot;xmobar -x 1 ~/.config/xmobar/xmobarrc1&quot;       (pure pp1)</span><span>
+</span><span id="line-372"></span><span class="hs-comment">-- &gt;</span><span>
+</span><span id="line-373"></span><span class="hs-comment">-- &gt; main = xmonad $ withSB (xmobarTop &lt;&gt; xmobarBottom &lt;&gt; xmobar1) myConfig</span><span>
+</span><span id="line-374"></span><span class="hs-comment">--</span><span>
+</span><span id="line-375"></span><span class="hs-comment">-- And here is an example of the related xmobar configuration for the multiple</span><span>
+</span><span id="line-376"></span><span class="hs-comment">-- status bars mentioned above:</span><span>
+</span><span id="line-377"></span><span class="hs-comment">--</span><span>
+</span><span id="line-378"></span><span class="hs-comment">-- &gt; xmobarrc_top</span><span>
+</span><span id="line-379"></span><span class="hs-comment">-- &gt; Config { ...</span><span>
+</span><span id="line-380"></span><span class="hs-comment">-- &gt;        , commands = [ Run XPropertyLog &quot;_XMONAD_LOG_1&quot;, ... ]</span><span>
+</span><span id="line-381"></span><span class="hs-comment">-- &gt;        , template = &quot;%_XMONAD_LOG_1% }{ ...&quot;</span><span>
+</span><span id="line-382"></span><span class="hs-comment">-- &gt;        }</span><span>
+</span><span id="line-383"></span><span class="hs-comment">--</span><span>
+</span><span id="line-384"></span><span class="hs-comment">-- The above example also works if the different status bars support different</span><span>
+</span><span id="line-385"></span><span class="hs-comment">-- logging methods: you could mix property logging and logging via pipes.</span><span>
+</span><span id="line-386"></span><span class="hs-comment">-- One thing to keep in mind is that if multiple bars read from the same</span><span>
+</span><span id="line-387"></span><span class="hs-comment">-- property, their content will be the same. If you want to use property-based</span><span>
+</span><span id="line-388"></span><span class="hs-comment">-- logging with multiple bars, they should read from different properties.</span><span>
+</span><span id="line-389"></span><span class="hs-comment">--</span><span>
+</span><span id="line-390"></span><span class="hs-comment">-- &quot;XMonad.Util.Loggers&quot; includes loggers that can be bound to specific screens,</span><span>
+</span><span id="line-391"></span><span class="hs-comment">-- like 'logCurrentOnScreen', that might be useful with multiple screens.</span><span>
+</span><span id="line-392"></span><span class="hs-comment">--</span><span>
+</span><span id="line-393"></span><span class="hs-comment">-- Long-time xmonad users will note that the above config is equivalent to</span><span>
+</span><span id="line-394"></span><span class="hs-comment">-- the following less robust and more verbose configuration that they might</span><span>
+</span><span id="line-395"></span><span class="hs-comment">-- find in their old configs:</span><span>
+</span><span id="line-396"></span><span class="hs-comment">--</span><span>
+</span><span id="line-397"></span><span class="hs-comment">-- &gt; main = do</span><span>
+</span><span id="line-398"></span><span class="hs-comment">-- &gt;   -- do not use this, this is an example of a deprecated config</span><span>
+</span><span id="line-399"></span><span class="hs-comment">-- &gt;   xmproc0 &lt;- spawnPipe &quot;xmobar -x 0 ~/.config/xmobar/xmobarrc_top&quot;</span><span>
+</span><span id="line-400"></span><span class="hs-comment">-- &gt;   xmproc1 &lt;- spawnPipe &quot;xmobar -x 0 ~/.config/xmobar/xmobarrc_bottom&quot;</span><span>
+</span><span id="line-401"></span><span class="hs-comment">-- &gt;   xmproc2 &lt;- spawnPipe &quot;xmobar -x 1 ~/.config/xmobar/xmobarrc1&quot;</span><span>
+</span><span id="line-402"></span><span class="hs-comment">-- &gt;   xmonad $ def {</span><span>
+</span><span id="line-403"></span><span class="hs-comment">-- &gt;     ...</span><span>
+</span><span id="line-404"></span><span class="hs-comment">-- &gt;     , logHook = dynamicLogWithPP ppTop { ppOutput = hPutStrLn xmproc0 }</span><span>
+</span><span id="line-405"></span><span class="hs-comment">-- &gt;              &gt;&gt; dynamicLogWithPP ppBottom { ppOutput = hPutStrLn xmproc1 }</span><span>
+</span><span id="line-406"></span><span class="hs-comment">-- &gt;              &gt;&gt; dynamicLogWithPP pp1 { ppOutput = hPutStrLn xmproc2 }</span><span>
+</span><span id="line-407"></span><span class="hs-comment">-- &gt;     ...</span><span>
+</span><span id="line-408"></span><span class="hs-comment">-- &gt;   }</span><span>
+</span><span id="line-409"></span><span class="hs-comment">--</span><span>
+</span><span id="line-410"></span><span class="hs-comment">-- By using the new interface, the config becomes more declarative and there's</span><span>
+</span><span id="line-411"></span><span class="hs-comment">-- less room for errors.</span><span>
+</span><span id="line-412"></span><span class="hs-comment">--</span><span>
+</span><span id="line-413"></span><span class="hs-comment">-- The only *problem* now is that the status bars will not be updated when your screen</span><span>
+</span><span id="line-414"></span><span class="hs-comment">-- configuration changes (by plugging in a monitor, for example). Check the section</span><span>
+</span><span id="line-415"></span><span class="hs-comment">-- on dynamic status bars for how to do that.</span><span>
+</span><span id="line-416"></span><span>
+</span><span id="line-417"></span><span class="hs-comment">-- $dynamic</span><span>
+</span><span id="line-418"></span><span class="hs-comment">-- Using multiple status bars by just combining them with '&lt;&gt;' works well</span><span>
+</span><span id="line-419"></span><span class="hs-comment">-- as long as the screen configuration does not change often. If it does,</span><span>
+</span><span id="line-420"></span><span class="hs-comment">-- you should use 'dynamicSBs': by providing a function that creates</span><span>
+</span><span id="line-421"></span><span class="hs-comment">-- status bars, it takes care of setting up the event hook, the log hook</span><span>
+</span><span id="line-422"></span><span class="hs-comment">-- and the startup hook necessary to make the status bars, well, dynamic.</span><span>
+</span><span id="line-423"></span><span class="hs-comment">--</span><span>
+</span><span id="line-424"></span><span class="hs-comment">-- &gt; xmobarTop    = statusBarPropTo &quot;_XMONAD_LOG_1&quot; &quot;xmobar -x 0 ~/.config/xmobar/xmobarrc_top&quot;    (pure ppTop)</span><span>
+</span><span id="line-425"></span><span class="hs-comment">-- &gt; xmobarBottom = statusBarPropTo &quot;_XMONAD_LOG_2&quot; &quot;xmobar -x 0 ~/.config/xmobar/xmobarrc_bottom&quot; (pure ppBottom)</span><span>
+</span><span id="line-426"></span><span class="hs-comment">-- &gt; xmobar1      = statusBarPropTo &quot;_XMONAD_LOG_3&quot; &quot;xmobar -x 1 ~/.config/xmobar/xmobarrc1&quot;       (pure pp1)</span><span>
+</span><span id="line-427"></span><span class="hs-comment">-- &gt;</span><span>
+</span><span id="line-428"></span><span class="hs-comment">-- &gt; barSpawner :: ScreenId -&gt; IO StatusBarConfig</span><span>
+</span><span id="line-429"></span><span class="hs-comment">-- &gt; barSpawner 0 = pure $ xmobarTop &lt;&gt; xmobarBottom -- two bars on the main screen</span><span>
+</span><span id="line-430"></span><span class="hs-comment">-- &gt; barSpawner 1 = pure $ xmobar1</span><span>
+</span><span id="line-431"></span><span class="hs-comment">-- &gt; barSpawner _ = mempty -- nothing on the rest of the screens</span><span>
+</span><span id="line-432"></span><span class="hs-comment">-- &gt;</span><span>
+</span><span id="line-433"></span><span class="hs-comment">-- &gt; main = xmonad $ dynamicSBs barSpawner (def { ... })</span><span>
+</span><span id="line-434"></span><span class="hs-comment">--</span><span>
+</span><span id="line-435"></span><span class="hs-comment">-- Make sure you specify which screen to place the status bar on (in xmobar,</span><span>
+</span><span id="line-436"></span><span class="hs-comment">-- this is achieved by the @-x@ argument). In addition to making sure that your</span><span>
+</span><span id="line-437"></span><span class="hs-comment">-- status bar lands where you intended it to land, the commands are used</span><span>
+</span><span id="line-438"></span><span class="hs-comment">-- internally to keep track of the status bars.</span><span>
+</span><span id="line-439"></span><span class="hs-comment">--</span><span>
+</span><span id="line-440"></span><span class="hs-comment">-- Note also that this interface can be used with one screen, or if</span><span>
+</span><span id="line-441"></span><span class="hs-comment">-- the screen configuration doesn't change.</span><span>
+</span><span id="line-442"></span><span>
+</span><span id="line-443"></span><span class="hs-keyword">newtype</span><span> </span><span id="ActiveSBs"><span class="annot"><a href="XMonad.Hooks.StatusBar.html#ActiveSBs"><span class="hs-identifier hs-var">ActiveSBs</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span id="ASB"><span class="annot"><a href="XMonad.Hooks.StatusBar.html#ASB"><span class="hs-identifier hs-var">ASB</span></a></span></span><span> </span><span class="hs-special">{</span><span id="getASBs"><span class="annot"><span class="annottext">ActiveSBs -&gt; [(ScreenId, StatusBarConfig)]
+</span><a href="XMonad.Hooks.StatusBar.html#getASBs"><span class="hs-identifier hs-var hs-var">getASBs</span></a></span></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="hs-special">[</span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">ScreenId</span></span><span class="hs-special">,</span><span>  </span><span class="annot"><a href="XMonad.Hooks.StatusBar.html#StatusBarConfig"><span class="hs-identifier hs-type">StatusBarConfig</span></a></span><span class="hs-special">)</span><span class="hs-special">]</span><span class="hs-special">}</span><span>
+</span><span id="line-444"></span><span>
+</span><span id="line-445"></span><span class="hs-keyword">instance</span><span> </span><span id="local-6989586621679399051"><span class="annot"><span class="hs-identifier hs-type">ExtensionClass</span></span><span> </span><span class="annot"><a href="XMonad.Hooks.StatusBar.html#ActiveSBs"><span class="hs-identifier hs-type">ActiveSBs</span></a></span></span><span> </span><span class="hs-keyword">where</span><span>
+</span><span id="line-446"></span><span>  </span><span id="local-6989586621679399049"><span class="annot"><span class="annottext">initialValue :: ActiveSBs
+</span><span class="hs-identifier hs-var hs-var hs-var hs-var">initialValue</span></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">[(ScreenId, StatusBarConfig)] -&gt; ActiveSBs
+</span><a href="XMonad.Hooks.StatusBar.html#ASB"><span class="hs-identifier hs-var">ASB</span></a></span><span> </span><span class="hs-special">[</span><span class="hs-special">]</span><span>
+</span><span id="line-447"></span><span>
+</span><span id="line-448"></span><span class="hs-comment">-- | Given a function to create status bars, 'dynamicSBs'</span><span>
+</span><span id="line-449"></span><span class="hs-comment">-- adds the dynamic status bar capabilities to the config.</span><span>
+</span><span id="line-450"></span><span class="hs-comment">-- For a version of this function that applies 'docks' and</span><span>
+</span><span id="line-451"></span><span class="hs-comment">-- 'avoidStruts', check 'dynamicEasySBs'.</span><span>
+</span><span id="line-452"></span><span class="hs-comment">--</span><span>
+</span><span id="line-453"></span><span class="hs-comment">-- Heavily inspired by &quot;XMonad.Hooks.DynamicBars&quot;</span><span>
+</span><span id="line-454"></span><span id="local-6989586621679399233"><span class="annot"><a href="XMonad.Hooks.StatusBar.html#dynamicSBs"><span class="hs-identifier hs-type">dynamicSBs</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">ScreenId</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">IO</span></span><span> </span><span class="annot"><a href="XMonad.Hooks.StatusBar.html#StatusBarConfig"><span class="hs-identifier hs-type">StatusBarConfig</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">XConfig</span></span><span> </span><span class="annot"><a href="#local-6989586621679399233"><span class="hs-identifier hs-type">l</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">XConfig</span></span><span> </span><span class="annot"><a href="#local-6989586621679399233"><span class="hs-identifier hs-type">l</span></a></span></span><span>
+</span><span id="line-455"></span><span id="dynamicSBs"><span class="annot"><span class="annottext">dynamicSBs :: (ScreenId -&gt; IO StatusBarConfig) -&gt; XConfig l -&gt; XConfig l
+</span><a href="XMonad.Hooks.StatusBar.html#dynamicSBs"><span class="hs-identifier hs-var hs-var">dynamicSBs</span></a></span></span><span> </span><span id="local-6989586621679399047"><span class="annot"><span class="annottext">ScreenId -&gt; IO StatusBarConfig
+</span><a href="#local-6989586621679399047"><span class="hs-identifier hs-var">f</span></a></span></span><span> </span><span id="local-6989586621679399046"><span class="annot"><span class="annottext">XConfig l
+</span><a href="#local-6989586621679399046"><span class="hs-identifier hs-var">conf</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">X () -&gt; XConfig l -&gt; XConfig l
+forall (l :: * -&gt; *). X () -&gt; XConfig l -&gt; XConfig l
+</span><a href="XMonad.Hooks.Rescreen.html#addAfterRescreenHook"><span class="hs-identifier hs-var">addAfterRescreenHook</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">(ScreenId -&gt; IO StatusBarConfig) -&gt; X ()
+</span><a href="XMonad.Hooks.StatusBar.html#updateSBs"><span class="hs-identifier hs-var">updateSBs</span></a></span><span> </span><span class="annot"><span class="annottext">ScreenId -&gt; IO StatusBarConfig
+</span><a href="#local-6989586621679399047"><span class="hs-identifier hs-var">f</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">(XConfig l -&gt; XConfig l) -&gt; XConfig l -&gt; XConfig l
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">XConfig l
+</span><a href="#local-6989586621679399046"><span class="hs-identifier hs-var">conf</span></a></span><span>
+</span><span id="line-456"></span><span>  </span><span class="hs-special">{</span><span> </span><span class="annot"><span class="annottext">startupHook :: X ()
+</span><span class="hs-identifier hs-var">startupHook</span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">XConfig l -&gt; X ()
+forall (l :: * -&gt; *). XConfig l -&gt; X ()
+</span><span class="hs-identifier hs-var hs-var">startupHook</span></span><span> </span><span class="annot"><span class="annottext">XConfig l
+</span><a href="#local-6989586621679399046"><span class="hs-identifier hs-var">conf</span></a></span><span> </span><span class="annot"><span class="annottext">X () -&gt; X () -&gt; X ()
+forall (m :: * -&gt; *) a b. Monad m =&gt; m a -&gt; m b -&gt; m b
+</span><span class="hs-operator hs-var">&gt;&gt;</span></span><span> </span><span class="annot"><span class="annottext">X ()
+</span><a href="XMonad.Hooks.StatusBar.html#killAllStatusBars"><span class="hs-identifier hs-var">killAllStatusBars</span></a></span><span> </span><span class="annot"><span class="annottext">X () -&gt; X () -&gt; X ()
+forall (m :: * -&gt; *) a b. Monad m =&gt; m a -&gt; m b -&gt; m b
+</span><span class="hs-operator hs-var">&gt;&gt;</span></span><span> </span><span class="annot"><span class="annottext">(ScreenId -&gt; IO StatusBarConfig) -&gt; X ()
+</span><a href="XMonad.Hooks.StatusBar.html#updateSBs"><span class="hs-identifier hs-var">updateSBs</span></a></span><span> </span><span class="annot"><span class="annottext">ScreenId -&gt; IO StatusBarConfig
+</span><a href="#local-6989586621679399047"><span class="hs-identifier hs-var">f</span></a></span><span>
+</span><span id="line-457"></span><span>  </span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">logHook :: X ()
+</span><span class="hs-identifier hs-var">logHook</span></span><span>     </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">XConfig l -&gt; X ()
+forall (l :: * -&gt; *). XConfig l -&gt; X ()
+</span><span class="hs-identifier hs-var hs-var">logHook</span></span><span> </span><span class="annot"><span class="annottext">XConfig l
+</span><a href="#local-6989586621679399046"><span class="hs-identifier hs-var">conf</span></a></span><span> </span><span class="annot"><span class="annottext">X () -&gt; X () -&gt; X ()
+forall (m :: * -&gt; *) a b. Monad m =&gt; m a -&gt; m b -&gt; m b
+</span><span class="hs-operator hs-var">&gt;&gt;</span></span><span> </span><span class="annot"><span class="annottext">X ()
+</span><a href="XMonad.Hooks.StatusBar.html#logSBs"><span class="hs-identifier hs-var">logSBs</span></a></span><span>
+</span><span id="line-458"></span><span>  </span><span class="hs-special">}</span><span>
+</span><span id="line-459"></span><span>
+</span><span id="line-460"></span><span class="hs-comment">-- | Like 'dynamicSBs', but applies 'docks' to the</span><span>
+</span><span id="line-461"></span><span class="hs-comment">-- resulting config and adds 'avoidStruts' to the</span><span>
+</span><span id="line-462"></span><span class="hs-comment">-- layout.</span><span>
+</span><span id="line-463"></span><span id="local-6989586621679399042"><span class="annot"><a href="XMonad.Hooks.StatusBar.html#dynamicEasySBs"><span class="hs-identifier hs-type">dynamicEasySBs</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">LayoutClass</span></span><span> </span><span class="annot"><a href="#local-6989586621679399042"><span class="hs-identifier hs-type">l</span></a></span><span> </span><span class="annot"><span class="hs-identifier hs-type">Window</span></span><span>
+</span><span id="line-464"></span><span>               </span><span class="hs-glyph">=&gt;</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">ScreenId</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">IO</span></span><span> </span><span class="annot"><a href="XMonad.Hooks.StatusBar.html#StatusBarConfig"><span class="hs-identifier hs-type">StatusBarConfig</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-465"></span><span>               </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">XConfig</span></span><span> </span><span class="annot"><a href="#local-6989586621679399042"><span class="hs-identifier hs-type">l</span></a></span><span>
+</span><span id="line-466"></span><span>               </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">XConfig</span></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="XMonad.Layout.LayoutModifier.html#ModifiedLayout"><span class="hs-identifier hs-type">ModifiedLayout</span></a></span><span> </span><span class="annot"><a href="XMonad.Hooks.ManageDocks.html#AvoidStruts"><span class="hs-identifier hs-type">AvoidStruts</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679399042"><span class="hs-identifier hs-type">l</span></a></span><span class="hs-special">)</span></span><span>
+</span><span id="line-467"></span><span id="dynamicEasySBs"><span class="annot"><span class="annottext">dynamicEasySBs :: (ScreenId -&gt; IO StatusBarConfig)
+-&gt; XConfig l -&gt; XConfig (ModifiedLayout AvoidStruts l)
+</span><a href="XMonad.Hooks.StatusBar.html#dynamicEasySBs"><span class="hs-identifier hs-var hs-var">dynamicEasySBs</span></a></span></span><span> </span><span id="local-6989586621679399041"><span class="annot"><span class="annottext">ScreenId -&gt; IO StatusBarConfig
+</span><a href="#local-6989586621679399041"><span class="hs-identifier hs-var">f</span></a></span></span><span> </span><span id="local-6989586621679399040"><span class="annot"><span class="annottext">XConfig l
+</span><a href="#local-6989586621679399040"><span class="hs-identifier hs-var">conf</span></a></span></span><span> </span><span class="hs-glyph">=</span><span>
+</span><span id="line-468"></span><span>  </span><span class="annot"><span class="annottext">XConfig (ModifiedLayout AvoidStruts l)
+-&gt; XConfig (ModifiedLayout AvoidStruts l)
+forall (a :: * -&gt; *). XConfig a -&gt; XConfig a
+</span><a href="XMonad.Hooks.ManageDocks.html#docks"><span class="hs-identifier hs-var">docks</span></a></span><span> </span><span class="annot"><span class="annottext">(XConfig (ModifiedLayout AvoidStruts l)
+ -&gt; XConfig (ModifiedLayout AvoidStruts l))
+-&gt; (XConfig (ModifiedLayout AvoidStruts l)
+    -&gt; XConfig (ModifiedLayout AvoidStruts l))
+-&gt; XConfig (ModifiedLayout AvoidStruts l)
+-&gt; XConfig (ModifiedLayout AvoidStruts l)
+forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">(ScreenId -&gt; IO StatusBarConfig)
+-&gt; XConfig (ModifiedLayout AvoidStruts l)
+-&gt; XConfig (ModifiedLayout AvoidStruts l)
+forall (l :: * -&gt; *).
+(ScreenId -&gt; IO StatusBarConfig) -&gt; XConfig l -&gt; XConfig l
+</span><a href="XMonad.Hooks.StatusBar.html#dynamicSBs"><span class="hs-identifier hs-var">dynamicSBs</span></a></span><span> </span><span class="annot"><span class="annottext">ScreenId -&gt; IO StatusBarConfig
+</span><a href="#local-6989586621679399041"><span class="hs-identifier hs-var">f</span></a></span><span> </span><span class="annot"><span class="annottext">(XConfig (ModifiedLayout AvoidStruts l)
+ -&gt; XConfig (ModifiedLayout AvoidStruts l))
+-&gt; XConfig (ModifiedLayout AvoidStruts l)
+-&gt; XConfig (ModifiedLayout AvoidStruts l)
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">XConfig l
+</span><a href="#local-6989586621679399040"><span class="hs-identifier hs-var">conf</span></a></span><span> </span><span class="hs-special">{</span><span> </span><span class="annot"><span class="annottext">layoutHook :: ModifiedLayout AvoidStruts l KeySym
+</span><span class="hs-identifier hs-var">layoutHook</span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">l KeySym -&gt; ModifiedLayout AvoidStruts l KeySym
+forall (l :: * -&gt; *) a.
+LayoutClass l a =&gt;
+l a -&gt; ModifiedLayout AvoidStruts l a
+</span><a href="XMonad.Hooks.ManageDocks.html#avoidStruts"><span class="hs-identifier hs-var">avoidStruts</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">XConfig l -&gt; l KeySym
+forall (l :: * -&gt; *). XConfig l -&gt; l KeySym
+</span><span class="hs-identifier hs-var hs-var">layoutHook</span></span><span> </span><span class="annot"><span class="annottext">XConfig l
+</span><a href="#local-6989586621679399040"><span class="hs-identifier hs-var">conf</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-special">}</span><span>
+</span><span id="line-469"></span><span>
+</span><span id="line-470"></span><span class="hs-comment">-- | Given the function to create status bars, update</span><span>
+</span><span id="line-471"></span><span class="hs-comment">-- the status bars by killing those that shouldn't be</span><span>
+</span><span id="line-472"></span><span class="hs-comment">-- visible anymore and creates any missing status bars</span><span>
+</span><span id="line-473"></span><span class="annot"><a href="XMonad.Hooks.StatusBar.html#updateSBs"><span class="hs-identifier hs-type">updateSBs</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">ScreenId</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">IO</span></span><span> </span><span class="annot"><a href="XMonad.Hooks.StatusBar.html#StatusBarConfig"><span class="hs-identifier hs-type">StatusBarConfig</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">X</span></span><span> </span><span class="hs-special">(</span><span class="hs-special">)</span><span>
+</span><span id="line-474"></span><span id="updateSBs"><span class="annot"><span class="annottext">updateSBs :: (ScreenId -&gt; IO StatusBarConfig) -&gt; X ()
+</span><a href="XMonad.Hooks.StatusBar.html#updateSBs"><span class="hs-identifier hs-var hs-var">updateSBs</span></a></span></span><span> </span><span id="local-6989586621679399039"><span class="annot"><span class="annottext">ScreenId -&gt; IO StatusBarConfig
+</span><a href="#local-6989586621679399039"><span class="hs-identifier hs-var">f</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-475"></span><span>  </span><span id="local-6989586621679399038"><span class="annot"><span class="annottext">[ScreenId]
+</span><a href="#local-6989586621679399038"><span class="hs-identifier hs-var">actualScreens</span></a></span></span><span>    </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">(WindowSet -&gt; X [ScreenId]) -&gt; X [ScreenId]
+forall a. (WindowSet -&gt; X a) -&gt; X a
+</span><span class="hs-identifier hs-var">withWindowSet</span></span><span> </span><span class="annot"><span class="annottext">((WindowSet -&gt; X [ScreenId]) -&gt; X [ScreenId])
+-&gt; (WindowSet -&gt; X [ScreenId]) -&gt; X [ScreenId]
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">[ScreenId] -&gt; X [ScreenId]
+forall (m :: * -&gt; *) a. Monad m =&gt; a -&gt; m a
+</span><span class="hs-identifier hs-var">return</span></span><span> </span><span class="annot"><span class="annottext">([ScreenId] -&gt; X [ScreenId])
+-&gt; (WindowSet -&gt; [ScreenId]) -&gt; WindowSet -&gt; X [ScreenId]
+forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">(Screen String (Layout KeySym) KeySym ScreenId ScreenDetail
+ -&gt; ScreenId)
+-&gt; [Screen String (Layout KeySym) KeySym ScreenId ScreenDetail]
+-&gt; [ScreenId]
+forall a b. (a -&gt; b) -&gt; [a] -&gt; [b]
+</span><span class="hs-identifier hs-var">map</span></span><span> </span><span class="annot"><span class="annottext">Screen String (Layout KeySym) KeySym ScreenId ScreenDetail
+-&gt; ScreenId
+forall i l a sid sd. Screen i l a sid sd -&gt; sid
+</span><span class="hs-identifier hs-var hs-var">W.screen</span></span><span> </span><span class="annot"><span class="annottext">([Screen String (Layout KeySym) KeySym ScreenId ScreenDetail]
+ -&gt; [ScreenId])
+-&gt; (WindowSet
+    -&gt; [Screen String (Layout KeySym) KeySym ScreenId ScreenDetail])
+-&gt; WindowSet
+-&gt; [ScreenId]
+forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">WindowSet
+-&gt; [Screen String (Layout KeySym) KeySym ScreenId ScreenDetail]
+forall i l a s sd. StackSet i l a s sd -&gt; [Screen i l a s sd]
+</span><span class="hs-identifier hs-var">W.screens</span></span><span>
+</span><span id="line-476"></span><span>  </span><span class="hs-special">(</span><span id="local-6989586621679399034"><span class="annot"><span class="annottext">[(ScreenId, StatusBarConfig)]
+</span><a href="#local-6989586621679399034"><span class="hs-identifier hs-var">toKeep</span></a></span></span><span class="hs-special">,</span><span> </span><span id="local-6989586621679399033"><span class="annot"><span class="annottext">[(ScreenId, StatusBarConfig)]
+</span><a href="#local-6989586621679399033"><span class="hs-identifier hs-var">toKill</span></a></span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">&lt;-</span><span>
+</span><span id="line-477"></span><span>    </span><span class="annot"><span class="annottext">((ScreenId, StatusBarConfig) -&gt; Bool)
+-&gt; [(ScreenId, StatusBarConfig)]
+-&gt; ([(ScreenId, StatusBarConfig)], [(ScreenId, StatusBarConfig)])
+forall a. (a -&gt; Bool) -&gt; [a] -&gt; ([a], [a])
+</span><span class="hs-identifier hs-var">partition</span></span><span> </span><span class="hs-special">(</span><span class="hs-special">(</span><span class="annot"><span class="annottext">ScreenId -&gt; [ScreenId] -&gt; Bool
+forall (t :: * -&gt; *) a. (Foldable t, Eq a) =&gt; a -&gt; t a -&gt; Bool
+</span><span class="hs-operator hs-var">`elem`</span></span><span> </span><span class="annot"><span class="annottext">[ScreenId]
+</span><a href="#local-6989586621679399038"><span class="hs-identifier hs-var">actualScreens</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">(ScreenId -&gt; Bool)
+-&gt; ((ScreenId, StatusBarConfig) -&gt; ScreenId)
+-&gt; (ScreenId, StatusBarConfig)
+-&gt; Bool
+forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">(ScreenId, StatusBarConfig) -&gt; ScreenId
+forall a b. (a, b) -&gt; a
+</span><span class="hs-identifier hs-var">fst</span></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">([(ScreenId, StatusBarConfig)]
+ -&gt; ([(ScreenId, StatusBarConfig)], [(ScreenId, StatusBarConfig)]))
+-&gt; (ActiveSBs -&gt; [(ScreenId, StatusBarConfig)])
+-&gt; ActiveSBs
+-&gt; ([(ScreenId, StatusBarConfig)], [(ScreenId, StatusBarConfig)])
+forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">ActiveSBs -&gt; [(ScreenId, StatusBarConfig)]
+</span><a href="XMonad.Hooks.StatusBar.html#getASBs"><span class="hs-identifier hs-var hs-var">getASBs</span></a></span><span> </span><span class="annot"><span class="annottext">(ActiveSBs
+ -&gt; ([(ScreenId, StatusBarConfig)], [(ScreenId, StatusBarConfig)]))
+-&gt; X ActiveSBs
+-&gt; X ([(ScreenId, StatusBarConfig)], [(ScreenId, StatusBarConfig)])
+forall (f :: * -&gt; *) a b. Functor f =&gt; (a -&gt; b) -&gt; f a -&gt; f b
+</span><span class="hs-operator hs-var">&lt;$&gt;</span></span><span> </span><span class="annot"><span class="annottext">X ActiveSBs
+forall a (m :: * -&gt; *). (ExtensionClass a, XLike m) =&gt; m a
+</span><a href="XMonad.Util.ExtensibleState.html#get"><span class="hs-identifier hs-var">XS.get</span></a></span><span>
+</span><span id="line-478"></span><span>  </span><span class="hs-comment">-- Kill the status bars</span><span>
+</span><span id="line-479"></span><span>  </span><span class="annot"><span class="annottext">[StatusBarConfig] -&gt; X ()
+</span><a href="XMonad.Hooks.StatusBar.html#cleanSBs"><span class="hs-identifier hs-var">cleanSBs</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">((ScreenId, StatusBarConfig) -&gt; StatusBarConfig)
+-&gt; [(ScreenId, StatusBarConfig)] -&gt; [StatusBarConfig]
+forall a b. (a -&gt; b) -&gt; [a] -&gt; [b]
+</span><span class="hs-identifier hs-var">map</span></span><span> </span><span class="annot"><span class="annottext">(ScreenId, StatusBarConfig) -&gt; StatusBarConfig
+forall a b. (a, b) -&gt; b
+</span><span class="hs-identifier hs-var">snd</span></span><span> </span><span class="annot"><span class="annottext">[(ScreenId, StatusBarConfig)]
+</span><a href="#local-6989586621679399033"><span class="hs-identifier hs-var">toKill</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-480"></span><span>  </span><span class="hs-comment">-- Create new status bars if needed</span><span>
+</span><span id="line-481"></span><span>  </span><span class="hs-keyword">let</span><span> </span><span id="local-6989586621679399028"><span class="annot"><span class="annottext">missing :: [ScreenId]
+</span><a href="#local-6989586621679399028"><span class="hs-identifier hs-var hs-var">missing</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">[ScreenId]
+</span><a href="#local-6989586621679399038"><span class="hs-identifier hs-var">actualScreens</span></a></span><span> </span><span class="annot"><span class="annottext">[ScreenId] -&gt; [ScreenId] -&gt; [ScreenId]
+forall a. Eq a =&gt; [a] -&gt; [a] -&gt; [a]
+</span><span class="hs-operator hs-var">\\</span></span><span> </span><span class="annot"><span class="annottext">((ScreenId, StatusBarConfig) -&gt; ScreenId)
+-&gt; [(ScreenId, StatusBarConfig)] -&gt; [ScreenId]
+forall a b. (a -&gt; b) -&gt; [a] -&gt; [b]
+</span><span class="hs-identifier hs-var">map</span></span><span> </span><span class="annot"><span class="annottext">(ScreenId, StatusBarConfig) -&gt; ScreenId
+forall a b. (a, b) -&gt; a
+</span><span class="hs-identifier hs-var">fst</span></span><span> </span><span class="annot"><span class="annottext">[(ScreenId, StatusBarConfig)]
+</span><a href="#local-6989586621679399034"><span class="hs-identifier hs-var">toKeep</span></a></span><span>
+</span><span id="line-482"></span><span>  </span><span id="local-6989586621679399026"><span class="annot"><span class="annottext">[(ScreenId, StatusBarConfig)]
+</span><a href="#local-6989586621679399026"><span class="hs-identifier hs-var">added</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">IO [(ScreenId, StatusBarConfig)] -&gt; X [(ScreenId, StatusBarConfig)]
+forall (m :: * -&gt; *) a. MonadIO m =&gt; IO a -&gt; m a
+</span><span class="hs-identifier hs-var">io</span></span><span> </span><span class="annot"><span class="annottext">(IO [(ScreenId, StatusBarConfig)]
+ -&gt; X [(ScreenId, StatusBarConfig)])
+-&gt; IO [(ScreenId, StatusBarConfig)]
+-&gt; X [(ScreenId, StatusBarConfig)]
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">(ScreenId -&gt; IO (ScreenId, StatusBarConfig))
+-&gt; [ScreenId] -&gt; IO [(ScreenId, StatusBarConfig)]
+forall (t :: * -&gt; *) (f :: * -&gt; *) a b.
+(Traversable t, Applicative f) =&gt;
+(a -&gt; f b) -&gt; t a -&gt; f (t b)
+</span><span class="hs-identifier hs-var">traverse</span></span><span> </span><span class="hs-special">(</span><span class="hs-glyph">\</span><span id="local-6989586621679399024"><span class="annot"><span class="annottext">ScreenId
+</span><a href="#local-6989586621679399024"><span class="hs-identifier hs-var">s</span></a></span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">ScreenId
+</span><a href="#local-6989586621679399024"><span class="hs-identifier hs-var">s</span></a></span><span class="hs-special">,</span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">(StatusBarConfig -&gt; (ScreenId, StatusBarConfig))
+-&gt; IO StatusBarConfig -&gt; IO (ScreenId, StatusBarConfig)
+forall (f :: * -&gt; *) a b. Functor f =&gt; (a -&gt; b) -&gt; f a -&gt; f b
+</span><span class="hs-operator hs-var">&lt;$&gt;</span></span><span> </span><span class="annot"><span class="annottext">ScreenId -&gt; IO StatusBarConfig
+</span><a href="#local-6989586621679399039"><span class="hs-identifier hs-var">f</span></a></span><span> </span><span class="annot"><span class="annottext">ScreenId
+</span><a href="#local-6989586621679399024"><span class="hs-identifier hs-var">s</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">[ScreenId]
+</span><a href="#local-6989586621679399028"><span class="hs-identifier hs-var">missing</span></a></span><span>
+</span><span id="line-483"></span><span>  </span><span class="annot"><span class="annottext">((ScreenId, StatusBarConfig) -&gt; X ())
+-&gt; [(ScreenId, StatusBarConfig)] -&gt; X ()
+forall (t :: * -&gt; *) (f :: * -&gt; *) a b.
+(Foldable t, Applicative f) =&gt;
+(a -&gt; f b) -&gt; t a -&gt; f ()
+</span><span class="hs-identifier hs-var">traverse_</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">StatusBarConfig -&gt; X ()
+</span><a href="XMonad.Hooks.StatusBar.html#sbStartupHook"><span class="hs-identifier hs-var hs-var">sbStartupHook</span></a></span><span> </span><span class="annot"><span class="annottext">(StatusBarConfig -&gt; X ())
+-&gt; ((ScreenId, StatusBarConfig) -&gt; StatusBarConfig)
+-&gt; (ScreenId, StatusBarConfig)
+-&gt; X ()
+forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">(ScreenId, StatusBarConfig) -&gt; StatusBarConfig
+forall a b. (a, b) -&gt; b
+</span><span class="hs-identifier hs-var">snd</span></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">[(ScreenId, StatusBarConfig)]
+</span><a href="#local-6989586621679399026"><span class="hs-identifier hs-var">added</span></a></span><span>
+</span><span id="line-484"></span><span>  </span><span class="annot"><span class="annottext">ActiveSBs -&gt; X ()
+forall a (m :: * -&gt; *). (ExtensionClass a, XLike m) =&gt; a -&gt; m ()
+</span><a href="XMonad.Util.ExtensibleState.html#put"><span class="hs-identifier hs-var">XS.put</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">[(ScreenId, StatusBarConfig)] -&gt; ActiveSBs
+</span><a href="XMonad.Hooks.StatusBar.html#ASB"><span class="hs-identifier hs-var">ASB</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">[(ScreenId, StatusBarConfig)]
+</span><a href="#local-6989586621679399034"><span class="hs-identifier hs-var">toKeep</span></a></span><span> </span><span class="annot"><span class="annottext">[(ScreenId, StatusBarConfig)]
+-&gt; [(ScreenId, StatusBarConfig)] -&gt; [(ScreenId, StatusBarConfig)]
+forall a. [a] -&gt; [a] -&gt; [a]
+</span><span class="hs-operator hs-var">++</span></span><span> </span><span class="annot"><span class="annottext">[(ScreenId, StatusBarConfig)]
+</span><a href="#local-6989586621679399026"><span class="hs-identifier hs-var">added</span></a></span><span class="hs-special">)</span><span class="hs-special">)</span><span>
+</span><span id="line-485"></span><span>
+</span><span id="line-486"></span><span class="hs-comment">-- | Run 'sbLogHook' for the saved 'StatusBarConfig's</span><span>
+</span><span id="line-487"></span><span class="annot"><a href="XMonad.Hooks.StatusBar.html#logSBs"><span class="hs-identifier hs-type">logSBs</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">X</span></span><span> </span><span class="hs-special">(</span><span class="hs-special">)</span><span>
+</span><span id="line-488"></span><span id="logSBs"><span class="annot"><span class="annottext">logSBs :: X ()
+</span><a href="XMonad.Hooks.StatusBar.html#logSBs"><span class="hs-identifier hs-var hs-var">logSBs</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">X ActiveSBs
+forall a (m :: * -&gt; *). (ExtensionClass a, XLike m) =&gt; m a
+</span><a href="XMonad.Util.ExtensibleState.html#get"><span class="hs-identifier hs-var">XS.get</span></a></span><span> </span><span class="annot"><span class="annottext">X ActiveSBs -&gt; (ActiveSBs -&gt; X ()) -&gt; X ()
+forall (m :: * -&gt; *) a b. Monad m =&gt; m a -&gt; (a -&gt; m b) -&gt; m b
+</span><span class="hs-operator hs-var">&gt;&gt;=</span></span><span> </span><span class="annot"><span class="annottext">((ScreenId, StatusBarConfig) -&gt; X ())
+-&gt; [(ScreenId, StatusBarConfig)] -&gt; X ()
+forall (t :: * -&gt; *) (f :: * -&gt; *) a b.
+(Foldable t, Applicative f) =&gt;
+(a -&gt; f b) -&gt; t a -&gt; f ()
+</span><span class="hs-identifier hs-var">traverse_</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">StatusBarConfig -&gt; X ()
+</span><a href="XMonad.Hooks.StatusBar.html#sbLogHook"><span class="hs-identifier hs-var hs-var">sbLogHook</span></a></span><span> </span><span class="annot"><span class="annottext">(StatusBarConfig -&gt; X ())
+-&gt; ((ScreenId, StatusBarConfig) -&gt; StatusBarConfig)
+-&gt; (ScreenId, StatusBarConfig)
+-&gt; X ()
+forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">(ScreenId, StatusBarConfig) -&gt; StatusBarConfig
+forall a b. (a, b) -&gt; b
+</span><span class="hs-identifier hs-var">snd</span></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">([(ScreenId, StatusBarConfig)] -&gt; X ())
+-&gt; (ActiveSBs -&gt; [(ScreenId, StatusBarConfig)])
+-&gt; ActiveSBs
+-&gt; X ()
+forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">ActiveSBs -&gt; [(ScreenId, StatusBarConfig)]
+</span><a href="XMonad.Hooks.StatusBar.html#getASBs"><span class="hs-identifier hs-var hs-var">getASBs</span></a></span><span>
+</span><span id="line-489"></span><span>
+</span><span id="line-490"></span><span class="hs-comment">-- | Kill the given 'StatusBarConfig's from the given</span><span>
+</span><span id="line-491"></span><span class="hs-comment">-- list</span><span>
+</span><span id="line-492"></span><span class="annot"><a href="XMonad.Hooks.StatusBar.html#cleanSBs"><span class="hs-identifier hs-type">cleanSBs</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="hs-special">[</span><span class="annot"><a href="XMonad.Hooks.StatusBar.html#StatusBarConfig"><span class="hs-identifier hs-type">StatusBarConfig</span></a></span><span class="hs-special">]</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">X</span></span><span> </span><span class="hs-special">(</span><span class="hs-special">)</span><span>
+</span><span id="line-493"></span><span id="cleanSBs"><span class="annot"><span class="annottext">cleanSBs :: [StatusBarConfig] -&gt; X ()
+</span><a href="XMonad.Hooks.StatusBar.html#cleanSBs"><span class="hs-identifier hs-var hs-var">cleanSBs</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">(StatusBarConfig -&gt; X ()) -&gt; [StatusBarConfig] -&gt; X ()
+forall (t :: * -&gt; *) (f :: * -&gt; *) a b.
+(Foldable t, Applicative f) =&gt;
+(a -&gt; f b) -&gt; t a -&gt; f ()
+</span><span class="hs-identifier hs-var">traverse_</span></span><span> </span><span class="annot"><span class="annottext">StatusBarConfig -&gt; X ()
+</span><a href="XMonad.Hooks.StatusBar.html#sbCleanupHook"><span class="hs-identifier hs-var hs-var">sbCleanupHook</span></a></span><span>
+</span><span id="line-494"></span><span>
+</span><span id="line-495"></span><span class="hs-comment">-- | The default property xmonad writes to. (@_XMONAD_LOG@).</span><span>
+</span><span id="line-496"></span><span class="annot"><a href="XMonad.Hooks.StatusBar.html#xmonadDefProp"><span class="hs-identifier hs-type">xmonadDefProp</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">String</span></span><span>
+</span><span id="line-497"></span><span id="xmonadDefProp"><span class="annot"><span class="annottext">xmonadDefProp :: String
+</span><a href="XMonad.Hooks.StatusBar.html#xmonadDefProp"><span class="hs-identifier hs-var hs-var">xmonadDefProp</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot;_XMONAD_LOG&quot;</span></span><span>
+</span><span id="line-498"></span><span>
+</span><span id="line-499"></span><span class="hs-comment">-- | Write a string to the @_XMONAD_LOG@ property on the root window.</span><span>
+</span><span id="line-500"></span><span class="annot"><a href="XMonad.Hooks.StatusBar.html#xmonadPropLog"><span class="hs-identifier hs-type">xmonadPropLog</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">String</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">X</span></span><span> </span><span class="hs-special">(</span><span class="hs-special">)</span><span>
+</span><span id="line-501"></span><span id="xmonadPropLog"><span class="annot"><span class="annottext">xmonadPropLog :: String -&gt; X ()
+</span><a href="XMonad.Hooks.StatusBar.html#xmonadPropLog"><span class="hs-identifier hs-var hs-var">xmonadPropLog</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">String -&gt; String -&gt; X ()
+</span><a href="XMonad.Hooks.StatusBar.html#xmonadPropLog%27"><span class="hs-identifier hs-var">xmonadPropLog'</span></a></span><span> </span><span class="annot"><span class="annottext">String
+</span><a href="XMonad.Hooks.StatusBar.html#xmonadDefProp"><span class="hs-identifier hs-var">xmonadDefProp</span></a></span><span>
+</span><span id="line-502"></span><span>
+</span><span id="line-503"></span><span class="hs-comment">-- | Write a string to a property on the root window.  This property is of type</span><span>
+</span><span id="line-504"></span><span class="hs-comment">-- @UTF8_STRING@.</span><span>
+</span><span id="line-505"></span><span class="annot"><a href="XMonad.Hooks.StatusBar.html#xmonadPropLog%27"><span class="hs-identifier hs-type">xmonadPropLog'</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">String</span></span><span>  </span><span class="hs-comment">-- ^ Property name</span><span>
+</span><span id="line-506"></span><span>               </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">String</span></span><span>  </span><span class="hs-comment">-- ^ Message to be written to the property</span><span>
+</span><span id="line-507"></span><span>               </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">X</span></span><span> </span><span class="hs-special">(</span><span class="hs-special">)</span><span>
+</span><span id="line-508"></span><span id="xmonadPropLog%27"><span class="annot"><span class="annottext">xmonadPropLog' :: String -&gt; String -&gt; X ()
+</span><a href="XMonad.Hooks.StatusBar.html#xmonadPropLog%27"><span class="hs-identifier hs-var hs-var">xmonadPropLog'</span></a></span></span><span> </span><span id="local-6989586621679399021"><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679399021"><span class="hs-identifier hs-var">prop</span></a></span></span><span> </span><span id="local-6989586621679399020"><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679399020"><span class="hs-identifier hs-var">msg</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-509"></span><span>    </span><span id="local-6989586621679399019"><span class="annot"><span class="annottext">Display
+</span><a href="#local-6989586621679399019"><span class="hs-identifier hs-var">d</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">(XConf -&gt; Display) -&gt; X Display
+forall r (m :: * -&gt; *) a. MonadReader r m =&gt; (r -&gt; a) -&gt; m a
+</span><span class="hs-identifier hs-var">asks</span></span><span> </span><span class="annot"><span class="annottext">XConf -&gt; Display
+</span><span class="hs-identifier hs-var hs-var">display</span></span><span>
+</span><span id="line-510"></span><span>    </span><span id="local-6989586621679399016"><span class="annot"><span class="annottext">KeySym
+</span><a href="#local-6989586621679399016"><span class="hs-identifier hs-var">r</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">(XConf -&gt; KeySym) -&gt; X KeySym
+forall r (m :: * -&gt; *) a. MonadReader r m =&gt; (r -&gt; a) -&gt; m a
+</span><span class="hs-identifier hs-var">asks</span></span><span> </span><span class="annot"><span class="annottext">XConf -&gt; KeySym
+</span><span class="hs-identifier hs-var hs-var">theRoot</span></span><span>
+</span><span id="line-511"></span><span>    </span><span id="local-6989586621679399014"><span class="annot"><span class="annottext">KeySym
+</span><a href="#local-6989586621679399014"><span class="hs-identifier hs-var">xlog</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">String -&gt; X KeySym
+</span><span class="hs-identifier hs-var">getAtom</span></span><span> </span><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679399021"><span class="hs-identifier hs-var">prop</span></a></span><span>
+</span><span id="line-512"></span><span>    </span><span id="local-6989586621679399012"><span class="annot"><span class="annottext">KeySym
+</span><a href="#local-6989586621679399012"><span class="hs-identifier hs-var">ustring</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">String -&gt; X KeySym
+</span><span class="hs-identifier hs-var">getAtom</span></span><span> </span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot;UTF8_STRING&quot;</span></span><span>
+</span><span id="line-513"></span><span>    </span><span class="annot"><span class="annottext">IO () -&gt; X ()
+forall (m :: * -&gt; *) a. MonadIO m =&gt; IO a -&gt; m a
+</span><span class="hs-identifier hs-var">io</span></span><span> </span><span class="annot"><span class="annottext">(IO () -&gt; X ()) -&gt; IO () -&gt; X ()
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">Display -&gt; KeySym -&gt; KeySym -&gt; KeySym -&gt; CInt -&gt; [CChar] -&gt; IO ()
+</span><span class="hs-identifier hs-var">changeProperty8</span></span><span> </span><span class="annot"><span class="annottext">Display
+</span><a href="#local-6989586621679399019"><span class="hs-identifier hs-var">d</span></a></span><span> </span><span class="annot"><span class="annottext">KeySym
+</span><a href="#local-6989586621679399016"><span class="hs-identifier hs-var">r</span></a></span><span> </span><span class="annot"><span class="annottext">KeySym
+</span><a href="#local-6989586621679399014"><span class="hs-identifier hs-var">xlog</span></a></span><span> </span><span class="annot"><span class="annottext">KeySym
+</span><a href="#local-6989586621679399012"><span class="hs-identifier hs-var">ustring</span></a></span><span> </span><span class="annot"><span class="annottext">CInt
+</span><span class="hs-identifier hs-var">propModeReplace</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">String -&gt; [CChar]
+</span><a href="#local-6989586621679399009"><span class="hs-identifier hs-var">encodeCChar</span></a></span><span> </span><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679399020"><span class="hs-identifier hs-var">msg</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-514"></span><span> </span><span class="hs-keyword">where</span><span>
+</span><span id="line-515"></span><span>    </span><span class="annot"><a href="#local-6989586621679399009"><span class="hs-identifier hs-type">encodeCChar</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">String</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="hs-special">[</span><span class="annot"><span class="hs-identifier hs-type">CChar</span></span><span class="hs-special">]</span><span>
+</span><span id="line-516"></span><span>    </span><span id="local-6989586621679399009"><span class="annot"><span class="annottext">encodeCChar :: String -&gt; [CChar]
+</span><a href="#local-6989586621679399009"><span class="hs-identifier hs-var hs-var">encodeCChar</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">(Word8 -&gt; CChar) -&gt; [Word8] -&gt; [CChar]
+forall a b. (a -&gt; b) -&gt; [a] -&gt; [b]
+</span><span class="hs-identifier hs-var">map</span></span><span> </span><span class="annot"><span class="annottext">Word8 -&gt; CChar
+forall a b. (Integral a, Num b) =&gt; a -&gt; b
+</span><span class="hs-identifier hs-var">fromIntegral</span></span><span> </span><span class="annot"><span class="annottext">([Word8] -&gt; [CChar]) -&gt; (String -&gt; [Word8]) -&gt; String -&gt; [CChar]
+forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">String -&gt; [Word8]
+</span><span class="hs-identifier hs-var">UTF8.encode</span></span><span>
+</span><span id="line-517"></span><span>
+</span><span id="line-518"></span><span>
+</span><span id="line-519"></span><span class="hs-comment">-- This newtype wrapper, together with the ExtensionClass instance make use of</span><span>
+</span><span id="line-520"></span><span class="hs-comment">-- the extensible state to save the PIDs bewteen xmonad restarts.</span><span>
+</span><span id="line-521"></span><span class="hs-keyword">newtype</span><span> </span><span id="StatusBarPIDs"><span class="annot"><a href="XMonad.Hooks.StatusBar.html#StatusBarPIDs"><span class="hs-identifier hs-var">StatusBarPIDs</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span id="StatusBarPIDs"><span class="annot"><a href="XMonad.Hooks.StatusBar.html#StatusBarPIDs"><span class="hs-identifier hs-var">StatusBarPIDs</span></a></span></span><span> </span><span class="hs-special">{</span><span> </span><span id="getPIDs"><span class="annot"><span class="annottext">StatusBarPIDs -&gt; Map String ProcessID
+</span><a href="XMonad.Hooks.StatusBar.html#getPIDs"><span class="hs-identifier hs-var hs-var">getPIDs</span></a></span></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">M.Map</span></span><span> </span><span class="annot"><span class="hs-identifier hs-type">String</span></span><span> </span><span class="annot"><span class="hs-identifier hs-type">ProcessID</span></span><span> </span><span class="hs-special">}</span><span>
+</span><span id="line-522"></span><span>  </span><span class="hs-keyword">deriving</span><span> </span><span class="hs-special">(</span><span id="local-6989586621679399001"><span id="local-6989586621679399003"><span id="local-6989586621679399005"><span class="annot"><span class="annottext">Int -&gt; StatusBarPIDs -&gt; ShowS
+[StatusBarPIDs] -&gt; ShowS
+StatusBarPIDs -&gt; String
+(Int -&gt; StatusBarPIDs -&gt; ShowS)
+-&gt; (StatusBarPIDs -&gt; String)
+-&gt; ([StatusBarPIDs] -&gt; ShowS)
+-&gt; Show StatusBarPIDs
+forall a.
+(Int -&gt; a -&gt; ShowS) -&gt; (a -&gt; String) -&gt; ([a] -&gt; ShowS) -&gt; Show a
+showList :: [StatusBarPIDs] -&gt; ShowS
+$cshowList :: [StatusBarPIDs] -&gt; ShowS
+show :: StatusBarPIDs -&gt; String
+$cshow :: StatusBarPIDs -&gt; String
+showsPrec :: Int -&gt; StatusBarPIDs -&gt; ShowS
+$cshowsPrec :: Int -&gt; StatusBarPIDs -&gt; ShowS
+</span><span class="hs-identifier hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var">Show</span></span></span></span></span><span class="hs-special">,</span><span> </span><span id="local-6989586621679398992"><span id="local-6989586621679398994"><span id="local-6989586621679398996"><span id="local-6989586621679398998"><span class="annot"><span class="annottext">ReadPrec [StatusBarPIDs]
+ReadPrec StatusBarPIDs
+Int -&gt; ReadS StatusBarPIDs
+ReadS [StatusBarPIDs]
+(Int -&gt; ReadS StatusBarPIDs)
+-&gt; ReadS [StatusBarPIDs]
+-&gt; ReadPrec StatusBarPIDs
+-&gt; ReadPrec [StatusBarPIDs]
+-&gt; Read StatusBarPIDs
+forall a.
+(Int -&gt; ReadS a)
+-&gt; ReadS [a] -&gt; ReadPrec a -&gt; ReadPrec [a] -&gt; Read a
+readListPrec :: ReadPrec [StatusBarPIDs]
+$creadListPrec :: ReadPrec [StatusBarPIDs]
+readPrec :: ReadPrec StatusBarPIDs
+$creadPrec :: ReadPrec StatusBarPIDs
+readList :: ReadS [StatusBarPIDs]
+$creadList :: ReadS [StatusBarPIDs]
+readsPrec :: Int -&gt; ReadS StatusBarPIDs
+$creadsPrec :: Int -&gt; ReadS StatusBarPIDs
+</span><span class="hs-identifier hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var">Read</span></span></span></span></span></span><span class="hs-special">)</span><span>
+</span><span id="line-523"></span><span>
+</span><span id="line-524"></span><span class="hs-keyword">instance</span><span> </span><span class="annot"><span class="hs-identifier hs-type">ExtensionClass</span></span><span> </span><span class="annot"><a href="XMonad.Hooks.StatusBar.html#StatusBarPIDs"><span class="hs-identifier hs-type">StatusBarPIDs</span></a></span><span> </span><span class="hs-keyword">where</span><span>
+</span><span id="line-525"></span><span>  </span><span id="local-6989586621679398987"><span class="annot"><span class="annottext">initialValue :: StatusBarPIDs
+</span><a href="#local-6989586621679398987"><span class="hs-identifier hs-var hs-var hs-var hs-var">initialValue</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Map String ProcessID -&gt; StatusBarPIDs
+</span><a href="XMonad.Hooks.StatusBar.html#StatusBarPIDs"><span class="hs-identifier hs-var">StatusBarPIDs</span></a></span><span> </span><span class="annot"><span class="annottext">Map String ProcessID
+forall a. Monoid a =&gt; a
+</span><span class="hs-identifier hs-var">mempty</span></span><span>
+</span><span id="line-526"></span><span>  </span><span id="local-6989586621679398986"><span class="annot"><span class="annottext">extensionType :: StatusBarPIDs -&gt; StateExtension
+</span><span class="hs-identifier hs-var hs-var hs-var hs-var">extensionType</span></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">StatusBarPIDs -&gt; StateExtension
+forall a. (Read a, Show a, ExtensionClass a) =&gt; a -&gt; StateExtension
+</span><span class="hs-identifier hs-var">PersistentExtension</span></span><span>
+</span><span id="line-527"></span><span>
+</span><span id="line-528"></span><span class="hs-comment">-- | Kills the status bar started with 'spawnStatusBar' using the given command</span><span>
+</span><span id="line-529"></span><span class="hs-comment">-- and resets the state. This could go for example at the beginning of the</span><span>
+</span><span id="line-530"></span><span class="hs-comment">-- startupHook, to kill the status bars that need to be restarted.</span><span>
+</span><span id="line-531"></span><span class="hs-comment">--</span><span>
+</span><span id="line-532"></span><span class="hs-comment">-- Concretely, this function sends a 'sigTERM' to the saved PIDs using</span><span>
+</span><span id="line-533"></span><span class="hs-comment">-- 'signalProcessGroup' to effectively terminate all processes, regardless</span><span>
+</span><span id="line-534"></span><span class="hs-comment">-- of how many were started by using  'spawnStatusBar'.</span><span>
+</span><span id="line-535"></span><span class="hs-comment">--</span><span>
+</span><span id="line-536"></span><span class="hs-comment">-- There is one caveat to keep in mind: to keep the implementation simple;</span><span>
+</span><span id="line-537"></span><span class="hs-comment">-- no checks are executed before terminating the processes. This means: if the</span><span>
+</span><span id="line-538"></span><span class="hs-comment">-- started process dies for some reason, and enough time passes for the PIDs</span><span>
+</span><span id="line-539"></span><span class="hs-comment">-- to wrap around, this function might terminate another process that happens</span><span>
+</span><span id="line-540"></span><span class="hs-comment">-- to have the same PID. However, this isn't a typical usage scenario.</span><span>
+</span><span id="line-541"></span><span class="annot"><a href="XMonad.Hooks.StatusBar.html#killStatusBar"><span class="hs-identifier hs-type">killStatusBar</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">String</span></span><span> </span><span class="hs-comment">-- ^ The command used to start the status bar</span><span>
+</span><span id="line-542"></span><span>                 </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">X</span></span><span> </span><span class="hs-special">(</span><span class="hs-special">)</span><span>
+</span><span id="line-543"></span><span id="killStatusBar"><span class="annot"><span class="annottext">killStatusBar :: String -&gt; X ()
+</span><a href="XMonad.Hooks.StatusBar.html#killStatusBar"><span class="hs-identifier hs-var hs-var">killStatusBar</span></a></span></span><span> </span><span id="local-6989586621679398983"><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679398983"><span class="hs-identifier hs-var">cmd</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-544"></span><span>    </span><span class="annot"><span class="annottext">(StatusBarPIDs -&gt; Maybe ProcessID) -&gt; X (Maybe ProcessID)
+forall a (m :: * -&gt; *) b.
+(ExtensionClass a, XLike m) =&gt;
+(a -&gt; b) -&gt; m b
+</span><a href="XMonad.Util.ExtensibleState.html#gets"><span class="hs-identifier hs-var">XS.gets</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">String -&gt; Map String ProcessID -&gt; Maybe ProcessID
+forall k a. Ord k =&gt; k -&gt; Map k a -&gt; Maybe a
+</span><span class="hs-identifier hs-var">M.lookup</span></span><span> </span><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679398983"><span class="hs-identifier hs-var">cmd</span></a></span><span> </span><span class="annot"><span class="annottext">(Map String ProcessID -&gt; Maybe ProcessID)
+-&gt; (StatusBarPIDs -&gt; Map String ProcessID)
+-&gt; StatusBarPIDs
+-&gt; Maybe ProcessID
+forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">StatusBarPIDs -&gt; Map String ProcessID
+</span><a href="XMonad.Hooks.StatusBar.html#getPIDs"><span class="hs-identifier hs-var hs-var">getPIDs</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">X (Maybe ProcessID) -&gt; (Maybe ProcessID -&gt; X ()) -&gt; X ()
+forall (m :: * -&gt; *) a b. Monad m =&gt; m a -&gt; (a -&gt; m b) -&gt; m b
+</span><span class="hs-operator hs-var">&gt;&gt;=</span></span><span> </span><span class="annot"><span class="annottext">(Maybe ProcessID -&gt; (ProcessID -&gt; X ()) -&gt; X ())
+-&gt; (ProcessID -&gt; X ()) -&gt; Maybe ProcessID -&gt; X ()
+forall a b c. (a -&gt; b -&gt; c) -&gt; b -&gt; a -&gt; c
+</span><span class="hs-identifier hs-var">flip</span></span><span> </span><span class="annot"><span class="annottext">Maybe ProcessID -&gt; (ProcessID -&gt; X ()) -&gt; X ()
+forall (m :: * -&gt; *) a. Monad m =&gt; Maybe a -&gt; (a -&gt; m ()) -&gt; m ()
+</span><span class="hs-identifier hs-var">whenJust</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">IO () -&gt; X ()
+forall (m :: * -&gt; *) a. MonadIO m =&gt; IO a -&gt; m a
+</span><span class="hs-identifier hs-var">io</span></span><span> </span><span class="annot"><span class="annottext">(IO () -&gt; X ()) -&gt; (ProcessID -&gt; IO ()) -&gt; ProcessID -&gt; X ()
+forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">ProcessID -&gt; IO ()
+</span><a href="XMonad.Hooks.StatusBar.html#killPid"><span class="hs-identifier hs-var">killPid</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-545"></span><span>    </span><span class="annot"><span class="annottext">(StatusBarPIDs -&gt; StatusBarPIDs) -&gt; X ()
+forall a (m :: * -&gt; *).
+(ExtensionClass a, XLike m) =&gt;
+(a -&gt; a) -&gt; m ()
+</span><a href="XMonad.Util.ExtensibleState.html#modify"><span class="hs-identifier hs-var">XS.modify</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Map String ProcessID -&gt; StatusBarPIDs
+</span><a href="XMonad.Hooks.StatusBar.html#StatusBarPIDs"><span class="hs-identifier hs-var">StatusBarPIDs</span></a></span><span> </span><span class="annot"><span class="annottext">(Map String ProcessID -&gt; StatusBarPIDs)
+-&gt; (StatusBarPIDs -&gt; Map String ProcessID)
+-&gt; StatusBarPIDs
+-&gt; StatusBarPIDs
+forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">String -&gt; Map String ProcessID -&gt; Map String ProcessID
+forall k a. Ord k =&gt; k -&gt; Map k a -&gt; Map k a
+</span><span class="hs-identifier hs-var">M.delete</span></span><span> </span><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679398983"><span class="hs-identifier hs-var">cmd</span></a></span><span> </span><span class="annot"><span class="annottext">(Map String ProcessID -&gt; Map String ProcessID)
+-&gt; (StatusBarPIDs -&gt; Map String ProcessID)
+-&gt; StatusBarPIDs
+-&gt; Map String ProcessID
+forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">StatusBarPIDs -&gt; Map String ProcessID
+</span><a href="XMonad.Hooks.StatusBar.html#getPIDs"><span class="hs-identifier hs-var hs-var">getPIDs</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-546"></span><span>
+</span><span id="line-547"></span><span class="annot"><a href="XMonad.Hooks.StatusBar.html#killPid"><span class="hs-identifier hs-type">killPid</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">ProcessID</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">IO</span></span><span> </span><span class="hs-special">(</span><span class="hs-special">)</span><span>
+</span><span id="line-548"></span><span id="killPid"><span class="annot"><span class="annottext">killPid :: ProcessID -&gt; IO ()
+</span><a href="XMonad.Hooks.StatusBar.html#killPid"><span class="hs-identifier hs-var hs-var">killPid</span></a></span></span><span> </span><span id="local-6989586621679398976"><span class="annot"><span class="annottext">ProcessID
+</span><a href="#local-6989586621679398976"><span class="hs-identifier hs-var">pidToKill</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">IO (Either SomeException ()) -&gt; IO ()
+forall (f :: * -&gt; *) a. Functor f =&gt; f a -&gt; f ()
+</span><span class="hs-identifier hs-var">void</span></span><span> </span><span class="annot"><span class="annottext">(IO (Either SomeException ()) -&gt; IO ())
+-&gt; IO (Either SomeException ()) -&gt; IO ()
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">IO () -&gt; IO (Either SomeException ())
+forall e a. Exception e =&gt; IO a -&gt; IO (Either e a)
+</span><span class="hs-identifier hs-var">try</span></span><span> </span><span class="hs-glyph">@</span><span class="annot"><span class="hs-identifier hs-type">SomeException</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">CInt -&gt; ProcessID -&gt; IO ()
+</span><span class="hs-identifier hs-var">signalProcessGroup</span></span><span> </span><span class="annot"><span class="annottext">CInt
+</span><span class="hs-identifier hs-var">sigTERM</span></span><span> </span><span class="annot"><span class="annottext">ProcessID
+</span><a href="#local-6989586621679398976"><span class="hs-identifier hs-var">pidToKill</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-549"></span><span>
+</span><span id="line-550"></span><span class="hs-comment">-- | Spawns a status bar and saves its PID together with the commands that was</span><span>
+</span><span id="line-551"></span><span class="hs-comment">-- used to start it. This is useful when the status bars should be restarted</span><span>
+</span><span id="line-552"></span><span class="hs-comment">-- with xmonad. Use this in combination with 'killStatusBar'.</span><span>
+</span><span id="line-553"></span><span class="hs-comment">--</span><span>
+</span><span id="line-554"></span><span class="hs-comment">-- Note: in some systems, multiple processes might start, even though one command is</span><span>
+</span><span id="line-555"></span><span class="hs-comment">-- provided. This means the first PID, of the group leader, is saved.</span><span>
+</span><span id="line-556"></span><span class="annot"><a href="XMonad.Hooks.StatusBar.html#spawnStatusBar"><span class="hs-identifier hs-type">spawnStatusBar</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">String</span></span><span> </span><span class="hs-comment">-- ^ The command used to spawn the status bar</span><span>
+</span><span id="line-557"></span><span>               </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">X</span></span><span> </span><span class="hs-special">(</span><span class="hs-special">)</span><span>
+</span><span id="line-558"></span><span id="spawnStatusBar"><span class="annot"><span class="annottext">spawnStatusBar :: String -&gt; X ()
+</span><a href="XMonad.Hooks.StatusBar.html#spawnStatusBar"><span class="hs-identifier hs-var hs-var">spawnStatusBar</span></a></span></span><span> </span><span id="local-6989586621679398974"><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679398974"><span class="hs-identifier hs-var">cmd</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-559"></span><span>  </span><span id="local-6989586621679398973"><span class="annot"><span class="annottext">ProcessID
+</span><a href="#local-6989586621679398973"><span class="hs-identifier hs-var">newPid</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">String -&gt; X ProcessID
+forall (m :: * -&gt; *). MonadIO m =&gt; String -&gt; m ProcessID
+</span><span class="hs-identifier hs-var">spawnPID</span></span><span> </span><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679398974"><span class="hs-identifier hs-var">cmd</span></a></span><span>
+</span><span id="line-560"></span><span>  </span><span class="annot"><span class="annottext">(StatusBarPIDs -&gt; StatusBarPIDs) -&gt; X ()
+forall a (m :: * -&gt; *).
+(ExtensionClass a, XLike m) =&gt;
+(a -&gt; a) -&gt; m ()
+</span><a href="XMonad.Util.ExtensibleState.html#modify"><span class="hs-identifier hs-var">XS.modify</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Map String ProcessID -&gt; StatusBarPIDs
+</span><a href="XMonad.Hooks.StatusBar.html#StatusBarPIDs"><span class="hs-identifier hs-var">StatusBarPIDs</span></a></span><span> </span><span class="annot"><span class="annottext">(Map String ProcessID -&gt; StatusBarPIDs)
+-&gt; (StatusBarPIDs -&gt; Map String ProcessID)
+-&gt; StatusBarPIDs
+-&gt; StatusBarPIDs
+forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">String -&gt; ProcessID -&gt; Map String ProcessID -&gt; Map String ProcessID
+forall k a. Ord k =&gt; k -&gt; a -&gt; Map k a -&gt; Map k a
+</span><span class="hs-identifier hs-var">M.insert</span></span><span> </span><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679398974"><span class="hs-identifier hs-var">cmd</span></a></span><span> </span><span class="annot"><span class="annottext">ProcessID
+</span><a href="#local-6989586621679398973"><span class="hs-identifier hs-var">newPid</span></a></span><span> </span><span class="annot"><span class="annottext">(Map String ProcessID -&gt; Map String ProcessID)
+-&gt; (StatusBarPIDs -&gt; Map String ProcessID)
+-&gt; StatusBarPIDs
+-&gt; Map String ProcessID
+forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">StatusBarPIDs -&gt; Map String ProcessID
+</span><a href="XMonad.Hooks.StatusBar.html#getPIDs"><span class="hs-identifier hs-var hs-var">getPIDs</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-561"></span><span>
+</span><span id="line-562"></span><span class="hs-comment">-- | Kill all status bars started with 'spawnStatusBar'. Note the</span><span>
+</span><span id="line-563"></span><span class="hs-comment">-- caveats in 'cleanupStatusBar'</span><span>
+</span><span id="line-564"></span><span class="annot"><a href="XMonad.Hooks.StatusBar.html#killAllStatusBars"><span class="hs-identifier hs-type">killAllStatusBars</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">X</span></span><span> </span><span class="hs-special">(</span><span class="hs-special">)</span><span>
+</span><span id="line-565"></span><span id="killAllStatusBars"><span class="annot"><span class="annottext">killAllStatusBars :: X ()
+</span><a href="XMonad.Hooks.StatusBar.html#killAllStatusBars"><span class="hs-identifier hs-var hs-var">killAllStatusBars</span></a></span></span><span> </span><span class="hs-glyph">=</span><span>
+</span><span id="line-566"></span><span>  </span><span class="annot"><span class="annottext">(StatusBarPIDs -&gt; [ProcessID]) -&gt; X [ProcessID]
+forall a (m :: * -&gt; *) b.
+(ExtensionClass a, XLike m) =&gt;
+(a -&gt; b) -&gt; m b
+</span><a href="XMonad.Util.ExtensibleState.html#gets"><span class="hs-identifier hs-var">XS.gets</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Map String ProcessID -&gt; [ProcessID]
+forall k a. Map k a -&gt; [a]
+</span><span class="hs-identifier hs-var">M.elems</span></span><span> </span><span class="annot"><span class="annottext">(Map String ProcessID -&gt; [ProcessID])
+-&gt; (StatusBarPIDs -&gt; Map String ProcessID)
+-&gt; StatusBarPIDs
+-&gt; [ProcessID]
+forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">StatusBarPIDs -&gt; Map String ProcessID
+</span><a href="XMonad.Hooks.StatusBar.html#getPIDs"><span class="hs-identifier hs-var hs-var">getPIDs</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">X [ProcessID] -&gt; ([ProcessID] -&gt; X ()) -&gt; X ()
+forall (m :: * -&gt; *) a b. Monad m =&gt; m a -&gt; (a -&gt; m b) -&gt; m b
+</span><span class="hs-operator hs-var">&gt;&gt;=</span></span><span> </span><span class="annot"><span class="annottext">IO () -&gt; X ()
+forall (m :: * -&gt; *) a. MonadIO m =&gt; IO a -&gt; m a
+</span><span class="hs-identifier hs-var">io</span></span><span> </span><span class="annot"><span class="annottext">(IO () -&gt; X ()) -&gt; ([ProcessID] -&gt; IO ()) -&gt; [ProcessID] -&gt; X ()
+forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">(ProcessID -&gt; IO ()) -&gt; [ProcessID] -&gt; IO ()
+forall (t :: * -&gt; *) (f :: * -&gt; *) a b.
+(Foldable t, Applicative f) =&gt;
+(a -&gt; f b) -&gt; t a -&gt; f ()
+</span><span class="hs-identifier hs-var">traverse_</span></span><span> </span><span class="annot"><span class="annottext">ProcessID -&gt; IO ()
+</span><a href="XMonad.Hooks.StatusBar.html#killPid"><span class="hs-identifier hs-var">killPid</span></a></span><span> </span><span class="annot"><span class="annottext">X () -&gt; X () -&gt; X ()
+forall (m :: * -&gt; *) a b. Monad m =&gt; m a -&gt; m b -&gt; m b
+</span><span class="hs-operator hs-var">&gt;&gt;</span></span><span> </span><span class="annot"><span class="annottext">StatusBarPIDs -&gt; X ()
+forall a (m :: * -&gt; *). (ExtensionClass a, XLike m) =&gt; a -&gt; m ()
+</span><a href="XMonad.Util.ExtensibleState.html#put"><span class="hs-identifier hs-var">XS.put</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Map String ProcessID -&gt; StatusBarPIDs
+</span><a href="XMonad.Hooks.StatusBar.html#StatusBarPIDs"><span class="hs-identifier hs-var">StatusBarPIDs</span></a></span><span> </span><span class="annot"><span class="annottext">Map String ProcessID
+forall a. Monoid a =&gt; a
+</span><span class="hs-identifier hs-var">mempty</span></span><span class="hs-special">)</span><span>
+</span><span id="line-567"></span></pre></body></html>

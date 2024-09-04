@@ -1,0 +1,289 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd"><html xmlns="http://www.w3.org/1999/xhtml"><head><link rel="stylesheet" type="text/css" href="style.css" /><script type="text/javascript" src="highlight.js"></script></head><body><pre><span class="hs-pragma">{-# LANGUAGE LambdaCase #-}</span><span>
+</span><span id="line-2"></span><span>
+</span><span id="line-3"></span><span class="hs-comment">-----------------------------------------------------------------------------</span><span>
+</span><span id="line-4"></span><span class="hs-comment">-- |</span><span>
+</span><span id="line-5"></span><span class="hs-comment">-- Module       : XMonad.Actions.SpawnOn</span><span>
+</span><span id="line-6"></span><span class="hs-comment">-- Description  : Modify a window spawned by a command.</span><span>
+</span><span id="line-7"></span><span class="hs-comment">-- Copyright    : (c) Spencer Janssen</span><span>
+</span><span id="line-8"></span><span class="hs-comment">-- License      : BSD</span><span>
+</span><span id="line-9"></span><span class="hs-comment">--</span><span>
+</span><span id="line-10"></span><span class="hs-comment">-- Maintainer   : Spencer Janssen &lt;spencerjanssen@gmail.com&gt;</span><span>
+</span><span id="line-11"></span><span class="hs-comment">-- Stability    : unstable</span><span>
+</span><span id="line-12"></span><span class="hs-comment">-- Portability  : unportable</span><span>
+</span><span id="line-13"></span><span class="hs-comment">--</span><span>
+</span><span id="line-14"></span><span class="hs-comment">-- Provides a way to modify a window spawned by a command(e.g shift it to the workspace</span><span>
+</span><span id="line-15"></span><span class="hs-comment">-- it was launched on) by using the _NET_WM_PID property that most windows set on creation.</span><span>
+</span><span id="line-16"></span><span class="hs-comment">-- Hence this module won't work on applications that don't set this property.</span><span>
+</span><span id="line-17"></span><span class="hs-comment">--</span><span>
+</span><span id="line-18"></span><span class="hs-comment">-----------------------------------------------------------------------------</span><span>
+</span><span id="line-19"></span><span>
+</span><span id="line-20"></span><span class="hs-keyword">module</span><span> </span><span class="hs-identifier">XMonad.Actions.SpawnOn</span><span> </span><span class="hs-special">(</span><span>
+</span><span id="line-21"></span><span>    </span><span class="annot"><span class="hs-comment">-- * Usage</span></span><span>
+</span><span id="line-22"></span><span>    </span><span class="annot"><span class="hs-comment">-- $usage</span></span><span>
+</span><span id="line-23"></span><span>    </span><span class="annot"><a href="XMonad.Actions.SpawnOn.html#Spawner"><span class="hs-identifier">Spawner</span></a></span><span class="hs-special">,</span><span>
+</span><span id="line-24"></span><span>    </span><span class="annot"><a href="XMonad.Actions.SpawnOn.html#manageSpawn"><span class="hs-identifier">manageSpawn</span></a></span><span class="hs-special">,</span><span>
+</span><span id="line-25"></span><span>    </span><span class="annot"><a href="XMonad.Actions.SpawnOn.html#manageSpawnWithGC"><span class="hs-identifier">manageSpawnWithGC</span></a></span><span class="hs-special">,</span><span>
+</span><span id="line-26"></span><span>    </span><span class="annot"><a href="XMonad.Actions.SpawnOn.html#spawnHere"><span class="hs-identifier">spawnHere</span></a></span><span class="hs-special">,</span><span>
+</span><span id="line-27"></span><span>    </span><span class="annot"><a href="XMonad.Actions.SpawnOn.html#spawnOn"><span class="hs-identifier">spawnOn</span></a></span><span class="hs-special">,</span><span>
+</span><span id="line-28"></span><span>    </span><span class="annot"><a href="XMonad.Actions.SpawnOn.html#spawnAndDo"><span class="hs-identifier">spawnAndDo</span></a></span><span class="hs-special">,</span><span>
+</span><span id="line-29"></span><span>    </span><span class="annot"><a href="XMonad.Actions.SpawnOn.html#shellPromptHere"><span class="hs-identifier">shellPromptHere</span></a></span><span class="hs-special">,</span><span>
+</span><span id="line-30"></span><span>    </span><span class="annot"><a href="XMonad.Actions.SpawnOn.html#shellPromptOn"><span class="hs-identifier">shellPromptOn</span></a></span><span>
+</span><span id="line-31"></span><span class="hs-special">)</span><span> </span><span class="hs-keyword">where</span><span>
+</span><span id="line-32"></span><span>
+</span><span id="line-33"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><span class="hs-identifier">System.Posix.Types</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier">ProcessID</span></span><span class="hs-special">)</span><span>
+</span><span id="line-34"></span><span>
+</span><span id="line-35"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><span class="hs-identifier">XMonad</span></span><span>
+</span><span id="line-36"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><a href="XMonad.Prelude.html"><span class="hs-identifier">XMonad.Prelude</span></a></span><span>
+</span><span id="line-37"></span><span class="hs-keyword">import</span><span> </span><span class="hs-keyword">qualified</span><span> </span><span class="annot"><span class="hs-identifier">XMonad.StackSet</span></span><span> </span><span class="hs-keyword">as</span><span> </span><span class="annot"><span class="hs-identifier">W</span></span><span>
+</span><span id="line-38"></span><span>
+</span><span id="line-39"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><a href="XMonad.Hooks.ManageHelpers.html"><span class="hs-identifier">XMonad.Hooks.ManageHelpers</span></a></span><span>
+</span><span id="line-40"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><a href="XMonad.Prompt.html"><span class="hs-identifier">XMonad.Prompt</span></a></span><span>
+</span><span id="line-41"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><a href="XMonad.Prompt.Shell.html"><span class="hs-identifier">XMonad.Prompt.Shell</span></a></span><span>
+</span><span id="line-42"></span><span class="hs-keyword">import</span><span> </span><span class="hs-keyword">qualified</span><span> </span><span class="annot"><a href="XMonad.Util.ExtensibleState.html"><span class="hs-identifier">XMonad.Util.ExtensibleState</span></a></span><span> </span><span class="hs-keyword">as</span><span> </span><span class="annot"><span class="hs-identifier">XS</span></span><span>
+</span><span id="line-43"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><a href="XMonad.Util.Process.html"><span class="hs-identifier">XMonad.Util.Process</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="XMonad.Util.Process.html#getPPIDChain"><span class="hs-identifier">getPPIDChain</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-44"></span><span>
+</span><span id="line-45"></span><span class="hs-comment">-- $usage</span><span>
+</span><span id="line-46"></span><span class="hs-comment">-- You can use this module with the following in your @xmonad.hs@:</span><span>
+</span><span id="line-47"></span><span class="hs-comment">--</span><span>
+</span><span id="line-48"></span><span class="hs-comment">-- &gt;    import XMonad.Actions.SpawnOn</span><span>
+</span><span id="line-49"></span><span class="hs-comment">--</span><span>
+</span><span id="line-50"></span><span class="hs-comment">-- &gt;    main = do</span><span>
+</span><span id="line-51"></span><span class="hs-comment">-- &gt;      xmonad def {</span><span>
+</span><span id="line-52"></span><span class="hs-comment">-- &gt;         ...</span><span>
+</span><span id="line-53"></span><span class="hs-comment">-- &gt;         manageHook = manageSpawn &lt;&gt; manageHook def</span><span>
+</span><span id="line-54"></span><span class="hs-comment">-- &gt;         ...</span><span>
+</span><span id="line-55"></span><span class="hs-comment">-- &gt;      }</span><span>
+</span><span id="line-56"></span><span class="hs-comment">--</span><span>
+</span><span id="line-57"></span><span class="hs-comment">-- To ensure that application appears on a workspace it was launched at, add keybindings like:</span><span>
+</span><span id="line-58"></span><span class="hs-comment">--</span><span>
+</span><span id="line-59"></span><span class="hs-comment">-- &gt;  , ((mod1Mask,xK_o), spawnHere &quot;urxvt&quot;)</span><span>
+</span><span id="line-60"></span><span class="hs-comment">-- &gt;  , ((mod1Mask,xK_s), shellPromptHere def)</span><span>
+</span><span id="line-61"></span><span class="hs-comment">--</span><span>
+</span><span id="line-62"></span><span class="hs-comment">-- The module can also be used to apply other manage hooks to the window of</span><span>
+</span><span id="line-63"></span><span class="hs-comment">-- the spawned application(e.g. float or resize it).</span><span>
+</span><span id="line-64"></span><span class="hs-comment">--</span><span>
+</span><span id="line-65"></span><span class="hs-comment">-- For detailed instructions on editing your key bindings, see</span><span>
+</span><span id="line-66"></span><span class="hs-comment">-- &lt;https://xmonad.org/TUTORIAL.html#customizing-xmonad the tutorial&gt;.</span><span>
+</span><span id="line-67"></span><span>
+</span><span id="line-68"></span><span class="hs-keyword">newtype</span><span> </span><span id="Spawner"><span class="annot"><a href="XMonad.Actions.SpawnOn.html#Spawner"><span class="hs-identifier hs-var">Spawner</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span id="Spawner"><span class="annot"><a href="XMonad.Actions.SpawnOn.html#Spawner"><span class="hs-identifier hs-var">Spawner</span></a></span></span><span> </span><span class="hs-special">{</span><span id="pidsRef"><span class="annot"><span class="annottext">Spawner -&gt; [(ProcessID, Query (Endo WindowSet))]
+</span><a href="XMonad.Actions.SpawnOn.html#pidsRef"><span class="hs-identifier hs-var hs-var">pidsRef</span></a></span></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="hs-special">[</span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">ProcessID</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier hs-type">ManageHook</span></span><span class="hs-special">)</span><span class="hs-special">]</span><span class="hs-special">}</span><span>
+</span><span id="line-69"></span><span>
+</span><span id="line-70"></span><span class="hs-keyword">instance</span><span> </span><span id="local-6989586621679477638"><span class="annot"><span class="hs-identifier hs-type">ExtensionClass</span></span><span> </span><span class="annot"><a href="XMonad.Actions.SpawnOn.html#Spawner"><span class="hs-identifier hs-type">Spawner</span></a></span></span><span> </span><span class="hs-keyword">where</span><span>
+</span><span id="line-71"></span><span>    </span><span id="local-6989586621679477636"><span class="annot"><span class="annottext">initialValue :: Spawner
+</span><span class="hs-identifier hs-var hs-var hs-var hs-var">initialValue</span></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">[(ProcessID, Query (Endo WindowSet))] -&gt; Spawner
+</span><a href="XMonad.Actions.SpawnOn.html#Spawner"><span class="hs-identifier hs-var">Spawner</span></a></span><span> </span><span class="hs-special">[</span><span class="hs-special">]</span><span>
+</span><span id="line-72"></span><span>
+</span><span id="line-73"></span><span>
+</span><span id="line-74"></span><span class="hs-comment">-- | Get the current Spawner or create one if it doesn't exist.</span><span>
+</span><span id="line-75"></span><span class="annot"><a href="XMonad.Actions.SpawnOn.html#modifySpawner"><span class="hs-identifier hs-type">modifySpawner</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="hs-special">(</span><span class="hs-special">[</span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">ProcessID</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier hs-type">ManageHook</span></span><span class="hs-special">)</span><span class="hs-special">]</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="hs-special">[</span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">ProcessID</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier hs-type">ManageHook</span></span><span class="hs-special">)</span><span class="hs-special">]</span><span class="hs-special">)</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">X</span></span><span> </span><span class="hs-special">(</span><span class="hs-special">)</span><span>
+</span><span id="line-76"></span><span id="modifySpawner"><span class="annot"><span class="annottext">modifySpawner :: ([(ProcessID, Query (Endo WindowSet))]
+ -&gt; [(ProcessID, Query (Endo WindowSet))])
+-&gt; X ()
+</span><a href="XMonad.Actions.SpawnOn.html#modifySpawner"><span class="hs-identifier hs-var hs-var">modifySpawner</span></a></span></span><span> </span><span id="local-6989586621679477633"><span class="annot"><span class="annottext">[(ProcessID, Query (Endo WindowSet))]
+-&gt; [(ProcessID, Query (Endo WindowSet))]
+</span><a href="#local-6989586621679477633"><span class="hs-identifier hs-var">f</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">forall a (m :: * -&gt; *).
+(ExtensionClass a, XLike m) =&gt;
+(a -&gt; a) -&gt; m ()
+</span><a href="XMonad.Util.ExtensibleState.html#modify"><span class="hs-identifier hs-var">XS.modify</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">[(ProcessID, Query (Endo WindowSet))] -&gt; Spawner
+</span><a href="XMonad.Actions.SpawnOn.html#Spawner"><span class="hs-identifier hs-var">Spawner</span></a></span><span> </span><span class="annot"><span class="annottext">forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">[(ProcessID, Query (Endo WindowSet))]
+-&gt; [(ProcessID, Query (Endo WindowSet))]
+</span><a href="#local-6989586621679477633"><span class="hs-identifier hs-var">f</span></a></span><span> </span><span class="annot"><span class="annottext">forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">Spawner -&gt; [(ProcessID, Query (Endo WindowSet))]
+</span><a href="XMonad.Actions.SpawnOn.html#pidsRef"><span class="hs-identifier hs-var">pidsRef</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-77"></span><span>
+</span><span id="line-78"></span><span class="annot"><a href="XMonad.Actions.SpawnOn.html#modifySpawnerM"><span class="hs-identifier hs-type">modifySpawnerM</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="hs-special">(</span><span class="hs-special">[</span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">ProcessID</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier hs-type">ManageHook</span></span><span class="hs-special">)</span><span class="hs-special">]</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">X</span></span><span> </span><span class="hs-special">[</span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">ProcessID</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier hs-type">ManageHook</span></span><span class="hs-special">)</span><span class="hs-special">]</span><span class="hs-special">)</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">X</span></span><span> </span><span class="hs-special">(</span><span class="hs-special">)</span><span>
+</span><span id="line-79"></span><span id="modifySpawnerM"><span class="annot"><span class="annottext">modifySpawnerM :: ([(ProcessID, Query (Endo WindowSet))]
+ -&gt; X [(ProcessID, Query (Endo WindowSet))])
+-&gt; X ()
+</span><a href="XMonad.Actions.SpawnOn.html#modifySpawnerM"><span class="hs-identifier hs-var hs-var">modifySpawnerM</span></a></span></span><span> </span><span id="local-6989586621679477629"><span class="annot"><span class="annottext">[(ProcessID, Query (Endo WindowSet))]
+-&gt; X [(ProcessID, Query (Endo WindowSet))]
+</span><a href="#local-6989586621679477629"><span class="hs-identifier hs-var">f</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">forall a (m :: * -&gt; *).
+(ExtensionClass a, XLike m) =&gt;
+(a -&gt; m a) -&gt; m ()
+</span><a href="XMonad.Util.ExtensibleState.html#modifyM"><span class="hs-identifier hs-var">XS.modifyM</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">forall (f :: * -&gt; *) a b. Functor f =&gt; (a -&gt; b) -&gt; f a -&gt; f b
+</span><span class="hs-identifier hs-var">fmap</span></span><span> </span><span class="annot"><span class="annottext">[(ProcessID, Query (Endo WindowSet))] -&gt; Spawner
+</span><a href="XMonad.Actions.SpawnOn.html#Spawner"><span class="hs-identifier hs-var">Spawner</span></a></span><span> </span><span class="annot"><span class="annottext">forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">[(ProcessID, Query (Endo WindowSet))]
+-&gt; X [(ProcessID, Query (Endo WindowSet))]
+</span><a href="#local-6989586621679477629"><span class="hs-identifier hs-var">f</span></a></span><span> </span><span class="annot"><span class="annottext">forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">Spawner -&gt; [(ProcessID, Query (Endo WindowSet))]
+</span><a href="XMonad.Actions.SpawnOn.html#pidsRef"><span class="hs-identifier hs-var">pidsRef</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-80"></span><span>
+</span><span id="line-81"></span><span class="hs-comment">-- | Provides a manage hook to react on process spawned with</span><span>
+</span><span id="line-82"></span><span class="hs-comment">-- 'spawnOn', 'spawnHere' etc.</span><span>
+</span><span id="line-83"></span><span class="annot"><a href="XMonad.Actions.SpawnOn.html#manageSpawn"><span class="hs-identifier hs-type">manageSpawn</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">ManageHook</span></span><span>
+</span><span id="line-84"></span><span id="manageSpawn"><span class="annot"><span class="annottext">manageSpawn :: Query (Endo WindowSet)
+</span><a href="XMonad.Actions.SpawnOn.html#manageSpawn"><span class="hs-identifier hs-var hs-var">manageSpawn</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">([(ProcessID, Query (Endo WindowSet))]
+ -&gt; X [(ProcessID, Query (Endo WindowSet))])
+-&gt; Query (Endo WindowSet)
+</span><a href="XMonad.Actions.SpawnOn.html#manageSpawnWithGC"><span class="hs-identifier hs-var">manageSpawnWithGC</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">forall (m :: * -&gt; *) a. Monad m =&gt; a -&gt; m a
+</span><span class="hs-identifier hs-var">return</span></span><span> </span><span class="annot"><span class="annottext">forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">forall a. Int -&gt; [a] -&gt; [a]
+</span><span class="hs-identifier hs-var">take</span></span><span> </span><span class="annot"><span class="annottext">Int
+</span><span class="hs-number">20</span></span><span class="hs-special">)</span><span>
+</span><span id="line-85"></span><span>
+</span><span id="line-86"></span><span class="annot"><a href="XMonad.Actions.SpawnOn.html#manageSpawnWithGC"><span class="hs-identifier hs-type">manageSpawnWithGC</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="hs-special">(</span><span class="hs-special">[</span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">ProcessID</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier hs-type">ManageHook</span></span><span class="hs-special">)</span><span class="hs-special">]</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">X</span></span><span> </span><span class="hs-special">[</span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">ProcessID</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier hs-type">ManageHook</span></span><span class="hs-special">)</span><span class="hs-special">]</span><span class="hs-special">)</span><span>
+</span><span id="line-87"></span><span>        </span><span class="hs-comment">-- ^ function to stop accumulation of entries for windows that never set @_NET_WM_PID@</span><span>
+</span><span id="line-88"></span><span>       </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">ManageHook</span></span><span>
+</span><span id="line-89"></span><span id="manageSpawnWithGC"><span class="annot"><span class="annottext">manageSpawnWithGC :: ([(ProcessID, Query (Endo WindowSet))]
+ -&gt; X [(ProcessID, Query (Endo WindowSet))])
+-&gt; Query (Endo WindowSet)
+</span><a href="XMonad.Actions.SpawnOn.html#manageSpawnWithGC"><span class="hs-identifier hs-var hs-var">manageSpawnWithGC</span></a></span></span><span> </span><span id="local-6989586621679477626"><span class="annot"><span class="annottext">[(ProcessID, Query (Endo WindowSet))]
+-&gt; X [(ProcessID, Query (Endo WindowSet))]
+</span><a href="#local-6989586621679477626"><span class="hs-identifier hs-var">garbageCollect</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Query (Maybe ProcessID)
+</span><a href="XMonad.Hooks.ManageHelpers.html#pid"><span class="hs-identifier hs-var">pid</span></a></span><span> </span><span class="annot"><span class="annottext">forall (m :: * -&gt; *) a b. Monad m =&gt; m a -&gt; (a -&gt; m b) -&gt; m b
+</span><span class="hs-operator hs-var">&gt;&gt;=</span></span><span> </span><span class="hs-glyph">\</span><span class="hs-glyph">case</span><span>
+</span><span id="line-90"></span><span>    </span><span class="annot"><span class="annottext">Maybe ProcessID
+</span><span class="hs-identifier hs-var">Nothing</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">forall a. Monoid a =&gt; a
+</span><span class="hs-identifier hs-var">mempty</span></span><span>
+</span><span id="line-91"></span><span>    </span><span class="annot"><span class="hs-identifier hs-type">Just</span></span><span> </span><span id="local-6989586621679477624"><span class="annot"><span class="annottext">ProcessID
+</span><a href="#local-6989586621679477624"><span class="hs-identifier hs-var">p</span></a></span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-92"></span><span>        </span><span class="annot"><a href="XMonad.Actions.SpawnOn.html#Spawner"><span class="hs-identifier hs-type">Spawner</span></a></span><span> </span><span id="local-6989586621679477623"><span class="annot"><span class="annottext">[(ProcessID, Query (Endo WindowSet))]
+</span><a href="#local-6989586621679477623"><span class="hs-identifier hs-var">pids</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">forall a. X a -&gt; Query a
+</span><span class="hs-identifier hs-var">liftX</span></span><span> </span><span class="annot"><span class="annottext">forall a (m :: * -&gt; *). (ExtensionClass a, XLike m) =&gt; m a
+</span><a href="XMonad.Util.ExtensibleState.html#get"><span class="hs-identifier hs-var">XS.get</span></a></span><span>
+</span><span id="line-93"></span><span>        </span><span id="local-6989586621679477620"><span class="annot"><span class="annottext">[ProcessID]
+</span><a href="#local-6989586621679477620"><span class="hs-identifier hs-var">ppid_chain</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">forall (m :: * -&gt; *) a. MonadIO m =&gt; IO a -&gt; m a
+</span><span class="hs-identifier hs-var">io</span></span><span> </span><span class="annot"><span class="annottext">forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">ProcessID -&gt; IO [ProcessID]
+</span><a href="XMonad.Util.Process.html#getPPIDChain"><span class="hs-identifier hs-var">getPPIDChain</span></a></span><span> </span><span class="annot"><span class="annottext">ProcessID
+</span><a href="#local-6989586621679477624"><span class="hs-identifier hs-var">p</span></a></span><span>
+</span><span id="line-94"></span><span>        </span><span class="hs-keyword">case</span><span> </span><span class="annot"><span class="annottext">forall a b. (a -&gt; Maybe b) -&gt; [a] -&gt; [b]
+</span><span class="hs-identifier hs-var">mapMaybe</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">forall a b. Eq a =&gt; a -&gt; [(a, b)] -&gt; Maybe b
+</span><span class="hs-operator hs-var">`lookup`</span></span><span> </span><span class="annot"><span class="annottext">[(ProcessID, Query (Endo WindowSet))]
+</span><a href="#local-6989586621679477623"><span class="hs-identifier hs-var">pids</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">[ProcessID]
+</span><a href="#local-6989586621679477620"><span class="hs-identifier hs-var">ppid_chain</span></a></span><span> </span><span class="hs-keyword">of</span><span>
+</span><span id="line-95"></span><span>            </span><span class="hs-special">[</span><span class="hs-special">]</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">forall a. Monoid a =&gt; a
+</span><span class="hs-identifier hs-var">mempty</span></span><span>
+</span><span id="line-96"></span><span>            </span><span id="local-6989586621679477616"><span class="annot"><span class="annottext">Query (Endo WindowSet)
+</span><a href="#local-6989586621679477616"><span class="hs-identifier hs-var">mh</span></a></span></span><span> </span><span class="annot"><span class="hs-glyph hs-type">:</span></span><span> </span><span class="annot"><span class="annottext">[Query (Endo WindowSet)]
+</span><span class="hs-identifier">_</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">forall a. X a -&gt; Query a
+</span><span class="hs-identifier hs-var">liftX</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">ProcessID -&gt; X ()
+</span><a href="#local-6989586621679477615"><span class="hs-identifier hs-var">gc</span></a></span><span> </span><span class="annot"><span class="annottext">ProcessID
+</span><a href="#local-6989586621679477624"><span class="hs-identifier hs-var">p</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">forall (m :: * -&gt; *) a b. Monad m =&gt; m a -&gt; m b -&gt; m b
+</span><span class="hs-operator hs-var">&gt;&gt;</span></span><span> </span><span class="annot"><span class="annottext">Query (Endo WindowSet)
+</span><a href="#local-6989586621679477616"><span class="hs-identifier hs-var">mh</span></a></span><span>
+</span><span id="line-97"></span><span>  </span><span class="hs-keyword">where</span><span>
+</span><span id="line-98"></span><span>    </span><span id="local-6989586621679477615"><span class="annot"><span class="annottext">gc :: ProcessID -&gt; X ()
+</span><a href="#local-6989586621679477615"><span class="hs-identifier hs-var hs-var">gc</span></a></span></span><span> </span><span id="local-6989586621679477613"><span class="annot"><span class="annottext">ProcessID
+</span><a href="#local-6989586621679477613"><span class="hs-identifier hs-var">p</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">([(ProcessID, Query (Endo WindowSet))]
+ -&gt; X [(ProcessID, Query (Endo WindowSet))])
+-&gt; X ()
+</span><a href="XMonad.Actions.SpawnOn.html#modifySpawnerM"><span class="hs-identifier hs-var">modifySpawnerM</span></a></span><span> </span><span class="annot"><span class="annottext">forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">[(ProcessID, Query (Endo WindowSet))]
+-&gt; X [(ProcessID, Query (Endo WindowSet))]
+</span><a href="#local-6989586621679477626"><span class="hs-identifier hs-var">garbageCollect</span></a></span><span> </span><span class="annot"><span class="annottext">forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">forall a. (a -&gt; Bool) -&gt; [a] -&gt; [a]
+</span><span class="hs-identifier hs-var">filter</span></span><span> </span><span class="hs-special">(</span><span class="hs-special">(</span><span class="annot"><span class="annottext">forall a. Eq a =&gt; a -&gt; a -&gt; Bool
+</span><span class="hs-operator hs-var">/=</span></span><span> </span><span class="annot"><span class="annottext">ProcessID
+</span><a href="#local-6989586621679477613"><span class="hs-identifier hs-var">p</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">forall a b. (a, b) -&gt; a
+</span><span class="hs-identifier hs-var">fst</span></span><span class="hs-special">)</span><span>
+</span><span id="line-99"></span><span>
+</span><span id="line-100"></span><span class="annot"><a href="XMonad.Actions.SpawnOn.html#mkPrompt"><span class="hs-identifier hs-type">mkPrompt</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">String</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">X</span></span><span> </span><span class="hs-special">(</span><span class="hs-special">)</span><span class="hs-special">)</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="XMonad.Prompt.html#XPConfig"><span class="hs-identifier hs-type">XPConfig</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">X</span></span><span> </span><span class="hs-special">(</span><span class="hs-special">)</span><span>
+</span><span id="line-101"></span><span id="mkPrompt"><span class="annot"><span class="annottext">mkPrompt :: (String -&gt; X ()) -&gt; XPConfig -&gt; X ()
+</span><a href="XMonad.Actions.SpawnOn.html#mkPrompt"><span class="hs-identifier hs-var hs-var">mkPrompt</span></a></span></span><span> </span><span id="local-6989586621679477610"><span class="annot"><span class="annottext">String -&gt; X ()
+</span><a href="#local-6989586621679477610"><span class="hs-identifier hs-var">cb</span></a></span></span><span> </span><span id="local-6989586621679477609"><span class="annot"><span class="annottext">XPConfig
+</span><a href="#local-6989586621679477609"><span class="hs-identifier hs-var">c</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-102"></span><span>    </span><span id="local-6989586621679477608"><span class="annot"><span class="annottext">[String]
+</span><a href="#local-6989586621679477608"><span class="hs-identifier hs-var">cmds</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">forall (m :: * -&gt; *) a. MonadIO m =&gt; IO a -&gt; m a
+</span><span class="hs-identifier hs-var">io</span></span><span> </span><span class="annot"><span class="annottext">IO [String]
+</span><a href="XMonad.Prompt.Shell.html#getCommands"><span class="hs-identifier hs-var">getCommands</span></a></span><span>
+</span><span id="line-103"></span><span>    </span><span class="annot"><span class="annottext">forall p.
+XPrompt p =&gt;
+p -&gt; XPConfig -&gt; ComplFunction -&gt; (String -&gt; X ()) -&gt; X ()
+</span><a href="XMonad.Prompt.html#mkXPrompt"><span class="hs-identifier hs-var">mkXPrompt</span></a></span><span> </span><span class="annot"><span class="annottext">Shell
+</span><a href="XMonad.Prompt.Shell.html#Shell"><span class="hs-identifier hs-var">Shell</span></a></span><span> </span><span class="annot"><span class="annottext">XPConfig
+</span><a href="#local-6989586621679477609"><span class="hs-identifier hs-var">c</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">[String] -&gt; Predicate -&gt; ComplFunction
+</span><a href="XMonad.Prompt.Shell.html#getShellCompl"><span class="hs-identifier hs-var">getShellCompl</span></a></span><span> </span><span class="annot"><span class="annottext">[String]
+</span><a href="#local-6989586621679477608"><span class="hs-identifier hs-var">cmds</span></a></span><span> </span><span class="annot"><span class="annottext">forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">XPConfig -&gt; Predicate
+</span><a href="XMonad.Prompt.html#searchPredicate"><span class="hs-identifier hs-var">searchPredicate</span></a></span><span> </span><span class="annot"><span class="annottext">XPConfig
+</span><a href="#local-6989586621679477609"><span class="hs-identifier hs-var">c</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">String -&gt; X ()
+</span><a href="#local-6989586621679477610"><span class="hs-identifier hs-var">cb</span></a></span><span>
+</span><span id="line-104"></span><span>
+</span><span id="line-105"></span><span class="hs-comment">-- | Replacement for Shell prompt (&quot;XMonad.Prompt.Shell&quot;) which launches</span><span>
+</span><span id="line-106"></span><span class="hs-comment">-- application on current workspace.</span><span>
+</span><span id="line-107"></span><span class="annot"><a href="XMonad.Actions.SpawnOn.html#shellPromptHere"><span class="hs-identifier hs-type">shellPromptHere</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><a href="XMonad.Prompt.html#XPConfig"><span class="hs-identifier hs-type">XPConfig</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">X</span></span><span> </span><span class="hs-special">(</span><span class="hs-special">)</span><span>
+</span><span id="line-108"></span><span id="shellPromptHere"><span class="annot"><span class="annottext">shellPromptHere :: XPConfig -&gt; X ()
+</span><a href="XMonad.Actions.SpawnOn.html#shellPromptHere"><span class="hs-identifier hs-var hs-var">shellPromptHere</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">(String -&gt; X ()) -&gt; XPConfig -&gt; X ()
+</span><a href="XMonad.Actions.SpawnOn.html#mkPrompt"><span class="hs-identifier hs-var">mkPrompt</span></a></span><span> </span><span class="annot"><span class="annottext">String -&gt; X ()
+</span><a href="XMonad.Actions.SpawnOn.html#spawnHere"><span class="hs-identifier hs-var">spawnHere</span></a></span><span>
+</span><span id="line-109"></span><span>
+</span><span id="line-110"></span><span class="hs-comment">-- | Replacement for Shell prompt (&quot;XMonad.Prompt.Shell&quot;) which launches</span><span>
+</span><span id="line-111"></span><span class="hs-comment">-- application on given workspace.</span><span>
+</span><span id="line-112"></span><span class="annot"><a href="XMonad.Actions.SpawnOn.html#shellPromptOn"><span class="hs-identifier hs-type">shellPromptOn</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">WorkspaceId</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="XMonad.Prompt.html#XPConfig"><span class="hs-identifier hs-type">XPConfig</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">X</span></span><span> </span><span class="hs-special">(</span><span class="hs-special">)</span><span>
+</span><span id="line-113"></span><span id="shellPromptOn"><span class="annot"><span class="annottext">shellPromptOn :: String -&gt; XPConfig -&gt; X ()
+</span><a href="XMonad.Actions.SpawnOn.html#shellPromptOn"><span class="hs-identifier hs-var hs-var">shellPromptOn</span></a></span></span><span> </span><span id="local-6989586621679477601"><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679477601"><span class="hs-identifier hs-var">ws</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">(String -&gt; X ()) -&gt; XPConfig -&gt; X ()
+</span><a href="XMonad.Actions.SpawnOn.html#mkPrompt"><span class="hs-identifier hs-var">mkPrompt</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">String -&gt; String -&gt; X ()
+</span><a href="XMonad.Actions.SpawnOn.html#spawnOn"><span class="hs-identifier hs-var">spawnOn</span></a></span><span> </span><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679477601"><span class="hs-identifier hs-var">ws</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-114"></span><span>
+</span><span id="line-115"></span><span class="hs-comment">-- | Replacement for 'spawn' which launches</span><span>
+</span><span id="line-116"></span><span class="hs-comment">-- application on current workspace.</span><span>
+</span><span id="line-117"></span><span class="annot"><a href="XMonad.Actions.SpawnOn.html#spawnHere"><span class="hs-identifier hs-type">spawnHere</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">String</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">X</span></span><span> </span><span class="hs-special">(</span><span class="hs-special">)</span><span>
+</span><span id="line-118"></span><span id="spawnHere"><span class="annot"><span class="annottext">spawnHere :: String -&gt; X ()
+</span><a href="XMonad.Actions.SpawnOn.html#spawnHere"><span class="hs-identifier hs-var hs-var">spawnHere</span></a></span></span><span> </span><span id="local-6989586621679477600"><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679477600"><span class="hs-identifier hs-var">cmd</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">forall a. (WindowSet -&gt; X a) -&gt; X a
+</span><span class="hs-identifier hs-var">withWindowSet</span></span><span> </span><span class="annot"><span class="annottext">forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="hs-glyph">\</span><span id="local-6989586621679477598"><span class="annot"><span class="annottext">WindowSet
+</span><a href="#local-6989586621679477598"><span class="hs-identifier hs-var">ws</span></a></span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">String -&gt; String -&gt; X ()
+</span><a href="XMonad.Actions.SpawnOn.html#spawnOn"><span class="hs-identifier hs-var">spawnOn</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">forall i l a s sd. StackSet i l a s sd -&gt; i
+</span><span class="hs-identifier hs-var">W.currentTag</span></span><span> </span><span class="annot"><span class="annottext">WindowSet
+</span><a href="#local-6989586621679477598"><span class="hs-identifier hs-var">ws</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679477600"><span class="hs-identifier hs-var">cmd</span></a></span><span>
+</span><span id="line-119"></span><span>
+</span><span id="line-120"></span><span class="hs-comment">-- | Replacement for 'spawn' which launches</span><span>
+</span><span id="line-121"></span><span class="hs-comment">-- application on given workspace.</span><span>
+</span><span id="line-122"></span><span class="annot"><a href="XMonad.Actions.SpawnOn.html#spawnOn"><span class="hs-identifier hs-type">spawnOn</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">WorkspaceId</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">String</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">X</span></span><span> </span><span class="hs-special">(</span><span class="hs-special">)</span><span>
+</span><span id="line-123"></span><span id="spawnOn"><span class="annot"><span class="annottext">spawnOn :: String -&gt; String -&gt; X ()
+</span><a href="XMonad.Actions.SpawnOn.html#spawnOn"><span class="hs-identifier hs-var hs-var">spawnOn</span></a></span></span><span> </span><span id="local-6989586621679477596"><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679477596"><span class="hs-identifier hs-var">ws</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Query (Endo WindowSet) -&gt; String -&gt; X ()
+</span><a href="XMonad.Actions.SpawnOn.html#spawnAndDo"><span class="hs-identifier hs-var">spawnAndDo</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">String -&gt; Query (Endo WindowSet)
+</span><span class="hs-identifier hs-var">doShift</span></span><span> </span><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679477596"><span class="hs-identifier hs-var">ws</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-124"></span><span>
+</span><span id="line-125"></span><span class="hs-comment">-- | Spawn an application and apply the manage hook when it opens.</span><span>
+</span><span id="line-126"></span><span class="annot"><a href="XMonad.Actions.SpawnOn.html#spawnAndDo"><span class="hs-identifier hs-type">spawnAndDo</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">ManageHook</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">String</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">X</span></span><span> </span><span class="hs-special">(</span><span class="hs-special">)</span><span>
+</span><span id="line-127"></span><span id="spawnAndDo"><span class="annot"><span class="annottext">spawnAndDo :: Query (Endo WindowSet) -&gt; String -&gt; X ()
+</span><a href="XMonad.Actions.SpawnOn.html#spawnAndDo"><span class="hs-identifier hs-var hs-var">spawnAndDo</span></a></span></span><span> </span><span id="local-6989586621679477594"><span class="annot"><span class="annottext">Query (Endo WindowSet)
+</span><a href="#local-6989586621679477594"><span class="hs-identifier hs-var">mh</span></a></span></span><span> </span><span id="local-6989586621679477593"><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679477593"><span class="hs-identifier hs-var">cmd</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-128"></span><span>    </span><span id="local-6989586621679477592"><span class="annot"><span class="annottext">ProcessID
+</span><a href="#local-6989586621679477592"><span class="hs-identifier hs-var">p</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">forall (m :: * -&gt; *). MonadIO m =&gt; String -&gt; m ProcessID
+</span><span class="hs-identifier hs-var">spawnPID</span></span><span> </span><span class="annot"><span class="annottext">forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">String -&gt; String
+</span><a href="#local-6989586621679477590"><span class="hs-identifier hs-var">mangle</span></a></span><span> </span><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679477593"><span class="hs-identifier hs-var">cmd</span></a></span><span>
+</span><span id="line-129"></span><span>    </span><span class="annot"><span class="annottext">([(ProcessID, Query (Endo WindowSet))]
+ -&gt; [(ProcessID, Query (Endo WindowSet))])
+-&gt; X ()
+</span><a href="XMonad.Actions.SpawnOn.html#modifySpawner"><span class="hs-identifier hs-var">modifySpawner</span></a></span><span> </span><span class="hs-special">(</span><span class="hs-special">(</span><span class="annot"><span class="annottext">ProcessID
+</span><a href="#local-6989586621679477592"><span class="hs-identifier hs-var">p</span></a></span><span class="hs-special">,</span><span class="annot"><span class="annottext">Query (Endo WindowSet)
+</span><a href="#local-6989586621679477594"><span class="hs-identifier hs-var">mh</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">forall a. a -&gt; [a] -&gt; [a]
+</span><span class="hs-glyph hs-var">:</span></span><span class="hs-special">)</span><span>
+</span><span id="line-130"></span><span> </span><span class="hs-keyword">where</span><span>
+</span><span id="line-131"></span><span>    </span><span class="hs-comment">-- TODO this is silly, search for a better solution</span><span>
+</span><span id="line-132"></span><span>    </span><span id="local-6989586621679477590"><span class="annot"><span class="annottext">mangle :: String -&gt; String
+</span><a href="#local-6989586621679477590"><span class="hs-identifier hs-var hs-var">mangle</span></a></span></span><span> </span><span id="local-6989586621679477583"><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679477583"><span class="hs-identifier hs-var">xs</span></a></span></span><span> </span><span class="hs-glyph">|</span><span> </span><span class="annot"><span class="annottext">forall (t :: * -&gt; *) a. Foldable t =&gt; (a -&gt; Bool) -&gt; t a -&gt; Bool
+</span><span class="hs-identifier hs-var">any</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">forall (t :: * -&gt; *) a. (Foldable t, Eq a) =&gt; a -&gt; t a -&gt; Bool
+</span><span class="hs-operator hs-var">`elem`</span></span><span> </span><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679477580"><span class="hs-identifier hs-var">metaChars</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679477583"><span class="hs-identifier hs-var">xs</span></a></span><span> </span><span class="annot"><span class="annottext">Bool -&gt; Bool -&gt; Bool
+</span><span class="hs-operator hs-var">||</span></span><span> </span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot;exec&quot;</span></span><span> </span><span class="annot"><span class="annottext">forall a. Eq a =&gt; [a] -&gt; [a] -&gt; Bool
+</span><span class="hs-operator hs-var">`isInfixOf`</span></span><span> </span><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679477583"><span class="hs-identifier hs-var">xs</span></a></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679477583"><span class="hs-identifier hs-var">xs</span></a></span><span>
+</span><span id="line-133"></span><span>              </span><span class="hs-glyph">|</span><span> </span><span class="annot"><span class="annottext">Bool
+</span><span class="hs-identifier hs-var">otherwise</span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot;exec &quot;</span></span><span> </span><span class="annot"><span class="annottext">forall a. [a] -&gt; [a] -&gt; [a]
+</span><span class="hs-operator hs-var">++</span></span><span> </span><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679477583"><span class="hs-identifier hs-var">xs</span></a></span><span>
+</span><span id="line-134"></span><span>    </span><span id="local-6989586621679477580"><span class="annot"><span class="annottext">metaChars :: String
+</span><a href="#local-6989586621679477580"><span class="hs-identifier hs-var hs-var">metaChars</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot;&amp;|;&quot;</span></span><span>
+</span><span id="line-135"></span></pre></body></html>
