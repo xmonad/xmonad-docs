@@ -1,0 +1,214 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd"><html xmlns="http://www.w3.org/1999/xhtml"><head><link rel="stylesheet" type="text/css" href="style.css" /><script type="text/javascript" src="highlight.js"></script></head><body><pre><span class="hs-comment">-----------------------------------------------------------------------------</span><span>
+</span><span id="line-2"></span><span class="hs-comment">-- |</span><span>
+</span><span id="line-3"></span><span class="hs-comment">-- Module      :  XMonad.Util.NamedWindows</span><span>
+</span><span id="line-4"></span><span class="hs-comment">-- Description :  Associate the X titles of windows with them.</span><span>
+</span><span id="line-5"></span><span class="hs-comment">-- Copyright   :  (c) David Roundy &lt;droundy@darcs.net&gt;</span><span>
+</span><span id="line-6"></span><span class="hs-comment">-- License     :  BSD3-style (see LICENSE)</span><span>
+</span><span id="line-7"></span><span class="hs-comment">--</span><span>
+</span><span id="line-8"></span><span class="hs-comment">-- Maintainer  :  none</span><span>
+</span><span id="line-9"></span><span class="hs-comment">-- Stability   :  unstable</span><span>
+</span><span id="line-10"></span><span class="hs-comment">-- Portability :  unportable</span><span>
+</span><span id="line-11"></span><span class="hs-comment">--</span><span>
+</span><span id="line-12"></span><span class="hs-comment">-- This module allows you to associate the X titles of windows with</span><span>
+</span><span id="line-13"></span><span class="hs-comment">-- them.</span><span>
+</span><span id="line-14"></span><span class="hs-comment">--</span><span>
+</span><span id="line-15"></span><span class="hs-comment">-----------------------------------------------------------------------------</span><span>
+</span><span id="line-16"></span><span>
+</span><span id="line-17"></span><span class="hs-keyword">module</span><span> </span><span class="hs-identifier">XMonad.Util.NamedWindows</span><span> </span><span class="hs-special">(</span><span>
+</span><span id="line-18"></span><span>                                   </span><span class="annot"><span class="hs-comment">-- * Usage</span></span><span>
+</span><span id="line-19"></span><span>                                   </span><span class="annot"><span class="hs-comment">-- $usage</span></span><span>
+</span><span id="line-20"></span><span>                                   </span><span class="annot"><a href="XMonad.Util.NamedWindows.html#NamedWindow"><span class="hs-identifier">NamedWindow</span></a></span><span class="hs-special">,</span><span>
+</span><span id="line-21"></span><span>                                   </span><span class="annot"><a href="XMonad.Util.NamedWindows.html#getName"><span class="hs-identifier">getName</span></a></span><span class="hs-special">,</span><span>
+</span><span id="line-22"></span><span>                                   </span><span class="annot"><a href="XMonad.Util.NamedWindows.html#getNameWMClass"><span class="hs-identifier">getNameWMClass</span></a></span><span class="hs-special">,</span><span>
+</span><span id="line-23"></span><span>                                   </span><span class="annot"><a href="XMonad.Util.NamedWindows.html#withNamedWindow"><span class="hs-identifier">withNamedWindow</span></a></span><span class="hs-special">,</span><span>
+</span><span id="line-24"></span><span>                                   </span><span class="annot"><a href="XMonad.Util.NamedWindows.html#unName"><span class="hs-identifier">unName</span></a></span><span>
+</span><span id="line-25"></span><span>                                  </span><span class="hs-special">)</span><span> </span><span class="hs-keyword">where</span><span>
+</span><span id="line-26"></span><span>
+</span><span id="line-27"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><span class="hs-identifier">Control.Exception</span></span><span> </span><span class="hs-keyword">as</span><span> </span><span class="annot"><span class="hs-identifier">E</span></span><span>
+</span><span id="line-28"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><a href="XMonad.Prelude.html"><span class="hs-identifier">XMonad.Prelude</span></a></span><span> </span><span class="hs-special">(</span><span> </span><span class="annot"><span class="hs-identifier">fromMaybe</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier">listToMaybe</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-operator">(&gt;=&gt;)</span></span><span> </span><span class="hs-special">)</span><span>
+</span><span id="line-29"></span><span>
+</span><span id="line-30"></span><span class="hs-keyword">import</span><span> </span><span class="hs-keyword">qualified</span><span> </span><span class="annot"><span class="hs-identifier">XMonad.StackSet</span></span><span> </span><span class="hs-keyword">as</span><span> </span><span class="annot"><span class="hs-identifier">W</span></span><span> </span><span class="hs-special">(</span><span> </span><span class="annot"><span class="hs-identifier">peek</span></span><span> </span><span class="hs-special">)</span><span>
+</span><span id="line-31"></span><span>
+</span><span id="line-32"></span><span>
+</span><span id="line-33"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><span class="hs-identifier">XMonad</span></span><span>
+</span><span id="line-34"></span><span>
+</span><span id="line-35"></span><span class="hs-comment">-- $usage</span><span>
+</span><span id="line-36"></span><span class="hs-comment">-- See &quot;XMonad.Layout.Tabbed&quot; for an example of its use.</span><span>
+</span><span id="line-37"></span><span>
+</span><span id="line-38"></span><span>
+</span><span id="line-39"></span><span class="hs-keyword">data</span><span> </span><span id="NamedWindow"><span class="annot"><a href="XMonad.Util.NamedWindows.html#NamedWindow"><span class="hs-identifier hs-var">NamedWindow</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span id="NW"><span class="annot"><a href="XMonad.Util.NamedWindows.html#NW"><span class="hs-identifier hs-var">NW</span></a></span></span><span> </span><span class="hs-glyph">!</span><span class="annot"><span class="hs-identifier hs-type">String</span></span><span> </span><span class="hs-glyph">!</span><span class="annot"><span class="hs-identifier hs-type">Window</span></span><span>
+</span><span id="line-40"></span><span class="hs-keyword">instance</span><span> </span><span id="local-6989586621679423802"><span class="annot"><span class="hs-identifier hs-type">Eq</span></span><span> </span><span class="annot"><a href="XMonad.Util.NamedWindows.html#NamedWindow"><span class="hs-identifier hs-type">NamedWindow</span></a></span></span><span> </span><span class="hs-keyword">where</span><span>
+</span><span id="line-41"></span><span>    </span><span class="hs-special">(</span><span class="annot"><a href="XMonad.Util.NamedWindows.html#NW"><span class="hs-identifier hs-type">NW</span></a></span><span> </span><span id="local-6989586621679423796"><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679423796"><span class="hs-identifier hs-var">s</span></a></span></span><span> </span><span class="annot"><span class="annottext">Window
+</span><span class="hs-identifier">_</span></span><span class="hs-special">)</span><span> </span><span id="local-6989586621679423795"><span class="annot"><span class="annottext">== :: NamedWindow -&gt; NamedWindow -&gt; Bool
+</span><span class="hs-operator hs-var hs-var hs-var hs-var">==</span></span></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="XMonad.Util.NamedWindows.html#NW"><span class="hs-identifier hs-type">NW</span></a></span><span> </span><span id="local-6989586621679423794"><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679423794"><span class="hs-identifier hs-var">s'</span></a></span></span><span> </span><span class="annot"><span class="annottext">Window
+</span><span class="hs-identifier">_</span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679423796"><span class="hs-identifier hs-var">s</span></a></span><span> </span><span class="annot"><span class="annottext">forall a. Eq a =&gt; a -&gt; a -&gt; Bool
+</span><span class="hs-operator hs-var">==</span></span><span> </span><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679423794"><span class="hs-identifier hs-var">s'</span></a></span><span>
+</span><span id="line-42"></span><span class="hs-keyword">instance</span><span> </span><span id="local-6989586621679423779"><span id="local-6989586621679423781"><span id="local-6989586621679423783"><span id="local-6989586621679423785"><span id="local-6989586621679423787"><span id="local-6989586621679423789"><span class="annot"><span class="hs-identifier hs-type">Ord</span></span><span> </span><span class="annot"><a href="XMonad.Util.NamedWindows.html#NamedWindow"><span class="hs-identifier hs-type">NamedWindow</span></a></span></span></span></span></span></span></span><span> </span><span class="hs-keyword">where</span><span>
+</span><span id="line-43"></span><span>    </span><span id="local-6989586621679423773"><span class="annot"><span class="annottext">compare :: NamedWindow -&gt; NamedWindow -&gt; Ordering
+</span><span class="hs-identifier hs-var hs-var hs-var hs-var">compare</span></span></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="XMonad.Util.NamedWindows.html#NW"><span class="hs-identifier hs-type">NW</span></a></span><span> </span><span id="local-6989586621679423771"><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679423771"><span class="hs-identifier hs-var">s</span></a></span></span><span> </span><span class="annot"><span class="annottext">Window
+</span><span class="hs-identifier">_</span></span><span class="hs-special">)</span><span> </span><span class="hs-special">(</span><span class="annot"><a href="XMonad.Util.NamedWindows.html#NW"><span class="hs-identifier hs-type">NW</span></a></span><span> </span><span id="local-6989586621679423770"><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679423770"><span class="hs-identifier hs-var">s'</span></a></span></span><span> </span><span class="annot"><span class="annottext">Window
+</span><span class="hs-identifier">_</span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">forall a. Ord a =&gt; a -&gt; a -&gt; Ordering
+</span><span class="hs-identifier hs-var">compare</span></span><span> </span><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679423771"><span class="hs-identifier hs-var">s</span></a></span><span> </span><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679423770"><span class="hs-identifier hs-var">s'</span></a></span><span>
+</span><span id="line-44"></span><span class="hs-keyword">instance</span><span> </span><span id="local-6989586621679423765"><span id="local-6989586621679423768"><span class="annot"><span class="hs-identifier hs-type">Show</span></span><span> </span><span class="annot"><a href="XMonad.Util.NamedWindows.html#NamedWindow"><span class="hs-identifier hs-type">NamedWindow</span></a></span></span></span><span> </span><span class="hs-keyword">where</span><span>
+</span><span id="line-45"></span><span>    </span><span id="local-6989586621679423763"><span class="annot"><span class="annottext">show :: NamedWindow -&gt; String
+</span><span class="hs-identifier hs-var hs-var hs-var hs-var">show</span></span></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="XMonad.Util.NamedWindows.html#NW"><span class="hs-identifier hs-type">NW</span></a></span><span> </span><span id="local-6989586621679423761"><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679423761"><span class="hs-identifier hs-var">n</span></a></span></span><span> </span><span class="annot"><span class="annottext">Window
+</span><span class="hs-identifier">_</span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679423761"><span class="hs-identifier hs-var">n</span></a></span><span>
+</span><span id="line-46"></span><span>
+</span><span id="line-47"></span><span class="annot"><a href="XMonad.Util.NamedWindows.html#getName"><span class="hs-identifier hs-type">getName</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Window</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">X</span></span><span> </span><span class="annot"><a href="XMonad.Util.NamedWindows.html#NamedWindow"><span class="hs-identifier hs-type">NamedWindow</span></a></span><span>
+</span><span id="line-48"></span><span id="getName"><span class="annot"><span class="annottext">getName :: Window -&gt; X NamedWindow
+</span><a href="XMonad.Util.NamedWindows.html#getName"><span class="hs-identifier hs-var hs-var">getName</span></a></span></span><span> </span><span id="local-6989586621679423760"><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679423760"><span class="hs-identifier hs-var">w</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">forall a. (Display -&gt; X a) -&gt; X a
+</span><span class="hs-identifier hs-var">withDisplay</span></span><span> </span><span class="annot"><span class="annottext">forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="hs-glyph">\</span><span id="local-6989586621679423758"><span class="annot"><span class="annottext">Display
+</span><a href="#local-6989586621679423758"><span class="hs-identifier hs-var">d</span></a></span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-49"></span><span>    </span><span class="hs-comment">-- TODO, this code is ugly and convoluted -- clean it up</span><span>
+</span><span id="line-50"></span><span>    </span><span class="hs-keyword">let</span><span> </span><span id="local-6989586621679423755"><span class="annot"><span class="annottext">getIt :: IO NamedWindow
+</span><a href="#local-6989586621679423755"><span class="hs-identifier hs-var hs-var">getIt</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">forall a b c. IO a -&gt; (a -&gt; IO b) -&gt; (a -&gt; IO c) -&gt; IO c
+</span><span class="hs-identifier hs-var">bracket</span></span><span> </span><span class="annot"><span class="annottext">IO TextProperty
+</span><a href="#local-6989586621679423753"><span class="hs-identifier hs-var">getProp</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">forall a. Ptr a -&gt; IO CInt
+</span><span class="hs-identifier hs-var">xFree</span></span><span> </span><span class="annot"><span class="annottext">forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">TextProperty -&gt; CString
+</span><span class="hs-identifier hs-var">tp_value</span></span><span class="hs-special">)</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">forall (f :: * -&gt; *) a b. Functor f =&gt; (a -&gt; b) -&gt; f a -&gt; f b
+</span><span class="hs-identifier hs-var">fmap</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">String -&gt; Window -&gt; NamedWindow
+</span><a href="XMonad.Util.NamedWindows.html#NW"><span class="hs-operator hs-var">`NW`</span></a></span><span> </span><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679423760"><span class="hs-identifier hs-var">w</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">TextProperty -&gt; IO String
+</span><a href="#local-6989586621679423749"><span class="hs-identifier hs-var">copy</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-51"></span><span>
+</span><span id="line-52"></span><span>        </span><span id="local-6989586621679423753"><span class="annot"><span class="annottext">getProp :: IO TextProperty
+</span><a href="#local-6989586621679423753"><span class="hs-identifier hs-var hs-var">getProp</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Display -&gt; String -&gt; Bool -&gt; IO Window
+</span><span class="hs-identifier hs-var">internAtom</span></span><span> </span><span class="annot"><span class="annottext">Display
+</span><a href="#local-6989586621679423758"><span class="hs-identifier hs-var">d</span></a></span><span> </span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot;_NET_WM_NAME&quot;</span></span><span> </span><span class="annot"><span class="annottext">Bool
+</span><span class="hs-identifier hs-var">False</span></span><span> </span><span class="annot"><span class="annottext">forall (m :: * -&gt; *) a b. Monad m =&gt; m a -&gt; (a -&gt; m b) -&gt; m b
+</span><span class="hs-operator hs-var">&gt;&gt;=</span></span><span> </span><span class="annot"><span class="annottext">Display -&gt; Window -&gt; Window -&gt; IO TextProperty
+</span><span class="hs-identifier hs-var">getTextProperty</span></span><span> </span><span class="annot"><span class="annottext">Display
+</span><a href="#local-6989586621679423758"><span class="hs-identifier hs-var">d</span></a></span><span> </span><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679423760"><span class="hs-identifier hs-var">w</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-53"></span><span>                      </span><span class="annot"><span class="annottext">forall e a. Exception e =&gt; IO a -&gt; (e -&gt; IO a) -&gt; IO a
+</span><span class="hs-operator hs-var">`E.catch`</span></span><span> </span><span class="hs-glyph">\</span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">SomeException</span></span><span> </span><span class="annot"><span class="annottext">e
+</span><span class="hs-identifier">_</span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">Display -&gt; Window -&gt; Window -&gt; IO TextProperty
+</span><span class="hs-identifier hs-var">getTextProperty</span></span><span> </span><span class="annot"><span class="annottext">Display
+</span><a href="#local-6989586621679423758"><span class="hs-identifier hs-var">d</span></a></span><span> </span><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679423760"><span class="hs-identifier hs-var">w</span></a></span><span> </span><span class="annot"><span class="annottext">Window
+</span><span class="hs-identifier hs-var">wM_NAME</span></span><span>
+</span><span id="line-54"></span><span>
+</span><span id="line-55"></span><span>        </span><span id="local-6989586621679423749"><span class="annot"><span class="annottext">copy :: TextProperty -&gt; IO String
+</span><a href="#local-6989586621679423749"><span class="hs-identifier hs-var hs-var">copy</span></a></span></span><span> </span><span id="local-6989586621679423738"><span class="annot"><span class="annottext">TextProperty
+</span><a href="#local-6989586621679423738"><span class="hs-identifier hs-var">prop</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">forall a. a -&gt; Maybe a -&gt; a
+</span><span class="hs-identifier hs-var">fromMaybe</span></span><span> </span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot;&quot;</span></span><span> </span><span class="annot"><span class="annottext">forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">forall a. [a] -&gt; Maybe a
+</span><span class="hs-identifier hs-var">listToMaybe</span></span><span> </span><span class="annot"><span class="annottext">forall (f :: * -&gt; *) a b. Functor f =&gt; (a -&gt; b) -&gt; f a -&gt; f b
+</span><span class="hs-operator hs-var">&lt;$&gt;</span></span><span> </span><span class="annot"><span class="annottext">Display -&gt; TextProperty -&gt; IO [String]
+</span><span class="hs-identifier hs-var">wcTextPropertyToTextList</span></span><span> </span><span class="annot"><span class="annottext">Display
+</span><a href="#local-6989586621679423758"><span class="hs-identifier hs-var">d</span></a></span><span> </span><span class="annot"><span class="annottext">TextProperty
+</span><a href="#local-6989586621679423738"><span class="hs-identifier hs-var">prop</span></a></span><span>
+</span><span id="line-56"></span><span>
+</span><span id="line-57"></span><span>    </span><span class="annot"><span class="annottext">forall (m :: * -&gt; *) a. MonadIO m =&gt; IO a -&gt; m a
+</span><span class="hs-identifier hs-var">io</span></span><span> </span><span class="annot"><span class="annottext">forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">IO NamedWindow
+</span><a href="#local-6989586621679423755"><span class="hs-identifier hs-var">getIt</span></a></span><span> </span><span class="annot"><span class="annottext">forall e a. Exception e =&gt; IO a -&gt; (e -&gt; IO a) -&gt; IO a
+</span><span class="hs-operator hs-var">`E.catch`</span></span><span> </span><span class="hs-glyph">\</span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">SomeException</span></span><span> </span><span class="annot"><span class="annottext">e
+</span><span class="hs-identifier">_</span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">-&gt;</span><span>  </span><span class="hs-special">(</span><span class="annot"><span class="annottext">String -&gt; Window -&gt; NamedWindow
+</span><a href="XMonad.Util.NamedWindows.html#NW"><span class="hs-operator hs-var">`NW`</span></a></span><span> </span><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679423760"><span class="hs-identifier hs-var">w</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">ClassHint -&gt; String
+</span><span class="hs-identifier hs-var">resName</span></span><span> </span><span class="annot"><span class="annottext">forall (f :: * -&gt; *) a b. Functor f =&gt; (a -&gt; b) -&gt; f a -&gt; f b
+</span><span class="hs-operator hs-var">&lt;$&gt;</span></span><span> </span><span class="annot"><span class="annottext">Display -&gt; Window -&gt; IO ClassHint
+</span><span class="hs-identifier hs-var">getClassHint</span></span><span> </span><span class="annot"><span class="annottext">Display
+</span><a href="#local-6989586621679423758"><span class="hs-identifier hs-var">d</span></a></span><span> </span><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679423760"><span class="hs-identifier hs-var">w</span></a></span><span>
+</span><span id="line-58"></span><span>
+</span><span id="line-59"></span><span class="hs-comment">-- | Get 'NamedWindow' using 'wM_CLASS'</span><span>
+</span><span id="line-60"></span><span class="annot"><a href="XMonad.Util.NamedWindows.html#getNameWMClass"><span class="hs-identifier hs-type">getNameWMClass</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Window</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">X</span></span><span> </span><span class="annot"><a href="XMonad.Util.NamedWindows.html#NamedWindow"><span class="hs-identifier hs-type">NamedWindow</span></a></span><span>
+</span><span id="line-61"></span><span id="getNameWMClass"><span class="annot"><span class="annottext">getNameWMClass :: Window -&gt; X NamedWindow
+</span><a href="XMonad.Util.NamedWindows.html#getNameWMClass"><span class="hs-identifier hs-var hs-var">getNameWMClass</span></a></span></span><span> </span><span id="local-6989586621679423730"><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679423730"><span class="hs-identifier hs-var">w</span></a></span></span><span> </span><span class="hs-glyph">=</span><span>
+</span><span id="line-62"></span><span>  </span><span class="annot"><span class="annottext">forall a. (Display -&gt; X a) -&gt; X a
+</span><span class="hs-identifier hs-var">withDisplay</span></span><span> </span><span class="annot"><span class="annottext">forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="hs-glyph">\</span><span id="local-6989586621679423729"><span class="annot"><span class="annottext">Display
+</span><a href="#local-6989586621679423729"><span class="hs-identifier hs-var">d</span></a></span></span><span>
+</span><span id="line-63"></span><span>    </span><span class="hs-comment">-- TODO, this code is ugly and convoluted -- clean it up</span><span>
+</span><span id="line-64"></span><span>   </span><span class="hs-glyph">-&gt;</span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-65"></span><span>    </span><span class="hs-keyword">let</span><span> </span><span id="local-6989586621679423727"><span class="annot"><span class="annottext">getIt :: IO NamedWindow
+</span><a href="#local-6989586621679423727"><span class="hs-identifier hs-var hs-var">getIt</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">forall a b c. IO a -&gt; (a -&gt; IO b) -&gt; (a -&gt; IO c) -&gt; IO c
+</span><span class="hs-identifier hs-var">bracket</span></span><span> </span><span class="annot"><span class="annottext">IO TextProperty
+</span><a href="#local-6989586621679423726"><span class="hs-identifier hs-var">getProp</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">forall a. Ptr a -&gt; IO CInt
+</span><span class="hs-identifier hs-var">xFree</span></span><span> </span><span class="annot"><span class="annottext">forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">TextProperty -&gt; CString
+</span><span class="hs-identifier hs-var">tp_value</span></span><span class="hs-special">)</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">forall (f :: * -&gt; *) a b. Functor f =&gt; (a -&gt; b) -&gt; f a -&gt; f b
+</span><span class="hs-identifier hs-var">fmap</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">String -&gt; Window -&gt; NamedWindow
+</span><a href="XMonad.Util.NamedWindows.html#NW"><span class="hs-operator hs-var">`NW`</span></a></span><span> </span><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679423730"><span class="hs-identifier hs-var">w</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">TextProperty -&gt; IO String
+</span><a href="#local-6989586621679423725"><span class="hs-identifier hs-var">copy</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-66"></span><span>        </span><span id="local-6989586621679423726"><span class="annot"><span class="annottext">getProp :: IO TextProperty
+</span><a href="#local-6989586621679423726"><span class="hs-identifier hs-var hs-var">getProp</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Display -&gt; Window -&gt; Window -&gt; IO TextProperty
+</span><span class="hs-identifier hs-var">getTextProperty</span></span><span> </span><span class="annot"><span class="annottext">Display
+</span><a href="#local-6989586621679423729"><span class="hs-identifier hs-var">d</span></a></span><span> </span><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679423730"><span class="hs-identifier hs-var">w</span></a></span><span> </span><span class="annot"><span class="annottext">Window
+</span><span class="hs-identifier hs-var">wM_CLASS</span></span><span>
+</span><span id="line-67"></span><span>        </span><span id="local-6989586621679423725"><span class="annot"><span class="annottext">copy :: TextProperty -&gt; IO String
+</span><a href="#local-6989586621679423725"><span class="hs-identifier hs-var hs-var">copy</span></a></span></span><span> </span><span id="local-6989586621679423722"><span class="annot"><span class="annottext">TextProperty
+</span><a href="#local-6989586621679423722"><span class="hs-identifier hs-var">prop</span></a></span></span><span> </span><span class="hs-glyph">=</span><span>
+</span><span id="line-68"></span><span>          </span><span class="annot"><span class="annottext">forall a. a -&gt; Maybe a -&gt; a
+</span><span class="hs-identifier hs-var">fromMaybe</span></span><span> </span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot;&quot;</span></span><span> </span><span class="annot"><span class="annottext">forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">forall a. [a] -&gt; Maybe a
+</span><span class="hs-identifier hs-var">listToMaybe</span></span><span> </span><span class="annot"><span class="annottext">forall (f :: * -&gt; *) a b. Functor f =&gt; (a -&gt; b) -&gt; f a -&gt; f b
+</span><span class="hs-operator hs-var">&lt;$&gt;</span></span><span> </span><span class="annot"><span class="annottext">Display -&gt; TextProperty -&gt; IO [String]
+</span><span class="hs-identifier hs-var">wcTextPropertyToTextList</span></span><span> </span><span class="annot"><span class="annottext">Display
+</span><a href="#local-6989586621679423729"><span class="hs-identifier hs-var">d</span></a></span><span> </span><span class="annot"><span class="annottext">TextProperty
+</span><a href="#local-6989586621679423722"><span class="hs-identifier hs-var">prop</span></a></span><span>
+</span><span id="line-69"></span><span>    </span><span class="annot"><span class="annottext">forall (m :: * -&gt; *) a. MonadIO m =&gt; IO a -&gt; m a
+</span><span class="hs-identifier hs-var">io</span></span><span> </span><span class="annot"><span class="annottext">forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span>
+</span><span id="line-70"></span><span>      </span><span class="annot"><span class="annottext">IO NamedWindow
+</span><a href="#local-6989586621679423727"><span class="hs-identifier hs-var">getIt</span></a></span><span> </span><span class="annot"><span class="annottext">forall e a. Exception e =&gt; IO a -&gt; (e -&gt; IO a) -&gt; IO a
+</span><span class="hs-operator hs-var">`E.catch`</span></span><span> </span><span class="hs-glyph">\</span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">SomeException</span></span><span> </span><span class="annot"><span class="annottext">e
+</span><span class="hs-identifier">_</span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">-&gt;</span><span>
+</span><span id="line-71"></span><span>        </span><span class="hs-special">(</span><span class="annot"><span class="annottext">String -&gt; Window -&gt; NamedWindow
+</span><a href="XMonad.Util.NamedWindows.html#NW"><span class="hs-operator hs-var">`NW`</span></a></span><span> </span><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679423730"><span class="hs-identifier hs-var">w</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">ClassHint -&gt; String
+</span><span class="hs-identifier hs-var">resName</span></span><span> </span><span class="annot"><span class="annottext">forall (f :: * -&gt; *) a b. Functor f =&gt; (a -&gt; b) -&gt; f a -&gt; f b
+</span><span class="hs-operator hs-var">&lt;$&gt;</span></span><span> </span><span class="annot"><span class="annottext">Display -&gt; Window -&gt; IO ClassHint
+</span><span class="hs-identifier hs-var">getClassHint</span></span><span> </span><span class="annot"><span class="annottext">Display
+</span><a href="#local-6989586621679423729"><span class="hs-identifier hs-var">d</span></a></span><span> </span><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679423730"><span class="hs-identifier hs-var">w</span></a></span><span>
+</span><span id="line-72"></span><span>
+</span><span id="line-73"></span><span class="annot"><a href="XMonad.Util.NamedWindows.html#unName"><span class="hs-identifier hs-type">unName</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><a href="XMonad.Util.NamedWindows.html#NamedWindow"><span class="hs-identifier hs-type">NamedWindow</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Window</span></span><span>
+</span><span id="line-74"></span><span id="unName"><span class="annot"><span class="annottext">unName :: NamedWindow -&gt; Window
+</span><a href="XMonad.Util.NamedWindows.html#unName"><span class="hs-identifier hs-var hs-var">unName</span></a></span></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="XMonad.Util.NamedWindows.html#NW"><span class="hs-identifier hs-type">NW</span></a></span><span> </span><span class="annot"><span class="annottext">String
+</span><span class="hs-identifier">_</span></span><span> </span><span id="local-6989586621679423719"><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679423719"><span class="hs-identifier hs-var">w</span></a></span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679423719"><span class="hs-identifier hs-var">w</span></a></span><span>
+</span><span id="line-75"></span><span>
+</span><span id="line-76"></span><span class="annot"><a href="XMonad.Util.NamedWindows.html#withNamedWindow"><span class="hs-identifier hs-type">withNamedWindow</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="hs-special">(</span><span class="annot"><a href="XMonad.Util.NamedWindows.html#NamedWindow"><span class="hs-identifier hs-type">NamedWindow</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">X</span></span><span> </span><span class="hs-special">(</span><span class="hs-special">)</span><span class="hs-special">)</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">X</span></span><span> </span><span class="hs-special">(</span><span class="hs-special">)</span><span>
+</span><span id="line-77"></span><span id="withNamedWindow"><span class="annot"><span class="annottext">withNamedWindow :: (NamedWindow -&gt; X ()) -&gt; X ()
+</span><a href="XMonad.Util.NamedWindows.html#withNamedWindow"><span class="hs-identifier hs-var hs-var">withNamedWindow</span></a></span></span><span> </span><span id="local-6989586621679423718"><span class="annot"><span class="annottext">NamedWindow -&gt; X ()
+</span><a href="#local-6989586621679423718"><span class="hs-identifier hs-var">f</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-keyword">do</span><span> </span><span id="local-6989586621679423717"><span class="annot"><span class="annottext">WindowSet
+</span><a href="#local-6989586621679423717"><span class="hs-identifier hs-var">ws</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">forall s (m :: * -&gt; *) a. MonadState s m =&gt; (s -&gt; a) -&gt; m a
+</span><span class="hs-identifier hs-var">gets</span></span><span> </span><span class="annot"><span class="annottext">XState -&gt; WindowSet
+</span><span class="hs-identifier hs-var">windowset</span></span><span>
+</span><span id="line-78"></span><span>                       </span><span class="annot"><span class="annottext">forall (m :: * -&gt; *) a. Monad m =&gt; Maybe a -&gt; (a -&gt; m ()) -&gt; m ()
+</span><span class="hs-identifier hs-var">whenJust</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">forall i l a s sd. StackSet i l a s sd -&gt; Maybe a
+</span><span class="hs-identifier hs-var">W.peek</span></span><span> </span><span class="annot"><span class="annottext">WindowSet
+</span><a href="#local-6989586621679423717"><span class="hs-identifier hs-var">ws</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Window -&gt; X NamedWindow
+</span><a href="XMonad.Util.NamedWindows.html#getName"><span class="hs-identifier hs-var">getName</span></a></span><span> </span><span class="annot"><span class="annottext">forall (m :: * -&gt; *) a b c.
+Monad m =&gt;
+(a -&gt; m b) -&gt; (b -&gt; m c) -&gt; a -&gt; m c
+</span><span class="hs-operator hs-var">&gt;=&gt;</span></span><span> </span><span class="annot"><span class="annottext">NamedWindow -&gt; X ()
+</span><a href="#local-6989586621679423718"><span class="hs-identifier hs-var">f</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-79"></span></pre></body></html>

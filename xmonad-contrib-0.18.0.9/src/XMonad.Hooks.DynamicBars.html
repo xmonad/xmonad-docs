@@ -1,0 +1,474 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd"><html xmlns="http://www.w3.org/1999/xhtml"><head><link rel="stylesheet" type="text/css" href="style.css" /><script type="text/javascript" src="highlight.js"></script></head><body><pre><span class="hs-comment">-----------------------------------------------------------------------------</span><span>
+</span><span id="line-2"></span><span class="hs-comment">-- |</span><span>
+</span><span id="line-3"></span><span class="hs-comment">-- Module      :  XMonad.Hooks.DynamicBars</span><span>
+</span><span id="line-4"></span><span class="hs-comment">-- Description :  Manage per-screen status bars.</span><span>
+</span><span id="line-5"></span><span class="hs-comment">-- Copyright   :  (c) Ben Boeckel 2012</span><span>
+</span><span id="line-6"></span><span class="hs-comment">-- License     :  BSD-style (as xmonad)</span><span>
+</span><span id="line-7"></span><span class="hs-comment">--</span><span>
+</span><span id="line-8"></span><span class="hs-comment">-- Maintainer  :  mathstuf@gmail.com</span><span>
+</span><span id="line-9"></span><span class="hs-comment">-- Stability   :  unstable</span><span>
+</span><span id="line-10"></span><span class="hs-comment">-- Portability :  unportable</span><span>
+</span><span id="line-11"></span><span class="hs-comment">--</span><span>
+</span><span id="line-12"></span><span class="hs-comment">-- Manage per-screen status bars.</span><span>
+</span><span id="line-13"></span><span class="hs-comment">--</span><span>
+</span><span id="line-14"></span><span class="hs-comment">-----------------------------------------------------------------------------</span><span>
+</span><span id="line-15"></span><span>
+</span><span id="line-16"></span><span class="hs-keyword">module</span><span> </span><span class="hs-identifier">XMonad.Hooks.DynamicBars</span><span> </span><span class="hs-pragma">{-# DEPRECATED</span><span> </span><span class="hs-pragma">&quot;Use XMonad.Hooks.StatusBar instead&quot;</span><span> </span><span class="hs-pragma">#-}</span><span> </span><span class="hs-special">(</span><span>
+</span><span id="line-17"></span><span>  </span><span class="annot"><span class="hs-comment">-- * Usage</span></span><span>
+</span><span id="line-18"></span><span>  </span><span class="annot"><span class="hs-comment">-- $usage</span></span><span>
+</span><span id="line-19"></span><span>    </span><span class="annot"><a href="XMonad.Hooks.DynamicBars.html#DynamicStatusBar"><span class="hs-identifier">DynamicStatusBar</span></a></span><span>
+</span><span id="line-20"></span><span>  </span><span class="hs-special">,</span><span> </span><span class="annot"><a href="XMonad.Hooks.DynamicBars.html#DynamicStatusBarCleanup"><span class="hs-identifier">DynamicStatusBarCleanup</span></a></span><span>
+</span><span id="line-21"></span><span>  </span><span class="hs-special">,</span><span> </span><span class="annot"><a href="XMonad.Hooks.DynamicBars.html#DynamicStatusBarPartialCleanup"><span class="hs-identifier">DynamicStatusBarPartialCleanup</span></a></span><span>
+</span><span id="line-22"></span><span>  </span><span class="hs-special">,</span><span> </span><span class="annot"><a href="XMonad.Hooks.DynamicBars.html#dynStatusBarStartup"><span class="hs-identifier">dynStatusBarStartup</span></a></span><span>
+</span><span id="line-23"></span><span>  </span><span class="hs-special">,</span><span> </span><span class="annot"><a href="XMonad.Hooks.DynamicBars.html#dynStatusBarStartup%27"><span class="hs-identifier">dynStatusBarStartup'</span></a></span><span>
+</span><span id="line-24"></span><span>  </span><span class="hs-special">,</span><span> </span><span class="annot"><a href="XMonad.Hooks.DynamicBars.html#dynStatusBarEventHook"><span class="hs-identifier">dynStatusBarEventHook</span></a></span><span>
+</span><span id="line-25"></span><span>  </span><span class="hs-special">,</span><span> </span><span class="annot"><a href="XMonad.Hooks.DynamicBars.html#dynStatusBarEventHook%27"><span class="hs-identifier">dynStatusBarEventHook'</span></a></span><span>
+</span><span id="line-26"></span><span>  </span><span class="hs-special">,</span><span> </span><span class="annot"><a href="XMonad.Hooks.DynamicBars.html#multiPP"><span class="hs-identifier">multiPP</span></a></span><span>
+</span><span id="line-27"></span><span>  </span><span class="hs-special">,</span><span> </span><span class="annot"><a href="XMonad.Hooks.DynamicBars.html#multiPPFormat"><span class="hs-identifier">multiPPFormat</span></a></span><span>
+</span><span id="line-28"></span><span>  </span><span class="hs-special">)</span><span> </span><span class="hs-keyword">where</span><span>
+</span><span id="line-29"></span><span>
+</span><span id="line-30"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><span class="hs-identifier">Prelude</span></span><span>
+</span><span id="line-31"></span><span>
+</span><span id="line-32"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><span class="hs-identifier">Control.Monad.Trans</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier">lift</span></span><span class="hs-special">)</span><span>
+</span><span id="line-33"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><span class="hs-identifier">Control.Monad.Writer</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier">WriterT</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier">execWriterT</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier">tell</span></span><span class="hs-special">)</span><span>
+</span><span id="line-34"></span><span>
+</span><span id="line-35"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><span class="hs-identifier">Graphics.X11.Xinerama</span></span><span>
+</span><span id="line-36"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><span class="hs-identifier">Graphics.X11.Xlib</span></span><span>
+</span><span id="line-37"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><span class="hs-identifier">Graphics.X11.Xlib.Extras</span></span><span>
+</span><span id="line-38"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><span class="hs-identifier">Graphics.X11.Xrandr</span></span><span>
+</span><span id="line-39"></span><span>
+</span><span id="line-40"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><span class="hs-identifier">System.IO</span></span><span>
+</span><span id="line-41"></span><span>
+</span><span id="line-42"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><span class="hs-identifier">XMonad</span></span><span>
+</span><span id="line-43"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><a href="XMonad.Prelude.html"><span class="hs-identifier">XMonad.Prelude</span></a></span><span>
+</span><span id="line-44"></span><span class="hs-keyword">import</span><span> </span><span class="hs-keyword">qualified</span><span> </span><span class="annot"><span class="hs-identifier">XMonad.StackSet</span></span><span> </span><span class="hs-keyword">as</span><span> </span><span class="annot"><span class="hs-identifier">W</span></span><span>
+</span><span id="line-45"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><a href="XMonad.Hooks.DynamicLog.html"><span class="hs-identifier">XMonad.Hooks.DynamicLog</span></a></span><span>
+</span><span id="line-46"></span><span class="hs-keyword">import</span><span> </span><span class="hs-keyword">qualified</span><span> </span><span class="annot"><a href="XMonad.Util.ExtensibleState.html"><span class="hs-identifier">XMonad.Util.ExtensibleState</span></a></span><span> </span><span class="hs-keyword">as</span><span> </span><span class="annot"><span class="hs-identifier">XS</span></span><span>
+</span><span id="line-47"></span><span>
+</span><span id="line-48"></span><span class="hs-comment">-- $usage</span><span>
+</span><span id="line-49"></span><span class="hs-comment">-- Provides a few helper functions to manage per-screen status bars while</span><span>
+</span><span id="line-50"></span><span class="hs-comment">-- dynamically responding to screen changes. A startup action, event hook, and</span><span>
+</span><span id="line-51"></span><span class="hs-comment">-- a way to separate PP styles based on the screen's focus are provided:</span><span>
+</span><span id="line-52"></span><span class="hs-comment">--</span><span>
+</span><span id="line-53"></span><span class="hs-comment">-- * The 'dynStatusBarStartup' hook which initializes the status bars. The</span><span>
+</span><span id="line-54"></span><span class="hs-comment">-- first argument is an `ScreenId -&gt; IO Handle` which spawns a status bar on the</span><span>
+</span><span id="line-55"></span><span class="hs-comment">-- given screen and returns the pipe which the string should be written to.</span><span>
+</span><span id="line-56"></span><span class="hs-comment">-- The second argument is a `IO ()` to shut down all status bars. This should</span><span>
+</span><span id="line-57"></span><span class="hs-comment">-- be placed in your `startupHook`.</span><span>
+</span><span id="line-58"></span><span class="hs-comment">--</span><span>
+</span><span id="line-59"></span><span class="hs-comment">-- * The 'dynStatusBarEventHook' hook which respawns status bars when the</span><span>
+</span><span id="line-60"></span><span class="hs-comment">-- number of screens changes. The arguments are the same as for the</span><span>
+</span><span id="line-61"></span><span class="hs-comment">-- `dynStatusBarStartup` function. This should be placed in your</span><span>
+</span><span id="line-62"></span><span class="hs-comment">-- `handleEventHook`.</span><span>
+</span><span id="line-63"></span><span class="hs-comment">--</span><span>
+</span><span id="line-64"></span><span class="hs-comment">-- * Each of the above functions have an alternate form</span><span>
+</span><span id="line-65"></span><span class="hs-comment">-- (`dynStatusBarStartup'` and `dynStatusBarEventHook'`) which use a cleanup</span><span>
+</span><span id="line-66"></span><span class="hs-comment">-- function which takes an additional `ScreenId` argument which allows for</span><span>
+</span><span id="line-67"></span><span class="hs-comment">-- more fine-grained control for shutting down a specific screen's status bar.</span><span>
+</span><span id="line-68"></span><span class="hs-comment">--</span><span>
+</span><span id="line-69"></span><span class="hs-comment">-- * The 'multiPP' function which allows for different output based on whether</span><span>
+</span><span id="line-70"></span><span class="hs-comment">-- the screen for the status bar has focus (the first argument) or not (the</span><span>
+</span><span id="line-71"></span><span class="hs-comment">-- second argument). This is for use in your `logHook`.</span><span>
+</span><span id="line-72"></span><span class="hs-comment">--</span><span>
+</span><span id="line-73"></span><span class="hs-comment">-- * The 'multiPPFormat' function is the same as the 'multiPP' function, but it</span><span>
+</span><span id="line-74"></span><span class="hs-comment">-- also takes in a function that can customize the output to status bars.</span><span>
+</span><span id="line-75"></span><span class="hs-comment">--</span><span>
+</span><span id="line-76"></span><span class="hs-comment">-- The hooks take a 'DynamicStatusBar' function which is given the id of the</span><span>
+</span><span id="line-77"></span><span class="hs-comment">-- screen to start up and returns the 'Handle' to the pipe to write to. The</span><span>
+</span><span id="line-78"></span><span class="hs-comment">-- 'DynamicStatusBarCleanup' argument should tear down previous instances. It</span><span>
+</span><span id="line-79"></span><span class="hs-comment">-- is called when the number of screens changes and on startup.</span><span>
+</span><span id="line-80"></span><span class="hs-comment">--</span><span>
+</span><span id="line-81"></span><span>
+</span><span id="line-82"></span><span class="hs-keyword">newtype</span><span> </span><span id="DynStatusBarInfo"><span class="annot"><a href="XMonad.Hooks.DynamicBars.html#DynStatusBarInfo"><span class="hs-identifier hs-var">DynStatusBarInfo</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span id="DynStatusBarInfo"><span class="annot"><a href="XMonad.Hooks.DynamicBars.html#DynStatusBarInfo"><span class="hs-identifier hs-var">DynStatusBarInfo</span></a></span></span><span>
+</span><span id="line-83"></span><span>  </span><span class="hs-special">{</span><span> </span><span id="dsbInfo"><span class="annot"><span class="annottext">DynStatusBarInfo -&gt; [(ScreenId, Handle)]
+</span><a href="XMonad.Hooks.DynamicBars.html#dsbInfo"><span class="hs-identifier hs-var hs-var">dsbInfo</span></a></span></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="hs-special">[</span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">ScreenId</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Handle</span></span><span class="hs-special">)</span><span class="hs-special">]</span><span>
+</span><span id="line-84"></span><span>  </span><span class="hs-special">}</span><span>
+</span><span id="line-85"></span><span>
+</span><span id="line-86"></span><span class="hs-keyword">instance</span><span> </span><span id="local-6989586621679472909"><span class="annot"><span class="hs-identifier hs-type">ExtensionClass</span></span><span> </span><span class="annot"><a href="XMonad.Hooks.DynamicBars.html#DynStatusBarInfo"><span class="hs-identifier hs-type">DynStatusBarInfo</span></a></span></span><span> </span><span class="hs-keyword">where</span><span>
+</span><span id="line-87"></span><span>  </span><span id="local-6989586621679472907"><span class="annot"><span class="annottext">initialValue :: DynStatusBarInfo
+</span><span class="hs-identifier hs-var hs-var hs-var hs-var">initialValue</span></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">[(ScreenId, Handle)] -&gt; DynStatusBarInfo
+</span><a href="XMonad.Hooks.DynamicBars.html#DynStatusBarInfo"><span class="hs-identifier hs-var">DynStatusBarInfo</span></a></span><span> </span><span class="hs-special">[</span><span class="hs-special">]</span><span>
+</span><span id="line-88"></span><span>
+</span><span id="line-89"></span><span class="hs-keyword">type</span><span> </span><span id="DynamicStatusBar"><span class="annot"><a href="XMonad.Hooks.DynamicBars.html#DynamicStatusBar"><span class="hs-identifier hs-var">DynamicStatusBar</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="hs-identifier hs-type">ScreenId</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">IO</span></span><span> </span><span class="annot"><span class="hs-identifier hs-type">Handle</span></span><span>
+</span><span id="line-90"></span><span class="hs-keyword">type</span><span> </span><span id="DynamicStatusBarCleanup"><span class="annot"><a href="XMonad.Hooks.DynamicBars.html#DynamicStatusBarCleanup"><span class="hs-identifier hs-var">DynamicStatusBarCleanup</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="hs-identifier hs-type">IO</span></span><span> </span><span class="hs-special">(</span><span class="hs-special">)</span><span>
+</span><span id="line-91"></span><span class="hs-keyword">type</span><span> </span><span id="DynamicStatusBarPartialCleanup"><span class="annot"><a href="XMonad.Hooks.DynamicBars.html#DynamicStatusBarPartialCleanup"><span class="hs-identifier hs-var">DynamicStatusBarPartialCleanup</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="hs-identifier hs-type">ScreenId</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">IO</span></span><span> </span><span class="hs-special">(</span><span class="hs-special">)</span><span>
+</span><span id="line-92"></span><span>
+</span><span id="line-93"></span><span class="annot"><a href="XMonad.Hooks.DynamicBars.html#dynStatusBarSetup"><span class="hs-identifier hs-type">dynStatusBarSetup</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">X</span></span><span> </span><span class="hs-special">(</span><span class="hs-special">)</span><span>
+</span><span id="line-94"></span><span id="dynStatusBarSetup"><span class="annot"><span class="annottext">dynStatusBarSetup :: X ()
+</span><a href="XMonad.Hooks.DynamicBars.html#dynStatusBarSetup"><span class="hs-identifier hs-var hs-var">dynStatusBarSetup</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-95"></span><span>  </span><span id="local-6989586621679472904"><span class="annot"><span class="annottext">Display
+</span><a href="#local-6989586621679472904"><span class="hs-identifier hs-var">dpy</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">forall r (m :: * -&gt; *) a. MonadReader r m =&gt; (r -&gt; a) -&gt; m a
+</span><span class="hs-identifier hs-var">asks</span></span><span> </span><span class="annot"><span class="annottext">XConf -&gt; Display
+</span><span class="hs-identifier hs-var">display</span></span><span>
+</span><span id="line-96"></span><span>  </span><span id="local-6989586621679472901"><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679472901"><span class="hs-identifier hs-var">root</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">forall r (m :: * -&gt; *) a. MonadReader r m =&gt; (r -&gt; a) -&gt; m a
+</span><span class="hs-identifier hs-var">asks</span></span><span> </span><span class="annot"><span class="annottext">XConf -&gt; Window
+</span><span class="hs-identifier hs-var">theRoot</span></span><span>
+</span><span id="line-97"></span><span>  </span><span class="annot"><span class="annottext">forall (m :: * -&gt; *) a. MonadIO m =&gt; IO a -&gt; m a
+</span><span class="hs-identifier hs-var">io</span></span><span> </span><span class="annot"><span class="annottext">forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">Display -&gt; Window -&gt; Window -&gt; IO ()
+</span><span class="hs-identifier hs-var">xrrSelectInput</span></span><span> </span><span class="annot"><span class="annottext">Display
+</span><a href="#local-6989586621679472904"><span class="hs-identifier hs-var">dpy</span></a></span><span> </span><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679472901"><span class="hs-identifier hs-var">root</span></a></span><span> </span><span class="annot"><span class="annottext">Window
+</span><span class="hs-identifier hs-var">rrScreenChangeNotifyMask</span></span><span>
+</span><span id="line-98"></span><span>
+</span><span id="line-99"></span><span class="annot"><a href="XMonad.Hooks.DynamicBars.html#dynStatusBarStartup"><span class="hs-identifier hs-type">dynStatusBarStartup</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><a href="XMonad.Hooks.DynamicBars.html#DynamicStatusBar"><span class="hs-identifier hs-type">DynamicStatusBar</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="XMonad.Hooks.DynamicBars.html#DynamicStatusBarCleanup"><span class="hs-identifier hs-type">DynamicStatusBarCleanup</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">X</span></span><span> </span><span class="hs-special">(</span><span class="hs-special">)</span><span>
+</span><span id="line-100"></span><span id="dynStatusBarStartup"><span class="annot"><span class="annottext">dynStatusBarStartup :: DynamicStatusBar -&gt; IO () -&gt; X ()
+</span><a href="XMonad.Hooks.DynamicBars.html#dynStatusBarStartup"><span class="hs-identifier hs-var hs-var">dynStatusBarStartup</span></a></span></span><span> </span><span id="local-6989586621679472896"><span class="annot"><span class="annottext">DynamicStatusBar
+</span><a href="#local-6989586621679472896"><span class="hs-identifier hs-var">sb</span></a></span></span><span> </span><span id="local-6989586621679472895"><span class="annot"><span class="annottext">IO ()
+</span><a href="#local-6989586621679472895"><span class="hs-identifier hs-var">cleanup</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-101"></span><span>  </span><span class="annot"><span class="annottext">X ()
+</span><a href="XMonad.Hooks.DynamicBars.html#dynStatusBarSetup"><span class="hs-identifier hs-var">dynStatusBarSetup</span></a></span><span>
+</span><span id="line-102"></span><span>  </span><span class="annot"><span class="annottext">DynamicStatusBar -&gt; IO () -&gt; X ()
+</span><a href="XMonad.Hooks.DynamicBars.html#updateStatusBars"><span class="hs-identifier hs-var">updateStatusBars</span></a></span><span> </span><span class="annot"><span class="annottext">DynamicStatusBar
+</span><a href="#local-6989586621679472896"><span class="hs-identifier hs-var">sb</span></a></span><span> </span><span class="annot"><span class="annottext">IO ()
+</span><a href="#local-6989586621679472895"><span class="hs-identifier hs-var">cleanup</span></a></span><span>
+</span><span id="line-103"></span><span>
+</span><span id="line-104"></span><span class="annot"><a href="XMonad.Hooks.DynamicBars.html#dynStatusBarStartup%27"><span class="hs-identifier hs-type">dynStatusBarStartup'</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><a href="XMonad.Hooks.DynamicBars.html#DynamicStatusBar"><span class="hs-identifier hs-type">DynamicStatusBar</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="XMonad.Hooks.DynamicBars.html#DynamicStatusBarPartialCleanup"><span class="hs-identifier hs-type">DynamicStatusBarPartialCleanup</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">X</span></span><span> </span><span class="hs-special">(</span><span class="hs-special">)</span><span>
+</span><span id="line-105"></span><span id="dynStatusBarStartup%27"><span class="annot"><span class="annottext">dynStatusBarStartup' :: DynamicStatusBar -&gt; DynamicStatusBarPartialCleanup -&gt; X ()
+</span><a href="XMonad.Hooks.DynamicBars.html#dynStatusBarStartup%27"><span class="hs-identifier hs-var hs-var">dynStatusBarStartup'</span></a></span></span><span> </span><span id="local-6989586621679472893"><span class="annot"><span class="annottext">DynamicStatusBar
+</span><a href="#local-6989586621679472893"><span class="hs-identifier hs-var">sb</span></a></span></span><span> </span><span id="local-6989586621679472892"><span class="annot"><span class="annottext">DynamicStatusBarPartialCleanup
+</span><a href="#local-6989586621679472892"><span class="hs-identifier hs-var">cleanup</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-106"></span><span>  </span><span class="annot"><span class="annottext">X ()
+</span><a href="XMonad.Hooks.DynamicBars.html#dynStatusBarSetup"><span class="hs-identifier hs-var">dynStatusBarSetup</span></a></span><span>
+</span><span id="line-107"></span><span>  </span><span class="annot"><span class="annottext">DynamicStatusBar -&gt; DynamicStatusBarPartialCleanup -&gt; X ()
+</span><a href="XMonad.Hooks.DynamicBars.html#updateStatusBars%27"><span class="hs-identifier hs-var">updateStatusBars'</span></a></span><span> </span><span class="annot"><span class="annottext">DynamicStatusBar
+</span><a href="#local-6989586621679472893"><span class="hs-identifier hs-var">sb</span></a></span><span> </span><span class="annot"><span class="annottext">DynamicStatusBarPartialCleanup
+</span><a href="#local-6989586621679472892"><span class="hs-identifier hs-var">cleanup</span></a></span><span>
+</span><span id="line-108"></span><span>
+</span><span id="line-109"></span><span class="annot"><a href="XMonad.Hooks.DynamicBars.html#dynStatusBarEventHook"><span class="hs-identifier hs-type">dynStatusBarEventHook</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><a href="XMonad.Hooks.DynamicBars.html#DynamicStatusBar"><span class="hs-identifier hs-type">DynamicStatusBar</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="XMonad.Hooks.DynamicBars.html#DynamicStatusBarCleanup"><span class="hs-identifier hs-type">DynamicStatusBarCleanup</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Event</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">X</span></span><span> </span><span class="annot"><span class="hs-identifier hs-type">All</span></span><span>
+</span><span id="line-110"></span><span id="dynStatusBarEventHook"><span class="annot"><span class="annottext">dynStatusBarEventHook :: DynamicStatusBar -&gt; IO () -&gt; Event -&gt; X All
+</span><a href="XMonad.Hooks.DynamicBars.html#dynStatusBarEventHook"><span class="hs-identifier hs-var hs-var">dynStatusBarEventHook</span></a></span></span><span> </span><span id="local-6989586621679472890"><span class="annot"><span class="annottext">DynamicStatusBar
+</span><a href="#local-6989586621679472890"><span class="hs-identifier hs-var">sb</span></a></span></span><span> </span><span id="local-6989586621679472889"><span class="annot"><span class="annottext">IO ()
+</span><a href="#local-6989586621679472889"><span class="hs-identifier hs-var">cleanup</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">X () -&gt; Event -&gt; X All
+</span><a href="XMonad.Hooks.DynamicBars.html#dynStatusBarRun"><span class="hs-identifier hs-var">dynStatusBarRun</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">DynamicStatusBar -&gt; IO () -&gt; X ()
+</span><a href="XMonad.Hooks.DynamicBars.html#updateStatusBars"><span class="hs-identifier hs-var">updateStatusBars</span></a></span><span> </span><span class="annot"><span class="annottext">DynamicStatusBar
+</span><a href="#local-6989586621679472890"><span class="hs-identifier hs-var">sb</span></a></span><span> </span><span class="annot"><span class="annottext">IO ()
+</span><a href="#local-6989586621679472889"><span class="hs-identifier hs-var">cleanup</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-111"></span><span>
+</span><span id="line-112"></span><span class="annot"><a href="XMonad.Hooks.DynamicBars.html#dynStatusBarEventHook%27"><span class="hs-identifier hs-type">dynStatusBarEventHook'</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><a href="XMonad.Hooks.DynamicBars.html#DynamicStatusBar"><span class="hs-identifier hs-type">DynamicStatusBar</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="XMonad.Hooks.DynamicBars.html#DynamicStatusBarPartialCleanup"><span class="hs-identifier hs-type">DynamicStatusBarPartialCleanup</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Event</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">X</span></span><span> </span><span class="annot"><span class="hs-identifier hs-type">All</span></span><span>
+</span><span id="line-113"></span><span id="dynStatusBarEventHook%27"><span class="annot"><span class="annottext">dynStatusBarEventHook' :: DynamicStatusBar
+-&gt; DynamicStatusBarPartialCleanup -&gt; Event -&gt; X All
+</span><a href="XMonad.Hooks.DynamicBars.html#dynStatusBarEventHook%27"><span class="hs-identifier hs-var hs-var">dynStatusBarEventHook'</span></a></span></span><span> </span><span id="local-6989586621679472887"><span class="annot"><span class="annottext">DynamicStatusBar
+</span><a href="#local-6989586621679472887"><span class="hs-identifier hs-var">sb</span></a></span></span><span> </span><span id="local-6989586621679472886"><span class="annot"><span class="annottext">DynamicStatusBarPartialCleanup
+</span><a href="#local-6989586621679472886"><span class="hs-identifier hs-var">cleanup</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">X () -&gt; Event -&gt; X All
+</span><a href="XMonad.Hooks.DynamicBars.html#dynStatusBarRun"><span class="hs-identifier hs-var">dynStatusBarRun</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">DynamicStatusBar -&gt; DynamicStatusBarPartialCleanup -&gt; X ()
+</span><a href="XMonad.Hooks.DynamicBars.html#updateStatusBars%27"><span class="hs-identifier hs-var">updateStatusBars'</span></a></span><span> </span><span class="annot"><span class="annottext">DynamicStatusBar
+</span><a href="#local-6989586621679472887"><span class="hs-identifier hs-var">sb</span></a></span><span> </span><span class="annot"><span class="annottext">DynamicStatusBarPartialCleanup
+</span><a href="#local-6989586621679472886"><span class="hs-identifier hs-var">cleanup</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-114"></span><span>
+</span><span id="line-115"></span><span class="annot"><a href="XMonad.Hooks.DynamicBars.html#dynStatusBarRun"><span class="hs-identifier hs-type">dynStatusBarRun</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">X</span></span><span> </span><span class="hs-special">(</span><span class="hs-special">)</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Event</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">X</span></span><span> </span><span class="annot"><span class="hs-identifier hs-type">All</span></span><span>
+</span><span id="line-116"></span><span id="dynStatusBarRun"><span class="annot"><span class="annottext">dynStatusBarRun :: X () -&gt; Event -&gt; X All
+</span><a href="XMonad.Hooks.DynamicBars.html#dynStatusBarRun"><span class="hs-identifier hs-var hs-var">dynStatusBarRun</span></a></span></span><span> </span><span id="local-6989586621679472885"><span class="annot"><span class="annottext">X ()
+</span><a href="#local-6989586621679472885"><span class="hs-identifier hs-var">action</span></a></span></span><span> </span><span class="annot"><span class="hs-identifier hs-type">RRScreenChangeNotifyEvent</span></span><span class="hs-special">{</span><span class="hs-special">}</span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">X ()
+</span><a href="#local-6989586621679472885"><span class="hs-identifier hs-var">action</span></a></span><span> </span><span class="annot"><span class="annottext">forall (m :: * -&gt; *) a b. Monad m =&gt; m a -&gt; m b -&gt; m b
+</span><span class="hs-operator hs-var">&gt;&gt;</span></span><span> </span><span class="annot"><span class="annottext">forall (m :: * -&gt; *) a. Monad m =&gt; a -&gt; m a
+</span><span class="hs-identifier hs-var">return</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Bool -&gt; All
+</span><span class="hs-identifier hs-var">All</span></span><span> </span><span class="annot"><span class="annottext">Bool
+</span><span class="hs-identifier hs-var">True</span></span><span class="hs-special">)</span><span>
+</span><span id="line-117"></span><span class="annot"><a href="XMonad.Hooks.DynamicBars.html#dynStatusBarRun"><span class="hs-identifier hs-var">dynStatusBarRun</span></a></span><span> </span><span class="annot"><span class="annottext">X ()
+</span><span class="hs-identifier">_</span></span><span>      </span><span class="annot"><span class="annottext">Event
+</span><span class="hs-identifier">_</span></span><span>                           </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">forall (m :: * -&gt; *) a. Monad m =&gt; a -&gt; m a
+</span><span class="hs-identifier hs-var">return</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Bool -&gt; All
+</span><span class="hs-identifier hs-var">All</span></span><span> </span><span class="annot"><span class="annottext">Bool
+</span><span class="hs-identifier hs-var">True</span></span><span class="hs-special">)</span><span>
+</span><span id="line-118"></span><span>
+</span><span id="line-119"></span><span class="annot"><a href="XMonad.Hooks.DynamicBars.html#updateStatusBars"><span class="hs-identifier hs-type">updateStatusBars</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><a href="XMonad.Hooks.DynamicBars.html#DynamicStatusBar"><span class="hs-identifier hs-type">DynamicStatusBar</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="XMonad.Hooks.DynamicBars.html#DynamicStatusBarCleanup"><span class="hs-identifier hs-type">DynamicStatusBarCleanup</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">X</span></span><span> </span><span class="hs-special">(</span><span class="hs-special">)</span><span>
+</span><span id="line-120"></span><span id="updateStatusBars"><span class="annot"><span class="annottext">updateStatusBars :: DynamicStatusBar -&gt; IO () -&gt; X ()
+</span><a href="XMonad.Hooks.DynamicBars.html#updateStatusBars"><span class="hs-identifier hs-var hs-var">updateStatusBars</span></a></span></span><span> </span><span id="local-6989586621679472882"><span class="annot"><span class="annottext">DynamicStatusBar
+</span><a href="#local-6989586621679472882"><span class="hs-identifier hs-var">sb</span></a></span></span><span> </span><span id="local-6989586621679472881"><span class="annot"><span class="annottext">IO ()
+</span><a href="#local-6989586621679472881"><span class="hs-identifier hs-var">cleanup</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-121"></span><span>  </span><span class="hs-special">(</span><span id="local-6989586621679472880"><span class="annot"><span class="annottext">[ScreenId]
+</span><a href="#local-6989586621679472880"><span class="hs-identifier hs-var">dsbInfoScreens</span></a></span></span><span class="hs-special">,</span><span> </span><span id="local-6989586621679472879"><span class="annot"><span class="annottext">[Handle]
+</span><a href="#local-6989586621679472879"><span class="hs-identifier hs-var">dsbInfoHandles</span></a></span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">forall a (m :: * -&gt; *). (ExtensionClass a, XLike m) =&gt; m a
+</span><a href="XMonad.Util.ExtensibleState.html#get"><span class="hs-identifier hs-var">XS.get</span></a></span><span> </span><span class="annot"><span class="annottext">forall (f :: * -&gt; *) a b. Functor f =&gt; f a -&gt; (a -&gt; b) -&gt; f b
+</span><span class="hs-operator hs-var">&lt;&amp;&gt;</span></span><span> </span><span class="annot"><span class="annottext">forall a b. [(a, b)] -&gt; ([a], [b])
+</span><span class="hs-identifier hs-var">unzip</span></span><span> </span><span class="annot"><span class="annottext">forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">DynStatusBarInfo -&gt; [(ScreenId, Handle)]
+</span><a href="XMonad.Hooks.DynamicBars.html#dsbInfo"><span class="hs-identifier hs-var">dsbInfo</span></a></span><span>
+</span><span id="line-122"></span><span>  </span><span id="local-6989586621679472874"><span class="annot"><span class="annottext">[ScreenId]
+</span><a href="#local-6989586621679472874"><span class="hs-identifier hs-var">screens</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">forall (m :: * -&gt; *). MonadIO m =&gt; m [ScreenId]
+</span><a href="XMonad.Hooks.DynamicBars.html#getScreens"><span class="hs-identifier hs-var">getScreens</span></a></span><span>
+</span><span id="line-123"></span><span>  </span><span class="annot"><span class="annottext">forall (f :: * -&gt; *). Applicative f =&gt; Bool -&gt; f () -&gt; f ()
+</span><span class="hs-identifier hs-var">when</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">[ScreenId]
+</span><a href="#local-6989586621679472874"><span class="hs-identifier hs-var">screens</span></a></span><span> </span><span class="annot"><span class="annottext">forall a. Eq a =&gt; a -&gt; a -&gt; Bool
+</span><span class="hs-operator hs-var">/=</span></span><span> </span><span class="annot"><span class="annottext">[ScreenId]
+</span><a href="#local-6989586621679472880"><span class="hs-identifier hs-var">dsbInfoScreens</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-124"></span><span>      </span><span id="local-6989586621679472870"><span class="annot"><span class="annottext">[Handle]
+</span><a href="#local-6989586621679472870"><span class="hs-identifier hs-var">newHandles</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">forall (m :: * -&gt; *) a. MonadIO m =&gt; IO a -&gt; m a
+</span><span class="hs-identifier hs-var">liftIO</span></span><span> </span><span class="annot"><span class="annottext">forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-125"></span><span>          </span><span class="annot"><span class="annottext">Handle -&gt; IO ()
+</span><span class="hs-identifier hs-var">hClose</span></span><span> </span><span class="annot"><span class="annottext">forall (t :: * -&gt; *) (m :: * -&gt; *) a b.
+(Foldable t, Monad m) =&gt;
+(a -&gt; m b) -&gt; t a -&gt; m ()
+</span><span class="hs-operator hs-var">`mapM_`</span></span><span> </span><span class="annot"><span class="annottext">[Handle]
+</span><a href="#local-6989586621679472879"><span class="hs-identifier hs-var">dsbInfoHandles</span></a></span><span>
+</span><span id="line-126"></span><span>          </span><span class="annot"><span class="annottext">IO ()
+</span><a href="#local-6989586621679472881"><span class="hs-identifier hs-var">cleanup</span></a></span><span>
+</span><span id="line-127"></span><span>          </span><span class="annot"><span class="annottext">forall (t :: * -&gt; *) (m :: * -&gt; *) a b.
+(Traversable t, Monad m) =&gt;
+(a -&gt; m b) -&gt; t a -&gt; m (t b)
+</span><span class="hs-identifier hs-var">mapM</span></span><span> </span><span class="annot"><span class="annottext">DynamicStatusBar
+</span><a href="#local-6989586621679472882"><span class="hs-identifier hs-var">sb</span></a></span><span> </span><span class="annot"><span class="annottext">[ScreenId]
+</span><a href="#local-6989586621679472874"><span class="hs-identifier hs-var">screens</span></a></span><span>
+</span><span id="line-128"></span><span>      </span><span class="annot"><span class="annottext">forall a (m :: * -&gt; *). (ExtensionClass a, XLike m) =&gt; a -&gt; m ()
+</span><a href="XMonad.Util.ExtensibleState.html#put"><span class="hs-identifier hs-var">XS.put</span></a></span><span> </span><span class="annot"><span class="annottext">forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">[(ScreenId, Handle)] -&gt; DynStatusBarInfo
+</span><a href="XMonad.Hooks.DynamicBars.html#DynStatusBarInfo"><span class="hs-identifier hs-var">DynStatusBarInfo</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">forall a b. [a] -&gt; [b] -&gt; [(a, b)]
+</span><span class="hs-identifier hs-var">zip</span></span><span> </span><span class="annot"><span class="annottext">[ScreenId]
+</span><a href="#local-6989586621679472874"><span class="hs-identifier hs-var">screens</span></a></span><span> </span><span class="annot"><span class="annottext">[Handle]
+</span><a href="#local-6989586621679472870"><span class="hs-identifier hs-var">newHandles</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-129"></span><span>
+</span><span id="line-130"></span><span class="annot"><a href="XMonad.Hooks.DynamicBars.html#updateStatusBars%27"><span class="hs-identifier hs-type">updateStatusBars'</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><a href="XMonad.Hooks.DynamicBars.html#DynamicStatusBar"><span class="hs-identifier hs-type">DynamicStatusBar</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="XMonad.Hooks.DynamicBars.html#DynamicStatusBarPartialCleanup"><span class="hs-identifier hs-type">DynamicStatusBarPartialCleanup</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">X</span></span><span> </span><span class="hs-special">(</span><span class="hs-special">)</span><span>
+</span><span id="line-131"></span><span id="updateStatusBars%27"><span class="annot"><span class="annottext">updateStatusBars' :: DynamicStatusBar -&gt; DynamicStatusBarPartialCleanup -&gt; X ()
+</span><a href="XMonad.Hooks.DynamicBars.html#updateStatusBars%27"><span class="hs-identifier hs-var hs-var">updateStatusBars'</span></a></span></span><span> </span><span id="local-6989586621679472864"><span class="annot"><span class="annottext">DynamicStatusBar
+</span><a href="#local-6989586621679472864"><span class="hs-identifier hs-var">sb</span></a></span></span><span> </span><span id="local-6989586621679472863"><span class="annot"><span class="annottext">DynamicStatusBarPartialCleanup
+</span><a href="#local-6989586621679472863"><span class="hs-identifier hs-var">cleanup</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-132"></span><span>  </span><span class="hs-special">(</span><span id="local-6989586621679472862"><span class="annot"><span class="annottext">[ScreenId]
+</span><a href="#local-6989586621679472862"><span class="hs-identifier hs-var">dsbInfoScreens</span></a></span></span><span class="hs-special">,</span><span> </span><span id="local-6989586621679472861"><span class="annot"><span class="annottext">[Handle]
+</span><a href="#local-6989586621679472861"><span class="hs-identifier hs-var">dsbInfoHandles</span></a></span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">forall a (m :: * -&gt; *). (ExtensionClass a, XLike m) =&gt; m a
+</span><a href="XMonad.Util.ExtensibleState.html#get"><span class="hs-identifier hs-var">XS.get</span></a></span><span> </span><span class="annot"><span class="annottext">forall (f :: * -&gt; *) a b. Functor f =&gt; f a -&gt; (a -&gt; b) -&gt; f b
+</span><span class="hs-operator hs-var">&lt;&amp;&gt;</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">forall a b. [(a, b)] -&gt; ([a], [b])
+</span><span class="hs-identifier hs-var">unzip</span></span><span> </span><span class="annot"><span class="annottext">forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">DynStatusBarInfo -&gt; [(ScreenId, Handle)]
+</span><a href="XMonad.Hooks.DynamicBars.html#dsbInfo"><span class="hs-identifier hs-var">dsbInfo</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-133"></span><span>  </span><span id="local-6989586621679472860"><span class="annot"><span class="annottext">[ScreenId]
+</span><a href="#local-6989586621679472860"><span class="hs-identifier hs-var">screens</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">forall (m :: * -&gt; *). MonadIO m =&gt; m [ScreenId]
+</span><a href="XMonad.Hooks.DynamicBars.html#getScreens"><span class="hs-identifier hs-var">getScreens</span></a></span><span>
+</span><span id="line-134"></span><span>  </span><span class="annot"><span class="annottext">forall (f :: * -&gt; *). Applicative f =&gt; Bool -&gt; f () -&gt; f ()
+</span><span class="hs-identifier hs-var">when</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">[ScreenId]
+</span><a href="#local-6989586621679472860"><span class="hs-identifier hs-var">screens</span></a></span><span> </span><span class="annot"><span class="annottext">forall a. Eq a =&gt; a -&gt; a -&gt; Bool
+</span><span class="hs-operator hs-var">/=</span></span><span> </span><span class="annot"><span class="annottext">[ScreenId]
+</span><a href="#local-6989586621679472862"><span class="hs-identifier hs-var">dsbInfoScreens</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-135"></span><span>      </span><span class="hs-keyword">let</span><span> </span><span id="local-6989586621679472859"><span class="annot"><span class="annottext">oldInfo :: [(ScreenId, Handle)]
+</span><a href="#local-6989586621679472859"><span class="hs-identifier hs-var hs-var">oldInfo</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">forall a b. [a] -&gt; [b] -&gt; [(a, b)]
+</span><span class="hs-identifier hs-var">zip</span></span><span> </span><span class="annot"><span class="annottext">[ScreenId]
+</span><a href="#local-6989586621679472862"><span class="hs-identifier hs-var">dsbInfoScreens</span></a></span><span> </span><span class="annot"><span class="annottext">[Handle]
+</span><a href="#local-6989586621679472861"><span class="hs-identifier hs-var">dsbInfoHandles</span></a></span><span>
+</span><span id="line-136"></span><span>      </span><span class="hs-keyword">let</span><span> </span><span class="hs-special">(</span><span id="local-6989586621679472856"><span class="annot"><span class="annottext">[(ScreenId, Handle)]
+</span><a href="#local-6989586621679472856"><span class="hs-identifier hs-var">infoToKeep</span></a></span></span><span class="hs-special">,</span><span> </span><span id="local-6989586621679472855"><span class="annot"><span class="annottext">[(ScreenId, Handle)]
+</span><a href="#local-6989586621679472855"><span class="hs-identifier hs-var">infoToClose</span></a></span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">forall a. (a -&gt; Bool) -&gt; [a] -&gt; ([a], [a])
+</span><span class="hs-identifier hs-var">partition</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">forall a b c. (a -&gt; b -&gt; c) -&gt; b -&gt; a -&gt; c
+</span><span class="hs-identifier hs-var">flip</span></span><span> </span><span class="annot"><span class="annottext">forall (t :: * -&gt; *) a. (Foldable t, Eq a) =&gt; a -&gt; t a -&gt; Bool
+</span><span class="hs-identifier hs-var">elem</span></span><span> </span><span class="annot"><span class="annottext">[ScreenId]
+</span><a href="#local-6989586621679472860"><span class="hs-identifier hs-var">screens</span></a></span><span> </span><span class="annot"><span class="annottext">forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">forall a b. (a, b) -&gt; a
+</span><span class="hs-identifier hs-var">fst</span></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">[(ScreenId, Handle)]
+</span><a href="#local-6989586621679472859"><span class="hs-identifier hs-var">oldInfo</span></a></span><span>
+</span><span id="line-137"></span><span>      </span><span id="local-6989586621679472851"><span class="annot"><span class="annottext">[(ScreenId, Handle)]
+</span><a href="#local-6989586621679472851"><span class="hs-identifier hs-var">newInfo</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">forall (m :: * -&gt; *) a. MonadIO m =&gt; IO a -&gt; m a
+</span><span class="hs-identifier hs-var">liftIO</span></span><span> </span><span class="annot"><span class="annottext">forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-138"></span><span>          </span><span class="annot"><span class="annottext">forall (t :: * -&gt; *) (m :: * -&gt; *) a b.
+(Foldable t, Monad m) =&gt;
+(a -&gt; m b) -&gt; t a -&gt; m ()
+</span><span class="hs-identifier hs-var">mapM_</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Handle -&gt; IO ()
+</span><span class="hs-identifier hs-var">hClose</span></span><span> </span><span class="annot"><span class="annottext">forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">forall a b. (a, b) -&gt; b
+</span><span class="hs-identifier hs-var">snd</span></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">[(ScreenId, Handle)]
+</span><a href="#local-6989586621679472855"><span class="hs-identifier hs-var">infoToClose</span></a></span><span>
+</span><span id="line-139"></span><span>          </span><span class="annot"><span class="annottext">forall (t :: * -&gt; *) (m :: * -&gt; *) a b.
+(Foldable t, Monad m) =&gt;
+(a -&gt; m b) -&gt; t a -&gt; m ()
+</span><span class="hs-identifier hs-var">mapM_</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">DynamicStatusBarPartialCleanup
+</span><a href="#local-6989586621679472863"><span class="hs-identifier hs-var">cleanup</span></a></span><span> </span><span class="annot"><span class="annottext">forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">forall a b. (a, b) -&gt; a
+</span><span class="hs-identifier hs-var">fst</span></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">[(ScreenId, Handle)]
+</span><a href="#local-6989586621679472855"><span class="hs-identifier hs-var">infoToClose</span></a></span><span>
+</span><span id="line-140"></span><span>          </span><span class="hs-keyword">let</span><span> </span><span id="local-6989586621679472849"><span class="annot"><span class="annottext">newScreens :: [ScreenId]
+</span><a href="#local-6989586621679472849"><span class="hs-identifier hs-var hs-var">newScreens</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">[ScreenId]
+</span><a href="#local-6989586621679472860"><span class="hs-identifier hs-var">screens</span></a></span><span> </span><span class="annot"><span class="annottext">forall a. Eq a =&gt; [a] -&gt; [a] -&gt; [a]
+</span><span class="hs-operator hs-var">\\</span></span><span> </span><span class="annot"><span class="annottext">[ScreenId]
+</span><a href="#local-6989586621679472862"><span class="hs-identifier hs-var">dsbInfoScreens</span></a></span><span>
+</span><span id="line-141"></span><span>          </span><span id="local-6989586621679472847"><span class="annot"><span class="annottext">[Handle]
+</span><a href="#local-6989586621679472847"><span class="hs-identifier hs-var">newHandles</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">forall (t :: * -&gt; *) (m :: * -&gt; *) a b.
+(Traversable t, Monad m) =&gt;
+(a -&gt; m b) -&gt; t a -&gt; m (t b)
+</span><span class="hs-identifier hs-var">mapM</span></span><span> </span><span class="annot"><span class="annottext">DynamicStatusBar
+</span><a href="#local-6989586621679472864"><span class="hs-identifier hs-var">sb</span></a></span><span> </span><span class="annot"><span class="annottext">[ScreenId]
+</span><a href="#local-6989586621679472849"><span class="hs-identifier hs-var">newScreens</span></a></span><span>
+</span><span id="line-142"></span><span>          </span><span class="annot"><span class="annottext">forall (m :: * -&gt; *) a. Monad m =&gt; a -&gt; m a
+</span><span class="hs-identifier hs-var">return</span></span><span> </span><span class="annot"><span class="annottext">forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">forall a b. [a] -&gt; [b] -&gt; [(a, b)]
+</span><span class="hs-identifier hs-var">zip</span></span><span> </span><span class="annot"><span class="annottext">[ScreenId]
+</span><a href="#local-6989586621679472849"><span class="hs-identifier hs-var">newScreens</span></a></span><span> </span><span class="annot"><span class="annottext">[Handle]
+</span><a href="#local-6989586621679472847"><span class="hs-identifier hs-var">newHandles</span></a></span><span>
+</span><span id="line-143"></span><span>      </span><span class="annot"><span class="annottext">forall a (m :: * -&gt; *). (ExtensionClass a, XLike m) =&gt; a -&gt; m ()
+</span><a href="XMonad.Util.ExtensibleState.html#put"><span class="hs-identifier hs-var">XS.put</span></a></span><span> </span><span class="annot"><span class="annottext">forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">[(ScreenId, Handle)] -&gt; DynStatusBarInfo
+</span><a href="XMonad.Hooks.DynamicBars.html#DynStatusBarInfo"><span class="hs-identifier hs-var">DynStatusBarInfo</span></a></span><span> </span><span class="annot"><span class="annottext">forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">[(ScreenId, Handle)]
+</span><a href="#local-6989586621679472856"><span class="hs-identifier hs-var">infoToKeep</span></a></span><span> </span><span class="annot"><span class="annottext">forall a. [a] -&gt; [a] -&gt; [a]
+</span><span class="hs-operator hs-var">++</span></span><span> </span><span class="annot"><span class="annottext">[(ScreenId, Handle)]
+</span><a href="#local-6989586621679472851"><span class="hs-identifier hs-var">newInfo</span></a></span><span>
+</span><span id="line-144"></span><span>
+</span><span id="line-145"></span><span class="hs-comment">-----------------------------------------------------------------------------</span><span>
+</span><span id="line-146"></span><span class="hs-comment">-- The following code is from adamvo's xmonad.hs file.</span><span>
+</span><span id="line-147"></span><span class="hs-comment">-- http://www.haskell.org/haskellwiki/Xmonad/Config_archive/adamvo%27s_xmonad.hs</span><span>
+</span><span id="line-148"></span><span>
+</span><span id="line-149"></span><span class="annot"><a href="XMonad.Hooks.DynamicBars.html#multiPP"><span class="hs-identifier hs-type">multiPP</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><a href="XMonad.Hooks.StatusBar.PP.html#PP"><span class="hs-identifier hs-type">PP</span></a></span><span> </span><span class="hs-comment">-- ^ The PP to use if the screen is focused</span><span>
+</span><span id="line-150"></span><span>        </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="XMonad.Hooks.StatusBar.PP.html#PP"><span class="hs-identifier hs-type">PP</span></a></span><span> </span><span class="hs-comment">-- ^ The PP to use otherwise</span><span>
+</span><span id="line-151"></span><span>        </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">X</span></span><span> </span><span class="hs-special">(</span><span class="hs-special">)</span><span>
+</span><span id="line-152"></span><span id="multiPP"><span class="annot"><span class="annottext">multiPP :: PP -&gt; PP -&gt; X ()
+</span><a href="XMonad.Hooks.DynamicBars.html#multiPP"><span class="hs-identifier hs-var hs-var">multiPP</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">(PP -&gt; X WorkspaceId) -&gt; PP -&gt; PP -&gt; X ()
+</span><a href="XMonad.Hooks.DynamicBars.html#multiPPFormat"><span class="hs-identifier hs-var">multiPPFormat</span></a></span><span> </span><span class="annot"><span class="annottext">PP -&gt; X WorkspaceId
+</span><a href="XMonad.Hooks.StatusBar.PP.html#dynamicLogString"><span class="hs-identifier hs-var">dynamicLogString</span></a></span><span>
+</span><span id="line-153"></span><span>
+</span><span id="line-154"></span><span class="annot"><a href="XMonad.Hooks.DynamicBars.html#multiPPFormat"><span class="hs-identifier hs-type">multiPPFormat</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="hs-special">(</span><span class="annot"><a href="XMonad.Hooks.StatusBar.PP.html#PP"><span class="hs-identifier hs-type">PP</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">X</span></span><span> </span><span class="annot"><span class="hs-identifier hs-type">String</span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="XMonad.Hooks.StatusBar.PP.html#PP"><span class="hs-identifier hs-type">PP</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="XMonad.Hooks.StatusBar.PP.html#PP"><span class="hs-identifier hs-type">PP</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">X</span></span><span> </span><span class="hs-special">(</span><span class="hs-special">)</span><span>
+</span><span id="line-155"></span><span id="multiPPFormat"><span class="annot"><span class="annottext">multiPPFormat :: (PP -&gt; X WorkspaceId) -&gt; PP -&gt; PP -&gt; X ()
+</span><a href="XMonad.Hooks.DynamicBars.html#multiPPFormat"><span class="hs-identifier hs-var hs-var">multiPPFormat</span></a></span></span><span> </span><span id="local-6989586621679472845"><span class="annot"><span class="annottext">PP -&gt; X WorkspaceId
+</span><a href="#local-6989586621679472845"><span class="hs-identifier hs-var">dynlStr</span></a></span></span><span> </span><span id="local-6989586621679472844"><span class="annot"><span class="annottext">PP
+</span><a href="#local-6989586621679472844"><span class="hs-identifier hs-var">focusPP</span></a></span></span><span> </span><span id="local-6989586621679472843"><span class="annot"><span class="annottext">PP
+</span><a href="#local-6989586621679472843"><span class="hs-identifier hs-var">unfocusPP</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-156"></span><span>  </span><span class="hs-special">(</span><span class="annot"><span class="annottext">[ScreenId]
+</span><span class="hs-identifier">_</span></span><span class="hs-special">,</span><span> </span><span id="local-6989586621679472842"><span class="annot"><span class="annottext">[Handle]
+</span><a href="#local-6989586621679472842"><span class="hs-identifier hs-var">dsbInfoHandles</span></a></span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">forall a (m :: * -&gt; *). (ExtensionClass a, XLike m) =&gt; m a
+</span><a href="XMonad.Util.ExtensibleState.html#get"><span class="hs-identifier hs-var">XS.get</span></a></span><span> </span><span class="annot"><span class="annottext">forall (f :: * -&gt; *) a b. Functor f =&gt; f a -&gt; (a -&gt; b) -&gt; f b
+</span><span class="hs-operator hs-var">&lt;&amp;&gt;</span></span><span> </span><span class="annot"><span class="annottext">forall a b. [(a, b)] -&gt; ([a], [b])
+</span><span class="hs-identifier hs-var">unzip</span></span><span> </span><span class="annot"><span class="annottext">forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">DynStatusBarInfo -&gt; [(ScreenId, Handle)]
+</span><a href="XMonad.Hooks.DynamicBars.html#dsbInfo"><span class="hs-identifier hs-var">dsbInfo</span></a></span><span>
+</span><span id="line-157"></span><span>  </span><span class="annot"><span class="annottext">(PP -&gt; X WorkspaceId) -&gt; PP -&gt; PP -&gt; [Handle] -&gt; X ()
+</span><a href="XMonad.Hooks.DynamicBars.html#multiPP%27"><span class="hs-identifier hs-var">multiPP'</span></a></span><span> </span><span class="annot"><span class="annottext">PP -&gt; X WorkspaceId
+</span><a href="#local-6989586621679472845"><span class="hs-identifier hs-var">dynlStr</span></a></span><span> </span><span class="annot"><span class="annottext">PP
+</span><a href="#local-6989586621679472844"><span class="hs-identifier hs-var">focusPP</span></a></span><span> </span><span class="annot"><span class="annottext">PP
+</span><a href="#local-6989586621679472843"><span class="hs-identifier hs-var">unfocusPP</span></a></span><span> </span><span class="annot"><span class="annottext">[Handle]
+</span><a href="#local-6989586621679472842"><span class="hs-identifier hs-var">dsbInfoHandles</span></a></span><span>
+</span><span id="line-158"></span><span>
+</span><span id="line-159"></span><span class="annot"><a href="XMonad.Hooks.DynamicBars.html#multiPP%27"><span class="hs-identifier hs-type">multiPP'</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="hs-special">(</span><span class="annot"><a href="XMonad.Hooks.StatusBar.PP.html#PP"><span class="hs-identifier hs-type">PP</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">X</span></span><span> </span><span class="annot"><span class="hs-identifier hs-type">String</span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="XMonad.Hooks.StatusBar.PP.html#PP"><span class="hs-identifier hs-type">PP</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="XMonad.Hooks.StatusBar.PP.html#PP"><span class="hs-identifier hs-type">PP</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="hs-special">[</span><span class="annot"><span class="hs-identifier hs-type">Handle</span></span><span class="hs-special">]</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">X</span></span><span> </span><span class="hs-special">(</span><span class="hs-special">)</span><span>
+</span><span id="line-160"></span><span id="multiPP%27"><span class="annot"><span class="annottext">multiPP' :: (PP -&gt; X WorkspaceId) -&gt; PP -&gt; PP -&gt; [Handle] -&gt; X ()
+</span><a href="XMonad.Hooks.DynamicBars.html#multiPP%27"><span class="hs-identifier hs-var hs-var">multiPP'</span></a></span></span><span> </span><span id="local-6989586621679472840"><span class="annot"><span class="annottext">PP -&gt; X WorkspaceId
+</span><a href="#local-6989586621679472840"><span class="hs-identifier hs-var">dynlStr</span></a></span></span><span> </span><span id="local-6989586621679472839"><span class="annot"><span class="annottext">PP
+</span><a href="#local-6989586621679472839"><span class="hs-identifier hs-var">focusPP</span></a></span></span><span> </span><span id="local-6989586621679472838"><span class="annot"><span class="annottext">PP
+</span><a href="#local-6989586621679472838"><span class="hs-identifier hs-var">unfocusPP</span></a></span></span><span> </span><span id="local-6989586621679472837"><span class="annot"><span class="annottext">[Handle]
+</span><a href="#local-6989586621679472837"><span class="hs-identifier hs-var">handles</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-161"></span><span>  </span><span id="local-6989586621679472836"><span class="annot"><span class="annottext">XState
+</span><a href="#local-6989586621679472836"><span class="hs-identifier hs-var">st</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">forall s (m :: * -&gt; *). MonadState s m =&gt; m s
+</span><span class="hs-identifier hs-var">get</span></span><span>
+</span><span id="line-162"></span><span>  </span><span class="hs-keyword">let</span><span> </span><span class="annot"><a href="#local-6989586621679472834"><span class="hs-identifier hs-type">pickPP</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">WorkspaceId</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">WriterT</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">Last</span></span><span> </span><span class="annot"><span class="hs-identifier hs-type">XState</span></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="hs-identifier hs-type">X</span></span><span> </span><span class="annot"><span class="hs-identifier hs-type">String</span></span><span>
+</span><span id="line-163"></span><span>      </span><span id="local-6989586621679472834"><span class="annot"><span class="annottext">pickPP :: WorkspaceId -&gt; WriterT (Last XState) X WorkspaceId
+</span><a href="#local-6989586621679472834"><span class="hs-identifier hs-var hs-var">pickPP</span></a></span></span><span> </span><span id="local-6989586621679472833"><span class="annot"><span class="annottext">WorkspaceId
+</span><a href="#local-6989586621679472833"><span class="hs-identifier hs-var">ws</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-164"></span><span>        </span><span class="hs-keyword">let</span><span> </span><span id="local-6989586621679472830"><span class="annot"><span class="annottext">isFoc :: Bool
+</span><a href="#local-6989586621679472830"><span class="hs-identifier hs-var hs-var">isFoc</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">WorkspaceId
+</span><a href="#local-6989586621679472833"><span class="hs-identifier hs-var">ws</span></a></span><span> </span><span class="annot"><span class="annottext">forall a. Eq a =&gt; a -&gt; a -&gt; Bool
+</span><span class="hs-operator hs-var">==</span></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">forall i l a. Workspace i l a -&gt; i
+</span><span class="hs-identifier hs-var">W.tag</span></span><span> </span><span class="annot"><span class="annottext">forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">forall i l a sid sd. Screen i l a sid sd -&gt; Workspace i l a
+</span><span class="hs-identifier hs-var">W.workspace</span></span><span> </span><span class="annot"><span class="annottext">forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">forall i l a sid sd. StackSet i l a sid sd -&gt; Screen i l a sid sd
+</span><span class="hs-identifier hs-var">W.current</span></span><span> </span><span class="annot"><span class="annottext">forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">XState -&gt; WindowSet
+</span><span class="hs-identifier hs-var">windowset</span></span><span> </span><span class="annot"><span class="annottext">XState
+</span><a href="#local-6989586621679472836"><span class="hs-identifier hs-var">st</span></a></span><span>
+</span><span id="line-165"></span><span>        </span><span class="annot"><span class="annottext">forall s (m :: * -&gt; *). MonadState s m =&gt; s -&gt; m ()
+</span><span class="hs-identifier hs-var">put</span></span><span> </span><span class="annot"><span class="annottext">XState
+</span><a href="#local-6989586621679472836"><span class="hs-identifier hs-var">st</span></a></span><span class="hs-special">{</span><span> </span><span class="annot"><span class="annottext">windowset :: WindowSet
+</span><span class="hs-identifier hs-var">windowset</span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">forall s i l a sd.
+(Eq s, Eq i) =&gt;
+i -&gt; StackSet i l a s sd -&gt; StackSet i l a s sd
+</span><span class="hs-identifier hs-var">W.view</span></span><span> </span><span class="annot"><span class="annottext">WorkspaceId
+</span><a href="#local-6989586621679472833"><span class="hs-identifier hs-var">ws</span></a></span><span> </span><span class="annot"><span class="annottext">forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">XState -&gt; WindowSet
+</span><span class="hs-identifier hs-var">windowset</span></span><span> </span><span class="annot"><span class="annottext">XState
+</span><a href="#local-6989586621679472836"><span class="hs-identifier hs-var">st</span></a></span><span> </span><span class="hs-special">}</span><span>
+</span><span id="line-166"></span><span>        </span><span id="local-6989586621679472823"><span class="annot"><span class="annottext">WorkspaceId
+</span><a href="#local-6989586621679472823"><span class="hs-identifier hs-var">out</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">forall (t :: (* -&gt; *) -&gt; * -&gt; *) (m :: * -&gt; *) a.
+(MonadTrans t, Monad m) =&gt;
+m a -&gt; t m a
+</span><span class="hs-identifier hs-var">lift</span></span><span> </span><span class="annot"><span class="annottext">forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">PP -&gt; X WorkspaceId
+</span><a href="#local-6989586621679472840"><span class="hs-identifier hs-var">dynlStr</span></a></span><span> </span><span class="annot"><span class="annottext">forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="hs-keyword">if</span><span> </span><span class="annot"><span class="annottext">Bool
+</span><a href="#local-6989586621679472830"><span class="hs-identifier hs-var">isFoc</span></a></span><span> </span><span class="hs-keyword">then</span><span> </span><span class="annot"><span class="annottext">PP
+</span><a href="#local-6989586621679472839"><span class="hs-identifier hs-var">focusPP</span></a></span><span> </span><span class="hs-keyword">else</span><span> </span><span class="annot"><span class="annottext">PP
+</span><a href="#local-6989586621679472838"><span class="hs-identifier hs-var">unfocusPP</span></a></span><span>
+</span><span id="line-167"></span><span>        </span><span class="annot"><span class="annottext">forall (f :: * -&gt; *). Applicative f =&gt; Bool -&gt; f () -&gt; f ()
+</span><span class="hs-identifier hs-var">when</span></span><span> </span><span class="annot"><span class="annottext">Bool
+</span><a href="#local-6989586621679472830"><span class="hs-identifier hs-var">isFoc</span></a></span><span> </span><span class="annot"><span class="annottext">forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">forall s (m :: * -&gt; *). MonadState s m =&gt; m s
+</span><span class="hs-identifier hs-var">get</span></span><span> </span><span class="annot"><span class="annottext">forall (m :: * -&gt; *) a b. Monad m =&gt; m a -&gt; (a -&gt; m b) -&gt; m b
+</span><span class="hs-operator hs-var">&gt;&gt;=</span></span><span> </span><span class="annot"><span class="annottext">forall w (m :: * -&gt; *). MonadWriter w m =&gt; w -&gt; m ()
+</span><span class="hs-identifier hs-var">tell</span></span><span> </span><span class="annot"><span class="annottext">forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">forall a. Maybe a -&gt; Last a
+</span><span class="hs-identifier hs-var">Last</span></span><span> </span><span class="annot"><span class="annottext">forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">forall a. a -&gt; Maybe a
+</span><span class="hs-identifier hs-var">Just</span></span><span>
+</span><span id="line-168"></span><span>        </span><span class="annot"><span class="annottext">forall (m :: * -&gt; *) a. Monad m =&gt; a -&gt; m a
+</span><span class="hs-identifier hs-var">return</span></span><span> </span><span class="annot"><span class="annottext">WorkspaceId
+</span><a href="#local-6989586621679472823"><span class="hs-identifier hs-var">out</span></a></span><span>
+</span><span id="line-169"></span><span>  </span><span class="annot"><span class="annottext">forall (t :: * -&gt; *) (f :: * -&gt; *) a b.
+(Foldable t, Applicative f) =&gt;
+(a -&gt; f b) -&gt; t a -&gt; f ()
+</span><span class="hs-identifier hs-var">traverse_</span></span><span> </span><span class="annot"><span class="annottext">forall s (m :: * -&gt; *). MonadState s m =&gt; s -&gt; m ()
+</span><span class="hs-identifier hs-var">put</span></span><span> </span><span class="annot"><span class="annottext">forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">forall a. Last a -&gt; Maybe a
+</span><span class="hs-identifier hs-var">getLast</span></span><span>
+</span><span id="line-170"></span><span>    </span><span class="annot"><span class="annottext">forall (m :: * -&gt; *) a b. Monad m =&gt; (a -&gt; m b) -&gt; m a -&gt; m b
+</span><span class="hs-operator hs-var">=&lt;&lt;</span></span><span> </span><span class="annot"><span class="annottext">forall (m :: * -&gt; *) w a. Monad m =&gt; WriterT w m a -&gt; m w
+</span><span class="hs-identifier hs-var">execWriterT</span></span><span> </span><span class="annot"><span class="annottext">forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">forall (m :: * -&gt; *) a. MonadIO m =&gt; IO a -&gt; m a
+</span><span class="hs-identifier hs-var">io</span></span><span> </span><span class="annot"><span class="annottext">forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">forall (m :: * -&gt; *) a b c.
+Applicative m =&gt;
+(a -&gt; b -&gt; m c) -&gt; [a] -&gt; [b] -&gt; m ()
+</span><span class="hs-identifier hs-var">zipWithM_</span></span><span> </span><span class="annot"><span class="annottext">Handle -&gt; WorkspaceId -&gt; IO ()
+</span><span class="hs-identifier hs-var">hPutStrLn</span></span><span> </span><span class="annot"><span class="annottext">[Handle]
+</span><a href="#local-6989586621679472837"><span class="hs-identifier hs-var">handles</span></a></span><span> </span><span class="annot"><span class="annottext">forall (m :: * -&gt; *) b c a.
+Monad m =&gt;
+(b -&gt; m c) -&gt; (a -&gt; m b) -&gt; a -&gt; m c
+</span><span class="hs-operator hs-var">&lt;=&lt;</span></span><span> </span><span class="annot"><span class="annottext">forall (t :: * -&gt; *) (m :: * -&gt; *) a b.
+(Traversable t, Monad m) =&gt;
+(a -&gt; m b) -&gt; t a -&gt; m (t b)
+</span><span class="hs-identifier hs-var">mapM</span></span><span> </span><span class="annot"><span class="annottext">WorkspaceId -&gt; WriterT (Last XState) X WorkspaceId
+</span><a href="#local-6989586621679472834"><span class="hs-identifier hs-var">pickPP</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">forall a. [Maybe a] -&gt; [a]
+</span><span class="hs-identifier hs-var">catMaybes</span></span><span>
+</span><span id="line-171"></span><span>    </span><span class="annot"><span class="annottext">forall (m :: * -&gt; *) a b. Monad m =&gt; (a -&gt; m b) -&gt; m a -&gt; m b
+</span><span class="hs-operator hs-var">=&lt;&lt;</span></span><span> </span><span class="annot"><span class="annottext">forall (t :: * -&gt; *) (m :: * -&gt; *) a b.
+(Traversable t, Monad m) =&gt;
+(a -&gt; m b) -&gt; t a -&gt; m (t b)
+</span><span class="hs-identifier hs-var">mapM</span></span><span> </span><span class="annot"><span class="annottext">ScreenId -&gt; X (Maybe WorkspaceId)
+</span><span class="hs-identifier hs-var">screenWorkspace</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">forall a b c. (a -&gt; b -&gt; c) -&gt; [a] -&gt; [b] -&gt; [c]
+</span><span class="hs-identifier hs-var">zipWith</span></span><span> </span><span class="annot"><span class="annottext">forall a b. a -&gt; b -&gt; a
+</span><span class="hs-identifier hs-var">const</span></span><span> </span><span class="hs-special">[</span><span class="annot"><span class="annottext">ScreenId
+</span><span class="hs-number">0</span></span><span> </span><span class="hs-glyph">..</span><span> </span><span class="hs-special">]</span><span> </span><span class="annot"><span class="annottext">[Handle]
+</span><a href="#local-6989586621679472837"><span class="hs-identifier hs-var">handles</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-172"></span><span>
+</span><span id="line-173"></span><span id="local-6989586621679473132"><span class="annot"><a href="XMonad.Hooks.DynamicBars.html#getScreens"><span class="hs-identifier hs-type">getScreens</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">MonadIO</span></span><span> </span><span class="annot"><a href="#local-6989586621679473132"><span class="hs-identifier hs-type">m</span></a></span><span> </span><span class="hs-glyph">=&gt;</span><span> </span><span class="annot"><a href="#local-6989586621679473132"><span class="hs-identifier hs-type">m</span></a></span><span> </span><span class="hs-special">[</span><span class="annot"><span class="hs-identifier hs-type">ScreenId</span></span><span class="hs-special">]</span></span><span>
+</span><span id="line-174"></span><span id="getScreens"><span class="annot"><span class="annottext">getScreens :: forall (m :: * -&gt; *). MonadIO m =&gt; m [ScreenId]
+</span><a href="XMonad.Hooks.DynamicBars.html#getScreens"><span class="hs-identifier hs-var hs-var">getScreens</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">forall (m :: * -&gt; *) a. MonadIO m =&gt; IO a -&gt; m a
+</span><span class="hs-identifier hs-var">liftIO</span></span><span> </span><span class="annot"><span class="annottext">forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-175"></span><span>  </span><span id="local-6989586621679472803"><span class="annot"><span class="annottext">[Rectangle]
+</span><a href="#local-6989586621679472803"><span class="hs-identifier hs-var">screens</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-176"></span><span>    </span><span id="local-6989586621679472802"><span class="annot"><span class="annottext">Display
+</span><a href="#local-6989586621679472802"><span class="hs-identifier hs-var">dpy</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">WorkspaceId -&gt; IO Display
+</span><span class="hs-identifier hs-var">openDisplay</span></span><span> </span><span class="annot"><span class="annottext">WorkspaceId
+</span><span class="hs-string">&quot;&quot;</span></span><span>
+</span><span id="line-177"></span><span>    </span><span id="local-6989586621679472800"><span class="annot"><span class="annottext">[Rectangle]
+</span><a href="#local-6989586621679472800"><span class="hs-identifier hs-var">rects</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">Display -&gt; IO [Rectangle]
+</span><span class="hs-identifier hs-var">getScreenInfo</span></span><span> </span><span class="annot"><span class="annottext">Display
+</span><a href="#local-6989586621679472802"><span class="hs-identifier hs-var">dpy</span></a></span><span>
+</span><span id="line-178"></span><span>    </span><span class="annot"><span class="annottext">Display -&gt; IO ()
+</span><span class="hs-identifier hs-var">closeDisplay</span></span><span> </span><span class="annot"><span class="annottext">Display
+</span><a href="#local-6989586621679472802"><span class="hs-identifier hs-var">dpy</span></a></span><span>
+</span><span id="line-179"></span><span>    </span><span class="annot"><span class="annottext">forall (m :: * -&gt; *) a. Monad m =&gt; a -&gt; m a
+</span><span class="hs-identifier hs-var">return</span></span><span> </span><span class="annot"><span class="annottext">[Rectangle]
+</span><a href="#local-6989586621679472800"><span class="hs-identifier hs-var">rects</span></a></span><span>
+</span><span id="line-180"></span><span>  </span><span class="hs-keyword">let</span><span> </span><span id="local-6989586621679472795"><span class="annot"><span class="annottext">ids :: [(ScreenId, Rectangle)]
+</span><a href="#local-6989586621679472795"><span class="hs-identifier hs-var hs-var">ids</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">forall a b. [a] -&gt; [b] -&gt; [(a, b)]
+</span><span class="hs-identifier hs-var">zip</span></span><span> </span><span class="hs-special">[</span><span class="annot"><span class="annottext">ScreenId
+</span><span class="hs-number">0</span></span><span> </span><span class="hs-glyph">..</span><span> </span><span class="hs-special">]</span><span> </span><span class="annot"><span class="annottext">[Rectangle]
+</span><a href="#local-6989586621679472803"><span class="hs-identifier hs-var">screens</span></a></span><span>
+</span><span id="line-181"></span><span>  </span><span class="annot"><span class="annottext">forall (m :: * -&gt; *) a. Monad m =&gt; a -&gt; m a
+</span><span class="hs-identifier hs-var">return</span></span><span> </span><span class="annot"><span class="annottext">forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">forall a b. (a -&gt; b) -&gt; [a] -&gt; [b]
+</span><span class="hs-identifier hs-var">map</span></span><span> </span><span class="annot"><span class="annottext">forall a b. (a, b) -&gt; a
+</span><span class="hs-identifier hs-var">fst</span></span><span> </span><span class="annot"><span class="annottext">[(ScreenId, Rectangle)]
+</span><a href="#local-6989586621679472795"><span class="hs-identifier hs-var">ids</span></a></span><span>
+</span><span id="line-182"></span></pre></body></html>

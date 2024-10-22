@@ -1,0 +1,230 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd"><html xmlns="http://www.w3.org/1999/xhtml"><head><link rel="stylesheet" type="text/css" href="style.css" /><script type="text/javascript" src="highlight.js"></script></head><body><pre><span class="hs-comment">{- |
+Module      :  XMonad.Util.Paste
+Description :  A module for sending key presses to windows.
+Copyright   :  (C) 2008 J&#233;r&#233;my Bobbio, gwern
+License     :  BSD3
+
+Maintainer  :  none
+Stability   :  unstable
+Portability :  unportable
+
+A module for sending key presses to windows. This modules provides generalized
+and specialized functions for this task.
+-}</span><span>
+</span><span id="line-14"></span><span>
+</span><span id="line-15"></span><span class="hs-keyword">module</span><span> </span><span class="hs-identifier">XMonad.Util.Paste</span><span> </span><span class="hs-special">(</span><span> </span><span class="annot"><span class="hs-comment">-- * Usage</span></span><span>
+</span><span id="line-16"></span><span>                           </span><span class="annot"><span class="hs-comment">-- $usage</span></span><span>
+</span><span id="line-17"></span><span>                           </span><span class="annot"><a href="XMonad.Util.Paste.html#pasteSelection"><span class="hs-identifier">pasteSelection</span></a></span><span class="hs-special">,</span><span>
+</span><span id="line-18"></span><span>                           </span><span class="annot"><a href="XMonad.Util.Paste.html#pasteString"><span class="hs-identifier">pasteString</span></a></span><span class="hs-special">,</span><span>
+</span><span id="line-19"></span><span>                           </span><span class="annot"><a href="XMonad.Util.Paste.html#pasteChar"><span class="hs-identifier">pasteChar</span></a></span><span class="hs-special">,</span><span>
+</span><span id="line-20"></span><span>                           </span><span class="annot"><a href="XMonad.Util.Paste.html#sendKey"><span class="hs-identifier">sendKey</span></a></span><span class="hs-special">,</span><span>
+</span><span id="line-21"></span><span>                           </span><span class="annot"><a href="XMonad.Util.Paste.html#sendKeyWindow"><span class="hs-identifier">sendKeyWindow</span></a></span><span class="hs-special">,</span><span>
+</span><span id="line-22"></span><span>                           </span><span class="annot"><span class="hs-identifier">noModMask</span></span><span>
+</span><span id="line-23"></span><span>                         </span><span class="hs-special">)</span><span>
+</span><span id="line-24"></span><span>                           </span><span class="hs-keyword">where</span><span>
+</span><span id="line-25"></span><span>
+</span><span id="line-26"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><span class="hs-identifier">XMonad</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier">io</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier">theRoot</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier">withDisplay</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier">X</span></span><span> </span><span class="hs-special">(</span><span class="hs-special">)</span><span class="hs-special">)</span><span>
+</span><span id="line-27"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><span class="hs-identifier">Graphics.X11</span></span><span>
+</span><span id="line-28"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><span class="hs-identifier">Graphics.X11.Xlib.Extras</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier">none</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier">setEventType</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier">setKeyEvent</span></span><span class="hs-special">)</span><span>
+</span><span id="line-29"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><span class="hs-identifier">Control.Monad.Reader</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier">asks</span></span><span class="hs-special">)</span><span>
+</span><span id="line-30"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><span class="hs-identifier">XMonad.Operations</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier">withFocused</span></span><span class="hs-special">)</span><span>
+</span><span id="line-31"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><a href="XMonad.Prelude.html"><span class="hs-identifier">XMonad.Prelude</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier">isUpper</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier">fromMaybe</span></span><span class="hs-special">)</span><span>
+</span><span id="line-32"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><a href="XMonad.Util.XSelection.html"><span class="hs-identifier">XMonad.Util.XSelection</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="XMonad.Util.XSelection.html#getSelection"><span class="hs-identifier">getSelection</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-33"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><a href="XMonad.Util.EZConfig.html"><span class="hs-identifier">XMonad.Util.EZConfig</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="XMonad.Util.EZConfig.html#parseKey"><span class="hs-identifier">parseKey</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-34"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><a href="XMonad.Util.Parser.html"><span class="hs-identifier">XMonad.Util.Parser</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="XMonad.Util.Parser.html#runParser"><span class="hs-identifier">runParser</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-35"></span><span>
+</span><span id="line-36"></span><span class="hs-comment">{- $usage
+
+Import this module into your @xmonad.hs@ as usual:
+
+&gt; import XMonad.Util.Paste
+
+And use the functions. They all return 'X' (), and so are appropriate
+for use as keybindings. Example:
+
+&gt;          , ((m,              xK_d), pasteString &quot;foo bar&quot;) ]
+
+Don't expect too much of the functions; they probably don't work on complex
+texts.
+-}</span><span>
+</span><span id="line-50"></span><span>
+</span><span id="line-51"></span><span class="hs-comment">-- | Paste the current X mouse selection. Note that this uses 'getSelection' from</span><span>
+</span><span id="line-52"></span><span class="hs-comment">--   &quot;XMonad.Util.XSelection&quot; and so is heir to its flaws.</span><span>
+</span><span id="line-53"></span><span class="annot"><a href="XMonad.Util.Paste.html#pasteSelection"><span class="hs-identifier hs-type">pasteSelection</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">X</span></span><span> </span><span class="hs-special">(</span><span class="hs-special">)</span><span>
+</span><span id="line-54"></span><span id="pasteSelection"><span class="annot"><span class="annottext">pasteSelection :: X ()
+</span><a href="XMonad.Util.Paste.html#pasteSelection"><span class="hs-identifier hs-var hs-var">pasteSelection</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">forall (m :: * -&gt; *). MonadIO m =&gt; m String
+</span><a href="XMonad.Util.XSelection.html#getSelection"><span class="hs-identifier hs-var">getSelection</span></a></span><span> </span><span class="annot"><span class="annottext">forall (m :: * -&gt; *) a b. Monad m =&gt; m a -&gt; (a -&gt; m b) -&gt; m b
+</span><span class="hs-operator hs-var">&gt;&gt;=</span></span><span> </span><span class="annot"><span class="annottext">String -&gt; X ()
+</span><a href="XMonad.Util.Paste.html#pasteString"><span class="hs-identifier hs-var">pasteString</span></a></span><span>
+</span><span id="line-55"></span><span>
+</span><span id="line-56"></span><span class="hs-comment">-- | Send a string to the window which is currently focused. This function correctly</span><span>
+</span><span id="line-57"></span><span class="hs-comment">-- handles capitalization. Warning: in dealing with capitalized characters, this assumes a QWERTY layout.</span><span>
+</span><span id="line-58"></span><span class="annot"><a href="XMonad.Util.Paste.html#pasteString"><span class="hs-identifier hs-type">pasteString</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">String</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">X</span></span><span> </span><span class="hs-special">(</span><span class="hs-special">)</span><span>
+</span><span id="line-59"></span><span id="pasteString"><span class="annot"><span class="annottext">pasteString :: String -&gt; X ()
+</span><a href="XMonad.Util.Paste.html#pasteString"><span class="hs-identifier hs-var hs-var">pasteString</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">forall (t :: * -&gt; *) (m :: * -&gt; *) a b.
+(Foldable t, Monad m) =&gt;
+(a -&gt; m b) -&gt; t a -&gt; m ()
+</span><span class="hs-identifier hs-var">mapM_</span></span><span> </span><span class="hs-special">(</span><span class="hs-glyph">\</span><span id="local-6989586621679508369"><span class="annot"><span class="annottext">Char
+</span><a href="#local-6989586621679508369"><span class="hs-identifier hs-var">x</span></a></span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="hs-keyword">if</span><span> </span><span class="annot"><span class="annottext">Char -&gt; Bool
+</span><span class="hs-identifier hs-var">isUpper</span></span><span> </span><span class="annot"><span class="annottext">Char
+</span><a href="#local-6989586621679508369"><span class="hs-identifier hs-var">x</span></a></span><span> </span><span class="annot"><span class="annottext">Bool -&gt; Bool -&gt; Bool
+</span><span class="hs-operator hs-var">||</span></span><span> </span><span class="annot"><span class="annottext">Char
+</span><a href="#local-6989586621679508369"><span class="hs-identifier hs-var">x</span></a></span><span> </span><span class="annot"><span class="annottext">forall (t :: * -&gt; *) a. (Foldable t, Eq a) =&gt; a -&gt; t a -&gt; Bool
+</span><span class="hs-operator hs-var">`elem`</span></span><span> </span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot;~!@#$%^&amp;*()_+{}|:\&quot;&lt;&gt;?&quot;</span></span><span> </span><span class="hs-keyword">then</span><span> </span><span class="annot"><span class="annottext">KeyMask -&gt; Char -&gt; X ()
+</span><a href="XMonad.Util.Paste.html#pasteChar"><span class="hs-identifier hs-var">pasteChar</span></a></span><span> </span><span class="annot"><span class="annottext">KeyMask
+</span><span class="hs-identifier hs-var">shiftMask</span></span><span> </span><span class="annot"><span class="annottext">Char
+</span><a href="#local-6989586621679508369"><span class="hs-identifier hs-var">x</span></a></span><span> </span><span class="hs-keyword">else</span><span> </span><span class="annot"><span class="annottext">KeyMask -&gt; Char -&gt; X ()
+</span><a href="XMonad.Util.Paste.html#pasteChar"><span class="hs-identifier hs-var">pasteChar</span></a></span><span> </span><span class="annot"><span class="annottext">KeyMask
+</span><span class="hs-identifier hs-var">noModMask</span></span><span> </span><span class="annot"><span class="annottext">Char
+</span><a href="#local-6989586621679508369"><span class="hs-identifier hs-var">x</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-60"></span><span>
+</span><span id="line-61"></span><span class="hs-comment">{- | Send a character to the current window. This is more low-level.
+   Remember that you must handle the case of capitalization appropriately.
+   That is, from the window's perspective:
+
+   &gt; pasteChar mod2Mask 'F' ~&gt; &quot;f&quot;
+
+   You would want to do something like:
+
+   &gt; pasteChar shiftMask 'F'
+
+   Note that this function will probably have trouble with any 'Char'
+   outside ASCII.
+-}</span><span>
+</span><span id="line-74"></span><span class="annot"><a href="XMonad.Util.Paste.html#pasteChar"><span class="hs-identifier hs-type">pasteChar</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">KeyMask</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Char</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">X</span></span><span> </span><span class="hs-special">(</span><span class="hs-special">)</span><span>
+</span><span id="line-75"></span><span id="pasteChar"><span class="annot"><span class="annottext">pasteChar :: KeyMask -&gt; Char -&gt; X ()
+</span><a href="XMonad.Util.Paste.html#pasteChar"><span class="hs-identifier hs-var hs-var">pasteChar</span></a></span></span><span> </span><span id="local-6989586621679508365"><span class="annot"><span class="annottext">KeyMask
+</span><a href="#local-6989586621679508365"><span class="hs-identifier hs-var">m</span></a></span></span><span> </span><span id="local-6989586621679508364"><span class="annot"><span class="annottext">Char
+</span><a href="#local-6989586621679508364"><span class="hs-identifier hs-var">c</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">KeyMask -&gt; KeySym -&gt; X ()
+</span><a href="XMonad.Util.Paste.html#sendKey"><span class="hs-identifier hs-var">sendKey</span></a></span><span> </span><span class="annot"><span class="annottext">KeyMask
+</span><a href="#local-6989586621679508365"><span class="hs-identifier hs-var">m</span></a></span><span> </span><span class="annot"><span class="annottext">forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">forall a. a -&gt; Maybe a -&gt; a
+</span><span class="hs-identifier hs-var">fromMaybe</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Char -&gt; KeySym
+</span><a href="XMonad.Util.Paste.html#unicodeToKeysym"><span class="hs-identifier hs-var">unicodeToKeysym</span></a></span><span> </span><span class="annot"><span class="annottext">Char
+</span><a href="#local-6989586621679508364"><span class="hs-identifier hs-var">c</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-76"></span><span>                </span><span class="annot"><span class="annottext">forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">forall a. Parser a -&gt; String -&gt; Maybe a
+</span><a href="XMonad.Util.Parser.html#runParser"><span class="hs-identifier hs-var">runParser</span></a></span><span> </span><span class="annot"><span class="annottext">Parser KeySym
+</span><a href="XMonad.Util.EZConfig.html#parseKey"><span class="hs-identifier hs-var">parseKey</span></a></span><span> </span><span class="hs-special">[</span><span class="annot"><span class="annottext">Char
+</span><a href="#local-6989586621679508364"><span class="hs-identifier hs-var">c</span></a></span><span class="hs-special">]</span><span>
+</span><span id="line-77"></span><span>
+</span><span id="line-78"></span><span class="hs-comment">-- | Send a key with a modifier to the currently focused window.</span><span>
+</span><span id="line-79"></span><span class="annot"><a href="XMonad.Util.Paste.html#sendKey"><span class="hs-identifier hs-type">sendKey</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">KeyMask</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">KeySym</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">X</span></span><span> </span><span class="hs-special">(</span><span class="hs-special">)</span><span>
+</span><span id="line-80"></span><span id="sendKey"><span class="annot"><span class="annottext">sendKey :: KeyMask -&gt; KeySym -&gt; X ()
+</span><a href="XMonad.Util.Paste.html#sendKey"><span class="hs-identifier hs-var hs-var">sendKey</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">(KeySym -&gt; X ()) -&gt; X ()
+</span><span class="hs-identifier hs-var">withFocused</span></span><span> </span><span class="annot"><span class="annottext">forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">KeyMask -&gt; KeySym -&gt; KeySym -&gt; X ()
+</span><a href="XMonad.Util.Paste.html#sendKeyWindow"><span class="hs-identifier hs-var">sendKeyWindow</span></a></span><span>
+</span><span id="line-81"></span><span>
+</span><span id="line-82"></span><span class="hs-comment">-- | The primitive. Allows you to send any combination of 'KeyMask' and 'KeySym' to any 'Window' you specify.</span><span>
+</span><span id="line-83"></span><span class="annot"><a href="XMonad.Util.Paste.html#sendKeyWindow"><span class="hs-identifier hs-type">sendKeyWindow</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">KeyMask</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">KeySym</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Window</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">X</span></span><span> </span><span class="hs-special">(</span><span class="hs-special">)</span><span>
+</span><span id="line-84"></span><span id="sendKeyWindow"><span class="annot"><span class="annottext">sendKeyWindow :: KeyMask -&gt; KeySym -&gt; KeySym -&gt; X ()
+</span><a href="XMonad.Util.Paste.html#sendKeyWindow"><span class="hs-identifier hs-var hs-var">sendKeyWindow</span></a></span></span><span> </span><span id="local-6989586621679508360"><span class="annot"><span class="annottext">KeyMask
+</span><a href="#local-6989586621679508360"><span class="hs-identifier hs-var">mods</span></a></span></span><span> </span><span id="local-6989586621679508359"><span class="annot"><span class="annottext">KeySym
+</span><a href="#local-6989586621679508359"><span class="hs-identifier hs-var">key</span></a></span></span><span> </span><span id="local-6989586621679508358"><span class="annot"><span class="annottext">KeySym
+</span><a href="#local-6989586621679508358"><span class="hs-identifier hs-var">w</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">forall a. (Display -&gt; X a) -&gt; X a
+</span><span class="hs-identifier hs-var">withDisplay</span></span><span> </span><span class="annot"><span class="annottext">forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="hs-glyph">\</span><span id="local-6989586621679508357"><span class="annot"><span class="annottext">Display
+</span><a href="#local-6989586621679508357"><span class="hs-identifier hs-var">d</span></a></span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-85"></span><span>              </span><span id="local-6989586621679508356"><span class="annot"><span class="annottext">KeySym
+</span><a href="#local-6989586621679508356"><span class="hs-identifier hs-var">rootw</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">forall r (m :: * -&gt; *) a. MonadReader r m =&gt; (r -&gt; a) -&gt; m a
+</span><span class="hs-identifier hs-var">asks</span></span><span> </span><span class="annot"><span class="annottext">XConf -&gt; KeySym
+</span><span class="hs-identifier hs-var">theRoot</span></span><span>
+</span><span id="line-86"></span><span>              </span><span id="local-6989586621679508355"><span class="annot"><span class="annottext">KeyCode
+</span><a href="#local-6989586621679508355"><span class="hs-identifier hs-var">keycode</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">forall (m :: * -&gt; *) a. MonadIO m =&gt; IO a -&gt; m a
+</span><span class="hs-identifier hs-var">io</span></span><span> </span><span class="annot"><span class="annottext">forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">Display -&gt; KeySym -&gt; IO KeyCode
+</span><span class="hs-identifier hs-var">keysymToKeycode</span></span><span> </span><span class="annot"><span class="annottext">Display
+</span><a href="#local-6989586621679508357"><span class="hs-identifier hs-var">d</span></a></span><span> </span><span class="annot"><span class="annottext">KeySym
+</span><a href="#local-6989586621679508359"><span class="hs-identifier hs-var">key</span></a></span><span>
+</span><span id="line-87"></span><span>              </span><span class="annot"><span class="annottext">forall (m :: * -&gt; *) a. MonadIO m =&gt; IO a -&gt; m a
+</span><span class="hs-identifier hs-var">io</span></span><span> </span><span class="annot"><span class="annottext">forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">forall a. (XEventPtr -&gt; IO a) -&gt; IO a
+</span><span class="hs-identifier hs-var">allocaXEvent</span></span><span> </span><span class="annot"><span class="annottext">forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="hs-glyph">\</span><span id="local-6989586621679508352"><span class="annot"><span class="annottext">XEventPtr
+</span><a href="#local-6989586621679508352"><span class="hs-identifier hs-var">ev</span></a></span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-88"></span><span>                  </span><span class="annot"><span class="annottext">XEventPtr -&gt; EventType -&gt; IO ()
+</span><span class="hs-identifier hs-var">setEventType</span></span><span> </span><span class="annot"><span class="annottext">XEventPtr
+</span><a href="#local-6989586621679508352"><span class="hs-identifier hs-var">ev</span></a></span><span> </span><span class="annot"><span class="annottext">EventType
+</span><span class="hs-identifier hs-var">keyPress</span></span><span>
+</span><span id="line-89"></span><span>                  </span><span class="annot"><span class="annottext">XEventPtr
+-&gt; KeySym
+-&gt; KeySym
+-&gt; KeySym
+-&gt; KeyMask
+-&gt; KeyCode
+-&gt; Bool
+-&gt; IO ()
+</span><span class="hs-identifier hs-var">setKeyEvent</span></span><span> </span><span class="annot"><span class="annottext">XEventPtr
+</span><a href="#local-6989586621679508352"><span class="hs-identifier hs-var">ev</span></a></span><span> </span><span class="annot"><span class="annottext">KeySym
+</span><a href="#local-6989586621679508358"><span class="hs-identifier hs-var">w</span></a></span><span> </span><span class="annot"><span class="annottext">KeySym
+</span><a href="#local-6989586621679508356"><span class="hs-identifier hs-var">rootw</span></a></span><span> </span><span class="annot"><span class="annottext">KeySym
+</span><span class="hs-identifier hs-var">none</span></span><span> </span><span class="annot"><span class="annottext">KeyMask
+</span><a href="#local-6989586621679508360"><span class="hs-identifier hs-var">mods</span></a></span><span> </span><span class="annot"><span class="annottext">KeyCode
+</span><a href="#local-6989586621679508355"><span class="hs-identifier hs-var">keycode</span></a></span><span> </span><span class="annot"><span class="annottext">Bool
+</span><span class="hs-identifier hs-var">True</span></span><span>
+</span><span id="line-90"></span><span>                  </span><span class="annot"><span class="annottext">Display -&gt; KeySym -&gt; Bool -&gt; KeySym -&gt; XEventPtr -&gt; IO ()
+</span><span class="hs-identifier hs-var">sendEvent</span></span><span> </span><span class="annot"><span class="annottext">Display
+</span><a href="#local-6989586621679508357"><span class="hs-identifier hs-var">d</span></a></span><span> </span><span class="annot"><span class="annottext">KeySym
+</span><a href="#local-6989586621679508358"><span class="hs-identifier hs-var">w</span></a></span><span> </span><span class="annot"><span class="annottext">Bool
+</span><span class="hs-identifier hs-var">True</span></span><span> </span><span class="annot"><span class="annottext">KeySym
+</span><span class="hs-identifier hs-var">keyPressMask</span></span><span> </span><span class="annot"><span class="annottext">XEventPtr
+</span><a href="#local-6989586621679508352"><span class="hs-identifier hs-var">ev</span></a></span><span>
+</span><span id="line-91"></span><span>                  </span><span class="annot"><span class="annottext">XEventPtr -&gt; EventType -&gt; IO ()
+</span><span class="hs-identifier hs-var">setEventType</span></span><span> </span><span class="annot"><span class="annottext">XEventPtr
+</span><a href="#local-6989586621679508352"><span class="hs-identifier hs-var">ev</span></a></span><span> </span><span class="annot"><span class="annottext">EventType
+</span><span class="hs-identifier hs-var">keyRelease</span></span><span>
+</span><span id="line-92"></span><span>                  </span><span class="annot"><span class="annottext">Display -&gt; KeySym -&gt; Bool -&gt; KeySym -&gt; XEventPtr -&gt; IO ()
+</span><span class="hs-identifier hs-var">sendEvent</span></span><span> </span><span class="annot"><span class="annottext">Display
+</span><a href="#local-6989586621679508357"><span class="hs-identifier hs-var">d</span></a></span><span> </span><span class="annot"><span class="annottext">KeySym
+</span><a href="#local-6989586621679508358"><span class="hs-identifier hs-var">w</span></a></span><span> </span><span class="annot"><span class="annottext">Bool
+</span><span class="hs-identifier hs-var">True</span></span><span> </span><span class="annot"><span class="annottext">KeySym
+</span><span class="hs-identifier hs-var">keyReleaseMask</span></span><span> </span><span class="annot"><span class="annottext">XEventPtr
+</span><a href="#local-6989586621679508352"><span class="hs-identifier hs-var">ev</span></a></span><span>
+</span><span id="line-93"></span><span>
+</span><span id="line-94"></span><span class="hs-comment">-- | Convert a unicode character to a 'KeySym'. Ideally, this should</span><span>
+</span><span id="line-95"></span><span class="hs-comment">-- work for any unicode character, but see here for details:</span><span>
+</span><span id="line-96"></span><span class="hs-comment">-- http://www.cl.cam.ac.uk/~mgk25/ucs/keysyms.txt</span><span>
+</span><span id="line-97"></span><span class="annot"><a href="XMonad.Util.Paste.html#unicodeToKeysym"><span class="hs-identifier hs-type">unicodeToKeysym</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Char</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">KeySym</span></span><span>
+</span><span id="line-98"></span><span id="unicodeToKeysym"><span class="annot"><span class="annottext">unicodeToKeysym :: Char -&gt; KeySym
+</span><a href="XMonad.Util.Paste.html#unicodeToKeysym"><span class="hs-identifier hs-var hs-var">unicodeToKeysym</span></a></span></span><span> </span><span id="local-6989586621679508346"><span class="annot"><span class="annottext">Char
+</span><a href="#local-6989586621679508346"><span class="hs-identifier hs-var">c</span></a></span></span><span>
+</span><span id="line-99"></span><span>  </span><span class="hs-glyph">|</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Int
+</span><a href="#local-6989586621679508345"><span class="hs-identifier hs-var">ucp</span></a></span><span> </span><span class="annot"><span class="annottext">forall a. Ord a =&gt; a -&gt; a -&gt; Bool
+</span><span class="hs-operator hs-var">&gt;=</span></span><span> </span><span class="annot"><span class="annottext">Int
+</span><span class="hs-number">32</span></span><span class="hs-special">)</span><span>  </span><span class="annot"><span class="annottext">Bool -&gt; Bool -&gt; Bool
+</span><span class="hs-operator hs-var">&amp;&amp;</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Int
+</span><a href="#local-6989586621679508345"><span class="hs-identifier hs-var">ucp</span></a></span><span> </span><span class="annot"><span class="annottext">forall a. Ord a =&gt; a -&gt; a -&gt; Bool
+</span><span class="hs-operator hs-var">&lt;=</span></span><span> </span><span class="annot"><span class="annottext">Int
+</span><span class="hs-number">126</span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">forall a b. (Integral a, Num b) =&gt; a -&gt; b
+</span><span class="hs-identifier hs-var">fromIntegral</span></span><span> </span><span class="annot"><span class="annottext">Int
+</span><a href="#local-6989586621679508345"><span class="hs-identifier hs-var">ucp</span></a></span><span>
+</span><span id="line-100"></span><span>  </span><span class="hs-glyph">|</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Int
+</span><a href="#local-6989586621679508345"><span class="hs-identifier hs-var">ucp</span></a></span><span> </span><span class="annot"><span class="annottext">forall a. Ord a =&gt; a -&gt; a -&gt; Bool
+</span><span class="hs-operator hs-var">&gt;=</span></span><span> </span><span class="annot"><span class="annottext">Int
+</span><span class="hs-number">160</span></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">Bool -&gt; Bool -&gt; Bool
+</span><span class="hs-operator hs-var">&amp;&amp;</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Int
+</span><a href="#local-6989586621679508345"><span class="hs-identifier hs-var">ucp</span></a></span><span> </span><span class="annot"><span class="annottext">forall a. Ord a =&gt; a -&gt; a -&gt; Bool
+</span><span class="hs-operator hs-var">&lt;=</span></span><span> </span><span class="annot"><span class="annottext">Int
+</span><span class="hs-number">255</span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">forall a b. (Integral a, Num b) =&gt; a -&gt; b
+</span><span class="hs-identifier hs-var">fromIntegral</span></span><span> </span><span class="annot"><span class="annottext">Int
+</span><a href="#local-6989586621679508345"><span class="hs-identifier hs-var">ucp</span></a></span><span>
+</span><span id="line-101"></span><span>  </span><span class="hs-glyph">|</span><span> </span><span class="annot"><span class="annottext">Int
+</span><a href="#local-6989586621679508345"><span class="hs-identifier hs-var">ucp</span></a></span><span> </span><span class="annot"><span class="annottext">forall a. Ord a =&gt; a -&gt; a -&gt; Bool
+</span><span class="hs-operator hs-var">&gt;=</span></span><span> </span><span class="annot"><span class="annottext">Int
+</span><span class="hs-number">256</span></span><span>                   </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">forall a b. (Integral a, Num b) =&gt; a -&gt; b
+</span><span class="hs-identifier hs-var">fromIntegral</span></span><span> </span><span class="annot"><span class="annottext">forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">Int
+</span><a href="#local-6989586621679508345"><span class="hs-identifier hs-var">ucp</span></a></span><span> </span><span class="annot"><span class="annottext">forall a. Num a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-operator hs-var">+</span></span><span> </span><span class="annot"><span class="annottext">Int
+</span><span class="hs-number">0x1000000</span></span><span>
+</span><span id="line-102"></span><span>  </span><span class="hs-glyph">|</span><span> </span><span class="annot"><span class="annottext">Bool
+</span><span class="hs-identifier hs-var">otherwise</span></span><span>                    </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">KeySym
+</span><span class="hs-number">0</span></span><span> </span><span class="hs-comment">-- this is supposed to be an error, but it's not ideal</span><span>
+</span><span id="line-103"></span><span>  </span><span class="hs-keyword">where</span><span> </span><span id="local-6989586621679508345"><span class="annot"><span class="annottext">ucp :: Int
+</span><a href="#local-6989586621679508345"><span class="hs-identifier hs-var hs-var">ucp</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">forall a. Enum a =&gt; a -&gt; Int
+</span><span class="hs-identifier hs-var">fromEnum</span></span><span> </span><span class="annot"><span class="annottext">Char
+</span><a href="#local-6989586621679508346"><span class="hs-identifier hs-var">c</span></a></span><span> </span><span class="hs-comment">-- codepoint</span><span>
+</span><span id="line-104"></span></pre></body></html>

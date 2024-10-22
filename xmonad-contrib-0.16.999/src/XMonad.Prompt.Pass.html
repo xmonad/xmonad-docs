@@ -1,0 +1,490 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd"><html xmlns="http://www.w3.org/1999/xhtml"><head><link rel="stylesheet" type="text/css" href="style.css" /><script type="text/javascript" src="highlight.js"></script></head><body><pre><span class="hs-comment">-----------------------------------------------------------------------------</span><span>
+</span><span id="line-2"></span><span class="hs-comment">-- |</span><span>
+</span><span id="line-3"></span><span class="hs-comment">-- Module      :  XMonad.Prompt.Pass</span><span>
+</span><span id="line-4"></span><span class="hs-comment">-- Description :  A prompt for interacting with @pass(1)@.</span><span>
+</span><span id="line-5"></span><span class="hs-comment">-- Copyright   :  (c) 2014 Igor Babuschkin, Antoine R. Dumont</span><span>
+</span><span id="line-6"></span><span class="hs-comment">-- License     :  BSD3-style (see LICENSE)</span><span>
+</span><span id="line-7"></span><span class="hs-comment">--</span><span>
+</span><span id="line-8"></span><span class="hs-comment">-- Maintainer  :  Antoine R. Dumont &lt;eniotna.t@gmail.com&gt;</span><span>
+</span><span id="line-9"></span><span class="hs-comment">-- Stability   :  unstable</span><span>
+</span><span id="line-10"></span><span class="hs-comment">-- Portability :  unportable</span><span>
+</span><span id="line-11"></span><span class="hs-comment">--</span><span>
+</span><span id="line-12"></span><span class="hs-comment">-- A thin wrapper around the standard @pass(1)@ UNIX utility.</span><span>
+</span><span id="line-13"></span><span class="hs-comment">--</span><span>
+</span><span id="line-14"></span><span class="hs-comment">-- This module provides several prompts to ease password manipulation</span><span>
+</span><span id="line-15"></span><span class="hs-comment">-- (generate, read, edit, remove); all of them benefit from the</span><span>
+</span><span id="line-16"></span><span class="hs-comment">-- completion system provided by &quot;XMonad.Prompt&quot;.  Specifically, we</span><span>
+</span><span id="line-17"></span><span class="hs-comment">-- provide</span><span>
+</span><span id="line-18"></span><span class="hs-comment">--</span><span>
+</span><span id="line-19"></span><span class="hs-comment">-- - two functions to lookup passwords in the password-store:</span><span>
+</span><span id="line-20"></span><span class="hs-comment">--</span><span>
+</span><span id="line-21"></span><span class="hs-comment">--     - 'passPrompt' copies the password directly to the clipboard.</span><span>
+</span><span id="line-22"></span><span class="hs-comment">--</span><span>
+</span><span id="line-23"></span><span class="hs-comment">--     - 'passTypePrompt' uses @xdotool@ to type the password</span><span>
+</span><span id="line-24"></span><span class="hs-comment">--       directly.</span><span>
+</span><span id="line-25"></span><span class="hs-comment">--</span><span>
+</span><span id="line-26"></span><span class="hs-comment">-- - 'passGeneratePrompt' generates a password for a given password</span><span>
+</span><span id="line-27"></span><span class="hs-comment">--   label that the user inputs.</span><span>
+</span><span id="line-28"></span><span class="hs-comment">--</span><span>
+</span><span id="line-29"></span><span class="hs-comment">-- - 'passEditPrompt' edits a password for a given password label that</span><span>
+</span><span id="line-30"></span><span class="hs-comment">--   the user inputs.</span><span>
+</span><span id="line-31"></span><span class="hs-comment">--</span><span>
+</span><span id="line-32"></span><span class="hs-comment">-- - 'passRemovePrompt' deletes a stored password for a given password</span><span>
+</span><span id="line-33"></span><span class="hs-comment">--   label that the user inputs.</span><span>
+</span><span id="line-34"></span><span class="hs-comment">--</span><span>
+</span><span id="line-35"></span><span class="hs-comment">-- The password store is setup through an environment variable</span><span>
+</span><span id="line-36"></span><span class="hs-comment">-- @$PASSWORD_STORE_DIR@, or @$HOME\/.password-store@ if it is unset.</span><span>
+</span><span id="line-37"></span><span class="hs-comment">-- The editor is determined from the environment variable @$EDITOR@.</span><span>
+</span><span id="line-38"></span><span class="hs-comment">--</span><span>
+</span><span id="line-39"></span><span class="hs-comment">-- Source:</span><span>
+</span><span id="line-40"></span><span class="hs-comment">--</span><span>
+</span><span id="line-41"></span><span class="hs-comment">-- - The &lt;https://www.passwordstore.org/ password store&gt;</span><span>
+</span><span id="line-42"></span><span class="hs-comment">--   implementation is &lt;http://git.zx2c4.com/password-store here&gt;.</span><span>
+</span><span id="line-43"></span><span class="hs-comment">--</span><span>
+</span><span id="line-44"></span><span class="hs-comment">-- - Inspired by &lt;http://babushk.in/posts/combining-xmonad-and-pass.html&gt;</span><span>
+</span><span id="line-45"></span><span class="hs-comment">--</span><span>
+</span><span id="line-46"></span><span class="hs-comment">-----------------------------------------------------------------------------</span><span>
+</span><span id="line-47"></span><span>
+</span><span id="line-48"></span><span class="hs-keyword">module</span><span> </span><span class="hs-identifier">XMonad.Prompt.Pass</span><span>
+</span><span id="line-49"></span><span>    </span><span class="hs-special">(</span><span> </span><span class="annot"><span class="hs-comment">-- * Usage</span></span><span>
+</span><span id="line-50"></span><span>      </span><span class="annot"><span class="hs-comment">-- $usage</span></span><span>
+</span><span id="line-51"></span><span>
+</span><span id="line-52"></span><span>      </span><span class="annot"><span class="hs-comment">-- * Retrieving passwords</span></span><span>
+</span><span id="line-53"></span><span>      </span><span class="annot"><a href="XMonad.Prompt.Pass.html#passPrompt"><span class="hs-identifier">passPrompt</span></a></span><span>
+</span><span id="line-54"></span><span>    </span><span class="hs-special">,</span><span> </span><span class="annot"><a href="XMonad.Prompt.Pass.html#passTypePrompt"><span class="hs-identifier">passTypePrompt</span></a></span><span>
+</span><span id="line-55"></span><span>
+</span><span id="line-56"></span><span>      </span><span class="annot"><span class="hs-comment">-- * Editing passwords</span></span><span>
+</span><span id="line-57"></span><span>    </span><span class="hs-special">,</span><span> </span><span class="annot"><a href="XMonad.Prompt.Pass.html#passEditPrompt"><span class="hs-identifier">passEditPrompt</span></a></span><span>
+</span><span id="line-58"></span><span>    </span><span class="hs-special">,</span><span> </span><span class="annot"><a href="XMonad.Prompt.Pass.html#passRemovePrompt"><span class="hs-identifier">passRemovePrompt</span></a></span><span>
+</span><span id="line-59"></span><span>    </span><span class="hs-special">,</span><span> </span><span class="annot"><a href="XMonad.Prompt.Pass.html#passGeneratePrompt"><span class="hs-identifier">passGeneratePrompt</span></a></span><span>
+</span><span id="line-60"></span><span>    </span><span class="hs-special">,</span><span> </span><span class="annot"><a href="XMonad.Prompt.Pass.html#passGenerateAndCopyPrompt"><span class="hs-identifier">passGenerateAndCopyPrompt</span></a></span><span>
+</span><span id="line-61"></span><span>
+</span><span id="line-62"></span><span>      </span><span class="annot"><span class="hs-comment">-- * Misc</span></span><span>
+</span><span id="line-63"></span><span>    </span><span class="hs-special">,</span><span> </span><span class="annot"><a href="XMonad.Prompt.Pass.html#passOTPPrompt"><span class="hs-identifier">passOTPPrompt</span></a></span><span>
+</span><span id="line-64"></span><span>    </span><span class="hs-special">)</span><span> </span><span class="hs-keyword">where</span><span>
+</span><span id="line-65"></span><span>
+</span><span id="line-66"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><span class="hs-identifier">System.Directory</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier">getHomeDirectory</span></span><span class="hs-special">)</span><span>
+</span><span id="line-67"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><span class="hs-identifier">System.FilePath</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier">combine</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier">dropExtension</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier">takeExtension</span></span><span class="hs-special">)</span><span>
+</span><span id="line-68"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><span class="hs-identifier">System.Posix.Env</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier">getEnv</span></span><span class="hs-special">)</span><span>
+</span><span id="line-69"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><span class="hs-identifier">XMonad.Core</span></span><span>
+</span><span id="line-70"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><a href="XMonad.Prompt.html"><span class="hs-identifier">XMonad.Prompt</span></a></span><span> </span><span class="hs-special">(</span><span> </span><span class="annot"><a href="XMonad.Prompt.html#XPrompt"><span class="hs-identifier">XPrompt</span></a></span><span>
+</span><span id="line-71"></span><span>                     </span><span class="hs-special">,</span><span> </span><span class="annot"><a href="XMonad.Prompt.html#showXPrompt"><span class="hs-identifier">showXPrompt</span></a></span><span>
+</span><span id="line-72"></span><span>                     </span><span class="hs-special">,</span><span> </span><span class="annot"><a href="XMonad.Prompt.html#commandToComplete"><span class="hs-identifier">commandToComplete</span></a></span><span>
+</span><span id="line-73"></span><span>                     </span><span class="hs-special">,</span><span> </span><span class="annot"><a href="XMonad.Prompt.html#nextCompletion"><span class="hs-identifier">nextCompletion</span></a></span><span>
+</span><span id="line-74"></span><span>                     </span><span class="hs-special">,</span><span> </span><span class="annot"><a href="XMonad.Prompt.html#getNextCompletion"><span class="hs-identifier">getNextCompletion</span></a></span><span>
+</span><span id="line-75"></span><span>                     </span><span class="hs-special">,</span><span> </span><span class="annot"><a href="XMonad.Prompt.html#XPConfig"><span class="hs-identifier">XPConfig</span></a></span><span>
+</span><span id="line-76"></span><span>                     </span><span class="hs-special">,</span><span> </span><span class="annot"><a href="XMonad.Prompt.html#mkXPrompt"><span class="hs-identifier">mkXPrompt</span></a></span><span>
+</span><span id="line-77"></span><span>                     </span><span class="hs-special">,</span><span> </span><span class="annot"><a href="XMonad.Prompt.html#searchPredicate"><span class="hs-identifier">searchPredicate</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-78"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><a href="XMonad.Util.Run.html"><span class="hs-identifier">XMonad.Util.Run</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="XMonad.Util.Run.html#runProcessWithInput"><span class="hs-identifier">runProcessWithInput</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-79"></span><span>
+</span><span id="line-80"></span><span class="hs-comment">-- $usage</span><span>
+</span><span id="line-81"></span><span class="hs-comment">-- You can use this module with the following in your @~\/.xmonad\/xmonad.hs@:</span><span>
+</span><span id="line-82"></span><span class="hs-comment">--</span><span>
+</span><span id="line-83"></span><span class="hs-comment">-- &gt; import XMonad.Prompt.Pass</span><span>
+</span><span id="line-84"></span><span class="hs-comment">--</span><span>
+</span><span id="line-85"></span><span class="hs-comment">-- Then add a keybinding for 'passPrompt', 'passGeneratePrompt',</span><span>
+</span><span id="line-86"></span><span class="hs-comment">-- 'passRemovePrompt', 'passEditPrompt' or 'passTypePrompt':</span><span>
+</span><span id="line-87"></span><span class="hs-comment">--</span><span>
+</span><span id="line-88"></span><span class="hs-comment">-- &gt;   , ((modMask , xK_p)                              , passPrompt def)</span><span>
+</span><span id="line-89"></span><span class="hs-comment">-- &gt;   , ((modMask .|. controlMask, xK_p)               , passGeneratePrompt def)</span><span>
+</span><span id="line-90"></span><span class="hs-comment">-- &gt;   , ((modMask .|. shiftMask, xK_p)                 , passEditPrompt def)</span><span>
+</span><span id="line-91"></span><span class="hs-comment">-- &gt;   , ((modMask .|. controlMask  .|. shiftMask, xK_p), passRemovePrompt def)</span><span>
+</span><span id="line-92"></span><span class="hs-comment">--</span><span>
+</span><span id="line-93"></span><span class="hs-comment">-- For detailed instructions on:</span><span>
+</span><span id="line-94"></span><span class="hs-comment">--</span><span>
+</span><span id="line-95"></span><span class="hs-comment">-- - editing your key bindings, see &quot;XMonad.Doc.Extending#Editing_key_bindings&quot;.</span><span>
+</span><span id="line-96"></span><span class="hs-comment">--</span><span>
+</span><span id="line-97"></span><span class="hs-comment">-- - how to setup the password store, see &lt;http://git.zx2c4.com/password-store/about/&gt;</span><span>
+</span><span id="line-98"></span><span class="hs-comment">--   or @man 1 pass@.</span><span>
+</span><span id="line-99"></span><span class="hs-comment">--</span><span>
+</span><span id="line-100"></span><span>
+</span><span id="line-101"></span><span class="hs-keyword">type</span><span> </span><span id="Predicate"><span class="annot"><a href="XMonad.Prompt.Pass.html#Predicate"><span class="hs-identifier hs-var">Predicate</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="hs-identifier hs-type">String</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">String</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Bool</span></span><span>
+</span><span id="line-102"></span><span>
+</span><span id="line-103"></span><span class="annot"><a href="XMonad.Prompt.Pass.html#getPassCompl"><span class="hs-identifier hs-type">getPassCompl</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="hs-special">[</span><span class="annot"><span class="hs-identifier hs-type">String</span></span><span class="hs-special">]</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="XMonad.Prompt.Pass.html#Predicate"><span class="hs-identifier hs-type">Predicate</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">String</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">IO</span></span><span> </span><span class="hs-special">[</span><span class="annot"><span class="hs-identifier hs-type">String</span></span><span class="hs-special">]</span><span>
+</span><span id="line-104"></span><span id="getPassCompl"><span class="annot"><span class="annottext">getPassCompl :: [String] -&gt; Predicate -&gt; String -&gt; IO [String]
+</span><a href="XMonad.Prompt.Pass.html#getPassCompl"><span class="hs-identifier hs-var hs-var">getPassCompl</span></a></span></span><span> </span><span id="local-6989586621679391081"><span class="annot"><span class="annottext">[String]
+</span><a href="#local-6989586621679391081"><span class="hs-identifier hs-var">compls</span></a></span></span><span> </span><span id="local-6989586621679391080"><span class="annot"><span class="annottext">Predicate
+</span><a href="#local-6989586621679391080"><span class="hs-identifier hs-var">p</span></a></span></span><span> </span><span id="local-6989586621679391079"><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679391079"><span class="hs-identifier hs-var">s</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">[String] -&gt; IO [String]
+forall (m :: * -&gt; *) a. Monad m =&gt; a -&gt; m a
+</span><span class="hs-identifier hs-var">return</span></span><span> </span><span class="annot"><span class="annottext">([String] -&gt; IO [String]) -&gt; [String] -&gt; IO [String]
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">(String -&gt; Bool) -&gt; [String] -&gt; [String]
+forall a. (a -&gt; Bool) -&gt; [a] -&gt; [a]
+</span><span class="hs-identifier hs-var">filter</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Predicate
+</span><a href="#local-6989586621679391080"><span class="hs-identifier hs-var">p</span></a></span><span> </span><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679391079"><span class="hs-identifier hs-var">s</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">[String]
+</span><a href="#local-6989586621679391081"><span class="hs-identifier hs-var">compls</span></a></span><span>
+</span><span id="line-105"></span><span>
+</span><span id="line-106"></span><span class="hs-keyword">type</span><span> </span><span id="PromptLabel"><span class="annot"><a href="XMonad.Prompt.Pass.html#PromptLabel"><span class="hs-identifier hs-var">PromptLabel</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="hs-identifier hs-type">String</span></span><span>
+</span><span id="line-107"></span><span>
+</span><span id="line-108"></span><span class="hs-keyword">newtype</span><span> </span><span id="Pass"><span class="annot"><a href="XMonad.Prompt.Pass.html#Pass"><span class="hs-identifier hs-var">Pass</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span id="Pass"><span class="annot"><a href="XMonad.Prompt.Pass.html#Pass"><span class="hs-identifier hs-var">Pass</span></a></span></span><span> </span><span class="annot"><a href="XMonad.Prompt.Pass.html#PromptLabel"><span class="hs-identifier hs-type">PromptLabel</span></a></span><span>
+</span><span id="line-109"></span><span>
+</span><span id="line-110"></span><span class="hs-keyword">instance</span><span> </span><span id="local-6989586621679391068"><span id="local-6989586621679391070"><span id="local-6989586621679391072"><span class="annot"><a href="XMonad.Prompt.html#XPrompt"><span class="hs-identifier hs-type">XPrompt</span></a></span><span> </span><span class="annot"><a href="XMonad.Prompt.Pass.html#Pass"><span class="hs-identifier hs-type">Pass</span></a></span></span></span></span><span> </span><span class="hs-keyword">where</span><span>
+</span><span id="line-111"></span><span>  </span><span id="local-6989586621679391066"><span class="annot"><span class="annottext">showXPrompt :: Pass -&gt; String
+</span><a href="#local-6989586621679391066"><span class="hs-identifier hs-var hs-var hs-var hs-var">showXPrompt</span></a></span></span><span>       </span><span class="hs-special">(</span><span class="annot"><a href="XMonad.Prompt.Pass.html#Pass"><span class="hs-identifier hs-type">Pass</span></a></span><span> </span><span id="local-6989586621679391065"><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679391065"><span class="hs-identifier hs-var">prompt</span></a></span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679391065"><span class="hs-identifier hs-var">prompt</span></a></span><span> </span><span class="annot"><span class="annottext">String -&gt; String -&gt; String
+forall a. [a] -&gt; [a] -&gt; [a]
+</span><span class="hs-operator hs-var">++</span></span><span> </span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot;: &quot;</span></span><span>
+</span><span id="line-112"></span><span>  </span><span id="local-6989586621679391064"><span class="annot"><span class="annottext">commandToComplete :: Pass -&gt; String -&gt; String
+</span><a href="#local-6989586621679391064"><span class="hs-identifier hs-var hs-var hs-var hs-var">commandToComplete</span></a></span></span><span> </span><span class="annot"><span class="annottext">Pass
+</span><span class="hs-identifier">_</span></span><span> </span><span id="local-6989586621679391063"><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679391063"><span class="hs-identifier hs-var">c</span></a></span></span><span>           </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679391063"><span class="hs-identifier hs-var">c</span></a></span><span>
+</span><span id="line-113"></span><span>  </span><span id="local-6989586621679391062"><span class="annot"><span class="annottext">nextCompletion :: Pass -&gt; String -&gt; [String] -&gt; String
+</span><a href="#local-6989586621679391062"><span class="hs-identifier hs-var hs-var hs-var hs-var">nextCompletion</span></a></span></span><span>      </span><span class="annot"><span class="annottext">Pass
+</span><span class="hs-identifier">_</span></span><span>           </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">String -&gt; [String] -&gt; String
+</span><a href="XMonad.Prompt.html#getNextCompletion"><span class="hs-identifier hs-var">getNextCompletion</span></a></span><span>
+</span><span id="line-114"></span><span>
+</span><span id="line-115"></span><span class="hs-comment">-- | Default password store folder in @$HOME/.password-store@.</span><span>
+</span><span id="line-116"></span><span class="hs-comment">--</span><span>
+</span><span id="line-117"></span><span class="annot"><a href="XMonad.Prompt.Pass.html#passwordStoreFolderDefault"><span class="hs-identifier hs-type">passwordStoreFolderDefault</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">String</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">String</span></span><span>
+</span><span id="line-118"></span><span id="passwordStoreFolderDefault"><span class="annot"><span class="annottext">passwordStoreFolderDefault :: String -&gt; String
+</span><a href="XMonad.Prompt.Pass.html#passwordStoreFolderDefault"><span class="hs-identifier hs-var hs-var">passwordStoreFolderDefault</span></a></span></span><span> </span><span id="local-6989586621679391060"><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679391060"><span class="hs-identifier hs-var">home</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">String -&gt; String -&gt; String
+</span><span class="hs-identifier hs-var">combine</span></span><span> </span><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679391060"><span class="hs-identifier hs-var">home</span></a></span><span> </span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot;.password-store&quot;</span></span><span>
+</span><span id="line-119"></span><span>
+</span><span id="line-120"></span><span class="hs-comment">-- | Compute the password store's location.</span><span>
+</span><span id="line-121"></span><span class="hs-comment">-- Use the @$PASSWORD_STORE_DIR@ environment variable to set the password store.</span><span>
+</span><span id="line-122"></span><span class="hs-comment">-- If empty, return the password store located in user's home.</span><span>
+</span><span id="line-123"></span><span class="hs-comment">--</span><span>
+</span><span id="line-124"></span><span class="annot"><a href="XMonad.Prompt.Pass.html#passwordStoreFolder"><span class="hs-identifier hs-type">passwordStoreFolder</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">IO</span></span><span> </span><span class="annot"><span class="hs-identifier hs-type">String</span></span><span>
+</span><span id="line-125"></span><span id="passwordStoreFolder"><span class="annot"><span class="annottext">passwordStoreFolder :: IO String
+</span><a href="XMonad.Prompt.Pass.html#passwordStoreFolder"><span class="hs-identifier hs-var hs-var">passwordStoreFolder</span></a></span></span><span> </span><span class="hs-glyph">=</span><span>
+</span><span id="line-126"></span><span>  </span><span class="annot"><span class="annottext">String -&gt; IO (Maybe String)
+</span><span class="hs-identifier hs-var">getEnv</span></span><span> </span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot;PASSWORD_STORE_DIR&quot;</span></span><span> </span><span class="annot"><span class="annottext">IO (Maybe String) -&gt; (Maybe String -&gt; IO String) -&gt; IO String
+forall (m :: * -&gt; *) a b. Monad m =&gt; m a -&gt; (a -&gt; m b) -&gt; m b
+</span><span class="hs-operator hs-var">&gt;&gt;=</span></span><span> </span><span class="annot"><span class="annottext">Maybe String -&gt; IO String
+</span><a href="#local-6989586621679391058"><span class="hs-identifier hs-var">computePasswordStoreDir</span></a></span><span>
+</span><span id="line-127"></span><span>  </span><span class="hs-keyword">where</span><span> </span><span id="local-6989586621679391058"><span class="annot"><span class="annottext">computePasswordStoreDir :: Maybe String -&gt; IO String
+</span><a href="#local-6989586621679391058"><span class="hs-identifier hs-var hs-var">computePasswordStoreDir</span></a></span></span><span> </span><span class="annot"><span class="annottext">Maybe String
+</span><span class="hs-identifier hs-var">Nothing</span></span><span>         </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">(String -&gt; String) -&gt; IO String -&gt; IO String
+forall (f :: * -&gt; *) a b. Functor f =&gt; (a -&gt; b) -&gt; f a -&gt; f b
+</span><span class="hs-identifier hs-var">fmap</span></span><span> </span><span class="annot"><span class="annottext">String -&gt; String
+</span><a href="XMonad.Prompt.Pass.html#passwordStoreFolderDefault"><span class="hs-identifier hs-var">passwordStoreFolderDefault</span></a></span><span> </span><span class="annot"><span class="annottext">IO String
+</span><span class="hs-identifier hs-var">getHomeDirectory</span></span><span>
+</span><span id="line-128"></span><span>        </span><span class="annot"><a href="#local-6989586621679391058"><span class="hs-identifier hs-var">computePasswordStoreDir</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">Just</span></span><span> </span><span id="local-6989586621679391057"><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679391057"><span class="hs-identifier hs-var">storeDir</span></a></span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">String -&gt; IO String
+forall (m :: * -&gt; *) a. Monad m =&gt; a -&gt; m a
+</span><span class="hs-identifier hs-var">return</span></span><span> </span><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679391057"><span class="hs-identifier hs-var">storeDir</span></a></span><span>
+</span><span id="line-129"></span><span>
+</span><span id="line-130"></span><span class="hs-comment">-- | A pass prompt factory.</span><span>
+</span><span id="line-131"></span><span class="hs-comment">--</span><span>
+</span><span id="line-132"></span><span class="annot"><a href="XMonad.Prompt.Pass.html#mkPassPrompt"><span class="hs-identifier hs-type">mkPassPrompt</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><a href="XMonad.Prompt.Pass.html#PromptLabel"><span class="hs-identifier hs-type">PromptLabel</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">String</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">X</span></span><span> </span><span class="hs-special">(</span><span class="hs-special">)</span><span class="hs-special">)</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="XMonad.Prompt.html#XPConfig"><span class="hs-identifier hs-type">XPConfig</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">X</span></span><span> </span><span class="hs-special">(</span><span class="hs-special">)</span><span>
+</span><span id="line-133"></span><span id="mkPassPrompt"><span class="annot"><span class="annottext">mkPassPrompt :: String -&gt; (String -&gt; X ()) -&gt; XPConfig -&gt; X ()
+</span><a href="XMonad.Prompt.Pass.html#mkPassPrompt"><span class="hs-identifier hs-var hs-var">mkPassPrompt</span></a></span></span><span> </span><span id="local-6989586621679391055"><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679391055"><span class="hs-identifier hs-var">promptLabel</span></a></span></span><span> </span><span id="local-6989586621679391054"><span class="annot"><span class="annottext">String -&gt; X ()
+</span><a href="#local-6989586621679391054"><span class="hs-identifier hs-var">passwordFunction</span></a></span></span><span> </span><span id="local-6989586621679391053"><span class="annot"><span class="annottext">XPConfig
+</span><a href="#local-6989586621679391053"><span class="hs-identifier hs-var">xpconfig</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-134"></span><span>  </span><span id="local-6989586621679391052"><span class="annot"><span class="annottext">[String]
+</span><a href="#local-6989586621679391052"><span class="hs-identifier hs-var">passwords</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">IO [String] -&gt; X [String]
+forall (m :: * -&gt; *) a. MonadIO m =&gt; IO a -&gt; m a
+</span><span class="hs-identifier hs-var">io</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">IO String
+</span><a href="XMonad.Prompt.Pass.html#passwordStoreFolder"><span class="hs-identifier hs-var">passwordStoreFolder</span></a></span><span> </span><span class="annot"><span class="annottext">IO String -&gt; (String -&gt; IO [String]) -&gt; IO [String]
+forall (m :: * -&gt; *) a b. Monad m =&gt; m a -&gt; (a -&gt; m b) -&gt; m b
+</span><span class="hs-operator hs-var">&gt;&gt;=</span></span><span> </span><span class="annot"><span class="annottext">String -&gt; IO [String]
+</span><a href="XMonad.Prompt.Pass.html#getPasswords"><span class="hs-identifier hs-var">getPasswords</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-135"></span><span>  </span><span class="annot"><span class="annottext">Pass
+-&gt; XPConfig -&gt; (String -&gt; IO [String]) -&gt; (String -&gt; X ()) -&gt; X ()
+forall p.
+XPrompt p =&gt;
+p
+-&gt; XPConfig -&gt; (String -&gt; IO [String]) -&gt; (String -&gt; X ()) -&gt; X ()
+</span><a href="XMonad.Prompt.html#mkXPrompt"><span class="hs-identifier hs-var">mkXPrompt</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">String -&gt; Pass
+</span><a href="XMonad.Prompt.Pass.html#Pass"><span class="hs-identifier hs-var">Pass</span></a></span><span> </span><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679391055"><span class="hs-identifier hs-var">promptLabel</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">XPConfig
+</span><a href="#local-6989586621679391053"><span class="hs-identifier hs-var">xpconfig</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">[String] -&gt; Predicate -&gt; String -&gt; IO [String]
+</span><a href="XMonad.Prompt.Pass.html#getPassCompl"><span class="hs-identifier hs-var">getPassCompl</span></a></span><span> </span><span class="annot"><span class="annottext">[String]
+</span><a href="#local-6989586621679391052"><span class="hs-identifier hs-var">passwords</span></a></span><span> </span><span class="annot"><span class="annottext">(Predicate -&gt; String -&gt; IO [String])
+-&gt; Predicate -&gt; String -&gt; IO [String]
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">XPConfig -&gt; Predicate
+</span><a href="XMonad.Prompt.html#searchPredicate"><span class="hs-identifier hs-var hs-var">searchPredicate</span></a></span><span> </span><span class="annot"><span class="annottext">XPConfig
+</span><a href="#local-6989586621679391053"><span class="hs-identifier hs-var">xpconfig</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">String -&gt; X ()
+</span><a href="#local-6989586621679391054"><span class="hs-identifier hs-var">passwordFunction</span></a></span><span>
+</span><span id="line-136"></span><span>
+</span><span id="line-137"></span><span class="hs-comment">-- | A prompt to retrieve a password from a given entry.</span><span>
+</span><span id="line-138"></span><span class="hs-comment">--</span><span>
+</span><span id="line-139"></span><span class="annot"><a href="XMonad.Prompt.Pass.html#passPrompt"><span class="hs-identifier hs-type">passPrompt</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><a href="XMonad.Prompt.html#XPConfig"><span class="hs-identifier hs-type">XPConfig</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">X</span></span><span> </span><span class="hs-special">(</span><span class="hs-special">)</span><span>
+</span><span id="line-140"></span><span id="passPrompt"><span class="annot"><span class="annottext">passPrompt :: XPConfig -&gt; X ()
+</span><a href="XMonad.Prompt.Pass.html#passPrompt"><span class="hs-identifier hs-var hs-var">passPrompt</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">String -&gt; (String -&gt; X ()) -&gt; XPConfig -&gt; X ()
+</span><a href="XMonad.Prompt.Pass.html#mkPassPrompt"><span class="hs-identifier hs-var">mkPassPrompt</span></a></span><span> </span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot;Select password&quot;</span></span><span> </span><span class="annot"><span class="annottext">String -&gt; X ()
+</span><a href="XMonad.Prompt.Pass.html#selectPassword"><span class="hs-identifier hs-var">selectPassword</span></a></span><span>
+</span><span id="line-141"></span><span>
+</span><span id="line-142"></span><span class="hs-comment">-- | A prompt to retrieve a OTP from a given entry.  Note that you will</span><span>
+</span><span id="line-143"></span><span class="hs-comment">-- need to use the &lt;https://github.com/tadfisher/pass-otp pass-otp&gt;</span><span>
+</span><span id="line-144"></span><span class="hs-comment">-- extension for this to work.</span><span>
+</span><span id="line-145"></span><span class="hs-comment">--</span><span>
+</span><span id="line-146"></span><span class="annot"><a href="XMonad.Prompt.Pass.html#passOTPPrompt"><span class="hs-identifier hs-type">passOTPPrompt</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><a href="XMonad.Prompt.html#XPConfig"><span class="hs-identifier hs-type">XPConfig</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">X</span></span><span> </span><span class="hs-special">(</span><span class="hs-special">)</span><span>
+</span><span id="line-147"></span><span id="passOTPPrompt"><span class="annot"><span class="annottext">passOTPPrompt :: XPConfig -&gt; X ()
+</span><a href="XMonad.Prompt.Pass.html#passOTPPrompt"><span class="hs-identifier hs-var hs-var">passOTPPrompt</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">String -&gt; (String -&gt; X ()) -&gt; XPConfig -&gt; X ()
+</span><a href="XMonad.Prompt.Pass.html#mkPassPrompt"><span class="hs-identifier hs-var">mkPassPrompt</span></a></span><span> </span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot;Select OTP&quot;</span></span><span> </span><span class="annot"><span class="annottext">String -&gt; X ()
+</span><a href="XMonad.Prompt.Pass.html#selectOTP"><span class="hs-identifier hs-var">selectOTP</span></a></span><span>
+</span><span id="line-148"></span><span>
+</span><span id="line-149"></span><span class="hs-comment">-- | A prompt to generate a password for a given entry.</span><span>
+</span><span id="line-150"></span><span class="hs-comment">-- This can be used to override an already stored entry.</span><span>
+</span><span id="line-151"></span><span class="hs-comment">-- (Beware that no confirmation is asked)</span><span>
+</span><span id="line-152"></span><span class="hs-comment">--</span><span>
+</span><span id="line-153"></span><span class="annot"><a href="XMonad.Prompt.Pass.html#passGeneratePrompt"><span class="hs-identifier hs-type">passGeneratePrompt</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><a href="XMonad.Prompt.html#XPConfig"><span class="hs-identifier hs-type">XPConfig</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">X</span></span><span> </span><span class="hs-special">(</span><span class="hs-special">)</span><span>
+</span><span id="line-154"></span><span id="passGeneratePrompt"><span class="annot"><span class="annottext">passGeneratePrompt :: XPConfig -&gt; X ()
+</span><a href="XMonad.Prompt.Pass.html#passGeneratePrompt"><span class="hs-identifier hs-var hs-var">passGeneratePrompt</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">String -&gt; (String -&gt; X ()) -&gt; XPConfig -&gt; X ()
+</span><a href="XMonad.Prompt.Pass.html#mkPassPrompt"><span class="hs-identifier hs-var">mkPassPrompt</span></a></span><span> </span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot;Generate password&quot;</span></span><span> </span><span class="annot"><span class="annottext">String -&gt; X ()
+</span><a href="XMonad.Prompt.Pass.html#generatePassword"><span class="hs-identifier hs-var">generatePassword</span></a></span><span>
+</span><span id="line-155"></span><span>
+</span><span id="line-156"></span><span class="hs-comment">-- | A prompt to generate a password for a given entry and immediately copy it</span><span>
+</span><span id="line-157"></span><span class="hs-comment">-- to the clipboard.  This can be used to override an already stored entry.</span><span>
+</span><span id="line-158"></span><span class="hs-comment">-- (Beware that no confirmation is asked)</span><span>
+</span><span id="line-159"></span><span class="hs-comment">--</span><span>
+</span><span id="line-160"></span><span class="annot"><a href="XMonad.Prompt.Pass.html#passGenerateAndCopyPrompt"><span class="hs-identifier hs-type">passGenerateAndCopyPrompt</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><a href="XMonad.Prompt.html#XPConfig"><span class="hs-identifier hs-type">XPConfig</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">X</span></span><span> </span><span class="hs-special">(</span><span class="hs-special">)</span><span>
+</span><span id="line-161"></span><span id="passGenerateAndCopyPrompt"><span class="annot"><span class="annottext">passGenerateAndCopyPrompt :: XPConfig -&gt; X ()
+</span><a href="XMonad.Prompt.Pass.html#passGenerateAndCopyPrompt"><span class="hs-identifier hs-var hs-var">passGenerateAndCopyPrompt</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">String -&gt; (String -&gt; X ()) -&gt; XPConfig -&gt; X ()
+</span><a href="XMonad.Prompt.Pass.html#mkPassPrompt"><span class="hs-identifier hs-var">mkPassPrompt</span></a></span><span> </span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot;Generate and copy password&quot;</span></span><span> </span><span class="annot"><span class="annottext">String -&gt; X ()
+</span><a href="XMonad.Prompt.Pass.html#generateAndCopyPassword"><span class="hs-identifier hs-var">generateAndCopyPassword</span></a></span><span>
+</span><span id="line-162"></span><span>
+</span><span id="line-163"></span><span class="hs-comment">-- | A prompt to remove a password for a given entry.</span><span>
+</span><span id="line-164"></span><span class="hs-comment">-- (Beware that no confirmation is asked)</span><span>
+</span><span id="line-165"></span><span class="hs-comment">--</span><span>
+</span><span id="line-166"></span><span class="annot"><a href="XMonad.Prompt.Pass.html#passRemovePrompt"><span class="hs-identifier hs-type">passRemovePrompt</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><a href="XMonad.Prompt.html#XPConfig"><span class="hs-identifier hs-type">XPConfig</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">X</span></span><span> </span><span class="hs-special">(</span><span class="hs-special">)</span><span>
+</span><span id="line-167"></span><span id="passRemovePrompt"><span class="annot"><span class="annottext">passRemovePrompt :: XPConfig -&gt; X ()
+</span><a href="XMonad.Prompt.Pass.html#passRemovePrompt"><span class="hs-identifier hs-var hs-var">passRemovePrompt</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">String -&gt; (String -&gt; X ()) -&gt; XPConfig -&gt; X ()
+</span><a href="XMonad.Prompt.Pass.html#mkPassPrompt"><span class="hs-identifier hs-var">mkPassPrompt</span></a></span><span> </span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot;Remove password&quot;</span></span><span> </span><span class="annot"><span class="annottext">String -&gt; X ()
+</span><a href="XMonad.Prompt.Pass.html#removePassword"><span class="hs-identifier hs-var">removePassword</span></a></span><span>
+</span><span id="line-168"></span><span>
+</span><span id="line-169"></span><span class="hs-comment">-- | A prompt to type in a password for a given entry.</span><span>
+</span><span id="line-170"></span><span class="hs-comment">-- This doesn't touch the clipboard.</span><span>
+</span><span id="line-171"></span><span class="hs-comment">--</span><span>
+</span><span id="line-172"></span><span class="annot"><a href="XMonad.Prompt.Pass.html#passTypePrompt"><span class="hs-identifier hs-type">passTypePrompt</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><a href="XMonad.Prompt.html#XPConfig"><span class="hs-identifier hs-type">XPConfig</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">X</span></span><span> </span><span class="hs-special">(</span><span class="hs-special">)</span><span>
+</span><span id="line-173"></span><span id="passTypePrompt"><span class="annot"><span class="annottext">passTypePrompt :: XPConfig -&gt; X ()
+</span><a href="XMonad.Prompt.Pass.html#passTypePrompt"><span class="hs-identifier hs-var hs-var">passTypePrompt</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">String -&gt; (String -&gt; X ()) -&gt; XPConfig -&gt; X ()
+</span><a href="XMonad.Prompt.Pass.html#mkPassPrompt"><span class="hs-identifier hs-var">mkPassPrompt</span></a></span><span> </span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot;Type password&quot;</span></span><span> </span><span class="annot"><span class="annottext">String -&gt; X ()
+</span><a href="XMonad.Prompt.Pass.html#typePassword"><span class="hs-identifier hs-var">typePassword</span></a></span><span>
+</span><span id="line-174"></span><span>
+</span><span id="line-175"></span><span class="hs-comment">-- | A prompt to edit a given entry.</span><span>
+</span><span id="line-176"></span><span class="hs-comment">-- This doesn't touch the clipboard.</span><span>
+</span><span id="line-177"></span><span class="hs-comment">--</span><span>
+</span><span id="line-178"></span><span class="annot"><a href="XMonad.Prompt.Pass.html#passEditPrompt"><span class="hs-identifier hs-type">passEditPrompt</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><a href="XMonad.Prompt.html#XPConfig"><span class="hs-identifier hs-type">XPConfig</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">X</span></span><span> </span><span class="hs-special">(</span><span class="hs-special">)</span><span>
+</span><span id="line-179"></span><span id="passEditPrompt"><span class="annot"><span class="annottext">passEditPrompt :: XPConfig -&gt; X ()
+</span><a href="XMonad.Prompt.Pass.html#passEditPrompt"><span class="hs-identifier hs-var hs-var">passEditPrompt</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">String -&gt; (String -&gt; X ()) -&gt; XPConfig -&gt; X ()
+</span><a href="XMonad.Prompt.Pass.html#mkPassPrompt"><span class="hs-identifier hs-var">mkPassPrompt</span></a></span><span> </span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot;Edit password&quot;</span></span><span> </span><span class="annot"><span class="annottext">String -&gt; X ()
+</span><a href="XMonad.Prompt.Pass.html#editPassword"><span class="hs-identifier hs-var">editPassword</span></a></span><span>
+</span><span id="line-180"></span><span>
+</span><span id="line-181"></span><span class="hs-comment">-- | Select a password.</span><span>
+</span><span id="line-182"></span><span class="hs-comment">--</span><span>
+</span><span id="line-183"></span><span class="annot"><a href="XMonad.Prompt.Pass.html#selectPassword"><span class="hs-identifier hs-type">selectPassword</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">String</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">X</span></span><span> </span><span class="hs-special">(</span><span class="hs-special">)</span><span>
+</span><span id="line-184"></span><span id="selectPassword"><span class="annot"><span class="annottext">selectPassword :: String -&gt; X ()
+</span><a href="XMonad.Prompt.Pass.html#selectPassword"><span class="hs-identifier hs-var hs-var">selectPassword</span></a></span></span><span> </span><span id="local-6989586621679391042"><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679391042"><span class="hs-identifier hs-var">passLabel</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">String -&gt; X ()
+forall (m :: * -&gt; *). MonadIO m =&gt; String -&gt; m ()
+</span><span class="hs-identifier hs-var">spawn</span></span><span> </span><span class="annot"><span class="annottext">(String -&gt; X ()) -&gt; String -&gt; X ()
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot;pass --clip \&quot;&quot;</span></span><span> </span><span class="annot"><span class="annottext">String -&gt; String -&gt; String
+forall a. [a] -&gt; [a] -&gt; [a]
+</span><span class="hs-operator hs-var">++</span></span><span> </span><span class="annot"><span class="annottext">String -&gt; String
+</span><a href="XMonad.Prompt.Pass.html#escapeQuote"><span class="hs-identifier hs-var">escapeQuote</span></a></span><span> </span><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679391042"><span class="hs-identifier hs-var">passLabel</span></a></span><span> </span><span class="annot"><span class="annottext">String -&gt; String -&gt; String
+forall a. [a] -&gt; [a] -&gt; [a]
+</span><span class="hs-operator hs-var">++</span></span><span> </span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot;\&quot;&quot;</span></span><span>
+</span><span id="line-185"></span><span>
+</span><span id="line-186"></span><span class="hs-comment">-- | Select an OTP.</span><span>
+</span><span id="line-187"></span><span class="hs-comment">--</span><span>
+</span><span id="line-188"></span><span class="annot"><a href="XMonad.Prompt.Pass.html#selectOTP"><span class="hs-identifier hs-type">selectOTP</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">String</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">X</span></span><span> </span><span class="hs-special">(</span><span class="hs-special">)</span><span>
+</span><span id="line-189"></span><span id="selectOTP"><span class="annot"><span class="annottext">selectOTP :: String -&gt; X ()
+</span><a href="XMonad.Prompt.Pass.html#selectOTP"><span class="hs-identifier hs-var hs-var">selectOTP</span></a></span></span><span> </span><span id="local-6989586621679391039"><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679391039"><span class="hs-identifier hs-var">passLabel</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">String -&gt; X ()
+forall (m :: * -&gt; *). MonadIO m =&gt; String -&gt; m ()
+</span><span class="hs-identifier hs-var">spawn</span></span><span> </span><span class="annot"><span class="annottext">(String -&gt; X ()) -&gt; String -&gt; X ()
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot;pass otp --clip \&quot;&quot;</span></span><span> </span><span class="annot"><span class="annottext">String -&gt; String -&gt; String
+forall a. [a] -&gt; [a] -&gt; [a]
+</span><span class="hs-operator hs-var">++</span></span><span> </span><span class="annot"><span class="annottext">String -&gt; String
+</span><a href="XMonad.Prompt.Pass.html#escapeQuote"><span class="hs-identifier hs-var">escapeQuote</span></a></span><span> </span><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679391039"><span class="hs-identifier hs-var">passLabel</span></a></span><span> </span><span class="annot"><span class="annottext">String -&gt; String -&gt; String
+forall a. [a] -&gt; [a] -&gt; [a]
+</span><span class="hs-operator hs-var">++</span></span><span> </span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot;\&quot;&quot;</span></span><span>
+</span><span id="line-190"></span><span>
+</span><span id="line-191"></span><span class="hs-comment">-- | Generate a 30 characters password for a given entry.</span><span>
+</span><span id="line-192"></span><span class="hs-comment">-- If the entry already exists, it is updated with a new password.</span><span>
+</span><span id="line-193"></span><span class="hs-comment">--</span><span>
+</span><span id="line-194"></span><span class="annot"><a href="XMonad.Prompt.Pass.html#generatePassword"><span class="hs-identifier hs-type">generatePassword</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">String</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">X</span></span><span> </span><span class="hs-special">(</span><span class="hs-special">)</span><span>
+</span><span id="line-195"></span><span id="generatePassword"><span class="annot"><span class="annottext">generatePassword :: String -&gt; X ()
+</span><a href="XMonad.Prompt.Pass.html#generatePassword"><span class="hs-identifier hs-var hs-var">generatePassword</span></a></span></span><span> </span><span id="local-6989586621679391038"><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679391038"><span class="hs-identifier hs-var">passLabel</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">String -&gt; X ()
+forall (m :: * -&gt; *). MonadIO m =&gt; String -&gt; m ()
+</span><span class="hs-identifier hs-var">spawn</span></span><span> </span><span class="annot"><span class="annottext">(String -&gt; X ()) -&gt; String -&gt; X ()
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot;pass generate --force \&quot;&quot;</span></span><span> </span><span class="annot"><span class="annottext">String -&gt; String -&gt; String
+forall a. [a] -&gt; [a] -&gt; [a]
+</span><span class="hs-operator hs-var">++</span></span><span> </span><span class="annot"><span class="annottext">String -&gt; String
+</span><a href="XMonad.Prompt.Pass.html#escapeQuote"><span class="hs-identifier hs-var">escapeQuote</span></a></span><span> </span><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679391038"><span class="hs-identifier hs-var">passLabel</span></a></span><span> </span><span class="annot"><span class="annottext">String -&gt; String -&gt; String
+forall a. [a] -&gt; [a] -&gt; [a]
+</span><span class="hs-operator hs-var">++</span></span><span> </span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot;\&quot; 30&quot;</span></span><span>
+</span><span id="line-196"></span><span>
+</span><span id="line-197"></span><span class="hs-comment">-- | Generate a 30 characters password for a given entry.</span><span>
+</span><span id="line-198"></span><span class="hs-comment">-- If the entry already exists, it is updated with a new password.</span><span>
+</span><span id="line-199"></span><span class="hs-comment">-- After generating the password, it is copied to the clipboard.</span><span>
+</span><span id="line-200"></span><span class="hs-comment">--</span><span>
+</span><span id="line-201"></span><span class="annot"><a href="XMonad.Prompt.Pass.html#generateAndCopyPassword"><span class="hs-identifier hs-type">generateAndCopyPassword</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">String</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">X</span></span><span> </span><span class="hs-special">(</span><span class="hs-special">)</span><span>
+</span><span id="line-202"></span><span id="generateAndCopyPassword"><span class="annot"><span class="annottext">generateAndCopyPassword :: String -&gt; X ()
+</span><a href="XMonad.Prompt.Pass.html#generateAndCopyPassword"><span class="hs-identifier hs-var hs-var">generateAndCopyPassword</span></a></span></span><span> </span><span id="local-6989586621679391037"><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679391037"><span class="hs-identifier hs-var">passLabel</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">String -&gt; X ()
+forall (m :: * -&gt; *). MonadIO m =&gt; String -&gt; m ()
+</span><span class="hs-identifier hs-var">spawn</span></span><span> </span><span class="annot"><span class="annottext">(String -&gt; X ()) -&gt; String -&gt; X ()
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot;pass generate --force -c \&quot;&quot;</span></span><span> </span><span class="annot"><span class="annottext">String -&gt; String -&gt; String
+forall a. [a] -&gt; [a] -&gt; [a]
+</span><span class="hs-operator hs-var">++</span></span><span> </span><span class="annot"><span class="annottext">String -&gt; String
+</span><a href="XMonad.Prompt.Pass.html#escapeQuote"><span class="hs-identifier hs-var">escapeQuote</span></a></span><span> </span><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679391037"><span class="hs-identifier hs-var">passLabel</span></a></span><span> </span><span class="annot"><span class="annottext">String -&gt; String -&gt; String
+forall a. [a] -&gt; [a] -&gt; [a]
+</span><span class="hs-operator hs-var">++</span></span><span> </span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot;\&quot; 30&quot;</span></span><span>
+</span><span id="line-203"></span><span>
+</span><span id="line-204"></span><span class="hs-comment">-- | Remove a password stored for a given entry.</span><span>
+</span><span id="line-205"></span><span class="hs-comment">--</span><span>
+</span><span id="line-206"></span><span class="annot"><a href="XMonad.Prompt.Pass.html#removePassword"><span class="hs-identifier hs-type">removePassword</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">String</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">X</span></span><span> </span><span class="hs-special">(</span><span class="hs-special">)</span><span>
+</span><span id="line-207"></span><span id="removePassword"><span class="annot"><span class="annottext">removePassword :: String -&gt; X ()
+</span><a href="XMonad.Prompt.Pass.html#removePassword"><span class="hs-identifier hs-var hs-var">removePassword</span></a></span></span><span> </span><span id="local-6989586621679391036"><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679391036"><span class="hs-identifier hs-var">passLabel</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">String -&gt; X ()
+forall (m :: * -&gt; *). MonadIO m =&gt; String -&gt; m ()
+</span><span class="hs-identifier hs-var">spawn</span></span><span> </span><span class="annot"><span class="annottext">(String -&gt; X ()) -&gt; String -&gt; X ()
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot;pass rm --force \&quot;&quot;</span></span><span> </span><span class="annot"><span class="annottext">String -&gt; String -&gt; String
+forall a. [a] -&gt; [a] -&gt; [a]
+</span><span class="hs-operator hs-var">++</span></span><span> </span><span class="annot"><span class="annottext">String -&gt; String
+</span><a href="XMonad.Prompt.Pass.html#escapeQuote"><span class="hs-identifier hs-var">escapeQuote</span></a></span><span> </span><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679391036"><span class="hs-identifier hs-var">passLabel</span></a></span><span> </span><span class="annot"><span class="annottext">String -&gt; String -&gt; String
+forall a. [a] -&gt; [a] -&gt; [a]
+</span><span class="hs-operator hs-var">++</span></span><span> </span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot;\&quot;&quot;</span></span><span>
+</span><span id="line-208"></span><span>
+</span><span id="line-209"></span><span class="hs-comment">-- | Edit a password stored for a given entry.</span><span>
+</span><span id="line-210"></span><span class="hs-comment">--</span><span>
+</span><span id="line-211"></span><span class="annot"><a href="XMonad.Prompt.Pass.html#editPassword"><span class="hs-identifier hs-type">editPassword</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">String</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">X</span></span><span> </span><span class="hs-special">(</span><span class="hs-special">)</span><span>
+</span><span id="line-212"></span><span id="editPassword"><span class="annot"><span class="annottext">editPassword :: String -&gt; X ()
+</span><a href="XMonad.Prompt.Pass.html#editPassword"><span class="hs-identifier hs-var hs-var">editPassword</span></a></span></span><span> </span><span id="local-6989586621679391035"><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679391035"><span class="hs-identifier hs-var">passLabel</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">String -&gt; X ()
+forall (m :: * -&gt; *). MonadIO m =&gt; String -&gt; m ()
+</span><span class="hs-identifier hs-var">spawn</span></span><span> </span><span class="annot"><span class="annottext">(String -&gt; X ()) -&gt; String -&gt; X ()
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot;pass edit \&quot;&quot;</span></span><span> </span><span class="annot"><span class="annottext">String -&gt; String -&gt; String
+forall a. [a] -&gt; [a] -&gt; [a]
+</span><span class="hs-operator hs-var">++</span></span><span> </span><span class="annot"><span class="annottext">String -&gt; String
+</span><a href="XMonad.Prompt.Pass.html#escapeQuote"><span class="hs-identifier hs-var">escapeQuote</span></a></span><span> </span><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679391035"><span class="hs-identifier hs-var">passLabel</span></a></span><span> </span><span class="annot"><span class="annottext">String -&gt; String -&gt; String
+forall a. [a] -&gt; [a] -&gt; [a]
+</span><span class="hs-operator hs-var">++</span></span><span> </span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot;\&quot;&quot;</span></span><span>
+</span><span id="line-213"></span><span>
+</span><span id="line-214"></span><span class="hs-comment">-- | Type a password stored for a given entry using xdotool.</span><span>
+</span><span id="line-215"></span><span class="hs-comment">--</span><span>
+</span><span id="line-216"></span><span class="annot"><a href="XMonad.Prompt.Pass.html#typePassword"><span class="hs-identifier hs-type">typePassword</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">String</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">X</span></span><span> </span><span class="hs-special">(</span><span class="hs-special">)</span><span>
+</span><span id="line-217"></span><span id="typePassword"><span class="annot"><span class="annottext">typePassword :: String -&gt; X ()
+</span><a href="XMonad.Prompt.Pass.html#typePassword"><span class="hs-identifier hs-var hs-var">typePassword</span></a></span></span><span> </span><span id="local-6989586621679391034"><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679391034"><span class="hs-identifier hs-var">passLabel</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">String -&gt; X ()
+forall (m :: * -&gt; *). MonadIO m =&gt; String -&gt; m ()
+</span><span class="hs-identifier hs-var">spawn</span></span><span> </span><span class="annot"><span class="annottext">(String -&gt; X ()) -&gt; String -&gt; X ()
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot;pass \&quot;&quot;</span></span><span> </span><span class="annot"><span class="annottext">String -&gt; String -&gt; String
+forall a. [a] -&gt; [a] -&gt; [a]
+</span><span class="hs-operator hs-var">++</span></span><span> </span><span class="annot"><span class="annottext">String -&gt; String
+</span><a href="XMonad.Prompt.Pass.html#escapeQuote"><span class="hs-identifier hs-var">escapeQuote</span></a></span><span> </span><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679391034"><span class="hs-identifier hs-var">passLabel</span></a></span><span>
+</span><span id="line-218"></span><span>  </span><span class="annot"><span class="annottext">String -&gt; String -&gt; String
+forall a. [a] -&gt; [a] -&gt; [a]
+</span><span class="hs-operator hs-var">++</span></span><span> </span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot;\&quot;|head -n1|tr -d '\n'|xdotool type --clearmodifiers --file -&quot;</span></span><span>
+</span><span id="line-219"></span><span>
+</span><span id="line-220"></span><span class="annot"><a href="XMonad.Prompt.Pass.html#escapeQuote"><span class="hs-identifier hs-type">escapeQuote</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">String</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">String</span></span><span>
+</span><span id="line-221"></span><span id="escapeQuote"><span class="annot"><span class="annottext">escapeQuote :: String -&gt; String
+</span><a href="XMonad.Prompt.Pass.html#escapeQuote"><span class="hs-identifier hs-var hs-var">escapeQuote</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">(Char -&gt; String) -&gt; String -&gt; String
+forall (t :: * -&gt; *) a b. Foldable t =&gt; (a -&gt; [b]) -&gt; t a -&gt; [b]
+</span><span class="hs-identifier hs-var">concatMap</span></span><span> </span><span class="annot"><span class="annottext">Char -&gt; String
+</span><a href="#local-6989586621679391032"><span class="hs-identifier hs-var">escape</span></a></span><span>
+</span><span id="line-222"></span><span>  </span><span class="hs-keyword">where</span><span> </span><span class="annot"><a href="#local-6989586621679391032"><span class="hs-identifier hs-type">escape</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Char</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">String</span></span><span>
+</span><span id="line-223"></span><span>        </span><span id="local-6989586621679391032"><span class="annot"><span class="annottext">escape :: Char -&gt; String
+</span><a href="#local-6989586621679391032"><span class="hs-identifier hs-var hs-var">escape</span></a></span></span><span> </span><span class="annot"><span class="annottext">Char
+</span><span class="hs-char">'&quot;'</span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot;\\\&quot;&quot;</span></span><span>
+</span><span id="line-224"></span><span>        </span><span class="annot"><a href="#local-6989586621679391032"><span class="hs-identifier hs-var">escape</span></a></span><span> </span><span id="local-6989586621679391031"><span class="annot"><span class="annottext">Char
+</span><a href="#local-6989586621679391031"><span class="hs-identifier hs-var">x</span></a></span></span><span>   </span><span class="hs-glyph">=</span><span> </span><span class="hs-special">[</span><span class="annot"><span class="annottext">Char
+</span><a href="#local-6989586621679391031"><span class="hs-identifier hs-var">x</span></a></span><span class="hs-special">]</span><span>
+</span><span id="line-225"></span><span>
+</span><span id="line-226"></span><span class="hs-comment">-- | Retrieve the list of passwords from the password store 'passwordStoreDir</span><span>
+</span><span id="line-227"></span><span class="hs-comment">--</span><span>
+</span><span id="line-228"></span><span class="annot"><a href="XMonad.Prompt.Pass.html#getPasswords"><span class="hs-identifier hs-type">getPasswords</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">FilePath</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">IO</span></span><span> </span><span class="hs-special">[</span><span class="annot"><span class="hs-identifier hs-type">String</span></span><span class="hs-special">]</span><span>
+</span><span id="line-229"></span><span id="getPasswords"><span class="annot"><span class="annottext">getPasswords :: String -&gt; IO [String]
+</span><a href="XMonad.Prompt.Pass.html#getPasswords"><span class="hs-identifier hs-var hs-var">getPasswords</span></a></span></span><span> </span><span id="local-6989586621679391029"><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679391029"><span class="hs-identifier hs-var">passwordStoreDir</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-230"></span><span>  </span><span id="local-6989586621679391028"><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679391028"><span class="hs-identifier hs-var">files</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">String -&gt; [String] -&gt; String -&gt; IO String
+forall (m :: * -&gt; *).
+MonadIO m =&gt;
+String -&gt; [String] -&gt; String -&gt; m String
+</span><a href="XMonad.Util.Run.html#runProcessWithInput"><span class="hs-identifier hs-var">runProcessWithInput</span></a></span><span> </span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot;find&quot;</span></span><span> </span><span class="hs-special">[</span><span>
+</span><span id="line-231"></span><span>    </span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot;-L&quot;</span></span><span class="hs-special">,</span><span> </span><span class="hs-comment">-- Traverse symlinks</span><span>
+</span><span id="line-232"></span><span>    </span><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679391029"><span class="hs-identifier hs-var">passwordStoreDir</span></a></span><span class="hs-special">,</span><span>
+</span><span id="line-233"></span><span>    </span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot;-type&quot;</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot;f&quot;</span></span><span class="hs-special">,</span><span>
+</span><span id="line-234"></span><span>    </span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot;-name&quot;</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot;*.gpg&quot;</span></span><span class="hs-special">,</span><span>
+</span><span id="line-235"></span><span>    </span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot;-printf&quot;</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot;%P\n&quot;</span></span><span class="hs-special">]</span><span> </span><span class="hs-special">[</span><span class="hs-special">]</span><span>
+</span><span id="line-236"></span><span>  </span><span class="annot"><span class="annottext">[String] -&gt; IO [String]
+forall (m :: * -&gt; *) a. Monad m =&gt; a -&gt; m a
+</span><span class="hs-identifier hs-var">return</span></span><span> </span><span class="annot"><span class="annottext">([String] -&gt; IO [String])
+-&gt; ([String] -&gt; [String]) -&gt; [String] -&gt; IO [String]
+forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">(String -&gt; String) -&gt; [String] -&gt; [String]
+forall a b. (a -&gt; b) -&gt; [a] -&gt; [b]
+</span><span class="hs-identifier hs-var">map</span></span><span> </span><span class="annot"><span class="annottext">String -&gt; String
+</span><a href="XMonad.Prompt.Pass.html#removeGpgExtension"><span class="hs-identifier hs-var">removeGpgExtension</span></a></span><span> </span><span class="annot"><span class="annottext">([String] -&gt; IO [String]) -&gt; [String] -&gt; IO [String]
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">String -&gt; [String]
+</span><span class="hs-identifier hs-var">lines</span></span><span> </span><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679391028"><span class="hs-identifier hs-var">files</span></a></span><span>
+</span><span id="line-237"></span><span>
+</span><span id="line-238"></span><span class="annot"><a href="XMonad.Prompt.Pass.html#removeGpgExtension"><span class="hs-identifier hs-type">removeGpgExtension</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">String</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">String</span></span><span>
+</span><span id="line-239"></span><span id="removeGpgExtension"><span class="annot"><span class="annottext">removeGpgExtension :: String -&gt; String
+</span><a href="XMonad.Prompt.Pass.html#removeGpgExtension"><span class="hs-identifier hs-var hs-var">removeGpgExtension</span></a></span></span><span> </span><span id="local-6989586621679391024"><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679391024"><span class="hs-identifier hs-var">file</span></a></span></span><span> </span><span class="hs-glyph">|</span><span> </span><span class="annot"><span class="annottext">String -&gt; String
+</span><span class="hs-identifier hs-var">takeExtension</span></span><span> </span><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679391024"><span class="hs-identifier hs-var">file</span></a></span><span> </span><span class="annot"><span class="annottext">Predicate
+forall a. Eq a =&gt; a -&gt; a -&gt; Bool
+</span><span class="hs-operator hs-var">==</span></span><span> </span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot;.gpg&quot;</span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">String -&gt; String
+</span><span class="hs-identifier hs-var">dropExtension</span></span><span> </span><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679391024"><span class="hs-identifier hs-var">file</span></a></span><span>
+</span><span id="line-240"></span><span>                        </span><span class="hs-glyph">|</span><span> </span><span class="annot"><span class="annottext">Bool
+</span><span class="hs-identifier hs-var">otherwise</span></span><span>                    </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679391024"><span class="hs-identifier hs-var">file</span></a></span><span>
+</span><span id="line-241"></span></pre></body></html>

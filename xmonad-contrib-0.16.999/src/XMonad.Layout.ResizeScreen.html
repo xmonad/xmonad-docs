@@ -1,0 +1,328 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd"><html xmlns="http://www.w3.org/1999/xhtml"><head><link rel="stylesheet" type="text/css" href="style.css" /><script type="text/javascript" src="highlight.js"></script></head><body><pre><span class="hs-pragma">{-# LANGUAGE FlexibleInstances, MultiParamTypeClasses, PatternGuards #-}</span><span>
+</span><span id="line-2"></span><span class="hs-comment">-----------------------------------------------------------------------------</span><span>
+</span><span id="line-3"></span><span class="hs-comment">-- |</span><span>
+</span><span id="line-4"></span><span class="hs-comment">-- Module      :  XMonad.Layout.ResizeScreen</span><span>
+</span><span id="line-5"></span><span class="hs-comment">-- Description :  A layout transformer to have a layout respect a given screen geometry.</span><span>
+</span><span id="line-6"></span><span class="hs-comment">-- Copyright   :  (c) 2007 Andrea Rossato</span><span>
+</span><span id="line-7"></span><span class="hs-comment">-- License     :  BSD-style (see xmonad/LICENSE)</span><span>
+</span><span id="line-8"></span><span class="hs-comment">--</span><span>
+</span><span id="line-9"></span><span class="hs-comment">-- Maintainer  :  andrea.rossato@unibz.it</span><span>
+</span><span id="line-10"></span><span class="hs-comment">-- Stability   :  unstable</span><span>
+</span><span id="line-11"></span><span class="hs-comment">-- Portability :  unportable</span><span>
+</span><span id="line-12"></span><span class="hs-comment">--</span><span>
+</span><span id="line-13"></span><span class="hs-comment">-- A layout transformer to have a layout respect a given screen</span><span>
+</span><span id="line-14"></span><span class="hs-comment">-- geometry. Mostly used with &quot;Decoration&quot; (the Horizontal and the</span><span>
+</span><span id="line-15"></span><span class="hs-comment">-- Vertical version will react to SetTheme and change their dimension</span><span>
+</span><span id="line-16"></span><span class="hs-comment">-- accordingly.</span><span>
+</span><span id="line-17"></span><span class="hs-comment">-----------------------------------------------------------------------------</span><span>
+</span><span id="line-18"></span><span>
+</span><span id="line-19"></span><span class="hs-keyword">module</span><span> </span><span class="hs-identifier">XMonad.Layout.ResizeScreen</span><span>
+</span><span id="line-20"></span><span>    </span><span class="hs-special">(</span><span> </span><span class="annot"><span class="hs-comment">-- * Usage:</span></span><span>
+</span><span id="line-21"></span><span>      </span><span class="annot"><span class="hs-comment">-- $usage</span></span><span>
+</span><span id="line-22"></span><span>      </span><span class="annot"><a href="XMonad.Layout.ResizeScreen.html#resizeHorizontal"><span class="hs-identifier">resizeHorizontal</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><a href="XMonad.Layout.ResizeScreen.html#resizeVertical"><span class="hs-identifier">resizeVertical</span></a></span><span>
+</span><span id="line-23"></span><span>    </span><span class="hs-special">,</span><span> </span><span class="annot"><a href="XMonad.Layout.ResizeScreen.html#resizeHorizontalRight"><span class="hs-identifier">resizeHorizontalRight</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><a href="XMonad.Layout.ResizeScreen.html#resizeVerticalBottom"><span class="hs-identifier">resizeVerticalBottom</span></a></span><span>
+</span><span id="line-24"></span><span>    </span><span class="hs-special">,</span><span> </span><span class="annot"><a href="XMonad.Layout.ResizeScreen.html#withNewRectangle"><span class="hs-identifier">withNewRectangle</span></a></span><span>
+</span><span id="line-25"></span><span>    </span><span class="hs-special">,</span><span> </span><span class="annot"><a href="XMonad.Layout.ResizeScreen.html#ResizeScreen"><span class="hs-identifier">ResizeScreen</span></a></span><span> </span><span class="hs-special">(</span><span class="hs-glyph">..</span><span class="hs-special">)</span><span>
+</span><span id="line-26"></span><span>    </span><span class="hs-special">,</span><span> </span><span class="annot"><a href="XMonad.Layout.ResizeScreen.html#ResizeMode"><span class="hs-identifier">ResizeMode</span></a></span><span>
+</span><span id="line-27"></span><span>    </span><span class="hs-special">)</span><span> </span><span class="hs-keyword">where</span><span>
+</span><span id="line-28"></span><span>
+</span><span id="line-29"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><span class="hs-identifier">XMonad</span></span><span>
+</span><span id="line-30"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><a href="XMonad.Layout.Decoration.html"><span class="hs-identifier">XMonad.Layout.Decoration</span></a></span><span>
+</span><span id="line-31"></span><span>
+</span><span id="line-32"></span><span class="hs-comment">-- $usage</span><span>
+</span><span id="line-33"></span><span class="hs-comment">-- You can use this module by importing it into your</span><span>
+</span><span id="line-34"></span><span class="hs-comment">-- @~\/.xmonad\/xmonad.hs@ file:</span><span>
+</span><span id="line-35"></span><span class="hs-comment">--</span><span>
+</span><span id="line-36"></span><span class="hs-comment">-- &gt; import XMonad.Layout.ResizeScreen</span><span>
+</span><span id="line-37"></span><span class="hs-comment">--</span><span>
+</span><span id="line-38"></span><span class="hs-comment">-- and modifying your layoutHook as follows (for example):</span><span>
+</span><span id="line-39"></span><span class="hs-comment">--</span><span>
+</span><span id="line-40"></span><span class="hs-comment">-- &gt; layoutHook = resizeHorizontal 40 Full</span><span>
+</span><span id="line-41"></span><span class="hs-comment">--</span><span>
+</span><span id="line-42"></span><span class="hs-comment">-- For more detailed instructions on editing the layoutHook see:</span><span>
+</span><span id="line-43"></span><span class="hs-comment">--</span><span>
+</span><span id="line-44"></span><span class="hs-comment">-- &quot;XMonad.Doc.Extending#Editing_the_layout_hook&quot;</span><span>
+</span><span id="line-45"></span><span>
+</span><span id="line-46"></span><span id="local-6989586621679410935"><span id="local-6989586621679410936"><span class="annot"><a href="XMonad.Layout.ResizeScreen.html#resizeHorizontal"><span class="hs-identifier hs-type">resizeHorizontal</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Int</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="#local-6989586621679410936"><span class="hs-identifier hs-type">l</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679410935"><span class="hs-identifier hs-type">a</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="XMonad.Layout.LayoutModifier.html#ModifiedLayout"><span class="hs-identifier hs-type">ModifiedLayout</span></a></span><span> </span><span class="annot"><a href="XMonad.Layout.ResizeScreen.html#ResizeScreen"><span class="hs-identifier hs-type">ResizeScreen</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679410936"><span class="hs-identifier hs-type">l</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679410935"><span class="hs-identifier hs-type">a</span></a></span></span></span><span>
+</span><span id="line-47"></span><span id="resizeHorizontal"><span class="annot"><span class="annottext">resizeHorizontal :: Int -&gt; l a -&gt; ModifiedLayout ResizeScreen l a
+</span><a href="XMonad.Layout.ResizeScreen.html#resizeHorizontal"><span class="hs-identifier hs-var hs-var">resizeHorizontal</span></a></span></span><span> </span><span id="local-6989586621679410934"><span class="annot"><span class="annottext">Int
+</span><a href="#local-6989586621679410934"><span class="hs-identifier hs-var">i</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">ResizeScreen a -&gt; l a -&gt; ModifiedLayout ResizeScreen l a
+forall (m :: * -&gt; *) (l :: * -&gt; *) a.
+m a -&gt; l a -&gt; ModifiedLayout m l a
+</span><a href="XMonad.Layout.LayoutModifier.html#ModifiedLayout"><span class="hs-identifier hs-var">ModifiedLayout</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">ResizeMode -&gt; Int -&gt; ResizeScreen a
+forall a. ResizeMode -&gt; Int -&gt; ResizeScreen a
+</span><a href="XMonad.Layout.ResizeScreen.html#ResizeScreen"><span class="hs-identifier hs-var">ResizeScreen</span></a></span><span> </span><span class="annot"><span class="annottext">ResizeMode
+</span><a href="XMonad.Layout.ResizeScreen.html#L"><span class="hs-identifier hs-var">L</span></a></span><span> </span><span class="annot"><span class="annottext">Int
+</span><a href="#local-6989586621679410934"><span class="hs-identifier hs-var">i</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-48"></span><span>
+</span><span id="line-49"></span><span id="local-6989586621679410929"><span id="local-6989586621679410930"><span class="annot"><a href="XMonad.Layout.ResizeScreen.html#resizeVertical"><span class="hs-identifier hs-type">resizeVertical</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Int</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="#local-6989586621679410930"><span class="hs-identifier hs-type">l</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679410929"><span class="hs-identifier hs-type">a</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="XMonad.Layout.LayoutModifier.html#ModifiedLayout"><span class="hs-identifier hs-type">ModifiedLayout</span></a></span><span> </span><span class="annot"><a href="XMonad.Layout.ResizeScreen.html#ResizeScreen"><span class="hs-identifier hs-type">ResizeScreen</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679410930"><span class="hs-identifier hs-type">l</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679410929"><span class="hs-identifier hs-type">a</span></a></span></span></span><span>
+</span><span id="line-50"></span><span id="resizeVertical"><span class="annot"><span class="annottext">resizeVertical :: Int -&gt; l a -&gt; ModifiedLayout ResizeScreen l a
+</span><a href="XMonad.Layout.ResizeScreen.html#resizeVertical"><span class="hs-identifier hs-var hs-var">resizeVertical</span></a></span></span><span> </span><span id="local-6989586621679410928"><span class="annot"><span class="annottext">Int
+</span><a href="#local-6989586621679410928"><span class="hs-identifier hs-var">i</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">ResizeScreen a -&gt; l a -&gt; ModifiedLayout ResizeScreen l a
+forall (m :: * -&gt; *) (l :: * -&gt; *) a.
+m a -&gt; l a -&gt; ModifiedLayout m l a
+</span><a href="XMonad.Layout.LayoutModifier.html#ModifiedLayout"><span class="hs-identifier hs-var">ModifiedLayout</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">ResizeMode -&gt; Int -&gt; ResizeScreen a
+forall a. ResizeMode -&gt; Int -&gt; ResizeScreen a
+</span><a href="XMonad.Layout.ResizeScreen.html#ResizeScreen"><span class="hs-identifier hs-var">ResizeScreen</span></a></span><span> </span><span class="annot"><span class="annottext">ResizeMode
+</span><a href="XMonad.Layout.ResizeScreen.html#T"><span class="hs-identifier hs-var">T</span></a></span><span> </span><span class="annot"><span class="annottext">Int
+</span><a href="#local-6989586621679410928"><span class="hs-identifier hs-var">i</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-51"></span><span>
+</span><span id="line-52"></span><span id="local-6989586621679410925"><span id="local-6989586621679410926"><span class="annot"><a href="XMonad.Layout.ResizeScreen.html#resizeHorizontalRight"><span class="hs-identifier hs-type">resizeHorizontalRight</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Int</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="#local-6989586621679410926"><span class="hs-identifier hs-type">l</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679410925"><span class="hs-identifier hs-type">a</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="XMonad.Layout.LayoutModifier.html#ModifiedLayout"><span class="hs-identifier hs-type">ModifiedLayout</span></a></span><span> </span><span class="annot"><a href="XMonad.Layout.ResizeScreen.html#ResizeScreen"><span class="hs-identifier hs-type">ResizeScreen</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679410926"><span class="hs-identifier hs-type">l</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679410925"><span class="hs-identifier hs-type">a</span></a></span></span></span><span>
+</span><span id="line-53"></span><span id="resizeHorizontalRight"><span class="annot"><span class="annottext">resizeHorizontalRight :: Int -&gt; l a -&gt; ModifiedLayout ResizeScreen l a
+</span><a href="XMonad.Layout.ResizeScreen.html#resizeHorizontalRight"><span class="hs-identifier hs-var hs-var">resizeHorizontalRight</span></a></span></span><span> </span><span id="local-6989586621679410924"><span class="annot"><span class="annottext">Int
+</span><a href="#local-6989586621679410924"><span class="hs-identifier hs-var">i</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">ResizeScreen a -&gt; l a -&gt; ModifiedLayout ResizeScreen l a
+forall (m :: * -&gt; *) (l :: * -&gt; *) a.
+m a -&gt; l a -&gt; ModifiedLayout m l a
+</span><a href="XMonad.Layout.LayoutModifier.html#ModifiedLayout"><span class="hs-identifier hs-var">ModifiedLayout</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">ResizeMode -&gt; Int -&gt; ResizeScreen a
+forall a. ResizeMode -&gt; Int -&gt; ResizeScreen a
+</span><a href="XMonad.Layout.ResizeScreen.html#ResizeScreen"><span class="hs-identifier hs-var">ResizeScreen</span></a></span><span> </span><span class="annot"><span class="annottext">ResizeMode
+</span><a href="XMonad.Layout.ResizeScreen.html#R"><span class="hs-identifier hs-var">R</span></a></span><span> </span><span class="annot"><span class="annottext">Int
+</span><a href="#local-6989586621679410924"><span class="hs-identifier hs-var">i</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-54"></span><span>
+</span><span id="line-55"></span><span id="local-6989586621679410921"><span id="local-6989586621679410922"><span class="annot"><a href="XMonad.Layout.ResizeScreen.html#resizeVerticalBottom"><span class="hs-identifier hs-type">resizeVerticalBottom</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Int</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="#local-6989586621679410922"><span class="hs-identifier hs-type">l</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679410921"><span class="hs-identifier hs-type">a</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="XMonad.Layout.LayoutModifier.html#ModifiedLayout"><span class="hs-identifier hs-type">ModifiedLayout</span></a></span><span> </span><span class="annot"><a href="XMonad.Layout.ResizeScreen.html#ResizeScreen"><span class="hs-identifier hs-type">ResizeScreen</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679410922"><span class="hs-identifier hs-type">l</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679410921"><span class="hs-identifier hs-type">a</span></a></span></span></span><span>
+</span><span id="line-56"></span><span id="resizeVerticalBottom"><span class="annot"><span class="annottext">resizeVerticalBottom :: Int -&gt; l a -&gt; ModifiedLayout ResizeScreen l a
+</span><a href="XMonad.Layout.ResizeScreen.html#resizeVerticalBottom"><span class="hs-identifier hs-var hs-var">resizeVerticalBottom</span></a></span></span><span> </span><span id="local-6989586621679410920"><span class="annot"><span class="annottext">Int
+</span><a href="#local-6989586621679410920"><span class="hs-identifier hs-var">i</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">ResizeScreen a -&gt; l a -&gt; ModifiedLayout ResizeScreen l a
+forall (m :: * -&gt; *) (l :: * -&gt; *) a.
+m a -&gt; l a -&gt; ModifiedLayout m l a
+</span><a href="XMonad.Layout.LayoutModifier.html#ModifiedLayout"><span class="hs-identifier hs-var">ModifiedLayout</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">ResizeMode -&gt; Int -&gt; ResizeScreen a
+forall a. ResizeMode -&gt; Int -&gt; ResizeScreen a
+</span><a href="XMonad.Layout.ResizeScreen.html#ResizeScreen"><span class="hs-identifier hs-var">ResizeScreen</span></a></span><span> </span><span class="annot"><span class="annottext">ResizeMode
+</span><a href="XMonad.Layout.ResizeScreen.html#B"><span class="hs-identifier hs-var">B</span></a></span><span> </span><span class="annot"><span class="annottext">Int
+</span><a href="#local-6989586621679410920"><span class="hs-identifier hs-var">i</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-57"></span><span>
+</span><span id="line-58"></span><span id="local-6989586621679410917"><span id="local-6989586621679410918"><span class="annot"><a href="XMonad.Layout.ResizeScreen.html#withNewRectangle"><span class="hs-identifier hs-type">withNewRectangle</span></a></span><span>  </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Rectangle</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="#local-6989586621679410918"><span class="hs-identifier hs-type">l</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679410917"><span class="hs-identifier hs-type">a</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="XMonad.Layout.LayoutModifier.html#ModifiedLayout"><span class="hs-identifier hs-type">ModifiedLayout</span></a></span><span> </span><span class="annot"><a href="XMonad.Layout.ResizeScreen.html#ResizeScreen"><span class="hs-identifier hs-type">ResizeScreen</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679410918"><span class="hs-identifier hs-type">l</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679410917"><span class="hs-identifier hs-type">a</span></a></span></span></span><span>
+</span><span id="line-59"></span><span id="withNewRectangle"><span class="annot"><span class="annottext">withNewRectangle :: Rectangle -&gt; l a -&gt; ModifiedLayout ResizeScreen l a
+</span><a href="XMonad.Layout.ResizeScreen.html#withNewRectangle"><span class="hs-identifier hs-var hs-var">withNewRectangle</span></a></span></span><span> </span><span id="local-6989586621679410916"><span class="annot"><span class="annottext">Rectangle
+</span><a href="#local-6989586621679410916"><span class="hs-identifier hs-var">r</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">ResizeScreen a -&gt; l a -&gt; ModifiedLayout ResizeScreen l a
+forall (m :: * -&gt; *) (l :: * -&gt; *) a.
+m a -&gt; l a -&gt; ModifiedLayout m l a
+</span><a href="XMonad.Layout.LayoutModifier.html#ModifiedLayout"><span class="hs-identifier hs-var">ModifiedLayout</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Rectangle -&gt; ResizeScreen a
+forall a. Rectangle -&gt; ResizeScreen a
+</span><a href="XMonad.Layout.ResizeScreen.html#WithNewScreen"><span class="hs-identifier hs-var">WithNewScreen</span></a></span><span> </span><span class="annot"><span class="annottext">Rectangle
+</span><a href="#local-6989586621679410916"><span class="hs-identifier hs-var">r</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-60"></span><span>
+</span><span id="line-61"></span><span class="hs-keyword">data</span><span> </span><span id="ResizeScreen"><span class="annot"><a href="XMonad.Layout.ResizeScreen.html#ResizeScreen"><span class="hs-identifier hs-var">ResizeScreen</span></a></span></span><span> </span><span id="local-6989586621679410989"><span class="annot"><a href="#local-6989586621679410989"><span class="hs-identifier hs-type">a</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span id="ResizeScreen"><span class="annot"><a href="XMonad.Layout.ResizeScreen.html#ResizeScreen"><span class="hs-identifier hs-var">ResizeScreen</span></a></span></span><span> </span><span class="annot"><a href="XMonad.Layout.ResizeScreen.html#ResizeMode"><span class="hs-identifier hs-type">ResizeMode</span></a></span><span> </span><span class="annot"><span class="hs-identifier hs-type">Int</span></span><span>
+</span><span id="line-62"></span><span>                    </span><span class="hs-glyph">|</span><span> </span><span id="WithNewScreen"><span class="annot"><a href="XMonad.Layout.ResizeScreen.html#WithNewScreen"><span class="hs-identifier hs-var">WithNewScreen</span></a></span></span><span> </span><span class="annot"><span class="hs-identifier hs-type">Rectangle</span></span><span>
+</span><span id="line-63"></span><span>                      </span><span class="hs-keyword">deriving</span><span> </span><span class="hs-special">(</span><span id="local-6989586621679410907"><span id="local-6989586621679410909"><span id="local-6989586621679410911"><span id="local-6989586621679410913"><span class="annot"><span class="annottext">ReadPrec [ResizeScreen a]
+ReadPrec (ResizeScreen a)
+Int -&gt; ReadS (ResizeScreen a)
+ReadS [ResizeScreen a]
+(Int -&gt; ReadS (ResizeScreen a))
+-&gt; ReadS [ResizeScreen a]
+-&gt; ReadPrec (ResizeScreen a)
+-&gt; ReadPrec [ResizeScreen a]
+-&gt; Read (ResizeScreen a)
+forall a. ReadPrec [ResizeScreen a]
+forall a. ReadPrec (ResizeScreen a)
+forall a. Int -&gt; ReadS (ResizeScreen a)
+forall a. ReadS [ResizeScreen a]
+forall a.
+(Int -&gt; ReadS a)
+-&gt; ReadS [a] -&gt; ReadPrec a -&gt; ReadPrec [a] -&gt; Read a
+readListPrec :: ReadPrec [ResizeScreen a]
+$creadListPrec :: forall a. ReadPrec [ResizeScreen a]
+readPrec :: ReadPrec (ResizeScreen a)
+$creadPrec :: forall a. ReadPrec (ResizeScreen a)
+readList :: ReadS [ResizeScreen a]
+$creadList :: forall a. ReadS [ResizeScreen a]
+readsPrec :: Int -&gt; ReadS (ResizeScreen a)
+$creadsPrec :: forall a. Int -&gt; ReadS (ResizeScreen a)
+</span><span class="hs-identifier hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var">Read</span></span></span></span></span></span><span class="hs-special">,</span><span> </span><span id="local-6989586621679410900"><span id="local-6989586621679410902"><span id="local-6989586621679410904"><span class="annot"><span class="annottext">Int -&gt; ResizeScreen a -&gt; ShowS
+[ResizeScreen a] -&gt; ShowS
+ResizeScreen a -&gt; String
+(Int -&gt; ResizeScreen a -&gt; ShowS)
+-&gt; (ResizeScreen a -&gt; String)
+-&gt; ([ResizeScreen a] -&gt; ShowS)
+-&gt; Show (ResizeScreen a)
+forall a. Int -&gt; ResizeScreen a -&gt; ShowS
+forall a. [ResizeScreen a] -&gt; ShowS
+forall a. ResizeScreen a -&gt; String
+forall a.
+(Int -&gt; a -&gt; ShowS) -&gt; (a -&gt; String) -&gt; ([a] -&gt; ShowS) -&gt; Show a
+showList :: [ResizeScreen a] -&gt; ShowS
+$cshowList :: forall a. [ResizeScreen a] -&gt; ShowS
+show :: ResizeScreen a -&gt; String
+$cshow :: forall a. ResizeScreen a -&gt; String
+showsPrec :: Int -&gt; ResizeScreen a -&gt; ShowS
+$cshowsPrec :: forall a. Int -&gt; ResizeScreen a -&gt; ShowS
+</span><span class="hs-identifier hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var">Show</span></span></span></span></span><span class="hs-special">)</span><span>
+</span><span id="line-64"></span><span>
+</span><span id="line-65"></span><span class="hs-keyword">data</span><span> </span><span id="ResizeMode"><span class="annot"><a href="XMonad.Layout.ResizeScreen.html#ResizeMode"><span class="hs-identifier hs-var">ResizeMode</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span id="T"><span class="annot"><a href="XMonad.Layout.ResizeScreen.html#T"><span class="hs-identifier hs-var">T</span></a></span></span><span> </span><span class="hs-glyph">|</span><span> </span><span id="B"><span class="annot"><a href="XMonad.Layout.ResizeScreen.html#B"><span class="hs-identifier hs-var">B</span></a></span></span><span> </span><span class="hs-glyph">|</span><span> </span><span id="L"><span class="annot"><a href="XMonad.Layout.ResizeScreen.html#L"><span class="hs-identifier hs-var">L</span></a></span></span><span> </span><span class="hs-glyph">|</span><span> </span><span id="R"><span class="annot"><a href="XMonad.Layout.ResizeScreen.html#R"><span class="hs-identifier hs-var">R</span></a></span></span><span> </span><span class="hs-keyword">deriving</span><span> </span><span class="hs-special">(</span><span id="local-6989586621679410891"><span id="local-6989586621679410893"><span id="local-6989586621679410895"><span id="local-6989586621679410897"><span class="annot"><span class="annottext">ReadPrec [ResizeMode]
+ReadPrec ResizeMode
+Int -&gt; ReadS ResizeMode
+ReadS [ResizeMode]
+(Int -&gt; ReadS ResizeMode)
+-&gt; ReadS [ResizeMode]
+-&gt; ReadPrec ResizeMode
+-&gt; ReadPrec [ResizeMode]
+-&gt; Read ResizeMode
+forall a.
+(Int -&gt; ReadS a)
+-&gt; ReadS [a] -&gt; ReadPrec a -&gt; ReadPrec [a] -&gt; Read a
+readListPrec :: ReadPrec [ResizeMode]
+$creadListPrec :: ReadPrec [ResizeMode]
+readPrec :: ReadPrec ResizeMode
+$creadPrec :: ReadPrec ResizeMode
+readList :: ReadS [ResizeMode]
+$creadList :: ReadS [ResizeMode]
+readsPrec :: Int -&gt; ReadS ResizeMode
+$creadsPrec :: Int -&gt; ReadS ResizeMode
+</span><span class="hs-identifier hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var">Read</span></span></span></span></span></span><span class="hs-special">,</span><span> </span><span id="local-6989586621679410885"><span id="local-6989586621679410887"><span id="local-6989586621679410889"><span class="annot"><span class="annottext">Int -&gt; ResizeMode -&gt; ShowS
+[ResizeMode] -&gt; ShowS
+ResizeMode -&gt; String
+(Int -&gt; ResizeMode -&gt; ShowS)
+-&gt; (ResizeMode -&gt; String)
+-&gt; ([ResizeMode] -&gt; ShowS)
+-&gt; Show ResizeMode
+forall a.
+(Int -&gt; a -&gt; ShowS) -&gt; (a -&gt; String) -&gt; ([a] -&gt; ShowS) -&gt; Show a
+showList :: [ResizeMode] -&gt; ShowS
+$cshowList :: [ResizeMode] -&gt; ShowS
+show :: ResizeMode -&gt; String
+$cshow :: ResizeMode -&gt; String
+showsPrec :: Int -&gt; ResizeMode -&gt; ShowS
+$cshowsPrec :: Int -&gt; ResizeMode -&gt; ShowS
+</span><span class="hs-identifier hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var">Show</span></span></span></span></span><span class="hs-special">)</span><span>
+</span><span id="line-66"></span><span>
+</span><span id="line-67"></span><span id="local-6989586621679410884"><span class="hs-keyword">instance</span><span> </span><span id="local-6989586621679410862"><span id="local-6989586621679410864"><span id="local-6989586621679410866"><span id="local-6989586621679410868"><span id="local-6989586621679410870"><span id="local-6989586621679410872"><span id="local-6989586621679410875"><span id="local-6989586621679410877"><span id="local-6989586621679410879"><span class="annot"><a href="XMonad.Layout.LayoutModifier.html#LayoutModifier"><span class="hs-identifier hs-type">LayoutModifier</span></a></span><span> </span><span class="annot"><a href="XMonad.Layout.ResizeScreen.html#ResizeScreen"><span class="hs-identifier hs-type">ResizeScreen</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679410884"><span class="hs-identifier hs-type">a</span></a></span></span></span></span></span></span></span></span></span></span><span> </span><span class="hs-keyword">where</span><span>
+</span><span id="line-68"></span><span>    </span><span id="local-6989586621679410860"><span class="annot"><span class="annottext">modifyLayout :: ResizeScreen a
+-&gt; Workspace String (l a) a
+-&gt; Rectangle
+-&gt; X ([(a, Rectangle)], Maybe (l a))
+</span><a href="XMonad.Layout.LayoutModifier.html#modifyLayout"><span class="hs-identifier hs-var hs-var hs-var hs-var">modifyLayout</span></a></span></span><span> </span><span id="local-6989586621679410858"><span class="annot"><span class="annottext">ResizeScreen a
+</span><a href="#local-6989586621679410858"><span class="hs-identifier hs-var">m</span></a></span></span><span> </span><span id="local-6989586621679410857"><span class="annot"><span class="annottext">Workspace String (l a) a
+</span><a href="#local-6989586621679410857"><span class="hs-identifier hs-var">ws</span></a></span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">Rectangle</span></span><span> </span><span id="local-6989586621679410855"><span class="annot"><span class="annottext">Position
+</span><a href="#local-6989586621679410855"><span class="hs-identifier hs-var">x</span></a></span></span><span> </span><span id="local-6989586621679410854"><span class="annot"><span class="annottext">Position
+</span><a href="#local-6989586621679410854"><span class="hs-identifier hs-var">y</span></a></span></span><span> </span><span id="local-6989586621679410853"><span class="annot"><span class="annottext">Dimension
+</span><a href="#local-6989586621679410853"><span class="hs-identifier hs-var">w</span></a></span></span><span> </span><span id="local-6989586621679410852"><span class="annot"><span class="annottext">Dimension
+</span><a href="#local-6989586621679410852"><span class="hs-identifier hs-var">h</span></a></span></span><span class="hs-special">)</span><span>
+</span><span id="line-69"></span><span>        </span><span class="hs-glyph">|</span><span> </span><span class="annot"><a href="XMonad.Layout.ResizeScreen.html#ResizeScreen"><span class="hs-identifier hs-type">ResizeScreen</span></a></span><span> </span><span class="annot"><span class="annottext">ResizeMode
+</span><a href="XMonad.Layout.ResizeScreen.html#L"><span class="hs-identifier hs-var">L</span></a></span><span> </span><span id="local-6989586621679410851"><span class="annot"><span class="annottext">Int
+</span><a href="#local-6989586621679410851"><span class="hs-identifier hs-var">i</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">ResizeScreen a
+</span><a href="#local-6989586621679410858"><span class="hs-identifier hs-var">m</span></a></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Rectangle -&gt; X ([(a, Rectangle)], Maybe (l a))
+</span><a href="#local-6989586621679410850"><span class="hs-identifier hs-var">resize</span></a></span><span> </span><span class="annot"><span class="annottext">(Rectangle -&gt; X ([(a, Rectangle)], Maybe (l a)))
+-&gt; Rectangle -&gt; X ([(a, Rectangle)], Maybe (l a))
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">Position -&gt; Position -&gt; Dimension -&gt; Dimension -&gt; Rectangle
+</span><span class="hs-identifier hs-var">Rectangle</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Position
+</span><a href="#local-6989586621679410855"><span class="hs-identifier hs-var">x</span></a></span><span> </span><span class="annot"><span class="annottext">Position -&gt; Position -&gt; Position
+forall a. Num a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-operator hs-var">+</span></span><span> </span><span class="annot"><span class="annottext">Int -&gt; Position
+forall a b. (Integral a, Num b) =&gt; a -&gt; b
+</span><a href="XMonad.Prelude.html#fi"><span class="hs-identifier hs-var">fi</span></a></span><span> </span><span class="annot"><span class="annottext">Int
+</span><a href="#local-6989586621679410851"><span class="hs-identifier hs-var">i</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">Position
+</span><a href="#local-6989586621679410854"><span class="hs-identifier hs-var">y</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Dimension
+</span><a href="#local-6989586621679410853"><span class="hs-identifier hs-var">w</span></a></span><span> </span><span class="annot"><span class="annottext">Dimension -&gt; Dimension -&gt; Dimension
+forall a. Num a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-glyph hs-var">-</span></span><span> </span><span class="annot"><span class="annottext">Int -&gt; Dimension
+forall a b. (Integral a, Num b) =&gt; a -&gt; b
+</span><a href="XMonad.Prelude.html#fi"><span class="hs-identifier hs-var">fi</span></a></span><span> </span><span class="annot"><span class="annottext">Int
+</span><a href="#local-6989586621679410851"><span class="hs-identifier hs-var">i</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">Dimension
+</span><a href="#local-6989586621679410852"><span class="hs-identifier hs-var">h</span></a></span><span>
+</span><span id="line-70"></span><span>        </span><span class="hs-glyph">|</span><span> </span><span class="annot"><a href="XMonad.Layout.ResizeScreen.html#ResizeScreen"><span class="hs-identifier hs-type">ResizeScreen</span></a></span><span> </span><span class="annot"><span class="annottext">ResizeMode
+</span><a href="XMonad.Layout.ResizeScreen.html#R"><span class="hs-identifier hs-var">R</span></a></span><span> </span><span id="local-6989586621679410847"><span class="annot"><span class="annottext">Int
+</span><a href="#local-6989586621679410847"><span class="hs-identifier hs-var">i</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">ResizeScreen a
+</span><a href="#local-6989586621679410858"><span class="hs-identifier hs-var">m</span></a></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Rectangle -&gt; X ([(a, Rectangle)], Maybe (l a))
+</span><a href="#local-6989586621679410850"><span class="hs-identifier hs-var">resize</span></a></span><span> </span><span class="annot"><span class="annottext">(Rectangle -&gt; X ([(a, Rectangle)], Maybe (l a)))
+-&gt; Rectangle -&gt; X ([(a, Rectangle)], Maybe (l a))
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">Position -&gt; Position -&gt; Dimension -&gt; Dimension -&gt; Rectangle
+</span><span class="hs-identifier hs-var">Rectangle</span></span><span> </span><span class="annot"><span class="annottext">Position
+</span><a href="#local-6989586621679410855"><span class="hs-identifier hs-var">x</span></a></span><span>          </span><span class="annot"><span class="annottext">Position
+</span><a href="#local-6989586621679410854"><span class="hs-identifier hs-var">y</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Dimension
+</span><a href="#local-6989586621679410853"><span class="hs-identifier hs-var">w</span></a></span><span> </span><span class="annot"><span class="annottext">Dimension -&gt; Dimension -&gt; Dimension
+forall a. Num a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-glyph hs-var">-</span></span><span> </span><span class="annot"><span class="annottext">Int -&gt; Dimension
+forall a b. (Integral a, Num b) =&gt; a -&gt; b
+</span><a href="XMonad.Prelude.html#fi"><span class="hs-identifier hs-var">fi</span></a></span><span> </span><span class="annot"><span class="annottext">Int
+</span><a href="#local-6989586621679410847"><span class="hs-identifier hs-var">i</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">Dimension
+</span><a href="#local-6989586621679410852"><span class="hs-identifier hs-var">h</span></a></span><span>
+</span><span id="line-71"></span><span>        </span><span class="hs-glyph">|</span><span> </span><span class="annot"><a href="XMonad.Layout.ResizeScreen.html#ResizeScreen"><span class="hs-identifier hs-type">ResizeScreen</span></a></span><span> </span><span class="annot"><span class="annottext">ResizeMode
+</span><a href="XMonad.Layout.ResizeScreen.html#T"><span class="hs-identifier hs-var">T</span></a></span><span> </span><span id="local-6989586621679410846"><span class="annot"><span class="annottext">Int
+</span><a href="#local-6989586621679410846"><span class="hs-identifier hs-var">i</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">ResizeScreen a
+</span><a href="#local-6989586621679410858"><span class="hs-identifier hs-var">m</span></a></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Rectangle -&gt; X ([(a, Rectangle)], Maybe (l a))
+</span><a href="#local-6989586621679410850"><span class="hs-identifier hs-var">resize</span></a></span><span> </span><span class="annot"><span class="annottext">(Rectangle -&gt; X ([(a, Rectangle)], Maybe (l a)))
+-&gt; Rectangle -&gt; X ([(a, Rectangle)], Maybe (l a))
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">Position -&gt; Position -&gt; Dimension -&gt; Dimension -&gt; Rectangle
+</span><span class="hs-identifier hs-var">Rectangle</span></span><span> </span><span class="annot"><span class="annottext">Position
+</span><a href="#local-6989586621679410855"><span class="hs-identifier hs-var">x</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Position
+</span><a href="#local-6989586621679410854"><span class="hs-identifier hs-var">y</span></a></span><span> </span><span class="annot"><span class="annottext">Position -&gt; Position -&gt; Position
+forall a. Num a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-operator hs-var">+</span></span><span> </span><span class="annot"><span class="annottext">Int -&gt; Position
+forall a b. (Integral a, Num b) =&gt; a -&gt; b
+</span><a href="XMonad.Prelude.html#fi"><span class="hs-identifier hs-var">fi</span></a></span><span> </span><span class="annot"><span class="annottext">Int
+</span><a href="#local-6989586621679410846"><span class="hs-identifier hs-var">i</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">Dimension
+</span><a href="#local-6989586621679410853"><span class="hs-identifier hs-var">w</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Dimension
+</span><a href="#local-6989586621679410852"><span class="hs-identifier hs-var">h</span></a></span><span> </span><span class="annot"><span class="annottext">Dimension -&gt; Dimension -&gt; Dimension
+forall a. Num a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-glyph hs-var">-</span></span><span> </span><span class="annot"><span class="annottext">Int -&gt; Dimension
+forall a b. (Integral a, Num b) =&gt; a -&gt; b
+</span><a href="XMonad.Prelude.html#fi"><span class="hs-identifier hs-var">fi</span></a></span><span> </span><span class="annot"><span class="annottext">Int
+</span><a href="#local-6989586621679410846"><span class="hs-identifier hs-var">i</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-72"></span><span>        </span><span class="hs-glyph">|</span><span> </span><span class="annot"><a href="XMonad.Layout.ResizeScreen.html#ResizeScreen"><span class="hs-identifier hs-type">ResizeScreen</span></a></span><span> </span><span class="annot"><span class="annottext">ResizeMode
+</span><a href="XMonad.Layout.ResizeScreen.html#B"><span class="hs-identifier hs-var">B</span></a></span><span> </span><span id="local-6989586621679410845"><span class="annot"><span class="annottext">Int
+</span><a href="#local-6989586621679410845"><span class="hs-identifier hs-var">i</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">ResizeScreen a
+</span><a href="#local-6989586621679410858"><span class="hs-identifier hs-var">m</span></a></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Rectangle -&gt; X ([(a, Rectangle)], Maybe (l a))
+</span><a href="#local-6989586621679410850"><span class="hs-identifier hs-var">resize</span></a></span><span> </span><span class="annot"><span class="annottext">(Rectangle -&gt; X ([(a, Rectangle)], Maybe (l a)))
+-&gt; Rectangle -&gt; X ([(a, Rectangle)], Maybe (l a))
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">Position -&gt; Position -&gt; Dimension -&gt; Dimension -&gt; Rectangle
+</span><span class="hs-identifier hs-var">Rectangle</span></span><span> </span><span class="annot"><span class="annottext">Position
+</span><a href="#local-6989586621679410855"><span class="hs-identifier hs-var">x</span></a></span><span>  </span><span class="annot"><span class="annottext">Position
+</span><a href="#local-6989586621679410854"><span class="hs-identifier hs-var">y</span></a></span><span>         </span><span class="annot"><span class="annottext">Dimension
+</span><a href="#local-6989586621679410853"><span class="hs-identifier hs-var">w</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Dimension
+</span><a href="#local-6989586621679410852"><span class="hs-identifier hs-var">h</span></a></span><span> </span><span class="annot"><span class="annottext">Dimension -&gt; Dimension -&gt; Dimension
+forall a. Num a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-glyph hs-var">-</span></span><span> </span><span class="annot"><span class="annottext">Int -&gt; Dimension
+forall a b. (Integral a, Num b) =&gt; a -&gt; b
+</span><a href="XMonad.Prelude.html#fi"><span class="hs-identifier hs-var">fi</span></a></span><span> </span><span class="annot"><span class="annottext">Int
+</span><a href="#local-6989586621679410845"><span class="hs-identifier hs-var">i</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-73"></span><span>        </span><span class="hs-glyph">|</span><span> </span><span class="annot"><a href="XMonad.Layout.ResizeScreen.html#WithNewScreen"><span class="hs-identifier hs-type">WithNewScreen</span></a></span><span>  </span><span id="local-6989586621679410844"><span class="annot"><span class="annottext">Rectangle
+</span><a href="#local-6989586621679410844"><span class="hs-identifier hs-var">r</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">ResizeScreen a
+</span><a href="#local-6989586621679410858"><span class="hs-identifier hs-var">m</span></a></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Rectangle -&gt; X ([(a, Rectangle)], Maybe (l a))
+</span><a href="#local-6989586621679410850"><span class="hs-identifier hs-var">resize</span></a></span><span> </span><span class="annot"><span class="annottext">Rectangle
+</span><a href="#local-6989586621679410844"><span class="hs-identifier hs-var">r</span></a></span><span>
+</span><span id="line-74"></span><span>       </span><span class="hs-keyword">where</span><span> </span><span id="local-6989586621679410850"><span class="annot"><span class="annottext">resize :: Rectangle -&gt; X ([(a, Rectangle)], Maybe (l a))
+</span><a href="#local-6989586621679410850"><span class="hs-identifier hs-var hs-var">resize</span></a></span></span><span> </span><span id="local-6989586621679410843"><span class="annot"><span class="annottext">Rectangle
+</span><a href="#local-6989586621679410843"><span class="hs-identifier hs-var">nr</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Workspace String (l a) a
+-&gt; Rectangle -&gt; X ([(a, Rectangle)], Maybe (l a))
+forall (layout :: * -&gt; *) a.
+LayoutClass layout a =&gt;
+Workspace String (layout a) a
+-&gt; Rectangle -&gt; X ([(a, Rectangle)], Maybe (layout a))
+</span><span class="hs-identifier hs-var">runLayout</span></span><span> </span><span class="annot"><span class="annottext">Workspace String (l a) a
+</span><a href="#local-6989586621679410857"><span class="hs-identifier hs-var">ws</span></a></span><span> </span><span class="annot"><span class="annottext">Rectangle
+</span><a href="#local-6989586621679410843"><span class="hs-identifier hs-var">nr</span></a></span><span>
+</span><span id="line-75"></span><span>
+</span><span id="line-76"></span><span>    </span><span id="local-6989586621679410841"><span class="annot"><span class="annottext">pureMess :: ResizeScreen a -&gt; SomeMessage -&gt; Maybe (ResizeScreen a)
+</span><a href="XMonad.Layout.LayoutModifier.html#pureMess"><span class="hs-identifier hs-var hs-var hs-var hs-var">pureMess</span></a></span></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="XMonad.Layout.ResizeScreen.html#ResizeScreen"><span class="hs-identifier hs-type">ResizeScreen</span></a></span><span> </span><span id="local-6989586621679410839"><span class="annot"><span class="annottext">ResizeMode
+</span><a href="#local-6989586621679410839"><span class="hs-identifier hs-var">d</span></a></span></span><span> </span><span class="annot"><span class="annottext">Int
+</span><span class="hs-identifier">_</span></span><span class="hs-special">)</span><span> </span><span id="local-6989586621679410838"><span class="annot"><span class="annottext">SomeMessage
+</span><a href="#local-6989586621679410838"><span class="hs-identifier hs-var">m</span></a></span></span><span>
+</span><span id="line-77"></span><span>        </span><span class="hs-glyph">|</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Just</span></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="XMonad.Layout.Decoration.html#SetTheme"><span class="hs-identifier hs-type">SetTheme</span></a></span><span> </span><span id="local-6989586621679410836"><span class="annot"><span class="annottext">Theme
+</span><a href="#local-6989586621679410836"><span class="hs-identifier hs-var">t</span></a></span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">SomeMessage -&gt; Maybe DecorationMsg
+forall m. Message m =&gt; SomeMessage -&gt; Maybe m
+</span><span class="hs-identifier hs-var">fromMessage</span></span><span> </span><span class="annot"><span class="annottext">SomeMessage
+</span><a href="#local-6989586621679410838"><span class="hs-identifier hs-var">m</span></a></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">ResizeScreen a -&gt; Maybe (ResizeScreen a)
+forall a. a -&gt; Maybe a
+</span><span class="hs-identifier hs-var">Just</span></span><span> </span><span class="annot"><span class="annottext">(ResizeScreen a -&gt; Maybe (ResizeScreen a))
+-&gt; ResizeScreen a -&gt; Maybe (ResizeScreen a)
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">ResizeMode -&gt; Int -&gt; ResizeScreen a
+forall a. ResizeMode -&gt; Int -&gt; ResizeScreen a
+</span><a href="XMonad.Layout.ResizeScreen.html#ResizeScreen"><span class="hs-identifier hs-var">ResizeScreen</span></a></span><span> </span><span class="annot"><span class="annottext">ResizeMode
+</span><a href="#local-6989586621679410839"><span class="hs-identifier hs-var">d</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Dimension -&gt; Int
+forall a b. (Integral a, Num b) =&gt; a -&gt; b
+</span><a href="XMonad.Prelude.html#fi"><span class="hs-identifier hs-var">fi</span></a></span><span> </span><span class="annot"><span class="annottext">(Dimension -&gt; Int) -&gt; Dimension -&gt; Int
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">Theme -&gt; Dimension
+</span><a href="XMonad.Layout.Decoration.html#decoHeight"><span class="hs-identifier hs-var hs-var">decoHeight</span></a></span><span> </span><span class="annot"><span class="annottext">Theme
+</span><a href="#local-6989586621679410836"><span class="hs-identifier hs-var">t</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-78"></span><span>    </span><span class="annot"><a href="XMonad.Layout.LayoutModifier.html#pureMess"><span class="hs-identifier hs-var">pureMess</span></a></span><span> </span><span class="annot"><span class="annottext">ResizeScreen a
+</span><span class="hs-identifier">_</span></span><span> </span><span class="annot"><span class="annottext">SomeMessage
+</span><span class="hs-identifier">_</span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Maybe (ResizeScreen a)
+forall a. Maybe a
+</span><span class="hs-identifier hs-var">Nothing</span></span></span><span>
+</span><span id="line-79"></span></pre></body></html>
