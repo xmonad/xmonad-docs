@@ -1,0 +1,248 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd"><html xmlns="http://www.w3.org/1999/xhtml"><head><link rel="stylesheet" type="text/css" href="style.css" /><script type="text/javascript" src="highlight.js"></script></head><body><pre><span class="hs-comment">-----------------------------------------------------------------------------</span><span>
+</span><span id="line-2"></span><span class="hs-comment">-- |</span><span>
+</span><span id="line-3"></span><span class="hs-comment">-- Module      :  XMonad.Hooks.ManageDebug</span><span>
+</span><span id="line-4"></span><span class="hs-comment">-- Description :  A manageHook and associated logHook for debugging &quot;ManageHooks&quot;.</span><span>
+</span><span id="line-5"></span><span class="hs-comment">-- Copyright   :  (c) Brandon S Allbery KF8NH, 2014</span><span>
+</span><span id="line-6"></span><span class="hs-comment">-- License     :  BSD3-style (see LICENSE)</span><span>
+</span><span id="line-7"></span><span class="hs-comment">--</span><span>
+</span><span id="line-8"></span><span class="hs-comment">-- Maintainer  :  allbery.b@gmail.com</span><span>
+</span><span id="line-9"></span><span class="hs-comment">-- Stability   :  unstable</span><span>
+</span><span id="line-10"></span><span class="hs-comment">-- Portability :  not portable</span><span>
+</span><span id="line-11"></span><span class="hs-comment">--</span><span>
+</span><span id="line-12"></span><span class="hs-comment">-- A @manageHook@ and associated @logHook@ for debugging 'ManageHook's.</span><span>
+</span><span id="line-13"></span><span class="hs-comment">-- Simplest usage: wrap your xmonad config in the @debugManageHook@ combinator.</span><span>
+</span><span id="line-14"></span><span class="hs-comment">-- Or use @debugManageHookOn@ for a triggerable version, specifying the</span><span>
+</span><span id="line-15"></span><span class="hs-comment">-- triggering key sequence in 'XMonad.Util.EZConfig' syntax. Or use the</span><span>
+</span><span id="line-16"></span><span class="hs-comment">-- individual hooks in whatever way you see fit.</span><span>
+</span><span id="line-17"></span><span class="hs-comment">--</span><span>
+</span><span id="line-18"></span><span class="hs-comment">-----------------------------------------------------------------------------</span><span>
+</span><span id="line-19"></span><span class="hs-comment">--</span><span>
+</span><span id="line-20"></span><span class="hs-comment">--</span><span>
+</span><span id="line-21"></span><span>
+</span><span id="line-22"></span><span class="hs-keyword">module</span><span> </span><span class="hs-identifier">XMonad.Hooks.ManageDebug</span><span> </span><span class="hs-special">(</span><span class="annot"><a href="XMonad.Hooks.ManageDebug.html#debugManageHook"><span class="hs-identifier">debugManageHook</span></a></span><span>
+</span><span id="line-23"></span><span>                                </span><span class="hs-special">,</span><span class="annot"><a href="XMonad.Hooks.ManageDebug.html#debugManageHookOn"><span class="hs-identifier">debugManageHookOn</span></a></span><span>
+</span><span id="line-24"></span><span>                                </span><span class="hs-special">,</span><span class="annot"><a href="XMonad.Hooks.ManageDebug.html#manageDebug"><span class="hs-identifier">manageDebug</span></a></span><span>
+</span><span id="line-25"></span><span>                                </span><span class="hs-special">,</span><span class="annot"><a href="XMonad.Hooks.ManageDebug.html#maybeManageDebug"><span class="hs-identifier">maybeManageDebug</span></a></span><span>
+</span><span id="line-26"></span><span>                                </span><span class="hs-special">,</span><span class="annot"><a href="XMonad.Hooks.ManageDebug.html#manageDebugLogHook"><span class="hs-identifier">manageDebugLogHook</span></a></span><span>
+</span><span id="line-27"></span><span>                                </span><span class="hs-special">,</span><span class="annot"><a href="XMonad.Hooks.ManageDebug.html#debugNextManagedWindow"><span class="hs-identifier">debugNextManagedWindow</span></a></span><span>
+</span><span id="line-28"></span><span>                                </span><span class="hs-special">)</span><span> </span><span class="hs-keyword">where</span><span>
+</span><span id="line-29"></span><span>
+</span><span id="line-30"></span><span class="hs-keyword">import</span><span>           </span><span class="annot"><span class="hs-identifier">XMonad</span></span><span>
+</span><span id="line-31"></span><span class="hs-keyword">import</span><span>           </span><span class="annot"><a href="XMonad.Prelude.html"><span class="hs-identifier">XMonad.Prelude</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier">when</span></span><span class="hs-special">)</span><span>
+</span><span id="line-32"></span><span class="hs-keyword">import</span><span>           </span><span class="annot"><a href="XMonad.Hooks.DebugStack.html"><span class="hs-identifier">XMonad.Hooks.DebugStack</span></a></span><span>
+</span><span id="line-33"></span><span class="hs-keyword">import</span><span>           </span><span class="annot"><a href="XMonad.Util.DebugWindow.html"><span class="hs-identifier">XMonad.Util.DebugWindow</span></a></span><span>
+</span><span id="line-34"></span><span class="hs-keyword">import</span><span>           </span><span class="annot"><a href="XMonad.Util.EZConfig.html"><span class="hs-identifier">XMonad.Util.EZConfig</span></a></span><span>
+</span><span id="line-35"></span><span class="hs-keyword">import</span><span> </span><span class="hs-keyword">qualified</span><span> </span><span class="annot"><a href="XMonad.Util.ExtensibleState.html"><span class="hs-identifier">XMonad.Util.ExtensibleState</span></a></span><span>                                                 </span><span class="hs-keyword">as</span><span> </span><span class="annot"><span class="hs-identifier">XS</span></span><span>
+</span><span id="line-36"></span><span>
+</span><span id="line-37"></span><span class="hs-comment">-- persistent state for manageHook debugging to trigger logHook debugging</span><span>
+</span><span id="line-38"></span><span class="hs-keyword">newtype</span><span> </span><span id="ManageStackDebug"><span class="annot"><a href="XMonad.Hooks.ManageDebug.html#ManageStackDebug"><span class="hs-identifier hs-var">ManageStackDebug</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span id="MSD"><span class="annot"><a href="XMonad.Hooks.ManageDebug.html#MSD"><span class="hs-identifier hs-var">MSD</span></a></span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">Bool</span></span><span class="hs-special">,</span><span class="annot"><span class="hs-identifier hs-type">Bool</span></span><span class="hs-special">)</span><span>
+</span><span id="line-39"></span><span class="hs-keyword">instance</span><span> </span><span id="local-6989586621679377050"><span class="annot"><span class="hs-identifier hs-type">ExtensionClass</span></span><span> </span><span class="annot"><a href="XMonad.Hooks.ManageDebug.html#ManageStackDebug"><span class="hs-identifier hs-type">ManageStackDebug</span></a></span></span><span> </span><span class="hs-keyword">where</span><span>
+</span><span id="line-40"></span><span>  </span><span id="local-6989586621679377048"><span class="annot"><span class="annottext">initialValue :: ManageStackDebug
+</span><span class="hs-identifier hs-var hs-var hs-var hs-var">initialValue</span></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">(Bool, Bool) -&gt; ManageStackDebug
+</span><a href="XMonad.Hooks.ManageDebug.html#MSD"><span class="hs-identifier hs-var">MSD</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Bool
+</span><span class="hs-identifier hs-var">False</span></span><span class="hs-special">,</span><span class="annot"><span class="annottext">Bool
+</span><span class="hs-identifier hs-var">False</span></span><span class="hs-special">)</span><span>
+</span><span id="line-41"></span><span>
+</span><span id="line-42"></span><span class="hs-comment">-- | A combinator to add full 'ManageHook' debugging in a single operation.</span><span>
+</span><span id="line-43"></span><span id="local-6989586621679377046"><span class="annot"><a href="XMonad.Hooks.ManageDebug.html#debugManageHook"><span class="hs-identifier hs-type">debugManageHook</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">XConfig</span></span><span> </span><span class="annot"><a href="#local-6989586621679377046"><span class="hs-identifier hs-type">l</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">XConfig</span></span><span> </span><span class="annot"><a href="#local-6989586621679377046"><span class="hs-identifier hs-type">l</span></a></span></span><span>
+</span><span id="line-44"></span><span id="debugManageHook"><span class="annot"><span class="annottext">debugManageHook :: XConfig l -&gt; XConfig l
+</span><a href="XMonad.Hooks.ManageDebug.html#debugManageHook"><span class="hs-identifier hs-var hs-var">debugManageHook</span></a></span></span><span> </span><span id="local-6989586621679377045"><span class="annot"><span class="annottext">XConfig l
+</span><a href="#local-6989586621679377045"><span class="hs-identifier hs-var">cf</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">XConfig l
+</span><a href="#local-6989586621679377045"><span class="hs-identifier hs-var">cf</span></a></span><span> </span><span class="hs-special">{</span><span class="annot"><span class="annottext">logHook :: X ()
+</span><span class="hs-identifier hs-var">logHook</span></span><span>    </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">X ()
+</span><a href="XMonad.Hooks.ManageDebug.html#manageDebugLogHook"><span class="hs-identifier hs-var">manageDebugLogHook</span></a></span><span> </span><span class="annot"><span class="annottext">X () -&gt; X () -&gt; X ()
+forall m. Monoid m =&gt; m -&gt; m -&gt; m
+</span><span class="hs-operator hs-var">&lt;+&gt;</span></span><span> </span><span class="annot"><span class="annottext">XConfig l -&gt; X ()
+forall (l :: * -&gt; *). XConfig l -&gt; X ()
+</span><span class="hs-identifier hs-var hs-var">logHook</span></span><span>    </span><span class="annot"><span class="annottext">XConfig l
+</span><a href="#local-6989586621679377045"><span class="hs-identifier hs-var">cf</span></a></span><span>
+</span><span id="line-45"></span><span>                        </span><span class="hs-special">,</span><span class="annot"><span class="annottext">manageHook :: ManageHook
+</span><span class="hs-identifier hs-var">manageHook</span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">ManageHook
+</span><a href="XMonad.Hooks.ManageDebug.html#manageDebug"><span class="hs-identifier hs-var">manageDebug</span></a></span><span>        </span><span class="annot"><span class="annottext">ManageHook -&gt; ManageHook -&gt; ManageHook
+forall m. Monoid m =&gt; m -&gt; m -&gt; m
+</span><span class="hs-operator hs-var">&lt;+&gt;</span></span><span> </span><span class="annot"><span class="annottext">XConfig l -&gt; ManageHook
+forall (l :: * -&gt; *). XConfig l -&gt; ManageHook
+</span><span class="hs-identifier hs-var hs-var">manageHook</span></span><span> </span><span class="annot"><span class="annottext">XConfig l
+</span><a href="#local-6989586621679377045"><span class="hs-identifier hs-var">cf</span></a></span><span>
+</span><span id="line-46"></span><span>                        </span><span class="hs-special">}</span><span>
+</span><span id="line-47"></span><span>
+</span><span id="line-48"></span><span class="hs-comment">-- | A combinator to add triggerable 'ManageHook' debugging in a single operation.</span><span>
+</span><span id="line-49"></span><span class="hs-comment">--   Specify a key sequence as a string in 'XMonad.Util.EZConfig' syntax; press</span><span>
+</span><span id="line-50"></span><span class="hs-comment">--   this key before opening the window to get just that logged.</span><span>
+</span><span id="line-51"></span><span id="local-6989586621679377041"><span class="annot"><a href="XMonad.Hooks.ManageDebug.html#debugManageHookOn"><span class="hs-identifier hs-type">debugManageHookOn</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">String</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">XConfig</span></span><span> </span><span class="annot"><a href="#local-6989586621679377041"><span class="hs-identifier hs-type">l</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">XConfig</span></span><span> </span><span class="annot"><a href="#local-6989586621679377041"><span class="hs-identifier hs-type">l</span></a></span></span><span>
+</span><span id="line-52"></span><span id="debugManageHookOn"><span class="annot"><span class="annottext">debugManageHookOn :: String -&gt; XConfig l -&gt; XConfig l
+</span><a href="XMonad.Hooks.ManageDebug.html#debugManageHookOn"><span class="hs-identifier hs-var hs-var">debugManageHookOn</span></a></span></span><span> </span><span id="local-6989586621679377040"><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679377040"><span class="hs-identifier hs-var">key</span></a></span></span><span> </span><span id="local-6989586621679377039"><span class="annot"><span class="annottext">XConfig l
+</span><a href="#local-6989586621679377039"><span class="hs-identifier hs-var">cf</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">XConfig l
+</span><a href="#local-6989586621679377039"><span class="hs-identifier hs-var">cf</span></a></span><span> </span><span class="hs-special">{</span><span class="annot"><span class="annottext">logHook :: X ()
+</span><span class="hs-identifier hs-var">logHook</span></span><span>    </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">X ()
+</span><a href="XMonad.Hooks.ManageDebug.html#manageDebugLogHook"><span class="hs-identifier hs-var">manageDebugLogHook</span></a></span><span> </span><span class="annot"><span class="annottext">X () -&gt; X () -&gt; X ()
+forall m. Monoid m =&gt; m -&gt; m -&gt; m
+</span><span class="hs-operator hs-var">&lt;+&gt;</span></span><span> </span><span class="annot"><span class="annottext">XConfig l -&gt; X ()
+forall (l :: * -&gt; *). XConfig l -&gt; X ()
+</span><span class="hs-identifier hs-var hs-var">logHook</span></span><span>    </span><span class="annot"><span class="annottext">XConfig l
+</span><a href="#local-6989586621679377039"><span class="hs-identifier hs-var">cf</span></a></span><span>
+</span><span id="line-53"></span><span>                              </span><span class="hs-special">,</span><span class="annot"><span class="annottext">manageHook :: ManageHook
+</span><span class="hs-identifier hs-var">manageHook</span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">ManageHook
+</span><a href="XMonad.Hooks.ManageDebug.html#maybeManageDebug"><span class="hs-identifier hs-var">maybeManageDebug</span></a></span><span>   </span><span class="annot"><span class="annottext">ManageHook -&gt; ManageHook -&gt; ManageHook
+forall m. Monoid m =&gt; m -&gt; m -&gt; m
+</span><span class="hs-operator hs-var">&lt;+&gt;</span></span><span> </span><span class="annot"><span class="annottext">XConfig l -&gt; ManageHook
+forall (l :: * -&gt; *). XConfig l -&gt; ManageHook
+</span><span class="hs-identifier hs-var hs-var">manageHook</span></span><span> </span><span class="annot"><span class="annottext">XConfig l
+</span><a href="#local-6989586621679377039"><span class="hs-identifier hs-var">cf</span></a></span><span>
+</span><span id="line-54"></span><span>                              </span><span class="hs-special">}</span><span>
+</span><span id="line-55"></span><span>                           </span><span class="annot"><span class="annottext">XConfig l -&gt; [(String, X ())] -&gt; XConfig l
+forall (l :: * -&gt; *). XConfig l -&gt; [(String, X ())] -&gt; XConfig l
+</span><a href="XMonad.Util.EZConfig.html#additionalKeysP"><span class="hs-operator hs-var">`additionalKeysP`</span></a></span><span>
+</span><span id="line-56"></span><span>                           </span><span class="hs-special">[</span><span class="hs-special">(</span><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679377040"><span class="hs-identifier hs-var">key</span></a></span><span class="hs-special">,</span><span class="annot"><span class="annottext">X ()
+</span><a href="XMonad.Hooks.ManageDebug.html#debugNextManagedWindow"><span class="hs-identifier hs-var">debugNextManagedWindow</span></a></span><span class="hs-special">)</span><span class="hs-special">]</span><span>
+</span><span id="line-57"></span><span>
+</span><span id="line-58"></span><span class="hs-comment">-- | Place this at the start of a 'ManageHook', or possibly other places for a</span><span>
+</span><span id="line-59"></span><span class="hs-comment">--   more limited view. It will show the current 'StackSet' state and the new</span><span>
+</span><span id="line-60"></span><span class="hs-comment">--   window, and set a flag so that @manageDebugLogHook@ will display the</span><span>
+</span><span id="line-61"></span><span class="hs-comment">--   final 'StackSet' state.</span><span>
+</span><span id="line-62"></span><span class="hs-comment">--</span><span>
+</span><span id="line-63"></span><span class="hs-comment">--   Note that the initial state shows only the current workspace; the final</span><span>
+</span><span id="line-64"></span><span class="hs-comment">--   one shows all workspaces, since your 'ManageHook' might use e.g. 'doShift',</span><span>
+</span><span id="line-65"></span><span class="annot"><a href="XMonad.Hooks.ManageDebug.html#manageDebug"><span class="hs-identifier hs-type">manageDebug</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">ManageHook</span></span><span>
+</span><span id="line-66"></span><span id="manageDebug"><span class="annot"><span class="annottext">manageDebug :: ManageHook
+</span><a href="XMonad.Hooks.ManageDebug.html#manageDebug"><span class="hs-identifier hs-var hs-var">manageDebug</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-67"></span><span>  </span><span id="local-6989586621679377037"><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679377037"><span class="hs-identifier hs-var">w</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">Query Window
+forall r (m :: * -&gt; *). MonadReader r m =&gt; m r
+</span><span class="hs-identifier hs-var">ask</span></span><span>
+</span><span id="line-68"></span><span>  </span><span class="annot"><span class="annottext">X () -&gt; Query ()
+forall a. X a -&gt; Query a
+</span><span class="hs-identifier hs-var">liftX</span></span><span> </span><span class="annot"><span class="annottext">(X () -&gt; Query ()) -&gt; X () -&gt; Query ()
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-69"></span><span>    </span><span class="annot"><span class="annottext">String -&gt; X ()
+forall (m :: * -&gt; *). MonadIO m =&gt; String -&gt; m ()
+</span><span class="hs-identifier hs-var">trace</span></span><span> </span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot;== manageHook; current stack ==&quot;</span></span><span>
+</span><span id="line-70"></span><span>    </span><span class="annot"><span class="annottext">X String
+</span><a href="XMonad.Hooks.DebugStack.html#debugStackString"><span class="hs-identifier hs-var">debugStackString</span></a></span><span> </span><span class="annot"><span class="annottext">X String -&gt; (String -&gt; X ()) -&gt; X ()
+forall (m :: * -&gt; *) a b. Monad m =&gt; m a -&gt; (a -&gt; m b) -&gt; m b
+</span><span class="hs-operator hs-var">&gt;&gt;=</span></span><span> </span><span class="annot"><span class="annottext">String -&gt; X ()
+forall (m :: * -&gt; *). MonadIO m =&gt; String -&gt; m ()
+</span><span class="hs-identifier hs-var">trace</span></span><span>
+</span><span id="line-71"></span><span>    </span><span id="local-6989586621679377032"><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679377032"><span class="hs-identifier hs-var">ws</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">Window -&gt; X String
+</span><a href="XMonad.Util.DebugWindow.html#debugWindow"><span class="hs-identifier hs-var">debugWindow</span></a></span><span> </span><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679377037"><span class="hs-identifier hs-var">w</span></a></span><span>
+</span><span id="line-72"></span><span>    </span><span class="annot"><span class="annottext">String -&gt; X ()
+forall (m :: * -&gt; *). MonadIO m =&gt; String -&gt; m ()
+</span><span class="hs-identifier hs-var">trace</span></span><span> </span><span class="annot"><span class="annottext">(String -&gt; X ()) -&gt; String -&gt; X ()
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot;new:\n  &quot;</span></span><span> </span><span class="annot"><span class="annottext">String -&gt; String -&gt; String
+forall a. [a] -&gt; [a] -&gt; [a]
+</span><span class="hs-operator hs-var">++</span></span><span> </span><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679377032"><span class="hs-identifier hs-var">ws</span></a></span><span>
+</span><span id="line-73"></span><span>    </span><span class="annot"><span class="annottext">(ManageStackDebug -&gt; ManageStackDebug) -&gt; X ()
+forall a (m :: * -&gt; *).
+(ExtensionClass a, XLike m) =&gt;
+(a -&gt; a) -&gt; m ()
+</span><a href="XMonad.Util.ExtensibleState.html#modify"><span class="hs-identifier hs-var">XS.modify</span></a></span><span> </span><span class="annot"><span class="annottext">((ManageStackDebug -&gt; ManageStackDebug) -&gt; X ())
+-&gt; (ManageStackDebug -&gt; ManageStackDebug) -&gt; X ()
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="hs-glyph">\</span><span class="hs-special">(</span><span class="annot"><a href="XMonad.Hooks.ManageDebug.html#MSD"><span class="hs-identifier hs-type">MSD</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Bool
+</span><span class="hs-identifier">_</span></span><span class="hs-special">,</span><span id="local-6989586621679377029"><span class="annot"><span class="annottext">Bool
+</span><a href="#local-6989586621679377029"><span class="hs-identifier hs-var">key</span></a></span></span><span class="hs-special">)</span><span class="hs-special">)</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">(Bool, Bool) -&gt; ManageStackDebug
+</span><a href="XMonad.Hooks.ManageDebug.html#MSD"><span class="hs-identifier hs-var">MSD</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Bool
+</span><span class="hs-identifier hs-var">True</span></span><span class="hs-special">,</span><span class="annot"><span class="annottext">Bool
+</span><a href="#local-6989586621679377029"><span class="hs-identifier hs-var">key</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-74"></span><span>  </span><span class="annot"><span class="annottext">ManageHook
+forall m. Monoid m =&gt; m
+</span><span class="hs-identifier hs-var">idHook</span></span><span>
+</span><span id="line-75"></span><span>
+</span><span id="line-76"></span><span class="hs-comment">-- | @manageDebug@ only if the user requested it with @debugNextManagedWindow@.</span><span>
+</span><span id="line-77"></span><span class="annot"><a href="XMonad.Hooks.ManageDebug.html#maybeManageDebug"><span class="hs-identifier hs-type">maybeManageDebug</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">ManageHook</span></span><span>
+</span><span id="line-78"></span><span id="maybeManageDebug"><span class="annot"><span class="annottext">maybeManageDebug :: ManageHook
+</span><a href="XMonad.Hooks.ManageDebug.html#maybeManageDebug"><span class="hs-identifier hs-var hs-var">maybeManageDebug</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-79"></span><span>  </span><span id="local-6989586621679377027"><span class="annot"><span class="annottext">Bool
+</span><a href="#local-6989586621679377027"><span class="hs-identifier hs-var">go</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">X Bool -&gt; Query Bool
+forall a. X a -&gt; Query a
+</span><span class="hs-identifier hs-var">liftX</span></span><span> </span><span class="annot"><span class="annottext">(X Bool -&gt; Query Bool) -&gt; X Bool -&gt; Query Bool
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-80"></span><span>    </span><span class="annot"><a href="XMonad.Hooks.ManageDebug.html#MSD"><span class="hs-identifier hs-type">MSD</span></a></span><span> </span><span class="hs-special">(</span><span id="local-6989586621679377026"><span class="annot"><span class="annottext">Bool
+</span><a href="#local-6989586621679377026"><span class="hs-identifier hs-var">log_</span></a></span></span><span class="hs-special">,</span><span id="local-6989586621679377025"><span class="annot"><span class="annottext">Bool
+</span><a href="#local-6989586621679377025"><span class="hs-identifier hs-var">go'</span></a></span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">X ManageStackDebug
+forall a (m :: * -&gt; *). (ExtensionClass a, XLike m) =&gt; m a
+</span><a href="XMonad.Util.ExtensibleState.html#get"><span class="hs-identifier hs-var">XS.get</span></a></span><span>
+</span><span id="line-81"></span><span>    </span><span class="annot"><span class="annottext">ManageStackDebug -&gt; X ()
+forall a (m :: * -&gt; *). (ExtensionClass a, XLike m) =&gt; a -&gt; m ()
+</span><a href="XMonad.Util.ExtensibleState.html#put"><span class="hs-identifier hs-var">XS.put</span></a></span><span> </span><span class="annot"><span class="annottext">(ManageStackDebug -&gt; X ()) -&gt; ManageStackDebug -&gt; X ()
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">(Bool, Bool) -&gt; ManageStackDebug
+</span><a href="XMonad.Hooks.ManageDebug.html#MSD"><span class="hs-identifier hs-var">MSD</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Bool
+</span><a href="#local-6989586621679377026"><span class="hs-identifier hs-var">log_</span></a></span><span class="hs-special">,</span><span class="annot"><span class="annottext">Bool
+</span><span class="hs-identifier hs-var">False</span></span><span class="hs-special">)</span><span>
+</span><span id="line-82"></span><span>    </span><span class="annot"><span class="annottext">Bool -&gt; X Bool
+forall (m :: * -&gt; *) a. Monad m =&gt; a -&gt; m a
+</span><span class="hs-identifier hs-var">return</span></span><span> </span><span class="annot"><span class="annottext">Bool
+</span><a href="#local-6989586621679377025"><span class="hs-identifier hs-var">go'</span></a></span><span>
+</span><span id="line-83"></span><span>  </span><span class="hs-keyword">if</span><span> </span><span class="annot"><span class="annottext">Bool
+</span><a href="#local-6989586621679377027"><span class="hs-identifier hs-var">go</span></a></span><span> </span><span class="hs-keyword">then</span><span> </span><span class="annot"><span class="annottext">ManageHook
+</span><a href="XMonad.Hooks.ManageDebug.html#manageDebug"><span class="hs-identifier hs-var">manageDebug</span></a></span><span> </span><span class="hs-keyword">else</span><span> </span><span class="annot"><span class="annottext">ManageHook
+forall m. Monoid m =&gt; m
+</span><span class="hs-identifier hs-var">idHook</span></span><span>
+</span><span id="line-84"></span><span>
+</span><span id="line-85"></span><span class="hs-comment">-- | If @manageDebug@ has set the debug-stack flag, show the stack.</span><span>
+</span><span id="line-86"></span><span class="annot"><a href="XMonad.Hooks.ManageDebug.html#manageDebugLogHook"><span class="hs-identifier hs-type">manageDebugLogHook</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">X</span></span><span> </span><span class="hs-special">(</span><span class="hs-special">)</span><span>
+</span><span id="line-87"></span><span id="manageDebugLogHook"><span class="annot"><span class="annottext">manageDebugLogHook :: X ()
+</span><a href="XMonad.Hooks.ManageDebug.html#manageDebugLogHook"><span class="hs-identifier hs-var hs-var">manageDebugLogHook</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-88"></span><span>                       </span><span class="annot"><a href="XMonad.Hooks.ManageDebug.html#MSD"><span class="hs-identifier hs-type">MSD</span></a></span><span> </span><span class="hs-special">(</span><span id="local-6989586621679377022"><span class="annot"><span class="annottext">Bool
+</span><a href="#local-6989586621679377022"><span class="hs-identifier hs-var">go</span></a></span></span><span class="hs-special">,</span><span id="local-6989586621679377021"><span class="annot"><span class="annottext">Bool
+</span><a href="#local-6989586621679377021"><span class="hs-identifier hs-var">key</span></a></span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">X ManageStackDebug
+forall a (m :: * -&gt; *). (ExtensionClass a, XLike m) =&gt; m a
+</span><a href="XMonad.Util.ExtensibleState.html#get"><span class="hs-identifier hs-var">XS.get</span></a></span><span>
+</span><span id="line-89"></span><span>                       </span><span class="annot"><span class="annottext">Bool -&gt; X () -&gt; X ()
+forall (f :: * -&gt; *). Applicative f =&gt; Bool -&gt; f () -&gt; f ()
+</span><span class="hs-identifier hs-var">when</span></span><span> </span><span class="annot"><span class="annottext">Bool
+</span><a href="#local-6989586621679377022"><span class="hs-identifier hs-var">go</span></a></span><span> </span><span class="annot"><span class="annottext">(X () -&gt; X ()) -&gt; X () -&gt; X ()
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-90"></span><span>                         </span><span class="annot"><span class="annottext">String -&gt; X ()
+forall (m :: * -&gt; *). MonadIO m =&gt; String -&gt; m ()
+</span><span class="hs-identifier hs-var">trace</span></span><span> </span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot;== manageHook; final stack ==&quot;</span></span><span>
+</span><span id="line-91"></span><span>                         </span><span class="annot"><span class="annottext">X String
+</span><a href="XMonad.Hooks.DebugStack.html#debugStackFullString"><span class="hs-identifier hs-var">debugStackFullString</span></a></span><span> </span><span class="annot"><span class="annottext">X String -&gt; (String -&gt; X ()) -&gt; X ()
+forall (m :: * -&gt; *) a b. Monad m =&gt; m a -&gt; (a -&gt; m b) -&gt; m b
+</span><span class="hs-operator hs-var">&gt;&gt;=</span></span><span> </span><span class="annot"><span class="annottext">String -&gt; X ()
+forall (m :: * -&gt; *). MonadIO m =&gt; String -&gt; m ()
+</span><span class="hs-identifier hs-var">trace</span></span><span>
+</span><span id="line-92"></span><span>                         </span><span class="annot"><span class="annottext">ManageStackDebug -&gt; X ()
+forall a (m :: * -&gt; *). (ExtensionClass a, XLike m) =&gt; a -&gt; m ()
+</span><a href="XMonad.Util.ExtensibleState.html#put"><span class="hs-identifier hs-var">XS.put</span></a></span><span> </span><span class="annot"><span class="annottext">(ManageStackDebug -&gt; X ()) -&gt; ManageStackDebug -&gt; X ()
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">(Bool, Bool) -&gt; ManageStackDebug
+</span><a href="XMonad.Hooks.ManageDebug.html#MSD"><span class="hs-identifier hs-var">MSD</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Bool
+</span><span class="hs-identifier hs-var">False</span></span><span class="hs-special">,</span><span class="annot"><span class="annottext">Bool
+</span><a href="#local-6989586621679377021"><span class="hs-identifier hs-var">key</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-93"></span><span>                       </span><span class="annot"><span class="annottext">X ()
+forall m. Monoid m =&gt; m
+</span><span class="hs-identifier hs-var">idHook</span></span><span>
+</span><span id="line-94"></span><span>
+</span><span id="line-95"></span><span class="hs-comment">-- | Request that the next window to be managed be @manageDebug@-ed. This can</span><span>
+</span><span id="line-96"></span><span class="hs-comment">--   be used anywhere an X action can, such as key bindings, mouse bindings</span><span>
+</span><span id="line-97"></span><span class="hs-comment">--   (presumably with 'const'), 'startupHook', etc.</span><span>
+</span><span id="line-98"></span><span class="annot"><a href="XMonad.Hooks.ManageDebug.html#debugNextManagedWindow"><span class="hs-identifier hs-type">debugNextManagedWindow</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">X</span></span><span> </span><span class="hs-special">(</span><span class="hs-special">)</span><span>
+</span><span id="line-99"></span><span id="debugNextManagedWindow"><span class="annot"><span class="annottext">debugNextManagedWindow :: X ()
+</span><a href="XMonad.Hooks.ManageDebug.html#debugNextManagedWindow"><span class="hs-identifier hs-var hs-var">debugNextManagedWindow</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">(ManageStackDebug -&gt; ManageStackDebug) -&gt; X ()
+forall a (m :: * -&gt; *).
+(ExtensionClass a, XLike m) =&gt;
+(a -&gt; a) -&gt; m ()
+</span><a href="XMonad.Util.ExtensibleState.html#modify"><span class="hs-identifier hs-var">XS.modify</span></a></span><span> </span><span class="annot"><span class="annottext">((ManageStackDebug -&gt; ManageStackDebug) -&gt; X ())
+-&gt; (ManageStackDebug -&gt; ManageStackDebug) -&gt; X ()
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="hs-glyph">\</span><span class="hs-special">(</span><span class="annot"><a href="XMonad.Hooks.ManageDebug.html#MSD"><span class="hs-identifier hs-type">MSD</span></a></span><span> </span><span class="hs-special">(</span><span id="local-6989586621679377019"><span class="annot"><span class="annottext">Bool
+</span><a href="#local-6989586621679377019"><span class="hs-identifier hs-var">log_</span></a></span></span><span class="hs-special">,</span><span class="annot"><span class="annottext">Bool
+</span><span class="hs-identifier">_</span></span><span class="hs-special">)</span><span class="hs-special">)</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">(Bool, Bool) -&gt; ManageStackDebug
+</span><a href="XMonad.Hooks.ManageDebug.html#MSD"><span class="hs-identifier hs-var">MSD</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Bool
+</span><a href="#local-6989586621679377019"><span class="hs-identifier hs-var">log_</span></a></span><span class="hs-special">,</span><span class="annot"><span class="annottext">Bool
+</span><span class="hs-identifier hs-var">True</span></span><span class="hs-special">)</span><span>
+</span><span id="line-100"></span></pre></body></html>

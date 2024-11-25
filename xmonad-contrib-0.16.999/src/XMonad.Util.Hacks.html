@@ -1,0 +1,330 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd"><html xmlns="http://www.w3.org/1999/xhtml"><head><link rel="stylesheet" type="text/css" href="style.css" /><script type="text/javascript" src="highlight.js"></script></head><body><pre><span class="hs-comment">-----------------------------------------------------------------------------</span><span>
+</span><span id="line-2"></span><span class="hs-comment">-- |</span><span>
+</span><span id="line-3"></span><span class="hs-comment">-- Module      :  XMonad.Util.Hacks</span><span>
+</span><span id="line-4"></span><span class="hs-comment">-- Description :  A collection of small fixes and utilities with possibly hacky implementations.</span><span>
+</span><span id="line-5"></span><span class="hs-comment">-- Copyright   :  (c) 2020 Leon Kowarschick</span><span>
+</span><span id="line-6"></span><span class="hs-comment">-- License     :  BSD3-style (see LICENSE)</span><span>
+</span><span id="line-7"></span><span class="hs-comment">--</span><span>
+</span><span id="line-8"></span><span class="hs-comment">-- Maintainer  :  Leon Kowarschick. &lt;thereal.elkowar@gmail.com&gt;</span><span>
+</span><span id="line-9"></span><span class="hs-comment">-- Stability   :  unstable</span><span>
+</span><span id="line-10"></span><span class="hs-comment">-- Portability :  unportable</span><span>
+</span><span id="line-11"></span><span class="hs-comment">--</span><span>
+</span><span id="line-12"></span><span class="hs-comment">-- This module is a collection of random fixes, workarounds and other functions</span><span>
+</span><span id="line-13"></span><span class="hs-comment">-- that rely on somewhat hacky implementations which may have unwanted side effects</span><span>
+</span><span id="line-14"></span><span class="hs-comment">-- and/or are small enough to not warrant a separate module.</span><span>
+</span><span id="line-15"></span><span class="hs-comment">--</span><span>
+</span><span id="line-16"></span><span class="hs-comment">-- Import this module as qualified like so:</span><span>
+</span><span id="line-17"></span><span class="hs-comment">--</span><span>
+</span><span id="line-18"></span><span class="hs-comment">-- &gt; import qualified XMonad.Util.Hacks as Hacks</span><span>
+</span><span id="line-19"></span><span class="hs-comment">--</span><span>
+</span><span id="line-20"></span><span class="hs-comment">-- and then use the functions you want as described in their respective documentation.</span><span>
+</span><span id="line-21"></span><span class="hs-comment">--</span><span>
+</span><span id="line-22"></span><span class="hs-comment">-----------------------------------------------------------------------------</span><span>
+</span><span id="line-23"></span><span>
+</span><span id="line-24"></span><span class="hs-keyword">module</span><span> </span><span class="hs-identifier">XMonad.Util.Hacks</span><span> </span><span class="hs-special">(</span><span>
+</span><span id="line-25"></span><span>  </span><span class="annot"><span class="hs-comment">-- * Windowed fullscreen</span></span><span>
+</span><span id="line-26"></span><span>  </span><span class="annot"><span class="hs-comment">-- $windowedFullscreenFix</span></span><span>
+</span><span id="line-27"></span><span>  </span><span class="annot"><a href="XMonad.Util.Hacks.html#windowedFullscreenFixEventHook"><span class="hs-identifier">windowedFullscreenFixEventHook</span></a></span><span class="hs-special">,</span><span>
+</span><span id="line-28"></span><span>
+</span><span id="line-29"></span><span>  </span><span class="annot"><span class="hs-comment">-- * Java Hack</span></span><span>
+</span><span id="line-30"></span><span>  </span><span class="annot"><span class="hs-comment">-- $java</span></span><span>
+</span><span id="line-31"></span><span>  </span><span class="annot"><a href="XMonad.Util.Hacks.html#javaHack"><span class="hs-identifier">javaHack</span></a></span><span class="hs-special">,</span><span>
+</span><span id="line-32"></span><span>
+</span><span id="line-33"></span><span>  </span><span class="annot"><span class="hs-comment">-- * Stacking trays (trayer) above panels (xmobar)</span></span><span>
+</span><span id="line-34"></span><span>  </span><span class="annot"><span class="hs-comment">-- $raiseTrayer</span></span><span>
+</span><span id="line-35"></span><span>  </span><span class="annot"><a href="XMonad.Util.Hacks.html#trayerAboveXmobarEventHook"><span class="hs-identifier">trayerAboveXmobarEventHook</span></a></span><span class="hs-special">,</span><span>
+</span><span id="line-36"></span><span>  </span><span class="annot"><a href="XMonad.Util.Hacks.html#trayAbovePanelEventHook"><span class="hs-identifier">trayAbovePanelEventHook</span></a></span><span class="hs-special">,</span><span>
+</span><span id="line-37"></span><span>  </span><span class="hs-special">)</span><span> </span><span class="hs-keyword">where</span><span>
+</span><span id="line-38"></span><span>
+</span><span id="line-39"></span><span>
+</span><span id="line-40"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><span class="hs-identifier">XMonad</span></span><span>
+</span><span id="line-41"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><a href="XMonad.Prelude.html"><span class="hs-identifier">XMonad.Prelude</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier">All</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier">All</span></span><span class="hs-special">)</span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier">filterM</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier">when</span></span><span class="hs-special">)</span><span>
+</span><span id="line-42"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><span class="hs-identifier">System.Posix.Env</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier">putEnv</span></span><span class="hs-special">)</span><span>
+</span><span id="line-43"></span><span>
+</span><span id="line-44"></span><span>
+</span><span id="line-45"></span><span class="hs-comment">-- $windowedFullscreenFix</span><span>
+</span><span id="line-46"></span><span class="hs-comment">-- Windowed fullscreen describes the behaviour in which XMonad,</span><span>
+</span><span id="line-47"></span><span class="hs-comment">-- by default, does not automatically put windows that request being fullscreened</span><span>
+</span><span id="line-48"></span><span class="hs-comment">-- into actual fullscreen, but keeps them constrained</span><span>
+</span><span id="line-49"></span><span class="hs-comment">-- to their normal window dimensions, still rendering them in fullscreen.</span><span>
+</span><span id="line-50"></span><span class="hs-comment">--</span><span>
+</span><span id="line-51"></span><span class="hs-comment">-- With chromium based applications like Chrome, Discord and others this</span><span>
+</span><span id="line-52"></span><span class="hs-comment">-- can cause issues, where the window does not correctly see the size of the window</span><span>
+</span><span id="line-53"></span><span class="hs-comment">-- when displaying the fullscreen content, thus cutting off the window content.</span><span>
+</span><span id="line-54"></span><span class="hs-comment">--</span><span>
+</span><span id="line-55"></span><span class="hs-comment">-- This function works around that issue by forcing the window to recalculate their</span><span>
+</span><span id="line-56"></span><span class="hs-comment">-- dimensions after initiating fullscreen, thus making chrome-based applications</span><span>
+</span><span id="line-57"></span><span class="hs-comment">-- behave properly when in windowed fullscreen.</span><span>
+</span><span id="line-58"></span><span class="hs-comment">--</span><span>
+</span><span id="line-59"></span><span class="hs-comment">-- The following gif shows the behaviour of chrome (left) without this fix</span><span>
+</span><span id="line-60"></span><span class="hs-comment">-- compared to firefox, which already behaves as expected by default:</span><span>
+</span><span id="line-61"></span><span class="hs-comment">-- &lt;&lt;https://user-images.githubusercontent.com/79924233/115355075-e61dd280-a1ec-11eb-81d3-927ca462945f.gif&gt;&gt;</span><span>
+</span><span id="line-62"></span><span class="hs-comment">--</span><span>
+</span><span id="line-63"></span><span class="hs-comment">-- Using this function, chrome will now behave as expected as well:</span><span>
+</span><span id="line-64"></span><span class="hs-comment">-- &lt;&lt;https://user-images.githubusercontent.com/5300871/99186115-4dbb8780-274e-11eb-9ed2-b7815ba9e597.gif&gt;&gt;</span><span>
+</span><span id="line-65"></span><span class="hs-comment">--</span><span>
+</span><span id="line-66"></span><span class="hs-comment">-- Usage:</span><span>
+</span><span id="line-67"></span><span class="hs-comment">-- add to handleEventHook as follows:</span><span>
+</span><span id="line-68"></span><span class="hs-comment">--</span><span>
+</span><span id="line-69"></span><span class="hs-comment">-- &gt; handleEventHook = handleEventHook def &lt;+&gt; Hacks.windowedFullscreenFixEventHook</span><span>
+</span><span id="line-70"></span><span class="hs-comment">--</span><span>
+</span><span id="line-71"></span><span>
+</span><span id="line-72"></span><span class="hs-comment">-- | Fixes fullscreen behaviour of chromium based apps by quickly applying and undoing a resize.</span><span>
+</span><span id="line-73"></span><span class="hs-comment">-- This causes chromium to recalculate the fullscreen window</span><span>
+</span><span id="line-74"></span><span class="hs-comment">-- dimensions to match the actual &quot;windowed fullscreen&quot; dimensions.</span><span>
+</span><span id="line-75"></span><span class="annot"><a href="XMonad.Util.Hacks.html#windowedFullscreenFixEventHook"><span class="hs-identifier hs-type">windowedFullscreenFixEventHook</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Event</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">X</span></span><span> </span><span class="annot"><span class="hs-identifier hs-type">All</span></span><span>
+</span><span id="line-76"></span><span id="windowedFullscreenFixEventHook"><span class="annot"><span class="annottext">windowedFullscreenFixEventHook :: Event -&gt; X All
+</span><a href="XMonad.Util.Hacks.html#windowedFullscreenFixEventHook"><span class="hs-identifier hs-var hs-var">windowedFullscreenFixEventHook</span></a></span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">ClientMessageEvent</span></span><span> </span><span class="annot"><span class="annottext">EventType
+</span><span class="hs-identifier">_</span></span><span> </span><span class="annot"><span class="annottext">CULong
+</span><span class="hs-identifier">_</span></span><span> </span><span class="annot"><span class="annottext">Bool
+</span><span class="hs-identifier">_</span></span><span> </span><span id="local-6989586621679371116"><span class="annot"><span class="annottext">Display
+</span><a href="#local-6989586621679371116"><span class="hs-identifier hs-var">dpy</span></a></span></span><span> </span><span id="local-6989586621679371115"><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679371115"><span class="hs-identifier hs-var">win</span></a></span></span><span> </span><span id="local-6989586621679371114"><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679371114"><span class="hs-identifier hs-var">typ</span></a></span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">CInt
+</span><span class="hs-identifier">_</span></span><span class="annot"><span class="hs-glyph hs-type">:</span></span><span id="local-6989586621679371113"><span class="annot"><span class="annottext">[CInt]
+</span><a href="#local-6989586621679371113"><span class="hs-identifier hs-var">dats</span></a></span></span><span class="hs-special">)</span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-77"></span><span>  </span><span id="local-6989586621679371112"><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679371112"><span class="hs-identifier hs-var">wmstate</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">String -&gt; X Window
+</span><span class="hs-identifier hs-var">getAtom</span></span><span> </span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot;_NET_WM_STATE&quot;</span></span><span>
+</span><span id="line-78"></span><span>  </span><span id="local-6989586621679371110"><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679371110"><span class="hs-identifier hs-var">fullscreen</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">String -&gt; X Window
+</span><span class="hs-identifier hs-var">getAtom</span></span><span> </span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot;_NET_WM_STATE_FULLSCREEN&quot;</span></span><span>
+</span><span id="line-79"></span><span>  </span><span class="annot"><span class="annottext">Bool -&gt; X () -&gt; X ()
+forall (f :: * -&gt; *). Applicative f =&gt; Bool -&gt; f () -&gt; f ()
+</span><span class="hs-identifier hs-var">when</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679371114"><span class="hs-identifier hs-var">typ</span></a></span><span> </span><span class="annot"><span class="annottext">Window -&gt; Window -&gt; Bool
+forall a. Eq a =&gt; a -&gt; a -&gt; Bool
+</span><span class="hs-operator hs-var">==</span></span><span> </span><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679371112"><span class="hs-identifier hs-var">wmstate</span></a></span><span> </span><span class="annot"><span class="annottext">Bool -&gt; Bool -&gt; Bool
+</span><span class="hs-operator hs-var">&amp;&amp;</span></span><span> </span><span class="annot"><span class="annottext">Window -&gt; CInt
+forall a b. (Integral a, Num b) =&gt; a -&gt; b
+</span><span class="hs-identifier hs-var">fromIntegral</span></span><span> </span><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679371110"><span class="hs-identifier hs-var">fullscreen</span></a></span><span> </span><span class="annot"><span class="annottext">CInt -&gt; [CInt] -&gt; Bool
+forall (t :: * -&gt; *) a. (Foldable t, Eq a) =&gt; a -&gt; t a -&gt; Bool
+</span><span class="hs-operator hs-var">`elem`</span></span><span> </span><span class="annot"><span class="annottext">[CInt]
+</span><a href="#local-6989586621679371113"><span class="hs-identifier hs-var">dats</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">(X () -&gt; X ()) -&gt; X () -&gt; X ()
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span>
+</span><span id="line-80"></span><span>    </span><span class="annot"><span class="annottext">Display -&gt; Window -&gt; (WindowAttributes -&gt; X ()) -&gt; X ()
+</span><span class="hs-identifier hs-var">withWindowAttributes</span></span><span> </span><span class="annot"><span class="annottext">Display
+</span><a href="#local-6989586621679371116"><span class="hs-identifier hs-var">dpy</span></a></span><span> </span><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679371115"><span class="hs-identifier hs-var">win</span></a></span><span> </span><span class="annot"><span class="annottext">((WindowAttributes -&gt; X ()) -&gt; X ())
+-&gt; (WindowAttributes -&gt; X ()) -&gt; X ()
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="hs-glyph">\</span><span id="local-6989586621679371106"><span class="annot"><span class="annottext">WindowAttributes
+</span><a href="#local-6989586621679371106"><span class="hs-identifier hs-var">attrs</span></a></span></span><span> </span><span class="hs-glyph">-&gt;</span><span>
+</span><span id="line-81"></span><span>      </span><span class="annot"><span class="annottext">IO () -&gt; X ()
+forall (m :: * -&gt; *) a. MonadIO m =&gt; IO a -&gt; m a
+</span><span class="hs-identifier hs-var">liftIO</span></span><span> </span><span class="annot"><span class="annottext">(IO () -&gt; X ()) -&gt; IO () -&gt; X ()
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-82"></span><span>        </span><span class="annot"><span class="annottext">Display -&gt; Window -&gt; EventType -&gt; EventType -&gt; IO ()
+</span><span class="hs-identifier hs-var">resizeWindow</span></span><span> </span><span class="annot"><span class="annottext">Display
+</span><a href="#local-6989586621679371116"><span class="hs-identifier hs-var">dpy</span></a></span><span> </span><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679371115"><span class="hs-identifier hs-var">win</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">CInt -&gt; EventType
+forall a b. (Integral a, Num b) =&gt; a -&gt; b
+</span><span class="hs-identifier hs-var">fromIntegral</span></span><span> </span><span class="annot"><span class="annottext">(CInt -&gt; EventType) -&gt; CInt -&gt; EventType
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">WindowAttributes -&gt; CInt
+</span><span class="hs-identifier hs-var hs-var">wa_width</span></span><span> </span><span class="annot"><span class="annottext">WindowAttributes
+</span><a href="#local-6989586621679371106"><span class="hs-identifier hs-var">attrs</span></a></span><span> </span><span class="annot"><span class="annottext">CInt -&gt; CInt -&gt; CInt
+forall a. Num a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-glyph hs-var">-</span></span><span> </span><span class="annot"><span class="annottext">CInt
+</span><span class="hs-number">1</span></span><span class="hs-special">)</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">CInt -&gt; EventType
+forall a b. (Integral a, Num b) =&gt; a -&gt; b
+</span><span class="hs-identifier hs-var">fromIntegral</span></span><span> </span><span class="annot"><span class="annottext">(CInt -&gt; EventType) -&gt; CInt -&gt; EventType
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">WindowAttributes -&gt; CInt
+</span><span class="hs-identifier hs-var hs-var">wa_height</span></span><span> </span><span class="annot"><span class="annottext">WindowAttributes
+</span><a href="#local-6989586621679371106"><span class="hs-identifier hs-var">attrs</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-83"></span><span>        </span><span class="annot"><span class="annottext">Display -&gt; Window -&gt; EventType -&gt; EventType -&gt; IO ()
+</span><span class="hs-identifier hs-var">resizeWindow</span></span><span> </span><span class="annot"><span class="annottext">Display
+</span><a href="#local-6989586621679371116"><span class="hs-identifier hs-var">dpy</span></a></span><span> </span><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679371115"><span class="hs-identifier hs-var">win</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">CInt -&gt; EventType
+forall a b. (Integral a, Num b) =&gt; a -&gt; b
+</span><span class="hs-identifier hs-var">fromIntegral</span></span><span> </span><span class="annot"><span class="annottext">(CInt -&gt; EventType) -&gt; CInt -&gt; EventType
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">WindowAttributes -&gt; CInt
+</span><span class="hs-identifier hs-var hs-var">wa_width</span></span><span> </span><span class="annot"><span class="annottext">WindowAttributes
+</span><a href="#local-6989586621679371106"><span class="hs-identifier hs-var">attrs</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">CInt -&gt; EventType
+forall a b. (Integral a, Num b) =&gt; a -&gt; b
+</span><span class="hs-identifier hs-var">fromIntegral</span></span><span> </span><span class="annot"><span class="annottext">(CInt -&gt; EventType) -&gt; CInt -&gt; EventType
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">WindowAttributes -&gt; CInt
+</span><span class="hs-identifier hs-var hs-var">wa_height</span></span><span> </span><span class="annot"><span class="annottext">WindowAttributes
+</span><a href="#local-6989586621679371106"><span class="hs-identifier hs-var">attrs</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-84"></span><span>  </span><span class="annot"><span class="annottext">All -&gt; X All
+forall (m :: * -&gt; *) a. Monad m =&gt; a -&gt; m a
+</span><span class="hs-identifier hs-var">return</span></span><span> </span><span class="annot"><span class="annottext">(All -&gt; X All) -&gt; All -&gt; X All
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">Bool -&gt; All
+</span><span class="hs-identifier hs-var">All</span></span><span> </span><span class="annot"><span class="annottext">Bool
+</span><span class="hs-identifier hs-var">True</span></span><span>
+</span><span id="line-85"></span><span class="annot"><a href="XMonad.Util.Hacks.html#windowedFullscreenFixEventHook"><span class="hs-identifier hs-var">windowedFullscreenFixEventHook</span></a></span><span> </span><span class="annot"><span class="annottext">Event
+</span><span class="hs-identifier">_</span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">All -&gt; X All
+forall (m :: * -&gt; *) a. Monad m =&gt; a -&gt; m a
+</span><span class="hs-identifier hs-var">return</span></span><span> </span><span class="annot"><span class="annottext">(All -&gt; X All) -&gt; All -&gt; X All
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">Bool -&gt; All
+</span><span class="hs-identifier hs-var">All</span></span><span> </span><span class="annot"><span class="annottext">Bool
+</span><span class="hs-identifier hs-var">True</span></span><span>
+</span><span id="line-86"></span><span>
+</span><span id="line-87"></span><span>
+</span><span id="line-88"></span><span class="hs-comment">-- $java</span><span>
+</span><span id="line-89"></span><span class="hs-comment">-- Some java Applications might not work with xmonad. A common workaround would be to set the environment</span><span>
+</span><span id="line-90"></span><span class="hs-comment">-- variable @_JAVA_AWT_WM_NONREPARENTING@ to 1. The function 'javaHack' does exactly that.</span><span>
+</span><span id="line-91"></span><span class="hs-comment">-- Example usage:</span><span>
+</span><span id="line-92"></span><span class="hs-comment">--</span><span>
+</span><span id="line-93"></span><span class="hs-comment">-- &gt; main = xmonad $ Hacks.javaHack (def {...})</span><span>
+</span><span id="line-94"></span><span class="hs-comment">--</span><span>
+</span><span id="line-95"></span><span>
+</span><span id="line-96"></span><span class="hs-comment">-- | Fixes Java applications that don't work well with xmonad, by setting @_JAVA_AWT_WM_NONREPARENTING=1@</span><span>
+</span><span id="line-97"></span><span id="local-6989586621679371101"><span class="annot"><a href="XMonad.Util.Hacks.html#javaHack"><span class="hs-identifier hs-type">javaHack</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">XConfig</span></span><span> </span><span class="annot"><a href="#local-6989586621679371101"><span class="hs-identifier hs-type">l</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">XConfig</span></span><span> </span><span class="annot"><a href="#local-6989586621679371101"><span class="hs-identifier hs-type">l</span></a></span></span><span>
+</span><span id="line-98"></span><span id="javaHack"><span class="annot"><span class="annottext">javaHack :: XConfig l -&gt; XConfig l
+</span><a href="XMonad.Util.Hacks.html#javaHack"><span class="hs-identifier hs-var hs-var">javaHack</span></a></span></span><span> </span><span id="local-6989586621679371100"><span class="annot"><span class="annottext">XConfig l
+</span><a href="#local-6989586621679371100"><span class="hs-identifier hs-var">conf</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">XConfig l
+</span><a href="#local-6989586621679371100"><span class="hs-identifier hs-var">conf</span></a></span><span>
+</span><span id="line-99"></span><span>  </span><span class="hs-special">{</span><span> </span><span class="annot"><span class="annottext">startupHook :: X ()
+</span><span class="hs-identifier hs-var">startupHook</span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">XConfig l -&gt; X ()
+forall (l :: * -&gt; *). XConfig l -&gt; X ()
+</span><span class="hs-identifier hs-var hs-var">startupHook</span></span><span> </span><span class="annot"><span class="annottext">XConfig l
+</span><a href="#local-6989586621679371100"><span class="hs-identifier hs-var">conf</span></a></span><span>
+</span><span id="line-100"></span><span>                    </span><span class="annot"><span class="annottext">X () -&gt; X () -&gt; X ()
+forall (f :: * -&gt; *) a b. Applicative f =&gt; f a -&gt; f b -&gt; f b
+</span><span class="hs-operator hs-var">*&gt;</span></span><span> </span><span class="annot"><span class="annottext">IO () -&gt; X ()
+forall (m :: * -&gt; *) a. MonadIO m =&gt; IO a -&gt; m a
+</span><span class="hs-identifier hs-var">io</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">String -&gt; IO ()
+</span><span class="hs-identifier hs-var">putEnv</span></span><span> </span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot;_JAVA_AWT_WM_NONREPARENTING=1&quot;</span></span><span class="hs-special">)</span><span>
+</span><span id="line-101"></span><span>  </span><span class="hs-special">}</span><span>
+</span><span id="line-102"></span><span>
+</span><span id="line-103"></span><span>
+</span><span id="line-104"></span><span class="hs-comment">-- $raiseTrayer</span><span>
+</span><span id="line-105"></span><span class="hs-comment">-- Placing @trayer@ on top of @xmobar@ is somewhat tricky:</span><span>
+</span><span id="line-106"></span><span class="hs-comment">--</span><span>
+</span><span id="line-107"></span><span class="hs-comment">-- - they both should be lowered to the bottom of the stacking order to avoid</span><span>
+</span><span id="line-108"></span><span class="hs-comment">--   overlapping fullscreen windows</span><span>
+</span><span id="line-109"></span><span class="hs-comment">--</span><span>
+</span><span id="line-110"></span><span class="hs-comment">-- - the tray needs to be stacked on top of the panel regardless of which</span><span>
+</span><span id="line-111"></span><span class="hs-comment">--   happens to start first</span><span>
+</span><span id="line-112"></span><span class="hs-comment">--</span><span>
+</span><span id="line-113"></span><span class="hs-comment">-- 'trayerAboveXmobarEventHook' (and the more generic</span><span>
+</span><span id="line-114"></span><span class="hs-comment">-- 'trayAbovePanelEventHook') is an event hook that ensures the latter:</span><span>
+</span><span id="line-115"></span><span class="hs-comment">-- whenever the tray lowers itself to the bottom of the stack, it checks</span><span>
+</span><span id="line-116"></span><span class="hs-comment">-- whether there are any panels above it and lowers these again.</span><span>
+</span><span id="line-117"></span><span class="hs-comment">--</span><span>
+</span><span id="line-118"></span><span class="hs-comment">-- To ensure the former, that is having both @trayer@ and @xmobar@ lower</span><span>
+</span><span id="line-119"></span><span class="hs-comment">-- themselves, which is a necessary prerequisite for this event hook to</span><span>
+</span><span id="line-120"></span><span class="hs-comment">-- trigger:</span><span>
+</span><span id="line-121"></span><span class="hs-comment">--</span><span>
+</span><span id="line-122"></span><span class="hs-comment">-- - set @lowerOnStart = True@ and @overrideRedirect = True@ in @~/.xmobarrc@</span><span>
+</span><span id="line-123"></span><span class="hs-comment">-- - pass @-l@ to @trayer@</span><span>
+</span><span id="line-124"></span><span class="hs-comment">--</span><span>
+</span><span id="line-125"></span><span class="hs-comment">-- Usage:</span><span>
+</span><span id="line-126"></span><span class="hs-comment">--</span><span>
+</span><span id="line-127"></span><span class="hs-comment">-- &gt; handleEventHook = &#8230; &lt;&gt; Hacks.trayerAboveXmobarEventHook</span><span>
+</span><span id="line-128"></span><span>
+</span><span id="line-129"></span><span class="hs-comment">-- | 'trayAbovePanelEventHook' for trayer/xmobar</span><span>
+</span><span id="line-130"></span><span class="annot"><a href="XMonad.Util.Hacks.html#trayerAboveXmobarEventHook"><span class="hs-identifier hs-type">trayerAboveXmobarEventHook</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Event</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">X</span></span><span> </span><span class="annot"><span class="hs-identifier hs-type">All</span></span><span>
+</span><span id="line-131"></span><span id="trayerAboveXmobarEventHook"><span class="annot"><span class="annottext">trayerAboveXmobarEventHook :: Event -&gt; X All
+</span><a href="XMonad.Util.Hacks.html#trayerAboveXmobarEventHook"><span class="hs-identifier hs-var hs-var">trayerAboveXmobarEventHook</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Query Bool -&gt; Query Bool -&gt; Event -&gt; X All
+</span><a href="XMonad.Util.Hacks.html#trayAbovePanelEventHook"><span class="hs-identifier hs-var">trayAbovePanelEventHook</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Query String
+</span><span class="hs-identifier hs-var">className</span></span><span> </span><span class="annot"><span class="annottext">Query String -&gt; String -&gt; Query Bool
+forall a. Eq a =&gt; Query a -&gt; a -&gt; Query Bool
+</span><span class="hs-operator hs-var">=?</span></span><span> </span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot;trayer&quot;</span></span><span class="hs-special">)</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Query String
+</span><span class="hs-identifier hs-var">appName</span></span><span> </span><span class="annot"><span class="annottext">Query String -&gt; String -&gt; Query Bool
+forall a. Eq a =&gt; Query a -&gt; a -&gt; Query Bool
+</span><span class="hs-operator hs-var">=?</span></span><span> </span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot;xmobar&quot;</span></span><span class="hs-special">)</span><span>
+</span><span id="line-132"></span><span>
+</span><span id="line-133"></span><span class="hs-comment">-- | Whenever a tray window lowers itself to the bottom of the stack, look for</span><span>
+</span><span id="line-134"></span><span class="hs-comment">-- any panels above it and lower these.</span><span>
+</span><span id="line-135"></span><span class="annot"><a href="XMonad.Util.Hacks.html#trayAbovePanelEventHook"><span class="hs-identifier hs-type">trayAbovePanelEventHook</span></a></span><span>
+</span><span id="line-136"></span><span>  </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Query</span></span><span> </span><span class="annot"><span class="hs-identifier hs-type">Bool</span></span><span> </span><span class="hs-comment">-- ^ tray</span><span>
+</span><span id="line-137"></span><span>  </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Query</span></span><span> </span><span class="annot"><span class="hs-identifier hs-type">Bool</span></span><span> </span><span class="hs-comment">-- ^ panel</span><span>
+</span><span id="line-138"></span><span>  </span><span class="hs-glyph">-&gt;</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">Event</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">X</span></span><span> </span><span class="annot"><span class="hs-identifier hs-type">All</span></span><span class="hs-special">)</span><span> </span><span class="hs-comment">-- ^ event hook</span><span>
+</span><span id="line-139"></span><span id="trayAbovePanelEventHook"><span class="annot"><span class="annottext">trayAbovePanelEventHook :: Query Bool -&gt; Query Bool -&gt; Event -&gt; X All
+</span><a href="XMonad.Util.Hacks.html#trayAbovePanelEventHook"><span class="hs-identifier hs-var hs-var">trayAbovePanelEventHook</span></a></span></span><span> </span><span id="local-6989586621679371094"><span class="annot"><span class="annottext">Query Bool
+</span><a href="#local-6989586621679371094"><span class="hs-identifier hs-var">trayQ</span></a></span></span><span> </span><span id="local-6989586621679371093"><span class="annot"><span class="annottext">Query Bool
+</span><a href="#local-6989586621679371093"><span class="hs-identifier hs-var">panelQ</span></a></span></span><span> </span><span class="annot"><span class="hs-identifier hs-type">ConfigureEvent</span></span><span class="hs-special">{</span><span class="annot"><span class="annottext">ev_window :: Event -&gt; Window
+</span><span class="hs-identifier hs-var">ev_window</span></span><span> </span><span class="hs-glyph">=</span><span> </span><span id="local-6989586621679371090"><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679371090"><span class="hs-identifier hs-var">w</span></a></span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">ev_above :: Event -&gt; Window
+</span><span class="hs-identifier hs-var">ev_above</span></span><span> </span><span class="hs-glyph">=</span><span> </span><span id="local-6989586621679371088"><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679371088"><span class="hs-identifier hs-var">a</span></a></span></span><span class="hs-special">}</span><span> </span><span class="hs-glyph">|</span><span> </span><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679371088"><span class="hs-identifier hs-var">a</span></a></span><span> </span><span class="annot"><span class="annottext">Window -&gt; Window -&gt; Bool
+forall a. Eq a =&gt; a -&gt; a -&gt; Bool
+</span><span class="hs-operator hs-var">==</span></span><span> </span><span class="annot"><span class="annottext">Window
+</span><span class="hs-identifier hs-var">none</span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-140"></span><span>  </span><span class="annot"><span class="annottext">X Bool -&gt; X () -&gt; X ()
+</span><span class="hs-identifier hs-var">whenX</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Query Bool -&gt; Window -&gt; X Bool
+forall a. Query a -&gt; Window -&gt; X a
+</span><span class="hs-identifier hs-var">runQuery</span></span><span> </span><span class="annot"><span class="annottext">Query Bool
+</span><a href="#local-6989586621679371094"><span class="hs-identifier hs-var">trayQ</span></a></span><span> </span><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679371090"><span class="hs-identifier hs-var">w</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">(X () -&gt; X ()) -&gt; X () -&gt; X ()
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">(Display -&gt; X ()) -&gt; X ()
+forall a. (Display -&gt; X a) -&gt; X a
+</span><span class="hs-identifier hs-var">withDisplay</span></span><span> </span><span class="annot"><span class="annottext">((Display -&gt; X ()) -&gt; X ()) -&gt; (Display -&gt; X ()) -&gt; X ()
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="hs-glyph">\</span><span id="local-6989586621679371083"><span class="annot"><span class="annottext">Display
+</span><a href="#local-6989586621679371083"><span class="hs-identifier hs-var">dpy</span></a></span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-141"></span><span>    </span><span id="local-6989586621679371082"><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679371082"><span class="hs-identifier hs-var">rootw</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">(XConf -&gt; Window) -&gt; X Window
+forall r (m :: * -&gt; *) a. MonadReader r m =&gt; (r -&gt; a) -&gt; m a
+</span><span class="hs-identifier hs-var">asks</span></span><span> </span><span class="annot"><span class="annottext">XConf -&gt; Window
+</span><span class="hs-identifier hs-var hs-var">theRoot</span></span><span>
+</span><span id="line-142"></span><span>    </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Window
+</span><span class="hs-identifier">_</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">Window
+</span><span class="hs-identifier">_</span></span><span class="hs-special">,</span><span> </span><span id="local-6989586621679371079"><span class="annot"><span class="annottext">[Window]
+</span><a href="#local-6989586621679371079"><span class="hs-identifier hs-var">ws</span></a></span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">IO (Window, Window, [Window]) -&gt; X (Window, Window, [Window])
+forall (m :: * -&gt; *) a. MonadIO m =&gt; IO a -&gt; m a
+</span><span class="hs-identifier hs-var">io</span></span><span> </span><span class="annot"><span class="annottext">(IO (Window, Window, [Window]) -&gt; X (Window, Window, [Window]))
+-&gt; IO (Window, Window, [Window]) -&gt; X (Window, Window, [Window])
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">Display -&gt; Window -&gt; IO (Window, Window, [Window])
+</span><span class="hs-identifier hs-var">queryTree</span></span><span> </span><span class="annot"><span class="annottext">Display
+</span><a href="#local-6989586621679371083"><span class="hs-identifier hs-var">dpy</span></a></span><span> </span><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679371082"><span class="hs-identifier hs-var">rootw</span></a></span><span>
+</span><span id="line-143"></span><span>    </span><span class="hs-keyword">let</span><span> </span><span id="local-6989586621679371077"><span class="annot"><span class="annottext">aboveTrayWs :: [Window]
+</span><a href="#local-6989586621679371077"><span class="hs-identifier hs-var hs-var">aboveTrayWs</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">(Window -&gt; Bool) -&gt; [Window] -&gt; [Window]
+forall a. (a -&gt; Bool) -&gt; [a] -&gt; [a]
+</span><span class="hs-identifier hs-var">dropWhile</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679371090"><span class="hs-identifier hs-var">w</span></a></span><span> </span><span class="annot"><span class="annottext">Window -&gt; Window -&gt; Bool
+forall a. Eq a =&gt; a -&gt; a -&gt; Bool
+</span><span class="hs-operator hs-var">/=</span></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">[Window]
+</span><a href="#local-6989586621679371079"><span class="hs-identifier hs-var">ws</span></a></span><span>
+</span><span id="line-144"></span><span>    </span><span id="local-6989586621679371074"><span class="annot"><span class="annottext">[Window]
+</span><a href="#local-6989586621679371074"><span class="hs-identifier hs-var">panelWs</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">(Window -&gt; X Bool) -&gt; [Window] -&gt; X [Window]
+forall (m :: * -&gt; *) a.
+Applicative m =&gt;
+(a -&gt; m Bool) -&gt; [a] -&gt; m [a]
+</span><span class="hs-identifier hs-var">filterM</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Query Bool -&gt; Window -&gt; X Bool
+forall a. Query a -&gt; Window -&gt; X a
+</span><span class="hs-identifier hs-var">runQuery</span></span><span> </span><span class="annot"><span class="annottext">Query Bool
+</span><a href="#local-6989586621679371093"><span class="hs-identifier hs-var">panelQ</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">[Window]
+</span><a href="#local-6989586621679371077"><span class="hs-identifier hs-var">aboveTrayWs</span></a></span><span>
+</span><span id="line-145"></span><span>    </span><span class="annot"><span class="annottext">(Window -&gt; X ()) -&gt; [Window] -&gt; X ()
+forall (t :: * -&gt; *) (m :: * -&gt; *) a b.
+(Foldable t, Monad m) =&gt;
+(a -&gt; m b) -&gt; t a -&gt; m ()
+</span><span class="hs-identifier hs-var">mapM_</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">IO () -&gt; X ()
+forall (m :: * -&gt; *) a. MonadIO m =&gt; IO a -&gt; m a
+</span><span class="hs-identifier hs-var">io</span></span><span> </span><span class="annot"><span class="annottext">(IO () -&gt; X ()) -&gt; (Window -&gt; IO ()) -&gt; Window -&gt; X ()
+forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">Display -&gt; Window -&gt; IO ()
+</span><span class="hs-identifier hs-var">lowerWindow</span></span><span> </span><span class="annot"><span class="annottext">Display
+</span><a href="#local-6989586621679371083"><span class="hs-identifier hs-var">dpy</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">[Window]
+</span><a href="#local-6989586621679371074"><span class="hs-identifier hs-var">panelWs</span></a></span><span>
+</span><span id="line-146"></span><span>  </span><span class="annot"><span class="annottext">X All
+forall a. Monoid a =&gt; a
+</span><span class="hs-identifier hs-var">mempty</span></span><span>
+</span><span id="line-147"></span><span class="annot"><a href="XMonad.Util.Hacks.html#trayAbovePanelEventHook"><span class="hs-identifier hs-var">trayAbovePanelEventHook</span></a></span><span> </span><span class="annot"><span class="annottext">Query Bool
+</span><span class="hs-identifier">_</span></span><span> </span><span class="annot"><span class="annottext">Query Bool
+</span><span class="hs-identifier">_</span></span><span> </span><span class="annot"><span class="annottext">Event
+</span><span class="hs-identifier">_</span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">X All
+forall a. Monoid a =&gt; a
+</span><span class="hs-identifier hs-var">mempty</span></span><span>
+</span><span id="line-148"></span></pre></body></html>

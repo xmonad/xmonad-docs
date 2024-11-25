@@ -1,0 +1,292 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd"><html xmlns="http://www.w3.org/1999/xhtml"><head><link rel="stylesheet" type="text/css" href="style.css" /><script type="text/javascript" src="highlight.js"></script></head><body><pre><span class="hs-pragma">{-# LANGUAGE FlexibleInstances, MultiParamTypeClasses #-}</span><span>
+</span><span id="line-2"></span><span>
+</span><span id="line-3"></span><span class="hs-comment">-----------------------------------------------------------------------------</span><span>
+</span><span id="line-4"></span><span class="hs-comment">-- |</span><span>
+</span><span id="line-5"></span><span class="hs-comment">-- Module      :  XMonad.Layout.PerScreen</span><span>
+</span><span id="line-6"></span><span class="hs-comment">-- Description :  Configure layouts based on the width of your screen.</span><span>
+</span><span id="line-7"></span><span class="hs-comment">-- Copyright   :  (c) Edward Z. Yang</span><span>
+</span><span id="line-8"></span><span class="hs-comment">-- License     :  BSD-style (see LICENSE)</span><span>
+</span><span id="line-9"></span><span class="hs-comment">--</span><span>
+</span><span id="line-10"></span><span class="hs-comment">-- Maintainer  :  &lt;ezyang@cs.stanford.edu&gt;</span><span>
+</span><span id="line-11"></span><span class="hs-comment">-- Stability   :  unstable</span><span>
+</span><span id="line-12"></span><span class="hs-comment">-- Portability :  unportable</span><span>
+</span><span id="line-13"></span><span class="hs-comment">--</span><span>
+</span><span id="line-14"></span><span class="hs-comment">-- Configure layouts based on the width of your screen; use your</span><span>
+</span><span id="line-15"></span><span class="hs-comment">-- favorite multi-column layout for wide screens and a full-screen</span><span>
+</span><span id="line-16"></span><span class="hs-comment">-- layout for small ones.</span><span>
+</span><span id="line-17"></span><span class="hs-comment">-----------------------------------------------------------------------------</span><span>
+</span><span id="line-18"></span><span>
+</span><span id="line-19"></span><span class="hs-keyword">module</span><span> </span><span class="hs-identifier">XMonad.Layout.PerScreen</span><span>
+</span><span id="line-20"></span><span>    </span><span class="hs-special">(</span><span> </span><span class="annot"><span class="hs-comment">-- * Usage</span></span><span>
+</span><span id="line-21"></span><span>      </span><span class="annot"><span class="hs-comment">-- $usage</span></span><span>
+</span><span id="line-22"></span><span>      </span><span class="annot"><a href="XMonad.Layout.PerScreen.html#PerScreen"><span class="hs-identifier">PerScreen</span></a></span><span class="hs-special">,</span><span>
+</span><span id="line-23"></span><span>      </span><span class="annot"><a href="XMonad.Layout.PerScreen.html#ifWider"><span class="hs-identifier">ifWider</span></a></span><span>
+</span><span id="line-24"></span><span>    </span><span class="hs-special">)</span><span> </span><span class="hs-keyword">where</span><span>
+</span><span id="line-25"></span><span>
+</span><span id="line-26"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><span class="hs-identifier">XMonad</span></span><span>
+</span><span id="line-27"></span><span class="hs-keyword">import</span><span> </span><span class="hs-keyword">qualified</span><span> </span><span class="annot"><span class="hs-identifier">XMonad.StackSet</span></span><span> </span><span class="hs-keyword">as</span><span> </span><span class="annot"><span class="hs-identifier">W</span></span><span>
+</span><span id="line-28"></span><span>
+</span><span id="line-29"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><a href="XMonad.Prelude.html"><span class="hs-identifier">XMonad.Prelude</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier">fromMaybe</span></span><span class="hs-special">)</span><span>
+</span><span id="line-30"></span><span>
+</span><span id="line-31"></span><span class="hs-comment">-- $usage</span><span>
+</span><span id="line-32"></span><span class="hs-comment">-- You can use this module by importing it into your @xmonad.hs@ file:</span><span>
+</span><span id="line-33"></span><span class="hs-comment">--</span><span>
+</span><span id="line-34"></span><span class="hs-comment">-- &gt; import XMonad.Layout.PerScreen</span><span>
+</span><span id="line-35"></span><span class="hs-comment">--</span><span>
+</span><span id="line-36"></span><span class="hs-comment">-- and modifying your layoutHook as follows (for example):</span><span>
+</span><span id="line-37"></span><span class="hs-comment">--</span><span>
+</span><span id="line-38"></span><span class="hs-comment">-- &gt; layoutHook = ifWider 1280 (Tall 1 (3/100) (1/2) ||| Full) Full</span><span>
+</span><span id="line-39"></span><span class="hs-comment">--</span><span>
+</span><span id="line-40"></span><span class="hs-comment">-- Replace any of the layouts with any arbitrarily complicated layout.</span><span>
+</span><span id="line-41"></span><span class="hs-comment">-- ifWider can also be used inside other layout combinators.</span><span>
+</span><span id="line-42"></span><span>
+</span><span id="line-43"></span><span id="local-6989586621679410000"><span id="local-6989586621679410001"><span id="local-6989586621679410002"><span class="annot"><a href="XMonad.Layout.PerScreen.html#ifWider"><span class="hs-identifier hs-type">ifWider</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">LayoutClass</span></span><span> </span><span class="annot"><a href="#local-6989586621679410002"><span class="hs-identifier hs-type">l1</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679410001"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier hs-type">LayoutClass</span></span><span> </span><span class="annot"><a href="#local-6989586621679410000"><span class="hs-identifier hs-type">l2</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679410001"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-44"></span><span>               </span><span class="hs-glyph">=&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Dimension</span></span><span>   </span><span class="hs-comment">-- ^ target screen width</span><span>
+</span><span id="line-45"></span><span>               </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="#local-6989586621679410002"><span class="hs-identifier hs-type">l1</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679410001"><span class="hs-identifier hs-type">a</span></a></span><span>        </span><span class="hs-comment">-- ^ layout to use when the screen is wide enough</span><span>
+</span><span id="line-46"></span><span>               </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="#local-6989586621679410000"><span class="hs-identifier hs-type">l2</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679410001"><span class="hs-identifier hs-type">a</span></a></span><span>        </span><span class="hs-comment">-- ^ layout to use otherwise</span><span>
+</span><span id="line-47"></span><span>               </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="XMonad.Layout.PerScreen.html#PerScreen"><span class="hs-identifier hs-type">PerScreen</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679410002"><span class="hs-identifier hs-type">l1</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679410000"><span class="hs-identifier hs-type">l2</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679410001"><span class="hs-identifier hs-type">a</span></a></span></span></span></span><span>
+</span><span id="line-48"></span><span id="ifWider"><span class="annot"><span class="annottext">ifWider :: forall (l1 :: * -&gt; *) a (l2 :: * -&gt; *).
+(LayoutClass l1 a, LayoutClass l2 a) =&gt;
+Dimension -&gt; l1 a -&gt; l2 a -&gt; PerScreen l1 l2 a
+</span><a href="XMonad.Layout.PerScreen.html#ifWider"><span class="hs-identifier hs-var hs-var">ifWider</span></a></span></span><span> </span><span id="local-6989586621679409920"><span class="annot"><span class="annottext">Dimension
+</span><a href="#local-6989586621679409920"><span class="hs-identifier hs-var">w</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">forall (l1 :: * -&gt; *) (l2 :: * -&gt; *) a.
+Dimension -&gt; Bool -&gt; l1 a -&gt; l2 a -&gt; PerScreen l1 l2 a
+</span><a href="XMonad.Layout.PerScreen.html#PerScreen"><span class="hs-identifier hs-var">PerScreen</span></a></span><span> </span><span class="annot"><span class="annottext">Dimension
+</span><a href="#local-6989586621679409920"><span class="hs-identifier hs-var">w</span></a></span><span> </span><span class="annot"><span class="annottext">Bool
+</span><span class="hs-identifier hs-var">False</span></span><span>
+</span><span id="line-49"></span><span>
+</span><span id="line-50"></span><span class="hs-keyword">data</span><span> </span><span id="PerScreen"><span class="annot"><a href="XMonad.Layout.PerScreen.html#PerScreen"><span class="hs-identifier hs-var">PerScreen</span></a></span></span><span> </span><span id="local-6989586621679409995"><span class="annot"><a href="#local-6989586621679409995"><span class="hs-identifier hs-type">l1</span></a></span></span><span> </span><span id="local-6989586621679409993"><span class="annot"><a href="#local-6989586621679409993"><span class="hs-identifier hs-type">l2</span></a></span></span><span> </span><span id="local-6989586621679409994"><span class="annot"><a href="#local-6989586621679409994"><span class="hs-identifier hs-type">a</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span id="PerScreen"><span class="annot"><a href="XMonad.Layout.PerScreen.html#PerScreen"><span class="hs-identifier hs-var">PerScreen</span></a></span></span><span> </span><span class="annot"><span class="hs-identifier hs-type">Dimension</span></span><span> </span><span class="annot"><span class="hs-identifier hs-type">Bool</span></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="#local-6989586621679409995"><span class="hs-identifier hs-type">l1</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679409994"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-special">(</span><span class="annot"><a href="#local-6989586621679409993"><span class="hs-identifier hs-type">l2</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679409994"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-keyword">deriving</span><span> </span><span class="hs-special">(</span><span id="local-6989586621679409897"><span id="local-6989586621679409912"><span id="local-6989586621679409915"><span id="local-6989586621679409917"><span class="annot"><span class="annottext">ReadPrec [PerScreen l1 l2 a]
+ReadPrec (PerScreen l1 l2 a)
+ReadS [PerScreen l1 l2 a]
+forall a.
+(Int -&gt; ReadS a)
+-&gt; ReadS [a] -&gt; ReadPrec a -&gt; ReadPrec [a] -&gt; Read a
+forall (l1 :: * -&gt; *) (l2 :: * -&gt; *) a.
+(Read (l1 a), Read (l2 a)) =&gt;
+ReadPrec [PerScreen l1 l2 a]
+forall (l1 :: * -&gt; *) (l2 :: * -&gt; *) a.
+(Read (l1 a), Read (l2 a)) =&gt;
+ReadPrec (PerScreen l1 l2 a)
+forall (l1 :: * -&gt; *) (l2 :: * -&gt; *) a.
+(Read (l1 a), Read (l2 a)) =&gt;
+Int -&gt; ReadS (PerScreen l1 l2 a)
+forall (l1 :: * -&gt; *) (l2 :: * -&gt; *) a.
+(Read (l1 a), Read (l2 a)) =&gt;
+ReadS [PerScreen l1 l2 a]
+readListPrec :: ReadPrec [PerScreen l1 l2 a]
+$creadListPrec :: forall (l1 :: * -&gt; *) (l2 :: * -&gt; *) a.
+(Read (l1 a), Read (l2 a)) =&gt;
+ReadPrec [PerScreen l1 l2 a]
+readPrec :: ReadPrec (PerScreen l1 l2 a)
+$creadPrec :: forall (l1 :: * -&gt; *) (l2 :: * -&gt; *) a.
+(Read (l1 a), Read (l2 a)) =&gt;
+ReadPrec (PerScreen l1 l2 a)
+readList :: ReadS [PerScreen l1 l2 a]
+$creadList :: forall (l1 :: * -&gt; *) (l2 :: * -&gt; *) a.
+(Read (l1 a), Read (l2 a)) =&gt;
+ReadS [PerScreen l1 l2 a]
+readsPrec :: Int -&gt; ReadS (PerScreen l1 l2 a)
+$creadsPrec :: forall (l1 :: * -&gt; *) (l2 :: * -&gt; *) a.
+(Read (l1 a), Read (l2 a)) =&gt;
+Int -&gt; ReadS (PerScreen l1 l2 a)
+</span><span class="hs-identifier hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var">Read</span></span></span></span></span></span><span class="hs-special">,</span><span> </span><span id="local-6989586621679409881"><span id="local-6989586621679409883"><span id="local-6989586621679409893"><span class="annot"><span class="annottext">Int -&gt; PerScreen l1 l2 a -&gt; ShowS
+forall a.
+(Int -&gt; a -&gt; ShowS) -&gt; (a -&gt; String) -&gt; ([a] -&gt; ShowS) -&gt; Show a
+forall (l1 :: * -&gt; *) (l2 :: * -&gt; *) a.
+(Show (l1 a), Show (l2 a)) =&gt;
+Int -&gt; PerScreen l1 l2 a -&gt; ShowS
+forall (l1 :: * -&gt; *) (l2 :: * -&gt; *) a.
+(Show (l1 a), Show (l2 a)) =&gt;
+[PerScreen l1 l2 a] -&gt; ShowS
+forall (l1 :: * -&gt; *) (l2 :: * -&gt; *) a.
+(Show (l1 a), Show (l2 a)) =&gt;
+PerScreen l1 l2 a -&gt; String
+showList :: [PerScreen l1 l2 a] -&gt; ShowS
+$cshowList :: forall (l1 :: * -&gt; *) (l2 :: * -&gt; *) a.
+(Show (l1 a), Show (l2 a)) =&gt;
+[PerScreen l1 l2 a] -&gt; ShowS
+show :: PerScreen l1 l2 a -&gt; String
+$cshow :: forall (l1 :: * -&gt; *) (l2 :: * -&gt; *) a.
+(Show (l1 a), Show (l2 a)) =&gt;
+PerScreen l1 l2 a -&gt; String
+showsPrec :: Int -&gt; PerScreen l1 l2 a -&gt; ShowS
+$cshowsPrec :: forall (l1 :: * -&gt; *) (l2 :: * -&gt; *) a.
+(Show (l1 a), Show (l2 a)) =&gt;
+Int -&gt; PerScreen l1 l2 a -&gt; ShowS
+</span><span class="hs-identifier hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var">Show</span></span></span></span></span><span class="hs-special">)</span><span>
+</span><span id="line-51"></span><span>
+</span><span id="line-52"></span><span class="hs-comment">-- | Construct new PerScreen values with possibly modified layouts.</span><span>
+</span><span id="line-53"></span><span id="local-6989586621679409985"><span id="local-6989586621679409986"><span id="local-6989586621679409987"><span class="annot"><a href="XMonad.Layout.PerScreen.html#mkNewPerScreenT"><span class="hs-identifier hs-type">mkNewPerScreenT</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><a href="XMonad.Layout.PerScreen.html#PerScreen"><span class="hs-identifier hs-type">PerScreen</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679409987"><span class="hs-identifier hs-type">l1</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679409986"><span class="hs-identifier hs-type">l2</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679409985"><span class="hs-identifier hs-type">a</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Maybe</span></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="#local-6989586621679409987"><span class="hs-identifier hs-type">l1</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679409985"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">-&gt;</span><span>
+</span><span id="line-54"></span><span>                      </span><span class="annot"><a href="XMonad.Layout.PerScreen.html#PerScreen"><span class="hs-identifier hs-type">PerScreen</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679409987"><span class="hs-identifier hs-type">l1</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679409986"><span class="hs-identifier hs-type">l2</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679409985"><span class="hs-identifier hs-type">a</span></a></span></span></span></span><span>
+</span><span id="line-55"></span><span id="mkNewPerScreenT"><span class="annot"><span class="annottext">mkNewPerScreenT :: forall (l1 :: * -&gt; *) (l2 :: * -&gt; *) a.
+PerScreen l1 l2 a -&gt; Maybe (l1 a) -&gt; PerScreen l1 l2 a
+</span><a href="XMonad.Layout.PerScreen.html#mkNewPerScreenT"><span class="hs-identifier hs-var hs-var">mkNewPerScreenT</span></a></span></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="XMonad.Layout.PerScreen.html#PerScreen"><span class="hs-identifier hs-type">PerScreen</span></a></span><span> </span><span id="local-6989586621679409878"><span class="annot"><span class="annottext">Dimension
+</span><a href="#local-6989586621679409878"><span class="hs-identifier hs-var">w</span></a></span></span><span> </span><span class="annot"><span class="annottext">Bool
+</span><span class="hs-identifier">_</span></span><span> </span><span id="local-6989586621679409877"><span class="annot"><span class="annottext">l1 a
+</span><a href="#local-6989586621679409877"><span class="hs-identifier hs-var">lt</span></a></span></span><span> </span><span id="local-6989586621679409876"><span class="annot"><span class="annottext">l2 a
+</span><a href="#local-6989586621679409876"><span class="hs-identifier hs-var">lf</span></a></span></span><span class="hs-special">)</span><span> </span><span id="local-6989586621679409875"><span class="annot"><span class="annottext">Maybe (l1 a)
+</span><a href="#local-6989586621679409875"><span class="hs-identifier hs-var">mlt'</span></a></span></span><span> </span><span class="hs-glyph">=</span><span>
+</span><span id="line-56"></span><span>    </span><span class="hs-special">(</span><span class="hs-glyph">\</span><span id="local-6989586621679409874"><span class="annot"><span class="annottext">l1 a
+</span><a href="#local-6989586621679409874"><span class="hs-identifier hs-var">lt'</span></a></span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">forall (l1 :: * -&gt; *) (l2 :: * -&gt; *) a.
+Dimension -&gt; Bool -&gt; l1 a -&gt; l2 a -&gt; PerScreen l1 l2 a
+</span><a href="XMonad.Layout.PerScreen.html#PerScreen"><span class="hs-identifier hs-var">PerScreen</span></a></span><span> </span><span class="annot"><span class="annottext">Dimension
+</span><a href="#local-6989586621679409878"><span class="hs-identifier hs-var">w</span></a></span><span> </span><span class="annot"><span class="annottext">Bool
+</span><span class="hs-identifier hs-var">True</span></span><span> </span><span class="annot"><span class="annottext">l1 a
+</span><a href="#local-6989586621679409874"><span class="hs-identifier hs-var">lt'</span></a></span><span> </span><span class="annot"><span class="annottext">l2 a
+</span><a href="#local-6989586621679409876"><span class="hs-identifier hs-var">lf</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">forall a. a -&gt; Maybe a -&gt; a
+</span><span class="hs-identifier hs-var">fromMaybe</span></span><span> </span><span class="annot"><span class="annottext">l1 a
+</span><a href="#local-6989586621679409877"><span class="hs-identifier hs-var">lt</span></a></span><span> </span><span class="annot"><span class="annottext">Maybe (l1 a)
+</span><a href="#local-6989586621679409875"><span class="hs-identifier hs-var">mlt'</span></a></span><span>
+</span><span id="line-57"></span><span>
+</span><span id="line-58"></span><span id="local-6989586621679409975"><span id="local-6989586621679409976"><span id="local-6989586621679409977"><span class="annot"><a href="XMonad.Layout.PerScreen.html#mkNewPerScreenF"><span class="hs-identifier hs-type">mkNewPerScreenF</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><a href="XMonad.Layout.PerScreen.html#PerScreen"><span class="hs-identifier hs-type">PerScreen</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679409977"><span class="hs-identifier hs-type">l1</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679409976"><span class="hs-identifier hs-type">l2</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679409975"><span class="hs-identifier hs-type">a</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Maybe</span></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="#local-6989586621679409976"><span class="hs-identifier hs-type">l2</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679409975"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">-&gt;</span><span>
+</span><span id="line-59"></span><span>                      </span><span class="annot"><a href="XMonad.Layout.PerScreen.html#PerScreen"><span class="hs-identifier hs-type">PerScreen</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679409977"><span class="hs-identifier hs-type">l1</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679409976"><span class="hs-identifier hs-type">l2</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679409975"><span class="hs-identifier hs-type">a</span></a></span></span></span></span><span>
+</span><span id="line-60"></span><span id="mkNewPerScreenF"><span class="annot"><span class="annottext">mkNewPerScreenF :: forall (l1 :: * -&gt; *) (l2 :: * -&gt; *) a.
+PerScreen l1 l2 a -&gt; Maybe (l2 a) -&gt; PerScreen l1 l2 a
+</span><a href="XMonad.Layout.PerScreen.html#mkNewPerScreenF"><span class="hs-identifier hs-var hs-var">mkNewPerScreenF</span></a></span></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="XMonad.Layout.PerScreen.html#PerScreen"><span class="hs-identifier hs-type">PerScreen</span></a></span><span> </span><span id="local-6989586621679409872"><span class="annot"><span class="annottext">Dimension
+</span><a href="#local-6989586621679409872"><span class="hs-identifier hs-var">w</span></a></span></span><span> </span><span class="annot"><span class="annottext">Bool
+</span><span class="hs-identifier">_</span></span><span> </span><span id="local-6989586621679409871"><span class="annot"><span class="annottext">l1 a
+</span><a href="#local-6989586621679409871"><span class="hs-identifier hs-var">lt</span></a></span></span><span> </span><span id="local-6989586621679409870"><span class="annot"><span class="annottext">l2 a
+</span><a href="#local-6989586621679409870"><span class="hs-identifier hs-var">lf</span></a></span></span><span class="hs-special">)</span><span> </span><span id="local-6989586621679409869"><span class="annot"><span class="annottext">Maybe (l2 a)
+</span><a href="#local-6989586621679409869"><span class="hs-identifier hs-var">mlf'</span></a></span></span><span> </span><span class="hs-glyph">=</span><span>
+</span><span id="line-61"></span><span>    </span><span class="annot"><span class="annottext">forall (l1 :: * -&gt; *) (l2 :: * -&gt; *) a.
+Dimension -&gt; Bool -&gt; l1 a -&gt; l2 a -&gt; PerScreen l1 l2 a
+</span><a href="XMonad.Layout.PerScreen.html#PerScreen"><span class="hs-identifier hs-var">PerScreen</span></a></span><span> </span><span class="annot"><span class="annottext">Dimension
+</span><a href="#local-6989586621679409872"><span class="hs-identifier hs-var">w</span></a></span><span> </span><span class="annot"><span class="annottext">Bool
+</span><span class="hs-identifier hs-var">False</span></span><span> </span><span class="annot"><span class="annottext">l1 a
+</span><a href="#local-6989586621679409871"><span class="hs-identifier hs-var">lt</span></a></span><span> </span><span class="annot"><span class="annottext">forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">forall a. a -&gt; Maybe a -&gt; a
+</span><span class="hs-identifier hs-var">fromMaybe</span></span><span> </span><span class="annot"><span class="annottext">l2 a
+</span><a href="#local-6989586621679409870"><span class="hs-identifier hs-var">lf</span></a></span><span> </span><span class="annot"><span class="annottext">Maybe (l2 a)
+</span><a href="#local-6989586621679409869"><span class="hs-identifier hs-var">mlf'</span></a></span><span>
+</span><span id="line-62"></span><span>
+</span><span id="line-63"></span><span class="hs-keyword">instance</span><span> </span><span id="local-6989586621679409854"><span id="local-6989586621679409857"><span id="local-6989586621679409859"><span id="local-6989586621679409861"><span id="local-6989586621679409962"><span id="local-6989586621679409963"><span id="local-6989586621679409964"><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">LayoutClass</span></span><span> </span><span class="annot"><a href="#local-6989586621679409964"><span class="hs-identifier hs-type">l1</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679409963"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier hs-type">LayoutClass</span></span><span> </span><span class="annot"><a href="#local-6989586621679409962"><span class="hs-identifier hs-type">l2</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679409963"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Show</span></span><span> </span><span class="annot"><a href="#local-6989586621679409963"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">LayoutClass</span></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="XMonad.Layout.PerScreen.html#PerScreen"><span class="hs-identifier hs-type">PerScreen</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679409964"><span class="hs-identifier hs-type">l1</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679409962"><span class="hs-identifier hs-type">l2</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><a href="#local-6989586621679409963"><span class="hs-identifier hs-type">a</span></a></span></span></span></span></span></span></span></span><span> </span><span class="hs-keyword">where</span><span>
+</span><span id="line-64"></span><span>    </span><span id="local-6989586621679409841"><span class="annot"><span class="annottext">runLayout :: Workspace String (PerScreen l1 l2 a) a
+-&gt; Rectangle -&gt; X ([(a, Rectangle)], Maybe (PerScreen l1 l2 a))
+</span><span class="hs-identifier hs-var hs-var hs-var hs-var">runLayout</span></span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">W.Workspace</span></span><span> </span><span id="local-6989586621679409838"><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679409838"><span class="hs-identifier hs-var">i</span></a></span></span><span> </span><span id="local-6989586621679409837"><span class="annot"><span class="annottext">p :: PerScreen l1 l2 a
+</span><a href="#local-6989586621679409837"><span class="hs-identifier hs-var">p</span></a></span></span><span class="hs-glyph">@</span><span class="hs-special">(</span><span class="annot"><a href="XMonad.Layout.PerScreen.html#PerScreen"><span class="hs-identifier hs-type">PerScreen</span></a></span><span> </span><span id="local-6989586621679409836"><span class="annot"><span class="annottext">Dimension
+</span><a href="#local-6989586621679409836"><span class="hs-identifier hs-var">w</span></a></span></span><span> </span><span class="annot"><span class="annottext">Bool
+</span><span class="hs-identifier">_</span></span><span> </span><span id="local-6989586621679409835"><span class="annot"><span class="annottext">l1 a
+</span><a href="#local-6989586621679409835"><span class="hs-identifier hs-var">lt</span></a></span></span><span> </span><span id="local-6989586621679409834"><span class="annot"><span class="annottext">l2 a
+</span><a href="#local-6989586621679409834"><span class="hs-identifier hs-var">lf</span></a></span></span><span class="hs-special">)</span><span> </span><span id="local-6989586621679409833"><span class="annot"><span class="annottext">Maybe (Stack a)
+</span><a href="#local-6989586621679409833"><span class="hs-identifier hs-var">ms</span></a></span></span><span class="hs-special">)</span><span> </span><span id="local-6989586621679409832"><span class="annot"><span class="annottext">Rectangle
+</span><a href="#local-6989586621679409832"><span class="hs-identifier hs-var">r</span></a></span></span><span>
+</span><span id="line-65"></span><span>        </span><span class="hs-glyph">|</span><span> </span><span class="annot"><span class="annottext">Rectangle -&gt; Dimension
+</span><span class="hs-identifier hs-var">rect_width</span></span><span> </span><span class="annot"><span class="annottext">Rectangle
+</span><a href="#local-6989586621679409832"><span class="hs-identifier hs-var">r</span></a></span><span> </span><span class="annot"><span class="annottext">forall a. Ord a =&gt; a -&gt; a -&gt; Bool
+</span><span class="hs-operator hs-var">&gt;</span></span><span> </span><span class="annot"><span class="annottext">Dimension
+</span><a href="#local-6989586621679409836"><span class="hs-identifier hs-var">w</span></a></span><span>    </span><span class="hs-glyph">=</span><span> </span><span class="hs-keyword">do</span><span> </span><span class="hs-special">(</span><span id="local-6989586621679409829"><span class="annot"><span class="annottext">[(a, Rectangle)]
+</span><a href="#local-6989586621679409829"><span class="hs-identifier hs-var">wrs</span></a></span></span><span class="hs-special">,</span><span> </span><span id="local-6989586621679409828"><span class="annot"><span class="annottext">Maybe (l1 a)
+</span><a href="#local-6989586621679409828"><span class="hs-identifier hs-var">mlt'</span></a></span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">forall (layout :: * -&gt; *) a.
+LayoutClass layout a =&gt;
+Workspace String (layout a) a
+-&gt; Rectangle -&gt; X ([(a, Rectangle)], Maybe (layout a))
+</span><span class="hs-identifier hs-var">runLayout</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">forall i l a. i -&gt; l -&gt; Maybe (Stack a) -&gt; Workspace i l a
+</span><span class="hs-identifier hs-var">W.Workspace</span></span><span> </span><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679409838"><span class="hs-identifier hs-var">i</span></a></span><span> </span><span class="annot"><span class="annottext">l1 a
+</span><a href="#local-6989586621679409835"><span class="hs-identifier hs-var">lt</span></a></span><span> </span><span class="annot"><span class="annottext">Maybe (Stack a)
+</span><a href="#local-6989586621679409833"><span class="hs-identifier hs-var">ms</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">Rectangle
+</span><a href="#local-6989586621679409832"><span class="hs-identifier hs-var">r</span></a></span><span>
+</span><span id="line-66"></span><span>                                   </span><span class="annot"><span class="annottext">forall (m :: * -&gt; *) a. Monad m =&gt; a -&gt; m a
+</span><span class="hs-identifier hs-var">return</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">[(a, Rectangle)]
+</span><a href="#local-6989586621679409829"><span class="hs-identifier hs-var">wrs</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">forall a. a -&gt; Maybe a
+</span><span class="hs-identifier hs-var">Just</span></span><span> </span><span class="annot"><span class="annottext">forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">forall (l1 :: * -&gt; *) (l2 :: * -&gt; *) a.
+PerScreen l1 l2 a -&gt; Maybe (l1 a) -&gt; PerScreen l1 l2 a
+</span><a href="XMonad.Layout.PerScreen.html#mkNewPerScreenT"><span class="hs-identifier hs-var">mkNewPerScreenT</span></a></span><span> </span><span class="annot"><span class="annottext">PerScreen l1 l2 a
+</span><a href="#local-6989586621679409837"><span class="hs-identifier hs-var">p</span></a></span><span> </span><span class="annot"><span class="annottext">Maybe (l1 a)
+</span><a href="#local-6989586621679409828"><span class="hs-identifier hs-var">mlt'</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-67"></span><span>        </span><span class="hs-glyph">|</span><span> </span><span class="annot"><span class="annottext">Bool
+</span><span class="hs-identifier hs-var">otherwise</span></span><span>           </span><span class="hs-glyph">=</span><span> </span><span class="hs-keyword">do</span><span> </span><span class="hs-special">(</span><span id="local-6989586621679409827"><span class="annot"><span class="annottext">[(a, Rectangle)]
+</span><a href="#local-6989586621679409827"><span class="hs-identifier hs-var">wrs</span></a></span></span><span class="hs-special">,</span><span> </span><span id="local-6989586621679409826"><span class="annot"><span class="annottext">Maybe (l2 a)
+</span><a href="#local-6989586621679409826"><span class="hs-identifier hs-var">mlt'</span></a></span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">forall (layout :: * -&gt; *) a.
+LayoutClass layout a =&gt;
+Workspace String (layout a) a
+-&gt; Rectangle -&gt; X ([(a, Rectangle)], Maybe (layout a))
+</span><span class="hs-identifier hs-var">runLayout</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">forall i l a. i -&gt; l -&gt; Maybe (Stack a) -&gt; Workspace i l a
+</span><span class="hs-identifier hs-var">W.Workspace</span></span><span> </span><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679409838"><span class="hs-identifier hs-var">i</span></a></span><span> </span><span class="annot"><span class="annottext">l2 a
+</span><a href="#local-6989586621679409834"><span class="hs-identifier hs-var">lf</span></a></span><span> </span><span class="annot"><span class="annottext">Maybe (Stack a)
+</span><a href="#local-6989586621679409833"><span class="hs-identifier hs-var">ms</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">Rectangle
+</span><a href="#local-6989586621679409832"><span class="hs-identifier hs-var">r</span></a></span><span>
+</span><span id="line-68"></span><span>                                   </span><span class="annot"><span class="annottext">forall (m :: * -&gt; *) a. Monad m =&gt; a -&gt; m a
+</span><span class="hs-identifier hs-var">return</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">[(a, Rectangle)]
+</span><a href="#local-6989586621679409827"><span class="hs-identifier hs-var">wrs</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">forall a. a -&gt; Maybe a
+</span><span class="hs-identifier hs-var">Just</span></span><span> </span><span class="annot"><span class="annottext">forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">forall (l1 :: * -&gt; *) (l2 :: * -&gt; *) a.
+PerScreen l1 l2 a -&gt; Maybe (l2 a) -&gt; PerScreen l1 l2 a
+</span><a href="XMonad.Layout.PerScreen.html#mkNewPerScreenF"><span class="hs-identifier hs-var">mkNewPerScreenF</span></a></span><span> </span><span class="annot"><span class="annottext">PerScreen l1 l2 a
+</span><a href="#local-6989586621679409837"><span class="hs-identifier hs-var">p</span></a></span><span> </span><span class="annot"><span class="annottext">Maybe (l2 a)
+</span><a href="#local-6989586621679409826"><span class="hs-identifier hs-var">mlt'</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-69"></span><span>
+</span><span id="line-70"></span><span>    </span><span id="local-6989586621679409817"><span class="annot"><span class="annottext">handleMessage :: PerScreen l1 l2 a -&gt; SomeMessage -&gt; X (Maybe (PerScreen l1 l2 a))
+</span><span class="hs-identifier hs-var hs-var hs-var hs-var">handleMessage</span></span></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="XMonad.Layout.PerScreen.html#PerScreen"><span class="hs-identifier hs-type">PerScreen</span></a></span><span> </span><span id="local-6989586621679409815"><span class="annot"><span class="annottext">Dimension
+</span><a href="#local-6989586621679409815"><span class="hs-identifier hs-var">w</span></a></span></span><span> </span><span id="local-6989586621679409814"><span class="annot"><span class="annottext">Bool
+</span><a href="#local-6989586621679409814"><span class="hs-identifier hs-var">bool</span></a></span></span><span> </span><span id="local-6989586621679409813"><span class="annot"><span class="annottext">l1 a
+</span><a href="#local-6989586621679409813"><span class="hs-identifier hs-var">lt</span></a></span></span><span> </span><span id="local-6989586621679409812"><span class="annot"><span class="annottext">l2 a
+</span><a href="#local-6989586621679409812"><span class="hs-identifier hs-var">lf</span></a></span></span><span class="hs-special">)</span><span> </span><span id="local-6989586621679409811"><span class="annot"><span class="annottext">SomeMessage
+</span><a href="#local-6989586621679409811"><span class="hs-identifier hs-var">m</span></a></span></span><span>
+</span><span id="line-71"></span><span>        </span><span class="hs-glyph">|</span><span> </span><span class="annot"><span class="annottext">Bool
+</span><a href="#local-6989586621679409814"><span class="hs-identifier hs-var">bool</span></a></span><span>      </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">forall (layout :: * -&gt; *) a.
+LayoutClass layout a =&gt;
+layout a -&gt; SomeMessage -&gt; X (Maybe (layout a))
+</span><span class="hs-identifier hs-var">handleMessage</span></span><span> </span><span class="annot"><span class="annottext">l1 a
+</span><a href="#local-6989586621679409813"><span class="hs-identifier hs-var">lt</span></a></span><span> </span><span class="annot"><span class="annottext">SomeMessage
+</span><a href="#local-6989586621679409811"><span class="hs-identifier hs-var">m</span></a></span><span> </span><span class="annot"><span class="annottext">forall (m :: * -&gt; *) a b. Monad m =&gt; m a -&gt; (a -&gt; m b) -&gt; m b
+</span><span class="hs-operator hs-var">&gt;&gt;=</span></span><span> </span><span class="annot"><span class="annottext">forall b a. b -&gt; (a -&gt; b) -&gt; Maybe a -&gt; b
+</span><span class="hs-identifier hs-var">maybe</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">forall (m :: * -&gt; *) a. Monad m =&gt; a -&gt; m a
+</span><span class="hs-identifier hs-var">return</span></span><span> </span><span class="annot"><span class="annottext">forall a. Maybe a
+</span><span class="hs-identifier hs-var">Nothing</span></span><span class="hs-special">)</span><span> </span><span class="hs-special">(</span><span class="hs-glyph">\</span><span id="local-6989586621679409809"><span class="annot"><span class="annottext">l1 a
+</span><a href="#local-6989586621679409809"><span class="hs-identifier hs-var">nt</span></a></span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">forall (m :: * -&gt; *) a. Monad m =&gt; a -&gt; m a
+</span><span class="hs-identifier hs-var">return</span></span><span> </span><span class="annot"><span class="annottext">forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">forall a. a -&gt; Maybe a
+</span><span class="hs-identifier hs-var">Just</span></span><span> </span><span class="annot"><span class="annottext">forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">forall (l1 :: * -&gt; *) (l2 :: * -&gt; *) a.
+Dimension -&gt; Bool -&gt; l1 a -&gt; l2 a -&gt; PerScreen l1 l2 a
+</span><a href="XMonad.Layout.PerScreen.html#PerScreen"><span class="hs-identifier hs-var">PerScreen</span></a></span><span> </span><span class="annot"><span class="annottext">Dimension
+</span><a href="#local-6989586621679409815"><span class="hs-identifier hs-var">w</span></a></span><span> </span><span class="annot"><span class="annottext">Bool
+</span><a href="#local-6989586621679409814"><span class="hs-identifier hs-var">bool</span></a></span><span> </span><span class="annot"><span class="annottext">l1 a
+</span><a href="#local-6989586621679409809"><span class="hs-identifier hs-var">nt</span></a></span><span> </span><span class="annot"><span class="annottext">l2 a
+</span><a href="#local-6989586621679409812"><span class="hs-identifier hs-var">lf</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-72"></span><span>        </span><span class="hs-glyph">|</span><span> </span><span class="annot"><span class="annottext">Bool
+</span><span class="hs-identifier hs-var">otherwise</span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">forall (layout :: * -&gt; *) a.
+LayoutClass layout a =&gt;
+layout a -&gt; SomeMessage -&gt; X (Maybe (layout a))
+</span><span class="hs-identifier hs-var">handleMessage</span></span><span> </span><span class="annot"><span class="annottext">l2 a
+</span><a href="#local-6989586621679409812"><span class="hs-identifier hs-var">lf</span></a></span><span> </span><span class="annot"><span class="annottext">SomeMessage
+</span><a href="#local-6989586621679409811"><span class="hs-identifier hs-var">m</span></a></span><span> </span><span class="annot"><span class="annottext">forall (m :: * -&gt; *) a b. Monad m =&gt; m a -&gt; (a -&gt; m b) -&gt; m b
+</span><span class="hs-operator hs-var">&gt;&gt;=</span></span><span> </span><span class="annot"><span class="annottext">forall b a. b -&gt; (a -&gt; b) -&gt; Maybe a -&gt; b
+</span><span class="hs-identifier hs-var">maybe</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">forall (m :: * -&gt; *) a. Monad m =&gt; a -&gt; m a
+</span><span class="hs-identifier hs-var">return</span></span><span> </span><span class="annot"><span class="annottext">forall a. Maybe a
+</span><span class="hs-identifier hs-var">Nothing</span></span><span class="hs-special">)</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">forall (m :: * -&gt; *) a. Monad m =&gt; a -&gt; m a
+</span><span class="hs-identifier hs-var">return</span></span><span> </span><span class="annot"><span class="annottext">forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">forall a. a -&gt; Maybe a
+</span><span class="hs-identifier hs-var">Just</span></span><span> </span><span class="annot"><span class="annottext">forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">forall (l1 :: * -&gt; *) (l2 :: * -&gt; *) a.
+Dimension -&gt; Bool -&gt; l1 a -&gt; l2 a -&gt; PerScreen l1 l2 a
+</span><a href="XMonad.Layout.PerScreen.html#PerScreen"><span class="hs-identifier hs-var">PerScreen</span></a></span><span> </span><span class="annot"><span class="annottext">Dimension
+</span><a href="#local-6989586621679409815"><span class="hs-identifier hs-var">w</span></a></span><span> </span><span class="annot"><span class="annottext">Bool
+</span><a href="#local-6989586621679409814"><span class="hs-identifier hs-var">bool</span></a></span><span> </span><span class="annot"><span class="annottext">l1 a
+</span><a href="#local-6989586621679409813"><span class="hs-identifier hs-var">lt</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-73"></span><span>
+</span><span id="line-74"></span><span>    </span><span id="local-6989586621679409805"><span class="annot"><span class="annottext">description :: PerScreen l1 l2 a -&gt; String
+</span><span class="hs-identifier hs-var hs-var hs-var hs-var">description</span></span></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="XMonad.Layout.PerScreen.html#PerScreen"><span class="hs-identifier hs-type">PerScreen</span></a></span><span> </span><span class="annot"><span class="annottext">Dimension
+</span><span class="hs-identifier">_</span></span><span> </span><span class="annot"><span class="annottext">Bool
+</span><span class="hs-identifier hs-var">True</span></span><span>  </span><span id="local-6989586621679409803"><span class="annot"><span class="annottext">l1 a
+</span><a href="#local-6989586621679409803"><span class="hs-identifier hs-var">l1</span></a></span></span><span> </span><span class="annot"><span class="annottext">l2 a
+</span><span class="hs-identifier">_</span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">forall (layout :: * -&gt; *) a.
+LayoutClass layout a =&gt;
+layout a -&gt; String
+</span><span class="hs-identifier hs-var">description</span></span><span> </span><span class="annot"><span class="annottext">l1 a
+</span><a href="#local-6989586621679409803"><span class="hs-identifier hs-var">l1</span></a></span><span>
+</span><span id="line-75"></span><span>    </span><span class="annot"><span class="hs-identifier hs-var">description</span></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="XMonad.Layout.PerScreen.html#PerScreen"><span class="hs-identifier hs-type">PerScreen</span></a></span><span> </span><span class="annot"><span class="annottext">Dimension
+</span><span class="hs-identifier">_</span></span><span> </span><span class="annot"><span class="annottext">Bool
+</span><span class="hs-identifier">_</span></span><span>     </span><span class="annot"><span class="annottext">l1 a
+</span><span class="hs-identifier">_</span></span><span> </span><span id="local-6989586621679409802"><span class="annot"><span class="annottext">l2 a
+</span><a href="#local-6989586621679409802"><span class="hs-identifier hs-var">l2</span></a></span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">forall (layout :: * -&gt; *) a.
+LayoutClass layout a =&gt;
+layout a -&gt; String
+</span><span class="hs-identifier hs-var">description</span></span><span> </span><span class="annot"><span class="annottext">l2 a
+</span><a href="#local-6989586621679409802"><span class="hs-identifier hs-var">l2</span></a></span><span>
+</span><span id="line-76"></span></pre></body></html>

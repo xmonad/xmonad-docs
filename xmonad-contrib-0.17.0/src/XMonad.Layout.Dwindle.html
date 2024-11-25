@@ -1,0 +1,855 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd"><html xmlns="http://www.w3.org/1999/xhtml"><head><link rel="stylesheet" type="text/css" href="style.css" /><script type="text/javascript" src="highlight.js"></script></head><body><pre><span class="hs-pragma">{-# LANGUAGE FlexibleInstances, MultiParamTypeClasses #-}</span><span>
+</span><span id="line-2"></span><span>
+</span><span id="line-3"></span><span class="hs-comment">-----------------------------------------------------------------------------</span><span>
+</span><span id="line-4"></span><span class="hs-comment">-- |</span><span>
+</span><span id="line-5"></span><span class="hs-comment">-- Module      :  XMonad.Layout.Dwindle</span><span>
+</span><span id="line-6"></span><span class="hs-comment">-- Description :  Various spirally layouts.</span><span>
+</span><span id="line-7"></span><span class="hs-comment">-- Copyright   :  (c) Norbert Zeh &lt;norbert.zeh@gmail.com&gt;</span><span>
+</span><span id="line-8"></span><span class="hs-comment">-- License     :  BSD3</span><span>
+</span><span id="line-9"></span><span class="hs-comment">--</span><span>
+</span><span id="line-10"></span><span class="hs-comment">-- Maintainer  :  Norbert Zeh &lt;norbert.zeh@gmail.com&gt;</span><span>
+</span><span id="line-11"></span><span class="hs-comment">-- Stability   :  experimental</span><span>
+</span><span id="line-12"></span><span class="hs-comment">-- Portability :  portable</span><span>
+</span><span id="line-13"></span><span class="hs-comment">--</span><span>
+</span><span id="line-14"></span><span class="hs-comment">-- Three layouts: The first, 'Spiral', is a reimplementation of</span><span>
+</span><span id="line-15"></span><span class="hs-comment">-- 'XMonad.Layout.Spiral.spiral' with, at least to me, more intuitive semantics.</span><span>
+</span><span id="line-16"></span><span class="hs-comment">-- The second, 'Dwindle', is inspired by a similar layout in awesome and</span><span>
+</span><span id="line-17"></span><span class="hs-comment">-- produces the same sequence of decreasing window sizes as Spiral but pushes</span><span>
+</span><span id="line-18"></span><span class="hs-comment">-- the smallest windows into a screen corner rather than the centre.  The third,</span><span>
+</span><span id="line-19"></span><span class="hs-comment">-- 'Squeeze' arranges all windows in one row or in one column, with</span><span>
+</span><span id="line-20"></span><span class="hs-comment">-- geometrically decreasing sizes.</span><span>
+</span><span id="line-21"></span><span class="hs-comment">--</span><span>
+</span><span id="line-22"></span><span class="hs-comment">-----------------------------------------------------------------------------</span><span>
+</span><span id="line-23"></span><span>
+</span><span id="line-24"></span><span class="hs-keyword">module</span><span> </span><span class="hs-identifier">XMonad.Layout.Dwindle</span><span> </span><span class="hs-special">(</span><span> </span><span class="annot"><span class="hs-comment">-- * Usage</span></span><span>
+</span><span id="line-25"></span><span>                               </span><span class="annot"><span class="hs-comment">-- $usage</span></span><span>
+</span><span id="line-26"></span><span>                               </span><span class="annot"><a href="XMonad.Layout.Dwindle.html#Dwindle"><span class="hs-identifier">Dwindle</span></a></span><span class="hs-special">(</span><span class="hs-glyph">..</span><span class="hs-special">)</span><span>
+</span><span id="line-27"></span><span>                             </span><span class="hs-special">,</span><span> </span><span class="annot"><a href="XMonad.Util.Types.html#Direction2D"><span class="hs-identifier">Direction2D</span></a></span><span class="hs-special">(</span><span class="hs-glyph">..</span><span class="hs-special">)</span><span>
+</span><span id="line-28"></span><span>                             </span><span class="hs-special">,</span><span> </span><span class="annot"><a href="XMonad.Layout.Dwindle.html#Chirality"><span class="hs-identifier">Chirality</span></a></span><span class="hs-special">(</span><span class="hs-glyph">..</span><span class="hs-special">)</span><span>
+</span><span id="line-29"></span><span>                             </span><span class="hs-special">)</span><span> </span><span class="hs-keyword">where</span><span>
+</span><span id="line-30"></span><span>
+</span><span id="line-31"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><a href="XMonad.Prelude.html"><span class="hs-identifier">XMonad.Prelude</span></a></span><span> </span><span class="hs-special">(</span><span> </span><span class="annot"><span class="hs-identifier">unfoldr</span></span><span> </span><span class="hs-special">)</span><span>
+</span><span id="line-32"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><span class="hs-identifier">XMonad</span></span><span>
+</span><span id="line-33"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><span class="hs-identifier">XMonad.StackSet</span></span><span> </span><span class="hs-special">(</span><span> </span><span class="annot"><span class="hs-identifier">integrate</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier">Stack</span></span><span> </span><span class="hs-special">)</span><span>
+</span><span id="line-34"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><a href="XMonad.Util.Types.html"><span class="hs-identifier">XMonad.Util.Types</span></a></span><span> </span><span class="hs-special">(</span><span> </span><span class="annot"><a href="XMonad.Util.Types.html#Direction2D"><span class="hs-identifier">Direction2D</span></a></span><span class="hs-special">(</span><span class="hs-glyph">..</span><span class="hs-special">)</span><span> </span><span class="hs-special">)</span><span>
+</span><span id="line-35"></span><span>
+</span><span id="line-36"></span><span class="hs-comment">-- $usage</span><span>
+</span><span id="line-37"></span><span class="hs-comment">-- This module can be used as follows:</span><span>
+</span><span id="line-38"></span><span class="hs-comment">--</span><span>
+</span><span id="line-39"></span><span class="hs-comment">-- &gt; import XMonad.Layout.Dwindle</span><span>
+</span><span id="line-40"></span><span class="hs-comment">--</span><span>
+</span><span id="line-41"></span><span class="hs-comment">-- Then add something like this to your layouts:</span><span>
+</span><span id="line-42"></span><span class="hs-comment">--</span><span>
+</span><span id="line-43"></span><span class="hs-comment">-- &gt; Dwindle R CW 1.5 1.1</span><span>
+</span><span id="line-44"></span><span class="hs-comment">--</span><span>
+</span><span id="line-45"></span><span class="hs-comment">-- or</span><span>
+</span><span id="line-46"></span><span class="hs-comment">--</span><span>
+</span><span id="line-47"></span><span class="hs-comment">-- &gt; Spiral L CW 1.5 1.1</span><span>
+</span><span id="line-48"></span><span class="hs-comment">--</span><span>
+</span><span id="line-49"></span><span class="hs-comment">-- or</span><span>
+</span><span id="line-50"></span><span class="hs-comment">--</span><span>
+</span><span id="line-51"></span><span class="hs-comment">-- ^ Squeeze D 1.5 1.1</span><span>
+</span><span id="line-52"></span><span class="hs-comment">--</span><span>
+</span><span id="line-53"></span><span class="hs-comment">-- The first produces a layout that places the second window to the right of</span><span>
+</span><span id="line-54"></span><span class="hs-comment">-- the first, the third below the second, the fourth to the right of the third,</span><span>
+</span><span id="line-55"></span><span class="hs-comment">-- and so on.  The first window is 1.5 times as wide as the second one, the</span><span>
+</span><span id="line-56"></span><span class="hs-comment">-- second is 1.5 times as tall as the third one, and so on.  Thus, the further</span><span>
+</span><span id="line-57"></span><span class="hs-comment">-- down the window stack a window is, the smaller it is and the more it is</span><span>
+</span><span id="line-58"></span><span class="hs-comment">-- pushed into the bottom-right corner.</span><span>
+</span><span id="line-59"></span><span class="hs-comment">--</span><span>
+</span><span id="line-60"></span><span class="hs-comment">-- The second produces a layout with the same window sizes but places the second</span><span>
+</span><span id="line-61"></span><span class="hs-comment">-- window to the left of the first one, the third above the second one, the</span><span>
+</span><span id="line-62"></span><span class="hs-comment">-- fourth to the right of the third one, and so on.</span><span>
+</span><span id="line-63"></span><span class="hs-comment">--</span><span>
+</span><span id="line-64"></span><span class="hs-comment">-- The third produces a layout that stacks windows vertically top-down with each</span><span>
+</span><span id="line-65"></span><span class="hs-comment">-- window being 1.5 times as tall as the next.</span><span>
+</span><span id="line-66"></span><span class="hs-comment">--</span><span>
+</span><span id="line-67"></span><span class="hs-comment">-- In all three cases, the fourth (third, in the case of 'Squeeze') parameter,</span><span>
+</span><span id="line-68"></span><span class="hs-comment">-- 1.1, is the factor by which the third parameter increases or decreases in</span><span>
+</span><span id="line-69"></span><span class="hs-comment">-- response to Expand or Shrink messages.</span><span>
+</span><span id="line-70"></span><span class="hs-comment">--</span><span>
+</span><span id="line-71"></span><span class="hs-comment">-- For more detailed instructions on editing the layoutHook see:</span><span>
+</span><span id="line-72"></span><span class="hs-comment">--</span><span>
+</span><span id="line-73"></span><span class="hs-comment">-- &quot;XMonad.Doc.Extending#Editing_the_layout_hook&quot;</span><span>
+</span><span id="line-74"></span><span>
+</span><span id="line-75"></span><span class="hs-comment">-- | Layouts with geometrically decreasing window sizes.  'Spiral' and 'Dwindle'</span><span>
+</span><span id="line-76"></span><span class="hs-comment">-- split the screen into a rectangle for the first window and a rectangle for</span><span>
+</span><span id="line-77"></span><span class="hs-comment">-- the remaining windows, which is split recursively to lay out these windows.</span><span>
+</span><span id="line-78"></span><span class="hs-comment">-- Both layouts alternate between horizontal and vertical splits.</span><span>
+</span><span id="line-79"></span><span class="hs-comment">--</span><span>
+</span><span id="line-80"></span><span class="hs-comment">-- In each recursive step, the split 'Direction2D' determines the placement of the</span><span>
+</span><span id="line-81"></span><span class="hs-comment">-- remaining windows relative to the current window: to the left, to the right,</span><span>
+</span><span id="line-82"></span><span class="hs-comment">-- above or below.  The split direction of the first split is determined by the</span><span>
+</span><span id="line-83"></span><span class="hs-comment">-- first layout parameter.  The split direction of the second step is rotated 90</span><span>
+</span><span id="line-84"></span><span class="hs-comment">-- degrees relative to the first split direction according to the second layout</span><span>
+</span><span id="line-85"></span><span class="hs-comment">-- parameter of type 'Chirality'.  So, if the first split is 'R' and the second</span><span>
+</span><span id="line-86"></span><span class="hs-comment">-- layout parameter is 'CW', then the second split is 'D'.</span><span>
+</span><span id="line-87"></span><span class="hs-comment">--</span><span>
+</span><span id="line-88"></span><span class="hs-comment">-- For the 'Spiral' layout, the same 'Chirality' is used for computing the split</span><span>
+</span><span id="line-89"></span><span class="hs-comment">-- direction of each step from the split direction of the previous step.  For</span><span>
+</span><span id="line-90"></span><span class="hs-comment">-- example, parameters 'R' and 'CW' produces the direction sequence 'R', 'D',</span><span>
+</span><span id="line-91"></span><span class="hs-comment">-- 'L', 'U', 'R', 'D', 'L', 'U', ...</span><span>
+</span><span id="line-92"></span><span class="hs-comment">--</span><span>
+</span><span id="line-93"></span><span class="hs-comment">-- For the 'Dwindle' layout, the 'Chirality' alternates between 'CW' and 'CCW' in</span><span>
+</span><span id="line-94"></span><span class="hs-comment">-- each step.  For example, parameters 'U' and 'CCW' produce the direction</span><span>
+</span><span id="line-95"></span><span class="hs-comment">-- sequence 'U', 'L', 'U', 'L', ... because 'L' is the 'CCW' rotation of 'U' and</span><span>
+</span><span id="line-96"></span><span class="hs-comment">-- 'U' is the 'CW' rotation of 'L'.</span><span>
+</span><span id="line-97"></span><span class="hs-comment">--</span><span>
+</span><span id="line-98"></span><span class="hs-comment">-- In each split, the current rectangle is split so that the ratio between the</span><span>
+</span><span id="line-99"></span><span class="hs-comment">-- size of the rectangle allocated to the current window and the size of the</span><span>
+</span><span id="line-100"></span><span class="hs-comment">-- rectangle allocated to the remaining windows is the third layout parameter.</span><span>
+</span><span id="line-101"></span><span class="hs-comment">-- This ratio can be altered using 'Expand' and 'Shrink' messages.  The former</span><span>
+</span><span id="line-102"></span><span class="hs-comment">-- multiplies the ratio by the fourth layout parameter.  The latter divides the</span><span>
+</span><span id="line-103"></span><span class="hs-comment">-- ratio by this parameter.</span><span>
+</span><span id="line-104"></span><span class="hs-comment">--</span><span>
+</span><span id="line-105"></span><span class="hs-comment">-- 'Squeeze' does not alternate between horizontal and vertical splits and</span><span>
+</span><span id="line-106"></span><span class="hs-comment">-- simply splits in the direction given as its first argument.</span><span>
+</span><span id="line-107"></span><span class="hs-comment">--</span><span>
+</span><span id="line-108"></span><span class="hs-comment">-- Parameters for both 'Dwindle' and 'Spiral':</span><span>
+</span><span id="line-109"></span><span class="hs-comment">--</span><span>
+</span><span id="line-110"></span><span class="hs-comment">-- * First split direction</span><span>
+</span><span id="line-111"></span><span class="hs-comment">--</span><span>
+</span><span id="line-112"></span><span class="hs-comment">-- * First split chirality</span><span>
+</span><span id="line-113"></span><span class="hs-comment">--</span><span>
+</span><span id="line-114"></span><span class="hs-comment">-- * Size ratio between rectangle allocated to current window and rectangle</span><span>
+</span><span id="line-115"></span><span class="hs-comment">-- allocated to remaining windows</span><span>
+</span><span id="line-116"></span><span class="hs-comment">--</span><span>
+</span><span id="line-117"></span><span class="hs-comment">-- * Factor by which the size ratio is changed in response to 'Expand' or 'Shrink'</span><span>
+</span><span id="line-118"></span><span class="hs-comment">-- messages</span><span>
+</span><span id="line-119"></span><span class="hs-comment">--</span><span>
+</span><span id="line-120"></span><span class="hs-comment">-- The parameters for 'Squeeze' are the same, except that there is no 'Chirality'</span><span>
+</span><span id="line-121"></span><span class="hs-comment">-- parameter.</span><span>
+</span><span id="line-122"></span><span class="hs-keyword">data</span><span> </span><span id="Dwindle"><span class="annot"><a href="XMonad.Layout.Dwindle.html#Dwindle"><span class="hs-identifier hs-var">Dwindle</span></a></span></span><span> </span><span id="local-6989586621679386375"><span class="annot"><a href="#local-6989586621679386375"><span class="hs-identifier hs-type">a</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span id="Dwindle"><span class="annot"><a href="XMonad.Layout.Dwindle.html#Dwindle"><span class="hs-identifier hs-var">Dwindle</span></a></span></span><span> </span><span class="hs-glyph">!</span><span class="annot"><a href="XMonad.Util.Types.html#Direction2D"><span class="hs-identifier hs-type">Direction2D</span></a></span><span> </span><span class="hs-glyph">!</span><span class="annot"><a href="XMonad.Layout.Dwindle.html#Chirality"><span class="hs-identifier hs-type">Chirality</span></a></span><span> </span><span class="hs-glyph">!</span><span class="annot"><span class="hs-identifier hs-type">Rational</span></span><span> </span><span class="hs-glyph">!</span><span class="annot"><span class="hs-identifier hs-type">Rational</span></span><span>
+</span><span id="line-123"></span><span>               </span><span class="hs-glyph">|</span><span> </span><span id="Spiral"><span class="annot"><a href="XMonad.Layout.Dwindle.html#Spiral"><span class="hs-identifier hs-var">Spiral</span></a></span></span><span>  </span><span class="hs-glyph">!</span><span class="annot"><a href="XMonad.Util.Types.html#Direction2D"><span class="hs-identifier hs-type">Direction2D</span></a></span><span> </span><span class="hs-glyph">!</span><span class="annot"><a href="XMonad.Layout.Dwindle.html#Chirality"><span class="hs-identifier hs-type">Chirality</span></a></span><span> </span><span class="hs-glyph">!</span><span class="annot"><span class="hs-identifier hs-type">Rational</span></span><span> </span><span class="hs-glyph">!</span><span class="annot"><span class="hs-identifier hs-type">Rational</span></span><span>
+</span><span id="line-124"></span><span>               </span><span class="hs-glyph">|</span><span> </span><span id="Squeeze"><span class="annot"><a href="XMonad.Layout.Dwindle.html#Squeeze"><span class="hs-identifier hs-var">Squeeze</span></a></span></span><span> </span><span class="hs-glyph">!</span><span class="annot"><a href="XMonad.Util.Types.html#Direction2D"><span class="hs-identifier hs-type">Direction2D</span></a></span><span> </span><span class="hs-glyph">!</span><span class="annot"><span class="hs-identifier hs-type">Rational</span></span><span> </span><span class="hs-glyph">!</span><span class="annot"><span class="hs-identifier hs-type">Rational</span></span><span>
+</span><span id="line-125"></span><span>               </span><span class="hs-keyword">deriving</span><span> </span><span class="hs-special">(</span><span id="local-6989586621679386317"><span id="local-6989586621679386319"><span id="local-6989586621679386321"><span id="local-6989586621679386323"><span class="annot"><span class="annottext">ReadPrec [Dwindle a]
+ReadPrec (Dwindle a)
+Int -&gt; ReadS (Dwindle a)
+ReadS [Dwindle a]
+(Int -&gt; ReadS (Dwindle a))
+-&gt; ReadS [Dwindle a]
+-&gt; ReadPrec (Dwindle a)
+-&gt; ReadPrec [Dwindle a]
+-&gt; Read (Dwindle a)
+forall a. ReadPrec [Dwindle a]
+forall a. ReadPrec (Dwindle a)
+forall a. Int -&gt; ReadS (Dwindle a)
+forall a. ReadS [Dwindle a]
+forall a.
+(Int -&gt; ReadS a)
+-&gt; ReadS [a] -&gt; ReadPrec a -&gt; ReadPrec [a] -&gt; Read a
+readListPrec :: ReadPrec [Dwindle a]
+$creadListPrec :: forall a. ReadPrec [Dwindle a]
+readPrec :: ReadPrec (Dwindle a)
+$creadPrec :: forall a. ReadPrec (Dwindle a)
+readList :: ReadS [Dwindle a]
+$creadList :: forall a. ReadS [Dwindle a]
+readsPrec :: Int -&gt; ReadS (Dwindle a)
+$creadsPrec :: forall a. Int -&gt; ReadS (Dwindle a)
+</span><span class="hs-identifier hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var">Read</span></span></span></span></span></span><span class="hs-special">,</span><span> </span><span id="local-6989586621679386310"><span id="local-6989586621679386312"><span id="local-6989586621679386314"><span class="annot"><span class="annottext">Int -&gt; Dwindle a -&gt; ShowS
+[Dwindle a] -&gt; ShowS
+Dwindle a -&gt; String
+(Int -&gt; Dwindle a -&gt; ShowS)
+-&gt; (Dwindle a -&gt; String)
+-&gt; ([Dwindle a] -&gt; ShowS)
+-&gt; Show (Dwindle a)
+forall a. Int -&gt; Dwindle a -&gt; ShowS
+forall a. [Dwindle a] -&gt; ShowS
+forall a. Dwindle a -&gt; String
+forall a.
+(Int -&gt; a -&gt; ShowS) -&gt; (a -&gt; String) -&gt; ([a] -&gt; ShowS) -&gt; Show a
+showList :: [Dwindle a] -&gt; ShowS
+$cshowList :: forall a. [Dwindle a] -&gt; ShowS
+show :: Dwindle a -&gt; String
+$cshow :: forall a. Dwindle a -&gt; String
+showsPrec :: Int -&gt; Dwindle a -&gt; ShowS
+$cshowsPrec :: forall a. Int -&gt; Dwindle a -&gt; ShowS
+</span><span class="hs-identifier hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var">Show</span></span></span></span></span><span class="hs-special">)</span><span>
+</span><span id="line-126"></span><span>
+</span><span id="line-127"></span><span class="hs-comment">-- | Rotation between consecutive split directions</span><span>
+</span><span id="line-128"></span><span class="hs-keyword">data</span><span> </span><span id="Chirality"><span class="annot"><a href="XMonad.Layout.Dwindle.html#Chirality"><span class="hs-identifier hs-var">Chirality</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span id="CW"><span class="annot"><a href="XMonad.Layout.Dwindle.html#CW"><span class="hs-identifier hs-var">CW</span></a></span></span><span> </span><span class="hs-glyph">|</span><span> </span><span id="CCW"><span class="annot"><a href="XMonad.Layout.Dwindle.html#CCW"><span class="hs-identifier hs-var">CCW</span></a></span></span><span>
+</span><span id="line-129"></span><span>               </span><span class="hs-keyword">deriving</span><span> </span><span class="hs-special">(</span><span id="local-6989586621679386299"><span id="local-6989586621679386301"><span id="local-6989586621679386303"><span id="local-6989586621679386305"><span class="annot"><span class="annottext">ReadPrec [Chirality]
+ReadPrec Chirality
+Int -&gt; ReadS Chirality
+ReadS [Chirality]
+(Int -&gt; ReadS Chirality)
+-&gt; ReadS [Chirality]
+-&gt; ReadPrec Chirality
+-&gt; ReadPrec [Chirality]
+-&gt; Read Chirality
+forall a.
+(Int -&gt; ReadS a)
+-&gt; ReadS [a] -&gt; ReadPrec a -&gt; ReadPrec [a] -&gt; Read a
+readListPrec :: ReadPrec [Chirality]
+$creadListPrec :: ReadPrec [Chirality]
+readPrec :: ReadPrec Chirality
+$creadPrec :: ReadPrec Chirality
+readList :: ReadS [Chirality]
+$creadList :: ReadS [Chirality]
+readsPrec :: Int -&gt; ReadS Chirality
+$creadsPrec :: Int -&gt; ReadS Chirality
+</span><span class="hs-identifier hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var">Read</span></span></span></span></span></span><span class="hs-special">,</span><span> </span><span id="local-6989586621679386293"><span id="local-6989586621679386295"><span id="local-6989586621679386297"><span class="annot"><span class="annottext">Int -&gt; Chirality -&gt; ShowS
+[Chirality] -&gt; ShowS
+Chirality -&gt; String
+(Int -&gt; Chirality -&gt; ShowS)
+-&gt; (Chirality -&gt; String)
+-&gt; ([Chirality] -&gt; ShowS)
+-&gt; Show Chirality
+forall a.
+(Int -&gt; a -&gt; ShowS) -&gt; (a -&gt; String) -&gt; ([a] -&gt; ShowS) -&gt; Show a
+showList :: [Chirality] -&gt; ShowS
+$cshowList :: [Chirality] -&gt; ShowS
+show :: Chirality -&gt; String
+$cshow :: Chirality -&gt; String
+showsPrec :: Int -&gt; Chirality -&gt; ShowS
+$cshowsPrec :: Int -&gt; Chirality -&gt; ShowS
+</span><span class="hs-identifier hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var">Show</span></span></span></span></span><span class="hs-special">)</span><span>
+</span><span id="line-130"></span><span>
+</span><span id="line-131"></span><span id="local-6989586621679386292"><span class="hs-keyword">instance</span><span> </span><span id="local-6989586621679386278"><span id="local-6989586621679386281"><span id="local-6989586621679386283"><span id="local-6989586621679386286"><span id="local-6989586621679386288"><span class="annot"><span class="hs-identifier hs-type">LayoutClass</span></span><span> </span><span class="annot"><a href="XMonad.Layout.Dwindle.html#Dwindle"><span class="hs-identifier hs-type">Dwindle</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679386292"><span class="hs-identifier hs-type">a</span></a></span></span></span></span></span></span><span> </span><span class="hs-keyword">where</span><span>
+</span><span id="line-132"></span><span>    </span><span id="local-6989586621679386276"><span class="annot"><span class="annottext">pureLayout :: Dwindle a -&gt; Rectangle -&gt; Stack a -&gt; [(a, Rectangle)]
+</span><span class="hs-identifier hs-var hs-var hs-var hs-var">pureLayout</span></span></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="XMonad.Layout.Dwindle.html#Dwindle"><span class="hs-identifier hs-type">Dwindle</span></a></span><span> </span><span id="local-6989586621679386274"><span class="annot"><span class="annottext">Direction2D
+</span><a href="#local-6989586621679386274"><span class="hs-identifier hs-var">dir</span></a></span></span><span> </span><span id="local-6989586621679386273"><span class="annot"><span class="annottext">Chirality
+</span><a href="#local-6989586621679386273"><span class="hs-identifier hs-var">rot</span></a></span></span><span> </span><span id="local-6989586621679386272"><span class="annot"><span class="annottext">Rational
+</span><a href="#local-6989586621679386272"><span class="hs-identifier hs-var">ratio</span></a></span></span><span> </span><span class="annot"><span class="annottext">Rational
+</span><span class="hs-identifier">_</span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">AxesGenerator
+-&gt; Direction2D
+-&gt; Chirality
+-&gt; Rational
+-&gt; Rectangle
+-&gt; Stack a
+-&gt; [(a, Rectangle)]
+forall a.
+AxesGenerator
+-&gt; Direction2D
+-&gt; Chirality
+-&gt; Rational
+-&gt; Rectangle
+-&gt; Stack a
+-&gt; [(a, Rectangle)]
+</span><a href="XMonad.Layout.Dwindle.html#dwindle"><span class="hs-identifier hs-var">dwindle</span></a></span><span> </span><span class="annot"><span class="annottext">AxesGenerator
+</span><a href="XMonad.Layout.Dwindle.html#alternate"><span class="hs-identifier hs-var">alternate</span></a></span><span> </span><span class="annot"><span class="annottext">Direction2D
+</span><a href="#local-6989586621679386274"><span class="hs-identifier hs-var">dir</span></a></span><span> </span><span class="annot"><span class="annottext">Chirality
+</span><a href="#local-6989586621679386273"><span class="hs-identifier hs-var">rot</span></a></span><span> </span><span class="annot"><span class="annottext">Rational
+</span><a href="#local-6989586621679386272"><span class="hs-identifier hs-var">ratio</span></a></span><span>
+</span><span id="line-133"></span><span>    </span><span class="annot"><span class="hs-identifier hs-var">pureLayout</span></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="XMonad.Layout.Dwindle.html#Spiral"><span class="hs-identifier hs-type">Spiral</span></a></span><span>  </span><span id="local-6989586621679386269"><span class="annot"><span class="annottext">Direction2D
+</span><a href="#local-6989586621679386269"><span class="hs-identifier hs-var">dir</span></a></span></span><span> </span><span id="local-6989586621679386268"><span class="annot"><span class="annottext">Chirality
+</span><a href="#local-6989586621679386268"><span class="hs-identifier hs-var">rot</span></a></span></span><span> </span><span id="local-6989586621679386267"><span class="annot"><span class="annottext">Rational
+</span><a href="#local-6989586621679386267"><span class="hs-identifier hs-var">ratio</span></a></span></span><span> </span><span class="annot"><span class="annottext">Rational
+</span><span class="hs-identifier">_</span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">AxesGenerator
+-&gt; Direction2D
+-&gt; Chirality
+-&gt; Rational
+-&gt; Rectangle
+-&gt; Stack a
+-&gt; [(a, Rectangle)]
+forall a.
+AxesGenerator
+-&gt; Direction2D
+-&gt; Chirality
+-&gt; Rational
+-&gt; Rectangle
+-&gt; Stack a
+-&gt; [(a, Rectangle)]
+</span><a href="XMonad.Layout.Dwindle.html#dwindle"><span class="hs-identifier hs-var">dwindle</span></a></span><span> </span><span class="annot"><span class="annottext">AxesGenerator
+</span><a href="XMonad.Layout.Dwindle.html#rotate"><span class="hs-identifier hs-var">rotate</span></a></span><span>    </span><span class="annot"><span class="annottext">Direction2D
+</span><a href="#local-6989586621679386269"><span class="hs-identifier hs-var">dir</span></a></span><span> </span><span class="annot"><span class="annottext">Chirality
+</span><a href="#local-6989586621679386268"><span class="hs-identifier hs-var">rot</span></a></span><span> </span><span class="annot"><span class="annottext">Rational
+</span><a href="#local-6989586621679386267"><span class="hs-identifier hs-var">ratio</span></a></span><span>
+</span><span id="line-134"></span><span>    </span><span class="annot"><span class="hs-identifier hs-var">pureLayout</span></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="XMonad.Layout.Dwindle.html#Squeeze"><span class="hs-identifier hs-type">Squeeze</span></a></span><span> </span><span id="local-6989586621679386265"><span class="annot"><span class="annottext">Direction2D
+</span><a href="#local-6989586621679386265"><span class="hs-identifier hs-var">dir</span></a></span></span><span>     </span><span id="local-6989586621679386264"><span class="annot"><span class="annottext">Rational
+</span><a href="#local-6989586621679386264"><span class="hs-identifier hs-var">ratio</span></a></span></span><span> </span><span class="annot"><span class="annottext">Rational
+</span><span class="hs-identifier">_</span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Direction2D -&gt; Rational -&gt; Rectangle -&gt; Stack a -&gt; [(a, Rectangle)]
+forall a.
+Direction2D -&gt; Rational -&gt; Rectangle -&gt; Stack a -&gt; [(a, Rectangle)]
+</span><a href="XMonad.Layout.Dwindle.html#squeeze"><span class="hs-identifier hs-var">squeeze</span></a></span><span>           </span><span class="annot"><span class="annottext">Direction2D
+</span><a href="#local-6989586621679386265"><span class="hs-identifier hs-var">dir</span></a></span><span>     </span><span class="annot"><span class="annottext">Rational
+</span><a href="#local-6989586621679386264"><span class="hs-identifier hs-var">ratio</span></a></span><span>
+</span><span id="line-135"></span><span>    </span><span id="local-6989586621679386262"><span class="annot"><span class="annottext">pureMessage :: Dwindle a -&gt; SomeMessage -&gt; Maybe (Dwindle a)
+</span><span class="hs-identifier hs-var hs-var hs-var hs-var">pureMessage</span></span></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="XMonad.Layout.Dwindle.html#Dwindle"><span class="hs-identifier hs-type">Dwindle</span></a></span><span> </span><span id="local-6989586621679386260"><span class="annot"><span class="annottext">Direction2D
+</span><a href="#local-6989586621679386260"><span class="hs-identifier hs-var">dir</span></a></span></span><span> </span><span id="local-6989586621679386259"><span class="annot"><span class="annottext">Chirality
+</span><a href="#local-6989586621679386259"><span class="hs-identifier hs-var">rot</span></a></span></span><span> </span><span id="local-6989586621679386258"><span class="annot"><span class="annottext">Rational
+</span><a href="#local-6989586621679386258"><span class="hs-identifier hs-var">ratio</span></a></span></span><span> </span><span id="local-6989586621679386257"><span class="annot"><span class="annottext">Rational
+</span><a href="#local-6989586621679386257"><span class="hs-identifier hs-var">delta</span></a></span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=</span><span>
+</span><span id="line-136"></span><span>      </span><span class="annot"><span class="annottext">(Rational -&gt; Dwindle a) -&gt; Maybe Rational -&gt; Maybe (Dwindle a)
+forall (f :: * -&gt; *) a b. Functor f =&gt; (a -&gt; b) -&gt; f a -&gt; f b
+</span><span class="hs-identifier hs-var">fmap</span></span><span> </span><span class="hs-special">(</span><span class="hs-glyph">\</span><span id="local-6989586621679386256"><span class="annot"><span class="annottext">Rational
+</span><a href="#local-6989586621679386256"><span class="hs-identifier hs-var">ratio'</span></a></span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">Direction2D -&gt; Chirality -&gt; Rational -&gt; Rational -&gt; Dwindle a
+forall a.
+Direction2D -&gt; Chirality -&gt; Rational -&gt; Rational -&gt; Dwindle a
+</span><a href="XMonad.Layout.Dwindle.html#Dwindle"><span class="hs-identifier hs-var">Dwindle</span></a></span><span> </span><span class="annot"><span class="annottext">Direction2D
+</span><a href="#local-6989586621679386260"><span class="hs-identifier hs-var">dir</span></a></span><span> </span><span class="annot"><span class="annottext">Chirality
+</span><a href="#local-6989586621679386259"><span class="hs-identifier hs-var">rot</span></a></span><span> </span><span class="annot"><span class="annottext">Rational
+</span><a href="#local-6989586621679386256"><span class="hs-identifier hs-var">ratio'</span></a></span><span> </span><span class="annot"><span class="annottext">Rational
+</span><a href="#local-6989586621679386257"><span class="hs-identifier hs-var">delta</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">(Maybe Rational -&gt; Maybe (Dwindle a))
+-&gt; (SomeMessage -&gt; Maybe Rational)
+-&gt; SomeMessage
+-&gt; Maybe (Dwindle a)
+forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">Rational -&gt; Rational -&gt; SomeMessage -&gt; Maybe Rational
+</span><a href="XMonad.Layout.Dwindle.html#changeRatio"><span class="hs-identifier hs-var">changeRatio</span></a></span><span> </span><span class="annot"><span class="annottext">Rational
+</span><a href="#local-6989586621679386258"><span class="hs-identifier hs-var">ratio</span></a></span><span> </span><span class="annot"><span class="annottext">Rational
+</span><a href="#local-6989586621679386257"><span class="hs-identifier hs-var">delta</span></a></span><span>
+</span><span id="line-137"></span><span>    </span><span class="annot"><span class="hs-identifier hs-var">pureMessage</span></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="XMonad.Layout.Dwindle.html#Spiral"><span class="hs-identifier hs-type">Spiral</span></a></span><span> </span><span id="local-6989586621679386253"><span class="annot"><span class="annottext">Direction2D
+</span><a href="#local-6989586621679386253"><span class="hs-identifier hs-var">dir</span></a></span></span><span> </span><span id="local-6989586621679386252"><span class="annot"><span class="annottext">Chirality
+</span><a href="#local-6989586621679386252"><span class="hs-identifier hs-var">rot</span></a></span></span><span> </span><span id="local-6989586621679386251"><span class="annot"><span class="annottext">Rational
+</span><a href="#local-6989586621679386251"><span class="hs-identifier hs-var">ratio</span></a></span></span><span> </span><span id="local-6989586621679386250"><span class="annot"><span class="annottext">Rational
+</span><a href="#local-6989586621679386250"><span class="hs-identifier hs-var">delta</span></a></span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=</span><span>
+</span><span id="line-138"></span><span>      </span><span class="annot"><span class="annottext">(Rational -&gt; Dwindle a) -&gt; Maybe Rational -&gt; Maybe (Dwindle a)
+forall (f :: * -&gt; *) a b. Functor f =&gt; (a -&gt; b) -&gt; f a -&gt; f b
+</span><span class="hs-identifier hs-var">fmap</span></span><span> </span><span class="hs-special">(</span><span class="hs-glyph">\</span><span id="local-6989586621679386249"><span class="annot"><span class="annottext">Rational
+</span><a href="#local-6989586621679386249"><span class="hs-identifier hs-var">ratio'</span></a></span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">Direction2D -&gt; Chirality -&gt; Rational -&gt; Rational -&gt; Dwindle a
+forall a.
+Direction2D -&gt; Chirality -&gt; Rational -&gt; Rational -&gt; Dwindle a
+</span><a href="XMonad.Layout.Dwindle.html#Spiral"><span class="hs-identifier hs-var">Spiral</span></a></span><span> </span><span class="annot"><span class="annottext">Direction2D
+</span><a href="#local-6989586621679386253"><span class="hs-identifier hs-var">dir</span></a></span><span> </span><span class="annot"><span class="annottext">Chirality
+</span><a href="#local-6989586621679386252"><span class="hs-identifier hs-var">rot</span></a></span><span> </span><span class="annot"><span class="annottext">Rational
+</span><a href="#local-6989586621679386249"><span class="hs-identifier hs-var">ratio'</span></a></span><span> </span><span class="annot"><span class="annottext">Rational
+</span><a href="#local-6989586621679386250"><span class="hs-identifier hs-var">delta</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">(Maybe Rational -&gt; Maybe (Dwindle a))
+-&gt; (SomeMessage -&gt; Maybe Rational)
+-&gt; SomeMessage
+-&gt; Maybe (Dwindle a)
+forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">Rational -&gt; Rational -&gt; SomeMessage -&gt; Maybe Rational
+</span><a href="XMonad.Layout.Dwindle.html#changeRatio"><span class="hs-identifier hs-var">changeRatio</span></a></span><span> </span><span class="annot"><span class="annottext">Rational
+</span><a href="#local-6989586621679386251"><span class="hs-identifier hs-var">ratio</span></a></span><span> </span><span class="annot"><span class="annottext">Rational
+</span><a href="#local-6989586621679386250"><span class="hs-identifier hs-var">delta</span></a></span><span>
+</span><span id="line-139"></span><span>    </span><span class="annot"><span class="hs-identifier hs-var">pureMessage</span></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="XMonad.Layout.Dwindle.html#Squeeze"><span class="hs-identifier hs-type">Squeeze</span></a></span><span> </span><span id="local-6989586621679386248"><span class="annot"><span class="annottext">Direction2D
+</span><a href="#local-6989586621679386248"><span class="hs-identifier hs-var">dir</span></a></span></span><span> </span><span id="local-6989586621679386247"><span class="annot"><span class="annottext">Rational
+</span><a href="#local-6989586621679386247"><span class="hs-identifier hs-var">ratio</span></a></span></span><span> </span><span id="local-6989586621679386246"><span class="annot"><span class="annottext">Rational
+</span><a href="#local-6989586621679386246"><span class="hs-identifier hs-var">delta</span></a></span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=</span><span>
+</span><span id="line-140"></span><span>      </span><span class="annot"><span class="annottext">(Rational -&gt; Dwindle a) -&gt; Maybe Rational -&gt; Maybe (Dwindle a)
+forall (f :: * -&gt; *) a b. Functor f =&gt; (a -&gt; b) -&gt; f a -&gt; f b
+</span><span class="hs-identifier hs-var">fmap</span></span><span> </span><span class="hs-special">(</span><span class="hs-glyph">\</span><span id="local-6989586621679386245"><span class="annot"><span class="annottext">Rational
+</span><a href="#local-6989586621679386245"><span class="hs-identifier hs-var">ratio'</span></a></span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">Direction2D -&gt; Rational -&gt; Rational -&gt; Dwindle a
+forall a. Direction2D -&gt; Rational -&gt; Rational -&gt; Dwindle a
+</span><a href="XMonad.Layout.Dwindle.html#Squeeze"><span class="hs-identifier hs-var">Squeeze</span></a></span><span> </span><span class="annot"><span class="annottext">Direction2D
+</span><a href="#local-6989586621679386248"><span class="hs-identifier hs-var">dir</span></a></span><span> </span><span class="annot"><span class="annottext">Rational
+</span><a href="#local-6989586621679386245"><span class="hs-identifier hs-var">ratio'</span></a></span><span> </span><span class="annot"><span class="annottext">Rational
+</span><a href="#local-6989586621679386246"><span class="hs-identifier hs-var">delta</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">(Maybe Rational -&gt; Maybe (Dwindle a))
+-&gt; (SomeMessage -&gt; Maybe Rational)
+-&gt; SomeMessage
+-&gt; Maybe (Dwindle a)
+forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">Rational -&gt; Rational -&gt; SomeMessage -&gt; Maybe Rational
+</span><a href="XMonad.Layout.Dwindle.html#changeRatio"><span class="hs-identifier hs-var">changeRatio</span></a></span><span> </span><span class="annot"><span class="annottext">Rational
+</span><a href="#local-6989586621679386247"><span class="hs-identifier hs-var">ratio</span></a></span><span> </span><span class="annot"><span class="annottext">Rational
+</span><a href="#local-6989586621679386246"><span class="hs-identifier hs-var">delta</span></a></span></span><span>
+</span><span id="line-141"></span><span>
+</span><span id="line-142"></span><span class="annot"><a href="XMonad.Layout.Dwindle.html#changeRatio"><span class="hs-identifier hs-type">changeRatio</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Rational</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Rational</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">SomeMessage</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Maybe</span></span><span> </span><span class="annot"><span class="hs-identifier hs-type">Rational</span></span><span>
+</span><span id="line-143"></span><span id="changeRatio"><span class="annot"><span class="annottext">changeRatio :: Rational -&gt; Rational -&gt; SomeMessage -&gt; Maybe Rational
+</span><a href="XMonad.Layout.Dwindle.html#changeRatio"><span class="hs-identifier hs-var hs-var">changeRatio</span></a></span></span><span> </span><span id="local-6989586621679386244"><span class="annot"><span class="annottext">Rational
+</span><a href="#local-6989586621679386244"><span class="hs-identifier hs-var">ratio</span></a></span></span><span> </span><span id="local-6989586621679386243"><span class="annot"><span class="annottext">Rational
+</span><a href="#local-6989586621679386243"><span class="hs-identifier hs-var">delta</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">(Resize -&gt; Rational) -&gt; Maybe Resize -&gt; Maybe Rational
+forall (f :: * -&gt; *) a b. Functor f =&gt; (a -&gt; b) -&gt; f a -&gt; f b
+</span><span class="hs-identifier hs-var">fmap</span></span><span> </span><span class="annot"><span class="annottext">Resize -&gt; Rational
+</span><a href="#local-6989586621679386242"><span class="hs-identifier hs-var">f</span></a></span><span> </span><span class="annot"><span class="annottext">(Maybe Resize -&gt; Maybe Rational)
+-&gt; (SomeMessage -&gt; Maybe Resize) -&gt; SomeMessage -&gt; Maybe Rational
+forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">SomeMessage -&gt; Maybe Resize
+forall m. Message m =&gt; SomeMessage -&gt; Maybe m
+</span><span class="hs-identifier hs-var">fromMessage</span></span><span>
+</span><span id="line-144"></span><span>  </span><span class="hs-keyword">where</span><span> </span><span id="local-6989586621679386242"><span class="annot"><span class="annottext">f :: Resize -&gt; Rational
+</span><a href="#local-6989586621679386242"><span class="hs-identifier hs-var hs-var">f</span></a></span></span><span> </span><span class="annot"><span class="annottext">Resize
+</span><span class="hs-identifier hs-var">Expand</span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Rational
+</span><a href="#local-6989586621679386244"><span class="hs-identifier hs-var">ratio</span></a></span><span> </span><span class="annot"><span class="annottext">Rational -&gt; Rational -&gt; Rational
+forall a. Num a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-operator hs-var">*</span></span><span> </span><span class="annot"><span class="annottext">Rational
+</span><a href="#local-6989586621679386243"><span class="hs-identifier hs-var">delta</span></a></span><span>
+</span><span id="line-145"></span><span>        </span><span class="annot"><a href="#local-6989586621679386242"><span class="hs-identifier hs-var">f</span></a></span><span> </span><span class="annot"><span class="annottext">Resize
+</span><span class="hs-identifier hs-var">Shrink</span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Rational
+</span><a href="#local-6989586621679386244"><span class="hs-identifier hs-var">ratio</span></a></span><span> </span><span class="annot"><span class="annottext">Rational -&gt; Rational -&gt; Rational
+forall a. Fractional a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-operator hs-var">/</span></span><span> </span><span class="annot"><span class="annottext">Rational
+</span><a href="#local-6989586621679386243"><span class="hs-identifier hs-var">delta</span></a></span><span>
+</span><span id="line-146"></span><span>
+</span><span id="line-147"></span><span id="local-6989586621679386380"><span class="annot"><a href="XMonad.Layout.Dwindle.html#dwindle"><span class="hs-identifier hs-type">dwindle</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><a href="XMonad.Layout.Dwindle.html#AxesGenerator"><span class="hs-identifier hs-type">AxesGenerator</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="XMonad.Util.Types.html#Direction2D"><span class="hs-identifier hs-type">Direction2D</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="XMonad.Layout.Dwindle.html#Chirality"><span class="hs-identifier hs-type">Chirality</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Rational</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Rectangle</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Stack</span></span><span> </span><span class="annot"><a href="#local-6989586621679386380"><span class="hs-identifier hs-type">a</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span>
+</span><span id="line-148"></span><span>           </span><span class="hs-special">[</span><span class="hs-special">(</span><span class="annot"><a href="#local-6989586621679386380"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Rectangle</span></span><span class="hs-special">)</span><span class="hs-special">]</span></span><span>
+</span><span id="line-149"></span><span id="dwindle"><span class="annot"><span class="annottext">dwindle :: AxesGenerator
+-&gt; Direction2D
+-&gt; Chirality
+-&gt; Rational
+-&gt; Rectangle
+-&gt; Stack a
+-&gt; [(a, Rectangle)]
+</span><a href="XMonad.Layout.Dwindle.html#dwindle"><span class="hs-identifier hs-var hs-var">dwindle</span></a></span></span><span> </span><span id="local-6989586621679386236"><span class="annot"><span class="annottext">AxesGenerator
+</span><a href="#local-6989586621679386236"><span class="hs-identifier hs-var">trans</span></a></span></span><span> </span><span id="local-6989586621679386235"><span class="annot"><span class="annottext">Direction2D
+</span><a href="#local-6989586621679386235"><span class="hs-identifier hs-var">dir</span></a></span></span><span> </span><span id="local-6989586621679386234"><span class="annot"><span class="annottext">Chirality
+</span><a href="#local-6989586621679386234"><span class="hs-identifier hs-var">rot</span></a></span></span><span> </span><span id="local-6989586621679386233"><span class="annot"><span class="annottext">Rational
+</span><a href="#local-6989586621679386233"><span class="hs-identifier hs-var">ratio</span></a></span></span><span> </span><span id="local-6989586621679386232"><span class="annot"><span class="annottext">Rectangle
+</span><a href="#local-6989586621679386232"><span class="hs-identifier hs-var">rect</span></a></span></span><span> </span><span id="local-6989586621679386231"><span class="annot"><span class="annottext">Stack a
+</span><a href="#local-6989586621679386231"><span class="hs-identifier hs-var">st</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">(([a], Rectangle, Axes, Chirality)
+ -&gt; Maybe ((a, Rectangle), ([a], Rectangle, Axes, Chirality)))
+-&gt; ([a], Rectangle, Axes, Chirality) -&gt; [(a, Rectangle)]
+forall b a. (b -&gt; Maybe (a, b)) -&gt; b -&gt; [a]
+</span><span class="hs-identifier hs-var">unfoldr</span></span><span> </span><span class="annot"><span class="annottext">([a], Rectangle, Axes, Chirality)
+-&gt; Maybe ((a, Rectangle), ([a], Rectangle, Axes, Chirality))
+forall a.
+([a], Rectangle, Axes, Chirality)
+-&gt; Maybe ((a, Rectangle), ([a], Rectangle, Axes, Chirality))
+</span><a href="#local-6989586621679386230"><span class="hs-identifier hs-var">genRects</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Stack a -&gt; [a]
+forall a. Stack a -&gt; [a]
+</span><span class="hs-identifier hs-var">integrate</span></span><span> </span><span class="annot"><span class="annottext">Stack a
+</span><a href="#local-6989586621679386231"><span class="hs-identifier hs-var">st</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">Rectangle
+</span><a href="#local-6989586621679386232"><span class="hs-identifier hs-var">rect</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">Direction2D -&gt; Axes
+</span><a href="XMonad.Layout.Dwindle.html#dirAxes"><span class="hs-identifier hs-var">dirAxes</span></a></span><span> </span><span class="annot"><span class="annottext">Direction2D
+</span><a href="#local-6989586621679386235"><span class="hs-identifier hs-var">dir</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">Chirality
+</span><a href="#local-6989586621679386234"><span class="hs-identifier hs-var">rot</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-150"></span><span>  </span><span class="hs-keyword">where</span><span> </span><span id="local-6989586621679386230"><span class="annot"><span class="annottext">genRects :: ([a], Rectangle, Axes, Chirality)
+-&gt; Maybe ((a, Rectangle), ([a], Rectangle, Axes, Chirality))
+</span><a href="#local-6989586621679386230"><span class="hs-identifier hs-var hs-var">genRects</span></a></span></span><span> </span><span class="hs-special">(</span><span class="hs-special">[</span><span class="hs-special">]</span><span class="hs-special">,</span><span>   </span><span class="annot"><span class="annottext">Rectangle
+</span><span class="hs-identifier">_</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">Axes
+</span><span class="hs-identifier">_</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">Chirality
+</span><span class="hs-identifier">_</span></span><span> </span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Maybe ((a, Rectangle), ([a], Rectangle, Axes, Chirality))
+forall a. Maybe a
+</span><span class="hs-identifier hs-var">Nothing</span></span><span>
+</span><span id="line-151"></span><span>        </span><span class="annot"><a href="#local-6989586621679386230"><span class="hs-identifier hs-var">genRects</span></a></span><span> </span><span class="hs-special">(</span><span class="hs-special">[</span><span id="local-6989586621679386228"><span class="annot"><span class="annottext">a
+</span><a href="#local-6989586621679386228"><span class="hs-identifier hs-var">w</span></a></span></span><span class="hs-special">]</span><span class="hs-special">,</span><span>  </span><span id="local-6989586621679386227"><span class="annot"><span class="annottext">Rectangle
+</span><a href="#local-6989586621679386227"><span class="hs-identifier hs-var">r</span></a></span></span><span class="hs-special">,</span><span> </span><span id="local-6989586621679386226"><span class="annot"><span class="annottext">Axes
+</span><a href="#local-6989586621679386226"><span class="hs-identifier hs-var">a</span></a></span></span><span class="hs-special">,</span><span> </span><span id="local-6989586621679386225"><span class="annot"><span class="annottext">Chirality
+</span><a href="#local-6989586621679386225"><span class="hs-identifier hs-var">rt</span></a></span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">((a, Rectangle), ([a], Rectangle, Axes, Chirality))
+-&gt; Maybe ((a, Rectangle), ([a], Rectangle, Axes, Chirality))
+forall a. a -&gt; Maybe a
+</span><span class="hs-identifier hs-var">Just</span></span><span> </span><span class="hs-special">(</span><span class="hs-special">(</span><span class="annot"><span class="annottext">a
+</span><a href="#local-6989586621679386228"><span class="hs-identifier hs-var">w</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">Rectangle
+</span><a href="#local-6989586621679386227"><span class="hs-identifier hs-var">r</span></a></span><span class="hs-special">)</span><span class="hs-special">,</span><span>  </span><span class="hs-special">(</span><span class="hs-special">[</span><span class="hs-special">]</span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">Rectangle
+</span><a href="#local-6989586621679386227"><span class="hs-identifier hs-var">r</span></a></span><span class="hs-special">,</span><span>   </span><span class="annot"><span class="annottext">Axes
+</span><a href="#local-6989586621679386226"><span class="hs-identifier hs-var">a</span></a></span><span class="hs-special">,</span><span>  </span><span class="annot"><span class="annottext">Chirality
+</span><a href="#local-6989586621679386225"><span class="hs-identifier hs-var">rt</span></a></span><span class="hs-special">)</span><span class="hs-special">)</span><span>
+</span><span id="line-152"></span><span>        </span><span class="annot"><a href="#local-6989586621679386230"><span class="hs-identifier hs-var">genRects</span></a></span><span> </span><span class="hs-special">(</span><span id="local-6989586621679386224"><span class="annot"><span class="annottext">a
+</span><a href="#local-6989586621679386224"><span class="hs-identifier hs-var">w</span></a></span></span><span class="annot"><span class="hs-glyph hs-type">:</span></span><span id="local-6989586621679386223"><span class="annot"><span class="annottext">[a]
+</span><a href="#local-6989586621679386223"><span class="hs-identifier hs-var">ws</span></a></span></span><span class="hs-special">,</span><span> </span><span id="local-6989586621679386222"><span class="annot"><span class="annottext">Rectangle
+</span><a href="#local-6989586621679386222"><span class="hs-identifier hs-var">r</span></a></span></span><span class="hs-special">,</span><span> </span><span id="local-6989586621679386221"><span class="annot"><span class="annottext">Axes
+</span><a href="#local-6989586621679386221"><span class="hs-identifier hs-var">a</span></a></span></span><span class="hs-special">,</span><span> </span><span id="local-6989586621679386220"><span class="annot"><span class="annottext">Chirality
+</span><a href="#local-6989586621679386220"><span class="hs-identifier hs-var">rt</span></a></span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">((a, Rectangle), ([a], Rectangle, Axes, Chirality))
+-&gt; Maybe ((a, Rectangle), ([a], Rectangle, Axes, Chirality))
+forall a. a -&gt; Maybe a
+</span><span class="hs-identifier hs-var">Just</span></span><span> </span><span class="hs-special">(</span><span class="hs-special">(</span><span class="annot"><span class="annottext">a
+</span><a href="#local-6989586621679386224"><span class="hs-identifier hs-var">w</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">Rectangle
+</span><a href="#local-6989586621679386219"><span class="hs-identifier hs-var">r'</span></a></span><span class="hs-special">)</span><span class="hs-special">,</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">[a]
+</span><a href="#local-6989586621679386223"><span class="hs-identifier hs-var">ws</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">Rectangle
+</span><a href="#local-6989586621679386218"><span class="hs-identifier hs-var">r''</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">Axes
+</span><a href="#local-6989586621679386217"><span class="hs-identifier hs-var">a'</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">Chirality
+</span><a href="#local-6989586621679386216"><span class="hs-identifier hs-var">rt'</span></a></span><span class="hs-special">)</span><span class="hs-special">)</span><span>
+</span><span id="line-153"></span><span>          </span><span class="hs-keyword">where</span><span> </span><span class="hs-special">(</span><span id="local-6989586621679386219"><span class="annot"><span class="annottext">Rectangle
+</span><a href="#local-6989586621679386219"><span class="hs-identifier hs-var">r'</span></a></span></span><span class="hs-special">,</span><span> </span><span id="local-6989586621679386218"><span class="annot"><span class="annottext">Rectangle
+</span><a href="#local-6989586621679386218"><span class="hs-identifier hs-var">r''</span></a></span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Rectangle -&gt; Rational -&gt; Axes -&gt; (Rectangle, Rectangle)
+</span><a href="XMonad.Layout.Dwindle.html#splitRect"><span class="hs-identifier hs-var">splitRect</span></a></span><span> </span><span class="annot"><span class="annottext">Rectangle
+</span><a href="#local-6989586621679386222"><span class="hs-identifier hs-var">r</span></a></span><span> </span><span class="annot"><span class="annottext">Rational
+</span><a href="#local-6989586621679386233"><span class="hs-identifier hs-var">ratio</span></a></span><span> </span><span class="annot"><span class="annottext">Axes
+</span><a href="#local-6989586621679386221"><span class="hs-identifier hs-var">a</span></a></span><span>
+</span><span id="line-154"></span><span>                </span><span class="hs-special">(</span><span id="local-6989586621679386217"><span class="annot"><span class="annottext">Axes
+</span><a href="#local-6989586621679386217"><span class="hs-identifier hs-var">a'</span></a></span></span><span class="hs-special">,</span><span> </span><span id="local-6989586621679386216"><span class="annot"><span class="annottext">Chirality
+</span><a href="#local-6989586621679386216"><span class="hs-identifier hs-var">rt'</span></a></span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">AxesGenerator
+</span><a href="#local-6989586621679386236"><span class="hs-identifier hs-var">trans</span></a></span><span> </span><span class="annot"><span class="annottext">Axes
+</span><a href="#local-6989586621679386221"><span class="hs-identifier hs-var">a</span></a></span><span> </span><span class="annot"><span class="annottext">Chirality
+</span><a href="#local-6989586621679386220"><span class="hs-identifier hs-var">rt</span></a></span><span>
+</span><span id="line-155"></span><span>
+</span><span id="line-156"></span><span id="local-6989586621679386379"><span class="annot"><a href="XMonad.Layout.Dwindle.html#squeeze"><span class="hs-identifier hs-type">squeeze</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><a href="XMonad.Util.Types.html#Direction2D"><span class="hs-identifier hs-type">Direction2D</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Rational</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Rectangle</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Stack</span></span><span> </span><span class="annot"><a href="#local-6989586621679386379"><span class="hs-identifier hs-type">a</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="hs-special">[</span><span class="hs-special">(</span><span class="annot"><a href="#local-6989586621679386379"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Rectangle</span></span><span class="hs-special">)</span><span class="hs-special">]</span></span><span>
+</span><span id="line-157"></span><span id="squeeze"><span class="annot"><span class="annottext">squeeze :: Direction2D -&gt; Rational -&gt; Rectangle -&gt; Stack a -&gt; [(a, Rectangle)]
+</span><a href="XMonad.Layout.Dwindle.html#squeeze"><span class="hs-identifier hs-var hs-var">squeeze</span></a></span></span><span> </span><span id="local-6989586621679386214"><span class="annot"><span class="annottext">Direction2D
+</span><a href="#local-6989586621679386214"><span class="hs-identifier hs-var">dir</span></a></span></span><span> </span><span id="local-6989586621679386213"><span class="annot"><span class="annottext">Rational
+</span><a href="#local-6989586621679386213"><span class="hs-identifier hs-var">ratio</span></a></span></span><span> </span><span id="local-6989586621679386212"><span class="annot"><span class="annottext">Rectangle
+</span><a href="#local-6989586621679386212"><span class="hs-identifier hs-var">rect</span></a></span></span><span> </span><span id="local-6989586621679386211"><span class="annot"><span class="annottext">Stack a
+</span><a href="#local-6989586621679386211"><span class="hs-identifier hs-var">st</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">[a] -&gt; [Rectangle] -&gt; [(a, Rectangle)]
+forall a b. [a] -&gt; [b] -&gt; [(a, b)]
+</span><span class="hs-identifier hs-var">zip</span></span><span> </span><span class="annot"><span class="annottext">[a]
+</span><a href="#local-6989586621679386210"><span class="hs-identifier hs-var">wins</span></a></span><span> </span><span class="annot"><span class="annottext">[Rectangle]
+</span><a href="#local-6989586621679386209"><span class="hs-identifier hs-var">rects</span></a></span><span>
+</span><span id="line-158"></span><span>  </span><span class="hs-keyword">where</span><span> </span><span id="local-6989586621679386210"><span class="annot"><span class="annottext">wins :: [a]
+</span><a href="#local-6989586621679386210"><span class="hs-identifier hs-var hs-var">wins</span></a></span></span><span>    </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Stack a -&gt; [a]
+forall a. Stack a -&gt; [a]
+</span><span class="hs-identifier hs-var">integrate</span></span><span> </span><span class="annot"><span class="annottext">Stack a
+</span><a href="#local-6989586621679386211"><span class="hs-identifier hs-var">st</span></a></span><span>
+</span><span id="line-159"></span><span>        </span><span id="local-6989586621679386208"><span class="annot"><span class="annottext">nwins :: Int
+</span><a href="#local-6989586621679386208"><span class="hs-identifier hs-var hs-var">nwins</span></a></span></span><span>   </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">[a] -&gt; Int
+forall (t :: * -&gt; *) a. Foldable t =&gt; t a -&gt; Int
+</span><span class="hs-identifier hs-var">length</span></span><span> </span><span class="annot"><span class="annottext">[a]
+</span><a href="#local-6989586621679386210"><span class="hs-identifier hs-var">wins</span></a></span><span>
+</span><span id="line-160"></span><span>        </span><span id="local-6989586621679386206"><span class="annot"><span class="annottext">sizes :: [Rational]
+</span><a href="#local-6989586621679386206"><span class="hs-identifier hs-var hs-var">sizes</span></a></span></span><span>   </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Int -&gt; [Rational] -&gt; [Rational]
+forall a. Int -&gt; [a] -&gt; [a]
+</span><span class="hs-identifier hs-var">take</span></span><span> </span><span class="annot"><span class="annottext">Int
+</span><a href="#local-6989586621679386208"><span class="hs-identifier hs-var">nwins</span></a></span><span> </span><span class="annot"><span class="annottext">([Rational] -&gt; [Rational]) -&gt; [Rational] -&gt; [Rational]
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">(Rational -&gt; Maybe (Rational, Rational)) -&gt; Rational -&gt; [Rational]
+forall b a. (b -&gt; Maybe (a, b)) -&gt; b -&gt; [a]
+</span><span class="hs-identifier hs-var">unfoldr</span></span><span> </span><span class="hs-special">(</span><span class="hs-glyph">\</span><span id="local-6989586621679386204"><span class="annot"><span class="annottext">Rational
+</span><a href="#local-6989586621679386204"><span class="hs-identifier hs-var">r</span></a></span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">(Rational, Rational) -&gt; Maybe (Rational, Rational)
+forall a. a -&gt; Maybe a
+</span><span class="hs-identifier hs-var">Just</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Rational
+</span><a href="#local-6989586621679386204"><span class="hs-identifier hs-var">r</span></a></span><span> </span><span class="annot"><span class="annottext">Rational -&gt; Rational -&gt; Rational
+forall a. Num a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-operator hs-var">*</span></span><span> </span><span class="annot"><span class="annottext">Rational
+</span><a href="#local-6989586621679386213"><span class="hs-identifier hs-var">ratio</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">Rational
+</span><a href="#local-6989586621679386204"><span class="hs-identifier hs-var">r</span></a></span><span> </span><span class="annot"><span class="annottext">Rational -&gt; Rational -&gt; Rational
+forall a. Num a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-operator hs-var">*</span></span><span> </span><span class="annot"><span class="annottext">Rational
+</span><a href="#local-6989586621679386213"><span class="hs-identifier hs-var">ratio</span></a></span><span class="hs-special">)</span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">Rational
+</span><span class="hs-number">1</span></span><span>
+</span><span id="line-161"></span><span>        </span><span id="local-6989586621679386203"><span class="annot"><span class="annottext">totals' :: [Rational]
+</span><a href="#local-6989586621679386203"><span class="hs-identifier hs-var hs-var">totals'</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Rational
+</span><span class="hs-number">0</span></span><span> </span><span class="annot"><span class="annottext">Rational -&gt; [Rational] -&gt; [Rational]
+forall a. a -&gt; [a] -&gt; [a]
+</span><span class="hs-glyph hs-var">:</span></span><span> </span><span class="annot"><span class="annottext">(Rational -&gt; Rational -&gt; Rational)
+-&gt; [Rational] -&gt; [Rational] -&gt; [Rational]
+forall a b c. (a -&gt; b -&gt; c) -&gt; [a] -&gt; [b] -&gt; [c]
+</span><span class="hs-identifier hs-var">zipWith</span></span><span> </span><span class="annot"><span class="annottext">Rational -&gt; Rational -&gt; Rational
+forall a. Num a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-operator hs-var">(+)</span></span><span> </span><span class="annot"><span class="annottext">[Rational]
+</span><a href="#local-6989586621679386206"><span class="hs-identifier hs-var">sizes</span></a></span><span> </span><span class="annot"><span class="annottext">[Rational]
+</span><a href="#local-6989586621679386203"><span class="hs-identifier hs-var">totals'</span></a></span><span>
+</span><span id="line-162"></span><span>        </span><span id="local-6989586621679386200"><span class="annot"><span class="annottext">totals :: [Rational]
+</span><a href="#local-6989586621679386200"><span class="hs-identifier hs-var hs-var">totals</span></a></span></span><span>  </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">[Rational] -&gt; [Rational]
+forall a. [a] -&gt; [a]
+</span><span class="hs-identifier hs-var">tail</span></span><span> </span><span class="annot"><span class="annottext">[Rational]
+</span><a href="#local-6989586621679386203"><span class="hs-identifier hs-var">totals'</span></a></span><span>
+</span><span id="line-163"></span><span>        </span><span id="local-6989586621679386198"><span class="annot"><span class="annottext">splits :: [(Rational, Rational)]
+</span><a href="#local-6989586621679386198"><span class="hs-identifier hs-var hs-var">splits</span></a></span></span><span>  </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">[Rational] -&gt; [Rational] -&gt; [(Rational, Rational)]
+forall a b. [a] -&gt; [b] -&gt; [(a, b)]
+</span><span class="hs-identifier hs-var">zip</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">[Rational] -&gt; [Rational]
+forall a. [a] -&gt; [a]
+</span><span class="hs-identifier hs-var">tail</span></span><span> </span><span class="annot"><span class="annottext">[Rational]
+</span><a href="#local-6989586621679386206"><span class="hs-identifier hs-var">sizes</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">[Rational]
+</span><a href="#local-6989586621679386200"><span class="hs-identifier hs-var">totals</span></a></span><span>
+</span><span id="line-164"></span><span>        </span><span id="local-6989586621679386197"><span class="annot"><span class="annottext">ratios :: [Rational]
+</span><a href="#local-6989586621679386197"><span class="hs-identifier hs-var hs-var">ratios</span></a></span></span><span>  </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">[Rational] -&gt; [Rational]
+forall a. [a] -&gt; [a]
+</span><span class="hs-identifier hs-var">reverse</span></span><span> </span><span class="annot"><span class="annottext">([Rational] -&gt; [Rational]) -&gt; [Rational] -&gt; [Rational]
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">((Rational, Rational) -&gt; Rational)
+-&gt; [(Rational, Rational)] -&gt; [Rational]
+forall a b. (a -&gt; b) -&gt; [a] -&gt; [b]
+</span><span class="hs-identifier hs-var">map</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">(Rational -&gt; Rational -&gt; Rational)
+-&gt; (Rational, Rational) -&gt; Rational
+forall a b c. (a -&gt; b -&gt; c) -&gt; (a, b) -&gt; c
+</span><span class="hs-identifier hs-var">uncurry</span></span><span> </span><span class="annot"><span class="annottext">Rational -&gt; Rational -&gt; Rational
+forall a. Fractional a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-operator hs-var">(/)</span></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">[(Rational, Rational)]
+</span><a href="#local-6989586621679386198"><span class="hs-identifier hs-var">splits</span></a></span><span>
+</span><span id="line-165"></span><span>        </span><span id="local-6989586621679386209"><span class="annot"><span class="annottext">rects :: [Rectangle]
+</span><a href="#local-6989586621679386209"><span class="hs-identifier hs-var hs-var">rects</span></a></span></span><span>   </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Rectangle -&gt; [Rational] -&gt; [Rectangle]
+</span><a href="#local-6989586621679386194"><span class="hs-identifier hs-var">genRects</span></a></span><span> </span><span class="annot"><span class="annottext">Rectangle
+</span><a href="#local-6989586621679386212"><span class="hs-identifier hs-var">rect</span></a></span><span> </span><span class="annot"><span class="annottext">[Rational]
+</span><a href="#local-6989586621679386197"><span class="hs-identifier hs-var">ratios</span></a></span><span>
+</span><span id="line-166"></span><span>        </span><span id="local-6989586621679386194"><span class="annot"><span class="annottext">genRects :: Rectangle -&gt; [Rational] -&gt; [Rectangle]
+</span><a href="#local-6989586621679386194"><span class="hs-identifier hs-var hs-var">genRects</span></a></span></span><span> </span><span id="local-6989586621679386193"><span class="annot"><span class="annottext">Rectangle
+</span><a href="#local-6989586621679386193"><span class="hs-identifier hs-var">r</span></a></span></span><span> </span><span class="hs-special">[</span><span class="hs-special">]</span><span>     </span><span class="hs-glyph">=</span><span> </span><span class="hs-special">[</span><span class="annot"><span class="annottext">Rectangle
+</span><a href="#local-6989586621679386193"><span class="hs-identifier hs-var">r</span></a></span><span class="hs-special">]</span><span>
+</span><span id="line-167"></span><span>        </span><span class="annot"><a href="#local-6989586621679386194"><span class="hs-identifier hs-var">genRects</span></a></span><span> </span><span id="local-6989586621679386192"><span class="annot"><span class="annottext">Rectangle
+</span><a href="#local-6989586621679386192"><span class="hs-identifier hs-var">r</span></a></span></span><span> </span><span class="hs-special">(</span><span id="local-6989586621679386191"><span class="annot"><span class="annottext">Rational
+</span><a href="#local-6989586621679386191"><span class="hs-identifier hs-var">x</span></a></span></span><span class="annot"><span class="hs-glyph hs-type">:</span></span><span id="local-6989586621679386190"><span class="annot"><span class="annottext">[Rational]
+</span><a href="#local-6989586621679386190"><span class="hs-identifier hs-var">xs</span></a></span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Rectangle
+</span><a href="#local-6989586621679386189"><span class="hs-identifier hs-var">r'</span></a></span><span> </span><span class="annot"><span class="annottext">Rectangle -&gt; [Rectangle] -&gt; [Rectangle]
+forall a. a -&gt; [a] -&gt; [a]
+</span><span class="hs-glyph hs-var">:</span></span><span> </span><span class="annot"><span class="annottext">Rectangle -&gt; [Rational] -&gt; [Rectangle]
+</span><a href="#local-6989586621679386194"><span class="hs-identifier hs-var">genRects</span></a></span><span> </span><span class="annot"><span class="annottext">Rectangle
+</span><a href="#local-6989586621679386188"><span class="hs-identifier hs-var">r''</span></a></span><span> </span><span class="annot"><span class="annottext">[Rational]
+</span><a href="#local-6989586621679386190"><span class="hs-identifier hs-var">xs</span></a></span><span>
+</span><span id="line-168"></span><span>          </span><span class="hs-keyword">where</span><span> </span><span class="hs-special">(</span><span id="local-6989586621679386189"><span class="annot"><span class="annottext">Rectangle
+</span><a href="#local-6989586621679386189"><span class="hs-identifier hs-var">r'</span></a></span></span><span class="hs-special">,</span><span> </span><span id="local-6989586621679386188"><span class="annot"><span class="annottext">Rectangle
+</span><a href="#local-6989586621679386188"><span class="hs-identifier hs-var">r''</span></a></span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Rectangle -&gt; Rational -&gt; Axes -&gt; (Rectangle, Rectangle)
+</span><a href="XMonad.Layout.Dwindle.html#splitRect"><span class="hs-identifier hs-var">splitRect</span></a></span><span> </span><span class="annot"><span class="annottext">Rectangle
+</span><a href="#local-6989586621679386192"><span class="hs-identifier hs-var">r</span></a></span><span> </span><span class="annot"><span class="annottext">Rational
+</span><a href="#local-6989586621679386191"><span class="hs-identifier hs-var">x</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Direction2D -&gt; Axes
+</span><a href="XMonad.Layout.Dwindle.html#dirAxes"><span class="hs-identifier hs-var">dirAxes</span></a></span><span> </span><span class="annot"><span class="annottext">Direction2D
+</span><a href="#local-6989586621679386214"><span class="hs-identifier hs-var">dir</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-169"></span><span>
+</span><span id="line-170"></span><span class="annot"><a href="XMonad.Layout.Dwindle.html#splitRect"><span class="hs-identifier hs-type">splitRect</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Rectangle</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Rational</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="XMonad.Layout.Dwindle.html#Axes"><span class="hs-identifier hs-type">Axes</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">Rectangle</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Rectangle</span></span><span class="hs-special">)</span><span>
+</span><span id="line-171"></span><span id="splitRect"><span class="annot"><span class="annottext">splitRect :: Rectangle -&gt; Rational -&gt; Axes -&gt; (Rectangle, Rectangle)
+</span><a href="XMonad.Layout.Dwindle.html#splitRect"><span class="hs-identifier hs-var hs-var">splitRect</span></a></span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">Rectangle</span></span><span> </span><span id="local-6989586621679386186"><span class="annot"><span class="annottext">Position
+</span><a href="#local-6989586621679386186"><span class="hs-identifier hs-var">x</span></a></span></span><span> </span><span id="local-6989586621679386185"><span class="annot"><span class="annottext">Position
+</span><a href="#local-6989586621679386185"><span class="hs-identifier hs-var">y</span></a></span></span><span> </span><span id="local-6989586621679386184"><span class="annot"><span class="annottext">Dimension
+</span><a href="#local-6989586621679386184"><span class="hs-identifier hs-var">w</span></a></span></span><span> </span><span id="local-6989586621679386183"><span class="annot"><span class="annottext">Dimension
+</span><a href="#local-6989586621679386183"><span class="hs-identifier hs-var">h</span></a></span></span><span class="hs-special">)</span><span> </span><span id="local-6989586621679386182"><span class="annot"><span class="annottext">Rational
+</span><a href="#local-6989586621679386182"><span class="hs-identifier hs-var">ratio</span></a></span></span><span> </span><span class="hs-special">(</span><span id="local-6989586621679386181"><span class="annot"><span class="annottext">Int
+</span><a href="#local-6989586621679386181"><span class="hs-identifier hs-var">ax</span></a></span></span><span class="hs-special">,</span><span> </span><span id="local-6989586621679386180"><span class="annot"><span class="annottext">Int
+</span><a href="#local-6989586621679386180"><span class="hs-identifier hs-var">ay</span></a></span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Position -&gt; Position -&gt; Dimension -&gt; Dimension -&gt; Rectangle
+</span><span class="hs-identifier hs-var">Rectangle</span></span><span> </span><span class="annot"><span class="annottext">Position
+</span><a href="#local-6989586621679386179"><span class="hs-identifier hs-var">x'</span></a></span><span> </span><span class="annot"><span class="annottext">Position
+</span><a href="#local-6989586621679386178"><span class="hs-identifier hs-var">y'</span></a></span><span> </span><span class="annot"><span class="annottext">Dimension
+</span><a href="#local-6989586621679386177"><span class="hs-identifier hs-var">w'</span></a></span><span> </span><span class="annot"><span class="annottext">Dimension
+</span><a href="#local-6989586621679386176"><span class="hs-identifier hs-var">h'</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">Position -&gt; Position -&gt; Dimension -&gt; Dimension -&gt; Rectangle
+</span><span class="hs-identifier hs-var">Rectangle</span></span><span> </span><span class="annot"><span class="annottext">Position
+</span><a href="#local-6989586621679386175"><span class="hs-identifier hs-var">x''</span></a></span><span> </span><span class="annot"><span class="annottext">Position
+</span><a href="#local-6989586621679386174"><span class="hs-identifier hs-var">y''</span></a></span><span> </span><span class="annot"><span class="annottext">Dimension
+</span><a href="#local-6989586621679386173"><span class="hs-identifier hs-var">w''</span></a></span><span> </span><span class="annot"><span class="annottext">Dimension
+</span><a href="#local-6989586621679386172"><span class="hs-identifier hs-var">h''</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-172"></span><span>  </span><span class="hs-keyword">where</span><span> </span><span id="local-6989586621679386171"><span class="annot"><span class="annottext">portion :: Rational
+</span><a href="#local-6989586621679386171"><span class="hs-identifier hs-var hs-var">portion</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Rational
+</span><a href="#local-6989586621679386182"><span class="hs-identifier hs-var">ratio</span></a></span><span> </span><span class="annot"><span class="annottext">Rational -&gt; Rational -&gt; Rational
+forall a. Fractional a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-operator hs-var">/</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Rational
+</span><a href="#local-6989586621679386182"><span class="hs-identifier hs-var">ratio</span></a></span><span> </span><span class="annot"><span class="annottext">Rational -&gt; Rational -&gt; Rational
+forall a. Num a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-operator hs-var">+</span></span><span> </span><span class="annot"><span class="annottext">Rational
+</span><span class="hs-number">1</span></span><span class="hs-special">)</span><span>
+</span><span id="line-173"></span><span>        </span><span id="local-6989586621679386170"><span class="annot"><span class="annottext">w1 :: Int
+</span><a href="#local-6989586621679386170"><span class="hs-identifier hs-var hs-var">w1</span></a></span></span><span>  </span><span class="hs-glyph">=</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Rational -&gt; Int
+forall a b. (RealFrac a, Integral b) =&gt; a -&gt; b
+</span><span class="hs-identifier hs-var">round</span></span><span> </span><span class="annot"><span class="annottext">(Rational -&gt; Int) -&gt; Rational -&gt; Int
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">Dimension -&gt; Rational
+forall b a. (Num b, Integral a) =&gt; a -&gt; b
+</span><a href="#local-6989586621679386168"><span class="hs-identifier hs-var">fi</span></a></span><span> </span><span class="annot"><span class="annottext">Dimension
+</span><a href="#local-6989586621679386184"><span class="hs-identifier hs-var">w</span></a></span><span> </span><span class="annot"><span class="annottext">Rational -&gt; Rational -&gt; Rational
+forall a. Num a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-operator hs-var">*</span></span><span> </span><span class="annot"><span class="annottext">Rational
+</span><a href="#local-6989586621679386171"><span class="hs-identifier hs-var">portion</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Int</span></span><span>
+</span><span id="line-174"></span><span>        </span><span id="local-6989586621679386167"><span class="annot"><span class="annottext">w2 :: Int
+</span><a href="#local-6989586621679386167"><span class="hs-identifier hs-var hs-var">w2</span></a></span></span><span>  </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Dimension -&gt; Int
+forall b a. (Num b, Integral a) =&gt; a -&gt; b
+</span><a href="#local-6989586621679386168"><span class="hs-identifier hs-var">fi</span></a></span><span> </span><span class="annot"><span class="annottext">Dimension
+</span><a href="#local-6989586621679386184"><span class="hs-identifier hs-var">w</span></a></span><span> </span><span class="annot"><span class="annottext">Int -&gt; Int -&gt; Int
+forall a. Num a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-glyph hs-var">-</span></span><span> </span><span class="annot"><span class="annottext">Int
+</span><a href="#local-6989586621679386170"><span class="hs-identifier hs-var">w1</span></a></span><span>
+</span><span id="line-175"></span><span>        </span><span id="local-6989586621679386166"><span class="annot"><span class="annottext">h1 :: Int
+</span><a href="#local-6989586621679386166"><span class="hs-identifier hs-var hs-var">h1</span></a></span></span><span>  </span><span class="hs-glyph">=</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Rational -&gt; Int
+forall a b. (RealFrac a, Integral b) =&gt; a -&gt; b
+</span><span class="hs-identifier hs-var">round</span></span><span> </span><span class="annot"><span class="annottext">(Rational -&gt; Int) -&gt; Rational -&gt; Int
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">Dimension -&gt; Rational
+forall b a. (Num b, Integral a) =&gt; a -&gt; b
+</span><a href="#local-6989586621679386168"><span class="hs-identifier hs-var">fi</span></a></span><span> </span><span class="annot"><span class="annottext">Dimension
+</span><a href="#local-6989586621679386183"><span class="hs-identifier hs-var">h</span></a></span><span> </span><span class="annot"><span class="annottext">Rational -&gt; Rational -&gt; Rational
+forall a. Num a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-operator hs-var">*</span></span><span> </span><span class="annot"><span class="annottext">Rational
+</span><a href="#local-6989586621679386171"><span class="hs-identifier hs-var">portion</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Int</span></span><span>
+</span><span id="line-176"></span><span>        </span><span id="local-6989586621679386165"><span class="annot"><span class="annottext">h2 :: Int
+</span><a href="#local-6989586621679386165"><span class="hs-identifier hs-var hs-var">h2</span></a></span></span><span>  </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Dimension -&gt; Int
+forall b a. (Num b, Integral a) =&gt; a -&gt; b
+</span><a href="#local-6989586621679386168"><span class="hs-identifier hs-var">fi</span></a></span><span> </span><span class="annot"><span class="annottext">Dimension
+</span><a href="#local-6989586621679386183"><span class="hs-identifier hs-var">h</span></a></span><span> </span><span class="annot"><span class="annottext">Int -&gt; Int -&gt; Int
+forall a. Num a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-glyph hs-var">-</span></span><span> </span><span class="annot"><span class="annottext">Int
+</span><a href="#local-6989586621679386166"><span class="hs-identifier hs-var">h1</span></a></span><span>
+</span><span id="line-177"></span><span>        </span><span id="local-6989586621679386179"><span class="annot"><span class="annottext">x' :: Position
+</span><a href="#local-6989586621679386179"><span class="hs-identifier hs-var hs-var">x'</span></a></span></span><span>  </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Position
+</span><a href="#local-6989586621679386186"><span class="hs-identifier hs-var">x</span></a></span><span> </span><span class="annot"><span class="annottext">Position -&gt; Position -&gt; Position
+forall a. Num a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-operator hs-var">+</span></span><span> </span><span class="annot"><span class="annottext">Int -&gt; Position
+forall b a. (Num b, Integral a) =&gt; a -&gt; b
+</span><a href="#local-6989586621679386168"><span class="hs-identifier hs-var">fi</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Int -&gt; Int
+forall a. Num a =&gt; a -&gt; a
+</span><span class="hs-identifier hs-var">negate</span></span><span> </span><span class="annot"><span class="annottext">Int
+</span><a href="#local-6989586621679386181"><span class="hs-identifier hs-var">ax</span></a></span><span> </span><span class="annot"><span class="annottext">Int -&gt; Int -&gt; Int
+forall a. Num a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-operator hs-var">*</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Int
+</span><span class="hs-number">1</span></span><span> </span><span class="annot"><span class="annottext">Int -&gt; Int -&gt; Int
+forall a. Num a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-glyph hs-var">-</span></span><span> </span><span class="annot"><span class="annottext">Int
+</span><a href="#local-6989586621679386181"><span class="hs-identifier hs-var">ax</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">Int -&gt; Int -&gt; Int
+forall a. Num a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-operator hs-var">*</span></span><span> </span><span class="annot"><span class="annottext">Int
+</span><a href="#local-6989586621679386167"><span class="hs-identifier hs-var">w2</span></a></span><span> </span><span class="annot"><span class="annottext">Int -&gt; Int -&gt; Int
+forall a. Integral a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-operator hs-var">`div`</span></span><span> </span><span class="annot"><span class="annottext">Int
+</span><span class="hs-number">2</span></span><span class="hs-special">)</span><span>
+</span><span id="line-178"></span><span>        </span><span id="local-6989586621679386178"><span class="annot"><span class="annottext">y' :: Position
+</span><a href="#local-6989586621679386178"><span class="hs-identifier hs-var hs-var">y'</span></a></span></span><span>  </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Position
+</span><a href="#local-6989586621679386185"><span class="hs-identifier hs-var">y</span></a></span><span> </span><span class="annot"><span class="annottext">Position -&gt; Position -&gt; Position
+forall a. Num a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-operator hs-var">+</span></span><span> </span><span class="annot"><span class="annottext">Int -&gt; Position
+forall b a. (Num b, Integral a) =&gt; a -&gt; b
+</span><a href="#local-6989586621679386168"><span class="hs-identifier hs-var">fi</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Int -&gt; Int
+forall a. Num a =&gt; a -&gt; a
+</span><span class="hs-identifier hs-var">negate</span></span><span> </span><span class="annot"><span class="annottext">Int
+</span><a href="#local-6989586621679386180"><span class="hs-identifier hs-var">ay</span></a></span><span> </span><span class="annot"><span class="annottext">Int -&gt; Int -&gt; Int
+forall a. Num a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-operator hs-var">*</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Int
+</span><span class="hs-number">1</span></span><span> </span><span class="annot"><span class="annottext">Int -&gt; Int -&gt; Int
+forall a. Num a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-glyph hs-var">-</span></span><span> </span><span class="annot"><span class="annottext">Int
+</span><a href="#local-6989586621679386180"><span class="hs-identifier hs-var">ay</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">Int -&gt; Int -&gt; Int
+forall a. Num a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-operator hs-var">*</span></span><span> </span><span class="annot"><span class="annottext">Int
+</span><a href="#local-6989586621679386165"><span class="hs-identifier hs-var">h2</span></a></span><span> </span><span class="annot"><span class="annottext">Int -&gt; Int -&gt; Int
+forall a. Integral a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-operator hs-var">`div`</span></span><span> </span><span class="annot"><span class="annottext">Int
+</span><span class="hs-number">2</span></span><span class="hs-special">)</span><span>
+</span><span id="line-179"></span><span>        </span><span id="local-6989586621679386177"><span class="annot"><span class="annottext">w' :: Dimension
+</span><a href="#local-6989586621679386177"><span class="hs-identifier hs-var hs-var">w'</span></a></span></span><span>  </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Int -&gt; Dimension
+forall b a. (Num b, Integral a) =&gt; a -&gt; b
+</span><a href="#local-6989586621679386168"><span class="hs-identifier hs-var">fi</span></a></span><span> </span><span class="annot"><span class="annottext">(Int -&gt; Dimension) -&gt; Int -&gt; Dimension
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">Int
+</span><a href="#local-6989586621679386170"><span class="hs-identifier hs-var">w1</span></a></span><span> </span><span class="annot"><span class="annottext">Int -&gt; Int -&gt; Int
+forall a. Num a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-operator hs-var">+</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Int
+</span><span class="hs-number">1</span></span><span> </span><span class="annot"><span class="annottext">Int -&gt; Int -&gt; Int
+forall a. Num a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-glyph hs-var">-</span></span><span> </span><span class="annot"><span class="annottext">Int -&gt; Int
+forall a. Num a =&gt; a -&gt; a
+</span><span class="hs-identifier hs-var">abs</span></span><span> </span><span class="annot"><span class="annottext">Int
+</span><a href="#local-6989586621679386181"><span class="hs-identifier hs-var">ax</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">Int -&gt; Int -&gt; Int
+forall a. Num a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-operator hs-var">*</span></span><span> </span><span class="annot"><span class="annottext">Int
+</span><a href="#local-6989586621679386167"><span class="hs-identifier hs-var">w2</span></a></span><span>
+</span><span id="line-180"></span><span>        </span><span id="local-6989586621679386176"><span class="annot"><span class="annottext">h' :: Dimension
+</span><a href="#local-6989586621679386176"><span class="hs-identifier hs-var hs-var">h'</span></a></span></span><span>  </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Int -&gt; Dimension
+forall b a. (Num b, Integral a) =&gt; a -&gt; b
+</span><a href="#local-6989586621679386168"><span class="hs-identifier hs-var">fi</span></a></span><span> </span><span class="annot"><span class="annottext">(Int -&gt; Dimension) -&gt; Int -&gt; Dimension
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">Int
+</span><a href="#local-6989586621679386166"><span class="hs-identifier hs-var">h1</span></a></span><span> </span><span class="annot"><span class="annottext">Int -&gt; Int -&gt; Int
+forall a. Num a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-operator hs-var">+</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Int
+</span><span class="hs-number">1</span></span><span> </span><span class="annot"><span class="annottext">Int -&gt; Int -&gt; Int
+forall a. Num a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-glyph hs-var">-</span></span><span> </span><span class="annot"><span class="annottext">Int -&gt; Int
+forall a. Num a =&gt; a -&gt; a
+</span><span class="hs-identifier hs-var">abs</span></span><span> </span><span class="annot"><span class="annottext">Int
+</span><a href="#local-6989586621679386180"><span class="hs-identifier hs-var">ay</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">Int -&gt; Int -&gt; Int
+forall a. Num a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-operator hs-var">*</span></span><span> </span><span class="annot"><span class="annottext">Int
+</span><a href="#local-6989586621679386165"><span class="hs-identifier hs-var">h2</span></a></span><span>
+</span><span id="line-181"></span><span>        </span><span id="local-6989586621679386175"><span class="annot"><span class="annottext">x'' :: Position
+</span><a href="#local-6989586621679386175"><span class="hs-identifier hs-var hs-var">x''</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Position
+</span><a href="#local-6989586621679386186"><span class="hs-identifier hs-var">x</span></a></span><span> </span><span class="annot"><span class="annottext">Position -&gt; Position -&gt; Position
+forall a. Num a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-operator hs-var">+</span></span><span> </span><span class="annot"><span class="annottext">Int -&gt; Position
+forall b a. (Num b, Integral a) =&gt; a -&gt; b
+</span><a href="#local-6989586621679386168"><span class="hs-identifier hs-var">fi</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Int
+</span><a href="#local-6989586621679386181"><span class="hs-identifier hs-var">ax</span></a></span><span> </span><span class="annot"><span class="annottext">Int -&gt; Int -&gt; Int
+forall a. Num a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-operator hs-var">*</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Int
+</span><span class="hs-number">1</span></span><span> </span><span class="annot"><span class="annottext">Int -&gt; Int -&gt; Int
+forall a. Num a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-operator hs-var">+</span></span><span> </span><span class="annot"><span class="annottext">Int
+</span><a href="#local-6989586621679386181"><span class="hs-identifier hs-var">ax</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">Int -&gt; Int -&gt; Int
+forall a. Num a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-operator hs-var">*</span></span><span> </span><span class="annot"><span class="annottext">Int
+</span><a href="#local-6989586621679386170"><span class="hs-identifier hs-var">w1</span></a></span><span> </span><span class="annot"><span class="annottext">Int -&gt; Int -&gt; Int
+forall a. Integral a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-operator hs-var">`div`</span></span><span> </span><span class="annot"><span class="annottext">Int
+</span><span class="hs-number">2</span></span><span class="hs-special">)</span><span>
+</span><span id="line-182"></span><span>        </span><span id="local-6989586621679386174"><span class="annot"><span class="annottext">y'' :: Position
+</span><a href="#local-6989586621679386174"><span class="hs-identifier hs-var hs-var">y''</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Position
+</span><a href="#local-6989586621679386185"><span class="hs-identifier hs-var">y</span></a></span><span> </span><span class="annot"><span class="annottext">Position -&gt; Position -&gt; Position
+forall a. Num a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-operator hs-var">+</span></span><span> </span><span class="annot"><span class="annottext">Int -&gt; Position
+forall b a. (Num b, Integral a) =&gt; a -&gt; b
+</span><a href="#local-6989586621679386168"><span class="hs-identifier hs-var">fi</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Int
+</span><a href="#local-6989586621679386180"><span class="hs-identifier hs-var">ay</span></a></span><span> </span><span class="annot"><span class="annottext">Int -&gt; Int -&gt; Int
+forall a. Num a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-operator hs-var">*</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Int
+</span><span class="hs-number">1</span></span><span> </span><span class="annot"><span class="annottext">Int -&gt; Int -&gt; Int
+forall a. Num a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-operator hs-var">+</span></span><span> </span><span class="annot"><span class="annottext">Int
+</span><a href="#local-6989586621679386180"><span class="hs-identifier hs-var">ay</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">Int -&gt; Int -&gt; Int
+forall a. Num a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-operator hs-var">*</span></span><span> </span><span class="annot"><span class="annottext">Int
+</span><a href="#local-6989586621679386166"><span class="hs-identifier hs-var">h1</span></a></span><span> </span><span class="annot"><span class="annottext">Int -&gt; Int -&gt; Int
+forall a. Integral a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-operator hs-var">`div`</span></span><span> </span><span class="annot"><span class="annottext">Int
+</span><span class="hs-number">2</span></span><span class="hs-special">)</span><span>
+</span><span id="line-183"></span><span>        </span><span id="local-6989586621679386173"><span class="annot"><span class="annottext">w'' :: Dimension
+</span><a href="#local-6989586621679386173"><span class="hs-identifier hs-var hs-var">w''</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Int -&gt; Dimension
+forall b a. (Num b, Integral a) =&gt; a -&gt; b
+</span><a href="#local-6989586621679386168"><span class="hs-identifier hs-var">fi</span></a></span><span> </span><span class="annot"><span class="annottext">(Int -&gt; Dimension) -&gt; Int -&gt; Dimension
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">Int
+</span><a href="#local-6989586621679386167"><span class="hs-identifier hs-var">w2</span></a></span><span> </span><span class="annot"><span class="annottext">Int -&gt; Int -&gt; Int
+forall a. Num a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-operator hs-var">+</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Int
+</span><span class="hs-number">1</span></span><span> </span><span class="annot"><span class="annottext">Int -&gt; Int -&gt; Int
+forall a. Num a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-glyph hs-var">-</span></span><span> </span><span class="annot"><span class="annottext">Int -&gt; Int
+forall a. Num a =&gt; a -&gt; a
+</span><span class="hs-identifier hs-var">abs</span></span><span> </span><span class="annot"><span class="annottext">Int
+</span><a href="#local-6989586621679386181"><span class="hs-identifier hs-var">ax</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">Int -&gt; Int -&gt; Int
+forall a. Num a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-operator hs-var">*</span></span><span> </span><span class="annot"><span class="annottext">Int
+</span><a href="#local-6989586621679386170"><span class="hs-identifier hs-var">w1</span></a></span><span>
+</span><span id="line-184"></span><span>        </span><span id="local-6989586621679386172"><span class="annot"><span class="annottext">h'' :: Dimension
+</span><a href="#local-6989586621679386172"><span class="hs-identifier hs-var hs-var">h''</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Int -&gt; Dimension
+forall b a. (Num b, Integral a) =&gt; a -&gt; b
+</span><a href="#local-6989586621679386168"><span class="hs-identifier hs-var">fi</span></a></span><span> </span><span class="annot"><span class="annottext">(Int -&gt; Dimension) -&gt; Int -&gt; Dimension
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">Int
+</span><a href="#local-6989586621679386165"><span class="hs-identifier hs-var">h2</span></a></span><span> </span><span class="annot"><span class="annottext">Int -&gt; Int -&gt; Int
+forall a. Num a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-operator hs-var">+</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Int
+</span><span class="hs-number">1</span></span><span> </span><span class="annot"><span class="annottext">Int -&gt; Int -&gt; Int
+forall a. Num a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-glyph hs-var">-</span></span><span> </span><span class="annot"><span class="annottext">Int -&gt; Int
+forall a. Num a =&gt; a -&gt; a
+</span><span class="hs-identifier hs-var">abs</span></span><span> </span><span class="annot"><span class="annottext">Int
+</span><a href="#local-6989586621679386180"><span class="hs-identifier hs-var">ay</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">Int -&gt; Int -&gt; Int
+forall a. Num a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-operator hs-var">*</span></span><span> </span><span class="annot"><span class="annottext">Int
+</span><a href="#local-6989586621679386166"><span class="hs-identifier hs-var">h1</span></a></span><span>
+</span><span id="line-185"></span><span>        </span><span id="local-6989586621679386336"><span id="local-6989586621679386337"><span class="annot"><a href="#local-6989586621679386168"><span class="hs-identifier hs-type">fi</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">Num</span></span><span> </span><span class="annot"><a href="#local-6989586621679386337"><span class="hs-identifier hs-type">b</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Integral</span></span><span> </span><span class="annot"><a href="#local-6989586621679386336"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=&gt;</span><span> </span><span class="annot"><a href="#local-6989586621679386336"><span class="hs-identifier hs-type">a</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="#local-6989586621679386337"><span class="hs-identifier hs-type">b</span></a></span></span></span><span>
+</span><span id="line-186"></span><span>        </span><span id="local-6989586621679386168"><span class="annot"><span class="annottext">fi :: a -&gt; b
+</span><a href="#local-6989586621679386168"><span class="hs-identifier hs-var hs-var">fi</span></a></span></span><span>  </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">a -&gt; b
+forall a b. (Integral a, Num b) =&gt; a -&gt; b
+</span><span class="hs-identifier hs-var">fromIntegral</span></span><span>
+</span><span id="line-187"></span><span>
+</span><span id="line-188"></span><span class="hs-keyword">type</span><span> </span><span id="Axes"><span class="annot"><a href="XMonad.Layout.Dwindle.html#Axes"><span class="hs-identifier hs-var">Axes</span></a></span></span><span>          </span><span class="hs-glyph">=</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">Int</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Int</span></span><span class="hs-special">)</span><span>
+</span><span id="line-189"></span><span class="hs-keyword">type</span><span> </span><span id="AxesGenerator"><span class="annot"><a href="XMonad.Layout.Dwindle.html#AxesGenerator"><span class="hs-identifier hs-var">AxesGenerator</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><a href="XMonad.Layout.Dwindle.html#Axes"><span class="hs-identifier hs-type">Axes</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="XMonad.Layout.Dwindle.html#Chirality"><span class="hs-identifier hs-type">Chirality</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="hs-special">(</span><span class="annot"><a href="XMonad.Layout.Dwindle.html#Axes"><span class="hs-identifier hs-type">Axes</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><a href="XMonad.Layout.Dwindle.html#Chirality"><span class="hs-identifier hs-type">Chirality</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-190"></span><span>
+</span><span id="line-191"></span><span class="annot"><a href="XMonad.Layout.Dwindle.html#dirAxes"><span class="hs-identifier hs-type">dirAxes</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><a href="XMonad.Util.Types.html#Direction2D"><span class="hs-identifier hs-type">Direction2D</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="XMonad.Layout.Dwindle.html#Axes"><span class="hs-identifier hs-type">Axes</span></a></span><span>
+</span><span id="line-192"></span><span id="dirAxes"><span class="annot"><span class="annottext">dirAxes :: Direction2D -&gt; Axes
+</span><a href="XMonad.Layout.Dwindle.html#dirAxes"><span class="hs-identifier hs-var hs-var">dirAxes</span></a></span></span><span> </span><span class="annot"><span class="annottext">Direction2D
+</span><a href="XMonad.Util.Types.html#L"><span class="hs-identifier hs-var">L</span></a></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-special">(</span><span class="hs-glyph">-</span><span class="annot"><span class="annottext">Int
+</span><span class="hs-number">1</span></span><span class="hs-special">,</span><span>  </span><span class="annot"><span class="annottext">Int
+</span><span class="hs-number">0</span></span><span class="hs-special">)</span><span>
+</span><span id="line-193"></span><span class="annot"><a href="XMonad.Layout.Dwindle.html#dirAxes"><span class="hs-identifier hs-var">dirAxes</span></a></span><span> </span><span class="annot"><span class="annottext">Direction2D
+</span><a href="XMonad.Util.Types.html#R"><span class="hs-identifier hs-var">R</span></a></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-special">(</span><span> </span><span class="annot"><span class="annottext">Int
+</span><span class="hs-number">1</span></span><span class="hs-special">,</span><span>  </span><span class="annot"><span class="annottext">Int
+</span><span class="hs-number">0</span></span><span class="hs-special">)</span><span>
+</span><span id="line-194"></span><span class="annot"><a href="XMonad.Layout.Dwindle.html#dirAxes"><span class="hs-identifier hs-var">dirAxes</span></a></span><span> </span><span class="annot"><span class="annottext">Direction2D
+</span><a href="XMonad.Util.Types.html#U"><span class="hs-identifier hs-var">U</span></a></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-special">(</span><span> </span><span class="annot"><span class="annottext">Int
+</span><span class="hs-number">0</span></span><span class="hs-special">,</span><span> </span><span class="hs-glyph">-</span><span class="annot"><span class="annottext">Int
+</span><span class="hs-number">1</span></span><span class="hs-special">)</span><span>
+</span><span id="line-195"></span><span class="annot"><a href="XMonad.Layout.Dwindle.html#dirAxes"><span class="hs-identifier hs-var">dirAxes</span></a></span><span> </span><span class="annot"><span class="annottext">Direction2D
+</span><a href="XMonad.Util.Types.html#D"><span class="hs-identifier hs-var">D</span></a></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-special">(</span><span> </span><span class="annot"><span class="annottext">Int
+</span><span class="hs-number">0</span></span><span class="hs-special">,</span><span>  </span><span class="annot"><span class="annottext">Int
+</span><span class="hs-number">1</span></span><span class="hs-special">)</span><span>
+</span><span id="line-196"></span><span>
+</span><span id="line-197"></span><span class="annot"><a href="XMonad.Layout.Dwindle.html#alternate"><span class="hs-identifier hs-type">alternate</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><a href="XMonad.Layout.Dwindle.html#AxesGenerator"><span class="hs-identifier hs-type">AxesGenerator</span></a></span><span>
+</span><span id="line-198"></span><span id="alternate"><span class="annot"><span class="annottext">alternate :: AxesGenerator
+</span><a href="XMonad.Layout.Dwindle.html#alternate"><span class="hs-identifier hs-var hs-var">alternate</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">(Chirality -&gt; Chirality) -&gt; AxesGenerator
+</span><a href="XMonad.Layout.Dwindle.html#chDir"><span class="hs-identifier hs-var">chDir</span></a></span><span> </span><span class="annot"><span class="annottext">Chirality -&gt; Chirality
+</span><a href="XMonad.Layout.Dwindle.html#alt"><span class="hs-identifier hs-var">alt</span></a></span><span>
+</span><span id="line-199"></span><span>
+</span><span id="line-200"></span><span class="annot"><a href="XMonad.Layout.Dwindle.html#rotate"><span class="hs-identifier hs-type">rotate</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><a href="XMonad.Layout.Dwindle.html#AxesGenerator"><span class="hs-identifier hs-type">AxesGenerator</span></a></span><span>
+</span><span id="line-201"></span><span id="rotate"><span class="annot"><span class="annottext">rotate :: AxesGenerator
+</span><a href="XMonad.Layout.Dwindle.html#rotate"><span class="hs-identifier hs-var hs-var">rotate</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">(Chirality -&gt; Chirality) -&gt; AxesGenerator
+</span><a href="XMonad.Layout.Dwindle.html#chDir"><span class="hs-identifier hs-var">chDir</span></a></span><span> </span><span class="annot"><span class="annottext">Chirality -&gt; Chirality
+forall a. a -&gt; a
+</span><span class="hs-identifier hs-var">id</span></span><span>
+</span><span id="line-202"></span><span>
+</span><span id="line-203"></span><span class="annot"><a href="XMonad.Layout.Dwindle.html#chDir"><span class="hs-identifier hs-type">chDir</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="hs-special">(</span><span class="annot"><a href="XMonad.Layout.Dwindle.html#Chirality"><span class="hs-identifier hs-type">Chirality</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="XMonad.Layout.Dwindle.html#Chirality"><span class="hs-identifier hs-type">Chirality</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="XMonad.Layout.Dwindle.html#AxesGenerator"><span class="hs-identifier hs-type">AxesGenerator</span></a></span><span>
+</span><span id="line-204"></span><span id="chDir"><span class="annot"><span class="annottext">chDir :: (Chirality -&gt; Chirality) -&gt; AxesGenerator
+</span><a href="XMonad.Layout.Dwindle.html#chDir"><span class="hs-identifier hs-var hs-var">chDir</span></a></span></span><span> </span><span id="local-6989586621679386155"><span class="annot"><span class="annottext">Chirality -&gt; Chirality
+</span><a href="#local-6989586621679386155"><span class="hs-identifier hs-var">f</span></a></span></span><span> </span><span class="hs-special">(</span><span id="local-6989586621679386154"><span class="annot"><span class="annottext">Int
+</span><a href="#local-6989586621679386154"><span class="hs-identifier hs-var">x</span></a></span></span><span class="hs-special">,</span><span> </span><span id="local-6989586621679386153"><span class="annot"><span class="annottext">Int
+</span><a href="#local-6989586621679386153"><span class="hs-identifier hs-var">y</span></a></span></span><span class="hs-special">)</span><span> </span><span id="local-6989586621679386152"><span class="annot"><span class="annottext">Chirality
+</span><a href="#local-6989586621679386152"><span class="hs-identifier hs-var">r</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Chirality -&gt; Axes
+</span><a href="#local-6989586621679386151"><span class="hs-identifier hs-var">a'</span></a></span><span> </span><span class="annot"><span class="annottext">Chirality
+</span><a href="#local-6989586621679386152"><span class="hs-identifier hs-var">r</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">Chirality
+</span><a href="#local-6989586621679386150"><span class="hs-identifier hs-var">r'</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-205"></span><span>  </span><span class="hs-keyword">where</span><span> </span><span id="local-6989586621679386151"><span class="annot"><span class="annottext">a' :: Chirality -&gt; Axes
+</span><a href="#local-6989586621679386151"><span class="hs-identifier hs-var hs-var">a'</span></a></span></span><span> </span><span class="annot"><span class="annottext">Chirality
+</span><a href="XMonad.Layout.Dwindle.html#CW"><span class="hs-identifier hs-var">CW</span></a></span><span>  </span><span class="hs-glyph">=</span><span> </span><span class="hs-special">(</span><span class="hs-glyph">-</span><span class="annot"><span class="annottext">Int
+</span><a href="#local-6989586621679386153"><span class="hs-identifier hs-var">y</span></a></span><span class="hs-special">,</span><span>  </span><span class="annot"><span class="annottext">Int
+</span><a href="#local-6989586621679386154"><span class="hs-identifier hs-var">x</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-206"></span><span>        </span><span class="annot"><a href="#local-6989586621679386151"><span class="hs-identifier hs-var">a'</span></a></span><span> </span><span class="annot"><span class="annottext">Chirality
+</span><a href="XMonad.Layout.Dwindle.html#CCW"><span class="hs-identifier hs-var">CCW</span></a></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-special">(</span><span> </span><span class="annot"><span class="annottext">Int
+</span><a href="#local-6989586621679386153"><span class="hs-identifier hs-var">y</span></a></span><span class="hs-special">,</span><span> </span><span class="hs-glyph">-</span><span class="annot"><span class="annottext">Int
+</span><a href="#local-6989586621679386154"><span class="hs-identifier hs-var">x</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-207"></span><span>        </span><span id="local-6989586621679386150"><span class="annot"><span class="annottext">r' :: Chirality
+</span><a href="#local-6989586621679386150"><span class="hs-identifier hs-var hs-var">r'</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Chirality -&gt; Chirality
+</span><a href="#local-6989586621679386155"><span class="hs-identifier hs-var">f</span></a></span><span> </span><span class="annot"><span class="annottext">Chirality
+</span><a href="#local-6989586621679386152"><span class="hs-identifier hs-var">r</span></a></span><span>
+</span><span id="line-208"></span><span>
+</span><span id="line-209"></span><span class="annot"><a href="XMonad.Layout.Dwindle.html#alt"><span class="hs-identifier hs-type">alt</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><a href="XMonad.Layout.Dwindle.html#Chirality"><span class="hs-identifier hs-type">Chirality</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="XMonad.Layout.Dwindle.html#Chirality"><span class="hs-identifier hs-type">Chirality</span></a></span><span>
+</span><span id="line-210"></span><span id="alt"><span class="annot"><span class="annottext">alt :: Chirality -&gt; Chirality
+</span><a href="XMonad.Layout.Dwindle.html#alt"><span class="hs-identifier hs-var hs-var">alt</span></a></span></span><span> </span><span class="annot"><span class="annottext">Chirality
+</span><a href="XMonad.Layout.Dwindle.html#CW"><span class="hs-identifier hs-var">CW</span></a></span><span>  </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Chirality
+</span><a href="XMonad.Layout.Dwindle.html#CCW"><span class="hs-identifier hs-var">CCW</span></a></span><span>
+</span><span id="line-211"></span><span class="annot"><a href="XMonad.Layout.Dwindle.html#alt"><span class="hs-identifier hs-var">alt</span></a></span><span> </span><span class="annot"><span class="annottext">Chirality
+</span><a href="XMonad.Layout.Dwindle.html#CCW"><span class="hs-identifier hs-var">CCW</span></a></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Chirality
+</span><a href="XMonad.Layout.Dwindle.html#CW"><span class="hs-identifier hs-var">CW</span></a></span><span>
+</span><span id="line-212"></span></pre></body></html>

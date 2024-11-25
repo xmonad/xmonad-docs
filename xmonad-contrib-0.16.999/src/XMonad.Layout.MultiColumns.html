@@ -1,0 +1,677 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd"><html xmlns="http://www.w3.org/1999/xhtml"><head><link rel="stylesheet" type="text/css" href="style.css" /><script type="text/javascript" src="highlight.js"></script></head><body><pre><span class="hs-pragma">{-# LANGUAGE FlexibleInstances, MultiParamTypeClasses #-}</span><span>
+</span><span id="line-2"></span><span>
+</span><span id="line-3"></span><span class="hs-comment">-----------------------------------------------------------------------------</span><span>
+</span><span id="line-4"></span><span class="hs-comment">-- |</span><span>
+</span><span id="line-5"></span><span class="hs-comment">-- Module      :  XMonad.Layout.MultiColumns</span><span>
+</span><span id="line-6"></span><span class="hs-comment">-- Description :  A layout that tiles windows in a growing number of columns.</span><span>
+</span><span id="line-7"></span><span class="hs-comment">-- Copyright   :  (c) Anders Engstrom &lt;ankaan@gmail.com&gt;</span><span>
+</span><span id="line-8"></span><span class="hs-comment">-- License     :  BSD3-style (see LICENSE)</span><span>
+</span><span id="line-9"></span><span class="hs-comment">--</span><span>
+</span><span id="line-10"></span><span class="hs-comment">-- Maintainer  :  Anders Engstrom &lt;ankaan@gmail.com&gt;</span><span>
+</span><span id="line-11"></span><span class="hs-comment">-- Stability   :  unstable</span><span>
+</span><span id="line-12"></span><span class="hs-comment">-- Portability :  unportable</span><span>
+</span><span id="line-13"></span><span class="hs-comment">--</span><span>
+</span><span id="line-14"></span><span class="hs-comment">-- This layout tiles windows in a growing number of columns. The number of</span><span>
+</span><span id="line-15"></span><span class="hs-comment">-- windows in each column can be controlled by messages.</span><span>
+</span><span id="line-16"></span><span class="hs-comment">-----------------------------------------------------------------------------</span><span>
+</span><span id="line-17"></span><span>
+</span><span id="line-18"></span><span class="hs-keyword">module</span><span> </span><span class="hs-identifier">XMonad.Layout.MultiColumns</span><span> </span><span class="hs-special">(</span><span>
+</span><span id="line-19"></span><span>                              </span><span class="annot"><span class="hs-comment">-- * Usage</span></span><span>
+</span><span id="line-20"></span><span>                              </span><span class="annot"><span class="hs-comment">-- $usage</span></span><span>
+</span><span id="line-21"></span><span>
+</span><span id="line-22"></span><span>                              </span><span class="annot"><a href="XMonad.Layout.MultiColumns.html#multiCol"><span class="hs-identifier">multiCol</span></a></span><span class="hs-special">,</span><span>
+</span><span id="line-23"></span><span>                              </span><span class="annot"><a href="XMonad.Layout.MultiColumns.html#MultiCol"><span class="hs-identifier">MultiCol</span></a></span><span class="hs-special">,</span><span>
+</span><span id="line-24"></span><span>                             </span><span class="hs-special">)</span><span> </span><span class="hs-keyword">where</span><span>
+</span><span id="line-25"></span><span>
+</span><span id="line-26"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><span class="hs-identifier">XMonad</span></span><span>
+</span><span id="line-27"></span><span class="hs-keyword">import</span><span> </span><span class="hs-keyword">qualified</span><span> </span><span class="annot"><span class="hs-identifier">XMonad.StackSet</span></span><span> </span><span class="hs-keyword">as</span><span> </span><span class="annot"><span class="hs-identifier">W</span></span><span>
+</span><span id="line-28"></span><span>
+</span><span id="line-29"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><a href="XMonad.Prelude.html"><span class="hs-identifier">XMonad.Prelude</span></a></span><span>
+</span><span id="line-30"></span><span>
+</span><span id="line-31"></span><span class="hs-comment">-- $usage</span><span>
+</span><span id="line-32"></span><span class="hs-comment">-- You can use this module with the following in your @~\/.xmonad\/xmonad.hs@:</span><span>
+</span><span id="line-33"></span><span class="hs-comment">--</span><span>
+</span><span id="line-34"></span><span class="hs-comment">-- &gt; import XMonad.Layout.MultiColumns</span><span>
+</span><span id="line-35"></span><span class="hs-comment">--</span><span>
+</span><span id="line-36"></span><span class="hs-comment">-- Then edit your @layoutHook@ by adding the multiCol layout:</span><span>
+</span><span id="line-37"></span><span class="hs-comment">--</span><span>
+</span><span id="line-38"></span><span class="hs-comment">-- &gt; myLayouts = multiCol [1] 4 0.01 0.5 ||| etc..</span><span>
+</span><span id="line-39"></span><span class="hs-comment">-- &gt; main = xmonad def { layoutHook = myLayouts }</span><span>
+</span><span id="line-40"></span><span class="hs-comment">--</span><span>
+</span><span id="line-41"></span><span class="hs-comment">-- Or alternatively:</span><span>
+</span><span id="line-42"></span><span class="hs-comment">--</span><span>
+</span><span id="line-43"></span><span class="hs-comment">-- &gt; myLayouts = Mirror (multiCol [1] 2 0.01 (-0.25)) ||| etc..</span><span>
+</span><span id="line-44"></span><span class="hs-comment">-- &gt; main = xmonad def { layoutHook = myLayouts }</span><span>
+</span><span id="line-45"></span><span class="hs-comment">--</span><span>
+</span><span id="line-46"></span><span class="hs-comment">-- The maximum number of windows in a column can be controlled using the</span><span>
+</span><span id="line-47"></span><span class="hs-comment">-- IncMasterN messages and the column containing the focused window will be</span><span>
+</span><span id="line-48"></span><span class="hs-comment">-- modified. If the value is 0, all remaining windows will be placed in that</span><span>
+</span><span id="line-49"></span><span class="hs-comment">-- column when all columns before that has been filled.</span><span>
+</span><span id="line-50"></span><span class="hs-comment">--</span><span>
+</span><span id="line-51"></span><span class="hs-comment">-- The size can be set to between 1 and -0.5. If the value is positive, the</span><span>
+</span><span id="line-52"></span><span class="hs-comment">-- master column will be of that size. The rest of the screen is split among</span><span>
+</span><span id="line-53"></span><span class="hs-comment">-- the other columns. But if the size is negative, it instead indicates the</span><span>
+</span><span id="line-54"></span><span class="hs-comment">-- size of all non-master columns and the master column will cover the rest of</span><span>
+</span><span id="line-55"></span><span class="hs-comment">-- the screen. If the master column would become smaller than the other</span><span>
+</span><span id="line-56"></span><span class="hs-comment">-- columns, the screen is instead split equally among all columns. Therefore,</span><span>
+</span><span id="line-57"></span><span class="hs-comment">-- if equal size among all columns are desired, set the size to -0.5.</span><span>
+</span><span id="line-58"></span><span class="hs-comment">--</span><span>
+</span><span id="line-59"></span><span class="hs-comment">-- For more detailed instructions on editing the layoutHook see:</span><span>
+</span><span id="line-60"></span><span class="hs-comment">--</span><span>
+</span><span id="line-61"></span><span class="hs-comment">-- &quot;XMonad.Doc.Extending#Editing_the_layout_hook&quot;</span><span>
+</span><span id="line-62"></span><span>
+</span><span id="line-63"></span><span class="hs-comment">-- | Layout constructor.</span><span>
+</span><span id="line-64"></span><span id="local-6989586621679358732"><span class="annot"><a href="XMonad.Layout.MultiColumns.html#multiCol"><span class="hs-identifier hs-type">multiCol</span></a></span><span>
+</span><span id="line-65"></span><span>  </span><span class="hs-glyph">::</span><span> </span><span class="hs-special">[</span><span class="annot"><span class="hs-identifier hs-type">Int</span></span><span class="hs-special">]</span><span>    </span><span class="hs-comment">-- ^ Windows in each column, starting with master. Set to 0 to catch the rest.</span><span>
+</span><span id="line-66"></span><span>  </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Int</span></span><span>      </span><span class="hs-comment">-- ^ Default value for all following columns.</span><span>
+</span><span id="line-67"></span><span>  </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Rational</span></span><span> </span><span class="hs-comment">-- ^ How much to change size each time.</span><span>
+</span><span id="line-68"></span><span>  </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Rational</span></span><span> </span><span class="hs-comment">-- ^ Initial size of master area, or column area if the size is negative.</span><span>
+</span><span id="line-69"></span><span>  </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="XMonad.Layout.MultiColumns.html#MultiCol"><span class="hs-identifier hs-type">MultiCol</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679358732"><span class="hs-identifier hs-type">a</span></a></span></span><span>
+</span><span id="line-70"></span><span id="multiCol"><span class="annot"><span class="annottext">multiCol :: [Int] -&gt; Int -&gt; Rational -&gt; Rational -&gt; MultiCol a
+</span><a href="XMonad.Layout.MultiColumns.html#multiCol"><span class="hs-identifier hs-var hs-var">multiCol</span></a></span></span><span> </span><span id="local-6989586621679358731"><span class="annot"><span class="annottext">[Int]
+</span><a href="#local-6989586621679358731"><span class="hs-identifier hs-var">n</span></a></span></span><span> </span><span id="local-6989586621679358730"><span class="annot"><span class="annottext">Int
+</span><a href="#local-6989586621679358730"><span class="hs-identifier hs-var">defn</span></a></span></span><span> </span><span id="local-6989586621679358729"><span class="annot"><span class="annottext">Rational
+</span><a href="#local-6989586621679358729"><span class="hs-identifier hs-var">ds</span></a></span></span><span> </span><span id="local-6989586621679358728"><span class="annot"><span class="annottext">Rational
+</span><a href="#local-6989586621679358728"><span class="hs-identifier hs-var">s</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">[Int] -&gt; Int -&gt; Rational -&gt; Rational -&gt; Int -&gt; MultiCol a
+forall a. [Int] -&gt; Int -&gt; Rational -&gt; Rational -&gt; Int -&gt; MultiCol a
+</span><a href="XMonad.Layout.MultiColumns.html#MultiCol"><span class="hs-identifier hs-var">MultiCol</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">(Int -&gt; Int) -&gt; [Int] -&gt; [Int]
+forall a b. (a -&gt; b) -&gt; [a] -&gt; [b]
+</span><span class="hs-identifier hs-var">map</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Int -&gt; Int -&gt; Int
+forall a. Ord a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-identifier hs-var">max</span></span><span> </span><span class="annot"><span class="annottext">Int
+</span><span class="hs-number">0</span></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">[Int]
+</span><a href="#local-6989586621679358731"><span class="hs-identifier hs-var">n</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Int -&gt; Int -&gt; Int
+forall a. Ord a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-identifier hs-var">max</span></span><span> </span><span class="annot"><span class="annottext">Int
+</span><span class="hs-number">0</span></span><span> </span><span class="annot"><span class="annottext">Int
+</span><a href="#local-6989586621679358730"><span class="hs-identifier hs-var">defn</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">Rational
+</span><a href="#local-6989586621679358729"><span class="hs-identifier hs-var">ds</span></a></span><span> </span><span class="annot"><span class="annottext">Rational
+</span><a href="#local-6989586621679358728"><span class="hs-identifier hs-var">s</span></a></span><span> </span><span class="annot"><span class="annottext">Int
+</span><span class="hs-number">0</span></span><span>
+</span><span id="line-71"></span><span>
+</span><span id="line-72"></span><span class="hs-keyword">data</span><span> </span><span id="MultiCol"><span class="annot"><a href="XMonad.Layout.MultiColumns.html#MultiCol"><span class="hs-identifier hs-var">MultiCol</span></a></span></span><span> </span><span id="local-6989586621679358812"><span class="annot"><a href="#local-6989586621679358812"><span class="hs-identifier hs-type">a</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span id="MultiCol"><span class="annot"><a href="XMonad.Layout.MultiColumns.html#MultiCol"><span class="hs-identifier hs-var">MultiCol</span></a></span></span><span>
+</span><span id="line-73"></span><span>  </span><span class="hs-special">{</span><span> </span><span id="multiColNWin"><span class="annot"><span class="annottext">MultiCol a -&gt; [Int]
+</span><a href="XMonad.Layout.MultiColumns.html#multiColNWin"><span class="hs-identifier hs-var hs-var">multiColNWin</span></a></span></span><span>      </span><span class="hs-glyph">::</span><span> </span><span class="hs-glyph">!</span><span class="hs-special">[</span><span class="annot"><span class="hs-identifier hs-type">Int</span></span><span class="hs-special">]</span><span>
+</span><span id="line-74"></span><span>  </span><span class="hs-special">,</span><span> </span><span id="multiColDefWin"><span class="annot"><span class="annottext">MultiCol a -&gt; Int
+</span><a href="XMonad.Layout.MultiColumns.html#multiColDefWin"><span class="hs-identifier hs-var hs-var">multiColDefWin</span></a></span></span><span>    </span><span class="hs-glyph">::</span><span> </span><span class="hs-glyph">!</span><span class="annot"><span class="hs-identifier hs-type">Int</span></span><span>
+</span><span id="line-75"></span><span>  </span><span class="hs-special">,</span><span> </span><span id="multiColDeltaSize"><span class="annot"><span class="annottext">MultiCol a -&gt; Rational
+</span><a href="XMonad.Layout.MultiColumns.html#multiColDeltaSize"><span class="hs-identifier hs-var hs-var">multiColDeltaSize</span></a></span></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="hs-glyph">!</span><span class="annot"><span class="hs-identifier hs-type">Rational</span></span><span>
+</span><span id="line-76"></span><span>  </span><span class="hs-special">,</span><span> </span><span id="multiColSize"><span class="annot"><span class="annottext">MultiCol a -&gt; Rational
+</span><a href="XMonad.Layout.MultiColumns.html#multiColSize"><span class="hs-identifier hs-var hs-var">multiColSize</span></a></span></span><span>      </span><span class="hs-glyph">::</span><span> </span><span class="hs-glyph">!</span><span class="annot"><span class="hs-identifier hs-type">Rational</span></span><span>
+</span><span id="line-77"></span><span>  </span><span class="hs-special">,</span><span> </span><span id="multiColActive"><span class="annot"><span class="annottext">MultiCol a -&gt; Int
+</span><a href="XMonad.Layout.MultiColumns.html#multiColActive"><span class="hs-identifier hs-var hs-var">multiColActive</span></a></span></span><span>    </span><span class="hs-glyph">::</span><span> </span><span class="hs-glyph">!</span><span class="annot"><span class="hs-identifier hs-type">Int</span></span><span>
+</span><span id="line-78"></span><span>  </span><span class="hs-special">}</span><span> </span><span class="hs-keyword">deriving</span><span> </span><span class="hs-special">(</span><span id="local-6989586621679358715"><span id="local-6989586621679358717"><span id="local-6989586621679358719"><span class="annot"><span class="annottext">Int -&gt; MultiCol a -&gt; ShowS
+[MultiCol a] -&gt; ShowS
+MultiCol a -&gt; String
+(Int -&gt; MultiCol a -&gt; ShowS)
+-&gt; (MultiCol a -&gt; String)
+-&gt; ([MultiCol a] -&gt; ShowS)
+-&gt; Show (MultiCol a)
+forall a. Int -&gt; MultiCol a -&gt; ShowS
+forall a. [MultiCol a] -&gt; ShowS
+forall a. MultiCol a -&gt; String
+forall a.
+(Int -&gt; a -&gt; ShowS) -&gt; (a -&gt; String) -&gt; ([a] -&gt; ShowS) -&gt; Show a
+showList :: [MultiCol a] -&gt; ShowS
+$cshowList :: forall a. [MultiCol a] -&gt; ShowS
+show :: MultiCol a -&gt; String
+$cshow :: forall a. MultiCol a -&gt; String
+showsPrec :: Int -&gt; MultiCol a -&gt; ShowS
+$cshowsPrec :: forall a. Int -&gt; MultiCol a -&gt; ShowS
+</span><span class="hs-identifier hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var">Show</span></span></span></span></span><span class="hs-special">,</span><span id="local-6989586621679358706"><span id="local-6989586621679358708"><span id="local-6989586621679358710"><span id="local-6989586621679358712"><span class="annot"><span class="annottext">ReadPrec [MultiCol a]
+ReadPrec (MultiCol a)
+Int -&gt; ReadS (MultiCol a)
+ReadS [MultiCol a]
+(Int -&gt; ReadS (MultiCol a))
+-&gt; ReadS [MultiCol a]
+-&gt; ReadPrec (MultiCol a)
+-&gt; ReadPrec [MultiCol a]
+-&gt; Read (MultiCol a)
+forall a. ReadPrec [MultiCol a]
+forall a. ReadPrec (MultiCol a)
+forall a. Int -&gt; ReadS (MultiCol a)
+forall a. ReadS [MultiCol a]
+forall a.
+(Int -&gt; ReadS a)
+-&gt; ReadS [a] -&gt; ReadPrec a -&gt; ReadPrec [a] -&gt; Read a
+readListPrec :: ReadPrec [MultiCol a]
+$creadListPrec :: forall a. ReadPrec [MultiCol a]
+readPrec :: ReadPrec (MultiCol a)
+$creadPrec :: forall a. ReadPrec (MultiCol a)
+readList :: ReadS [MultiCol a]
+$creadList :: forall a. ReadS [MultiCol a]
+readsPrec :: Int -&gt; ReadS (MultiCol a)
+$creadsPrec :: forall a. Int -&gt; ReadS (MultiCol a)
+</span><span class="hs-identifier hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var">Read</span></span></span></span></span></span><span class="hs-special">,</span><span id="local-6989586621679358701"><span id="local-6989586621679358703"><span class="annot"><span class="annottext">MultiCol a -&gt; MultiCol a -&gt; Bool
+(MultiCol a -&gt; MultiCol a -&gt; Bool)
+-&gt; (MultiCol a -&gt; MultiCol a -&gt; Bool) -&gt; Eq (MultiCol a)
+forall a. MultiCol a -&gt; MultiCol a -&gt; Bool
+forall a. (a -&gt; a -&gt; Bool) -&gt; (a -&gt; a -&gt; Bool) -&gt; Eq a
+/= :: MultiCol a -&gt; MultiCol a -&gt; Bool
+$c/= :: forall a. MultiCol a -&gt; MultiCol a -&gt; Bool
+== :: MultiCol a -&gt; MultiCol a -&gt; Bool
+$c== :: forall a. MultiCol a -&gt; MultiCol a -&gt; Bool
+</span><span class="hs-identifier hs-var hs-var hs-var hs-var hs-var hs-var">Eq</span></span></span></span><span class="hs-special">)</span><span>
+</span><span id="line-79"></span><span>
+</span><span id="line-80"></span><span id="local-6989586621679358699"><span class="hs-keyword">instance</span><span> </span><span id="local-6989586621679358687"><span id="local-6989586621679358690"><span id="local-6989586621679358692"><span id="local-6989586621679358695"><span class="annot"><span class="hs-identifier hs-type">LayoutClass</span></span><span> </span><span class="annot"><a href="XMonad.Layout.MultiColumns.html#MultiCol"><span class="hs-identifier hs-type">MultiCol</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679358699"><span class="hs-identifier hs-type">a</span></a></span></span></span></span></span><span> </span><span class="hs-keyword">where</span><span>
+</span><span id="line-81"></span><span>    </span><span id="local-6989586621679358684"><span class="annot"><span class="annottext">doLayout :: MultiCol a
+-&gt; Rectangle -&gt; Stack a -&gt; X ([(a, Rectangle)], Maybe (MultiCol a))
+</span><span class="hs-identifier hs-var hs-var hs-var hs-var">doLayout</span></span></span><span> </span><span id="local-6989586621679358682"><span class="annot"><span class="annottext">MultiCol a
+</span><a href="#local-6989586621679358682"><span class="hs-identifier hs-var">l</span></a></span></span><span> </span><span id="local-6989586621679358681"><span class="annot"><span class="annottext">Rectangle
+</span><a href="#local-6989586621679358681"><span class="hs-identifier hs-var">r</span></a></span></span><span> </span><span id="local-6989586621679358680"><span class="annot"><span class="annottext">Stack a
+</span><a href="#local-6989586621679358680"><span class="hs-identifier hs-var">s</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">([(a, Rectangle)], Maybe (MultiCol a))
+-&gt; X ([(a, Rectangle)], Maybe (MultiCol a))
+forall (m :: * -&gt; *) a. Monad m =&gt; a -&gt; m a
+</span><span class="hs-identifier hs-var">return</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Stack a -&gt; [Rectangle] -&gt; [(a, Rectangle)]
+forall a b. Stack a -&gt; [b] -&gt; [(a, b)]
+</span><a href="#local-6989586621679358679"><span class="hs-identifier hs-var">combine</span></a></span><span> </span><span class="annot"><span class="annottext">Stack a
+</span><a href="#local-6989586621679358680"><span class="hs-identifier hs-var">s</span></a></span><span> </span><span class="annot"><span class="annottext">[Rectangle]
+</span><a href="#local-6989586621679358678"><span class="hs-identifier hs-var">rlist</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">Maybe (MultiCol a)
+forall a. Maybe (MultiCol a)
+</span><a href="#local-6989586621679358677"><span class="hs-identifier hs-var">resl</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-82"></span><span>        </span><span class="hs-keyword">where</span><span> </span><span id="local-6989586621679358678"><span class="annot"><span class="annottext">rlist :: [Rectangle]
+</span><a href="#local-6989586621679358678"><span class="hs-identifier hs-var hs-var">rlist</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">[Int] -&gt; Rational -&gt; Rectangle -&gt; Int -&gt; [Rectangle]
+</span><a href="XMonad.Layout.MultiColumns.html#doL"><span class="hs-identifier hs-var">doL</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">MultiCol Any -&gt; [Int]
+forall a. MultiCol a -&gt; [Int]
+</span><a href="XMonad.Layout.MultiColumns.html#multiColNWin"><span class="hs-identifier hs-var hs-var">multiColNWin</span></a></span><span> </span><span class="annot"><span class="annottext">MultiCol Any
+forall a. MultiCol a
+</span><a href="#local-6989586621679358675"><span class="hs-identifier hs-var">l'</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">MultiCol Any -&gt; Rational
+forall a. MultiCol a -&gt; Rational
+</span><a href="XMonad.Layout.MultiColumns.html#multiColSize"><span class="hs-identifier hs-var hs-var">multiColSize</span></a></span><span> </span><span class="annot"><span class="annottext">MultiCol Any
+forall a. MultiCol a
+</span><a href="#local-6989586621679358675"><span class="hs-identifier hs-var">l'</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">Rectangle
+</span><a href="#local-6989586621679358681"><span class="hs-identifier hs-var">r</span></a></span><span> </span><span class="annot"><span class="annottext">Int
+</span><a href="#local-6989586621679358674"><span class="hs-identifier hs-var">wlen</span></a></span><span>
+</span><span id="line-83"></span><span>              </span><span id="local-6989586621679358674"><span class="annot"><span class="annottext">wlen :: Int
+</span><a href="#local-6989586621679358674"><span class="hs-identifier hs-var hs-var">wlen</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">[a] -&gt; Int
+forall (t :: * -&gt; *) a. Foldable t =&gt; t a -&gt; Int
+</span><span class="hs-identifier hs-var">length</span></span><span> </span><span class="annot"><span class="annottext">([a] -&gt; Int) -&gt; [a] -&gt; Int
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">Stack a -&gt; [a]
+forall a. Stack a -&gt; [a]
+</span><span class="hs-identifier hs-var">W.integrate</span></span><span> </span><span class="annot"><span class="annottext">Stack a
+</span><a href="#local-6989586621679358680"><span class="hs-identifier hs-var">s</span></a></span><span>
+</span><span id="line-84"></span><span>              </span><span class="hs-comment">-- Make sure the list of columns is big enough and update active column</span><span>
+</span><span id="line-85"></span><span>              </span><span id="local-6989586621679358671"><span class="annot"><span class="annottext">nw :: [Int]
+</span><a href="#local-6989586621679358671"><span class="hs-identifier hs-var hs-var">nw</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">MultiCol a -&gt; [Int]
+forall a. MultiCol a -&gt; [Int]
+</span><a href="XMonad.Layout.MultiColumns.html#multiColNWin"><span class="hs-identifier hs-var hs-var">multiColNWin</span></a></span><span> </span><span class="annot"><span class="annottext">MultiCol a
+</span><a href="#local-6989586621679358682"><span class="hs-identifier hs-var">l</span></a></span><span> </span><span class="annot"><span class="annottext">[Int] -&gt; [Int] -&gt; [Int]
+forall a. [a] -&gt; [a] -&gt; [a]
+</span><span class="hs-operator hs-var">++</span></span><span> </span><span class="annot"><span class="annottext">Int -&gt; [Int]
+forall a. a -&gt; [a]
+</span><span class="hs-identifier hs-var">repeat</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">MultiCol a -&gt; Int
+forall a. MultiCol a -&gt; Int
+</span><a href="XMonad.Layout.MultiColumns.html#multiColDefWin"><span class="hs-identifier hs-var hs-var">multiColDefWin</span></a></span><span> </span><span class="annot"><span class="annottext">MultiCol a
+</span><a href="#local-6989586621679358682"><span class="hs-identifier hs-var">l</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-86"></span><span>              </span><span id="local-6989586621679358675"><span class="annot"><span class="annottext">l' :: MultiCol a
+</span><a href="#local-6989586621679358675"><span class="hs-identifier hs-var hs-var">l'</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">MultiCol a
+</span><a href="#local-6989586621679358682"><span class="hs-identifier hs-var">l</span></a></span><span> </span><span class="hs-special">{</span><span> </span><span class="annot"><span class="annottext">multiColNWin :: [Int]
+</span><a href="XMonad.Layout.MultiColumns.html#multiColNWin"><span class="hs-identifier hs-var">multiColNWin</span></a></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Int -&gt; [Int] -&gt; [Int]
+forall a. Int -&gt; [a] -&gt; [a]
+</span><span class="hs-identifier hs-var">take</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Int -&gt; Int -&gt; Int
+forall a. Ord a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-identifier hs-var">max</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">[Int] -&gt; Int
+forall (t :: * -&gt; *) a. Foldable t =&gt; t a -&gt; Int
+</span><span class="hs-identifier hs-var">length</span></span><span> </span><span class="annot"><span class="annottext">([Int] -&gt; Int) -&gt; [Int] -&gt; Int
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">MultiCol a -&gt; [Int]
+forall a. MultiCol a -&gt; [Int]
+</span><a href="XMonad.Layout.MultiColumns.html#multiColNWin"><span class="hs-identifier hs-var hs-var">multiColNWin</span></a></span><span> </span><span class="annot"><span class="annottext">MultiCol a
+</span><a href="#local-6989586621679358682"><span class="hs-identifier hs-var">l</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">(Int -&gt; Int) -&gt; Int -&gt; Int
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">Int -&gt; [Int] -&gt; Int
+</span><a href="XMonad.Layout.MultiColumns.html#getCol"><span class="hs-identifier hs-var">getCol</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Int
+</span><a href="#local-6989586621679358674"><span class="hs-identifier hs-var">wlen</span></a></span><span class="annot"><span class="annottext">Int -&gt; Int -&gt; Int
+forall a. Num a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-glyph hs-var">-</span></span><span class="annot"><span class="annottext">Int
+</span><span class="hs-number">1</span></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">[Int]
+</span><a href="#local-6989586621679358671"><span class="hs-identifier hs-var">nw</span></a></span><span> </span><span class="annot"><span class="annottext">Int -&gt; Int -&gt; Int
+forall a. Num a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-operator hs-var">+</span></span><span> </span><span class="annot"><span class="annottext">Int
+</span><span class="hs-number">1</span></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">[Int]
+</span><a href="#local-6989586621679358671"><span class="hs-identifier hs-var">nw</span></a></span><span>
+</span><span id="line-87"></span><span>                     </span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">multiColActive :: Int
+</span><a href="XMonad.Layout.MultiColumns.html#multiColActive"><span class="hs-identifier hs-var">multiColActive</span></a></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Int -&gt; [Int] -&gt; Int
+</span><a href="XMonad.Layout.MultiColumns.html#getCol"><span class="hs-identifier hs-var">getCol</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">[a] -&gt; Int
+forall (t :: * -&gt; *) a. Foldable t =&gt; t a -&gt; Int
+</span><span class="hs-identifier hs-var">length</span></span><span> </span><span class="annot"><span class="annottext">([a] -&gt; Int) -&gt; [a] -&gt; Int
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">Stack a -&gt; [a]
+forall a. Stack a -&gt; [a]
+</span><span class="hs-identifier hs-var hs-var">W.up</span></span><span> </span><span class="annot"><span class="annottext">Stack a
+</span><a href="#local-6989586621679358680"><span class="hs-identifier hs-var">s</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">[Int]
+</span><a href="#local-6989586621679358671"><span class="hs-identifier hs-var">nw</span></a></span><span>
+</span><span id="line-88"></span><span>                     </span><span class="hs-special">}</span><span>
+</span><span id="line-89"></span><span>              </span><span class="hs-comment">-- Only return new layout if it has been modified</span><span>
+</span><span id="line-90"></span><span>              </span><span id="local-6989586621679358677"><span class="annot"><span class="annottext">resl :: Maybe (MultiCol a)
+</span><a href="#local-6989586621679358677"><span class="hs-identifier hs-var hs-var">resl</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-keyword">if</span><span> </span><span class="annot"><span class="annottext">MultiCol a
+forall a. MultiCol a
+</span><a href="#local-6989586621679358675"><span class="hs-identifier hs-var">l'</span></a></span><span class="annot"><span class="annottext">MultiCol a -&gt; MultiCol a -&gt; Bool
+forall a. Eq a =&gt; a -&gt; a -&gt; Bool
+</span><span class="hs-operator hs-var">==</span></span><span class="annot"><span class="annottext">MultiCol a
+</span><a href="#local-6989586621679358682"><span class="hs-identifier hs-var">l</span></a></span><span>
+</span><span id="line-91"></span><span>                     </span><span class="hs-keyword">then</span><span> </span><span class="annot"><span class="annottext">Maybe (MultiCol a)
+forall a. Maybe a
+</span><span class="hs-identifier hs-var">Nothing</span></span><span>
+</span><span id="line-92"></span><span>                     </span><span class="hs-keyword">else</span><span> </span><span class="annot"><span class="annottext">MultiCol a -&gt; Maybe (MultiCol a)
+forall a. a -&gt; Maybe a
+</span><span class="hs-identifier hs-var">Just</span></span><span> </span><span class="annot"><span class="annottext">MultiCol a
+forall a. MultiCol a
+</span><a href="#local-6989586621679358675"><span class="hs-identifier hs-var">l'</span></a></span><span>
+</span><span id="line-93"></span><span>              </span><span id="local-6989586621679358679"><span class="annot"><span class="annottext">combine :: Stack a -&gt; [b] -&gt; [(a, b)]
+</span><a href="#local-6989586621679358679"><span class="hs-identifier hs-var hs-var">combine</span></a></span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">W.Stack</span></span><span> </span><span id="local-6989586621679358664"><span class="annot"><span class="annottext">a
+</span><a href="#local-6989586621679358664"><span class="hs-identifier hs-var">foc</span></a></span></span><span> </span><span id="local-6989586621679358663"><span class="annot"><span class="annottext">[a]
+</span><a href="#local-6989586621679358663"><span class="hs-identifier hs-var">left</span></a></span></span><span> </span><span id="local-6989586621679358662"><span class="annot"><span class="annottext">[a]
+</span><a href="#local-6989586621679358662"><span class="hs-identifier hs-var">right</span></a></span></span><span class="hs-special">)</span><span> </span><span id="local-6989586621679358661"><span class="annot"><span class="annottext">[b]
+</span><a href="#local-6989586621679358661"><span class="hs-identifier hs-var">rs</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">[a] -&gt; [b] -&gt; [(a, b)]
+forall a b. [a] -&gt; [b] -&gt; [(a, b)]
+</span><span class="hs-identifier hs-var">zip</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">a
+</span><a href="#local-6989586621679358664"><span class="hs-identifier hs-var">foc</span></a></span><span> </span><span class="annot"><span class="annottext">a -&gt; [a] -&gt; [a]
+forall a. a -&gt; [a] -&gt; [a]
+</span><span class="hs-glyph hs-var">:</span></span><span> </span><span class="annot"><span class="annottext">[a] -&gt; [a]
+forall a. [a] -&gt; [a]
+</span><span class="hs-identifier hs-var">reverse</span></span><span> </span><span class="annot"><span class="annottext">[a]
+</span><a href="#local-6989586621679358663"><span class="hs-identifier hs-var">left</span></a></span><span> </span><span class="annot"><span class="annottext">[a] -&gt; [a] -&gt; [a]
+forall a. [a] -&gt; [a] -&gt; [a]
+</span><span class="hs-operator hs-var">++</span></span><span> </span><span class="annot"><span class="annottext">[a]
+</span><a href="#local-6989586621679358662"><span class="hs-identifier hs-var">right</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">([b] -&gt; [(a, b)]) -&gt; [b] -&gt; [(a, b)]
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">Int -&gt; [b] -&gt; [b]
+forall a. Int -&gt; [a] -&gt; [a]
+</span><a href="XMonad.Layout.MultiColumns.html#raiseFocused"><span class="hs-identifier hs-var">raiseFocused</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">[a] -&gt; Int
+forall (t :: * -&gt; *) a. Foldable t =&gt; t a -&gt; Int
+</span><span class="hs-identifier hs-var">length</span></span><span> </span><span class="annot"><span class="annottext">[a]
+</span><a href="#local-6989586621679358663"><span class="hs-identifier hs-var">left</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">[b]
+</span><a href="#local-6989586621679358661"><span class="hs-identifier hs-var">rs</span></a></span><span>
+</span><span id="line-94"></span><span>    </span><span id="local-6989586621679358658"><span class="annot"><span class="annottext">handleMessage :: MultiCol a -&gt; SomeMessage -&gt; X (Maybe (MultiCol a))
+</span><span class="hs-identifier hs-var hs-var hs-var hs-var">handleMessage</span></span></span><span> </span><span id="local-6989586621679358656"><span class="annot"><span class="annottext">MultiCol a
+</span><a href="#local-6989586621679358656"><span class="hs-identifier hs-var">l</span></a></span></span><span> </span><span id="local-6989586621679358655"><span class="annot"><span class="annottext">SomeMessage
+</span><a href="#local-6989586621679358655"><span class="hs-identifier hs-var">m</span></a></span></span><span> </span><span class="hs-glyph">=</span><span>
+</span><span id="line-95"></span><span>        </span><span class="annot"><span class="annottext">Maybe (MultiCol a) -&gt; X (Maybe (MultiCol a))
+forall (m :: * -&gt; *) a. Monad m =&gt; a -&gt; m a
+</span><span class="hs-identifier hs-var">return</span></span><span> </span><span class="annot"><span class="annottext">(Maybe (MultiCol a) -&gt; X (Maybe (MultiCol a)))
+-&gt; Maybe (MultiCol a) -&gt; X (Maybe (MultiCol a))
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">[Maybe (MultiCol a)] -&gt; Maybe (MultiCol a)
+forall (t :: * -&gt; *) (m :: * -&gt; *) a.
+(Foldable t, MonadPlus m) =&gt;
+t (m a) -&gt; m a
+</span><span class="hs-identifier hs-var">msum</span></span><span> </span><span class="hs-special">[</span><span class="annot"><span class="annottext">(Resize -&gt; MultiCol a) -&gt; Maybe Resize -&gt; Maybe (MultiCol a)
+forall (f :: * -&gt; *) a b. Functor f =&gt; (a -&gt; b) -&gt; f a -&gt; f b
+</span><span class="hs-identifier hs-var">fmap</span></span><span> </span><span class="annot"><span class="annottext">Resize -&gt; MultiCol a
+forall a. Resize -&gt; MultiCol a
+</span><a href="#local-6989586621679358653"><span class="hs-identifier hs-var">resize</span></a></span><span>     </span><span class="hs-special">(</span><span class="annot"><span class="annottext">SomeMessage -&gt; Maybe Resize
+forall m. Message m =&gt; SomeMessage -&gt; Maybe m
+</span><span class="hs-identifier hs-var">fromMessage</span></span><span> </span><span class="annot"><span class="annottext">SomeMessage
+</span><a href="#local-6989586621679358655"><span class="hs-identifier hs-var">m</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-96"></span><span>                      </span><span class="hs-special">,</span><span class="annot"><span class="annottext">(IncMasterN -&gt; MultiCol a)
+-&gt; Maybe IncMasterN -&gt; Maybe (MultiCol a)
+forall (f :: * -&gt; *) a b. Functor f =&gt; (a -&gt; b) -&gt; f a -&gt; f b
+</span><span class="hs-identifier hs-var">fmap</span></span><span> </span><span class="annot"><span class="annottext">IncMasterN -&gt; MultiCol a
+forall a. IncMasterN -&gt; MultiCol a
+</span><a href="#local-6989586621679358651"><span class="hs-identifier hs-var">incmastern</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">SomeMessage -&gt; Maybe IncMasterN
+forall m. Message m =&gt; SomeMessage -&gt; Maybe m
+</span><span class="hs-identifier hs-var">fromMessage</span></span><span> </span><span class="annot"><span class="annottext">SomeMessage
+</span><a href="#local-6989586621679358655"><span class="hs-identifier hs-var">m</span></a></span><span class="hs-special">)</span><span class="hs-special">]</span><span>
+</span><span id="line-97"></span><span>            </span><span class="hs-keyword">where</span><span> </span><span id="local-6989586621679358653"><span class="annot"><span class="annottext">resize :: Resize -&gt; MultiCol a
+</span><a href="#local-6989586621679358653"><span class="hs-identifier hs-var hs-var">resize</span></a></span></span><span> </span><span class="annot"><span class="annottext">Resize
+</span><span class="hs-identifier hs-var">Shrink</span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">MultiCol a
+</span><a href="#local-6989586621679358656"><span class="hs-identifier hs-var">l</span></a></span><span> </span><span class="hs-special">{</span><span> </span><span class="annot"><span class="annottext">multiColSize :: Rational
+</span><a href="XMonad.Layout.MultiColumns.html#multiColSize"><span class="hs-identifier hs-var">multiColSize</span></a></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Rational -&gt; Rational -&gt; Rational
+forall a. Ord a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-identifier hs-var">max</span></span><span> </span><span class="hs-special">(</span><span class="hs-glyph">-</span><span class="annot"><span class="annottext">Rational
+</span><span class="hs-number">0.5</span></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">(Rational -&gt; Rational) -&gt; Rational -&gt; Rational
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">Rational
+</span><a href="#local-6989586621679358649"><span class="hs-identifier hs-var">s</span></a></span><span class="annot"><span class="annottext">Rational -&gt; Rational -&gt; Rational
+forall a. Num a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-glyph hs-var">-</span></span><span class="annot"><span class="annottext">Rational
+</span><a href="#local-6989586621679358648"><span class="hs-identifier hs-var">ds</span></a></span><span> </span><span class="hs-special">}</span><span>
+</span><span id="line-98"></span><span>                  </span><span class="annot"><a href="#local-6989586621679358653"><span class="hs-identifier hs-var">resize</span></a></span><span> </span><span class="annot"><span class="annottext">Resize
+</span><span class="hs-identifier hs-var">Expand</span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">MultiCol a
+</span><a href="#local-6989586621679358656"><span class="hs-identifier hs-var">l</span></a></span><span> </span><span class="hs-special">{</span><span> </span><span class="annot"><span class="annottext">multiColSize :: Rational
+</span><a href="XMonad.Layout.MultiColumns.html#multiColSize"><span class="hs-identifier hs-var">multiColSize</span></a></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Rational -&gt; Rational -&gt; Rational
+forall a. Ord a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-identifier hs-var">min</span></span><span> </span><span class="annot"><span class="annottext">Rational
+</span><span class="hs-number">1</span></span><span> </span><span class="annot"><span class="annottext">(Rational -&gt; Rational) -&gt; Rational -&gt; Rational
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">Rational
+</span><a href="#local-6989586621679358649"><span class="hs-identifier hs-var">s</span></a></span><span class="annot"><span class="annottext">Rational -&gt; Rational -&gt; Rational
+forall a. Num a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-operator hs-var">+</span></span><span class="annot"><span class="annottext">Rational
+</span><a href="#local-6989586621679358648"><span class="hs-identifier hs-var">ds</span></a></span><span> </span><span class="hs-special">}</span><span>
+</span><span id="line-99"></span><span>                  </span><span id="local-6989586621679358651"><span class="annot"><span class="annottext">incmastern :: IncMasterN -&gt; MultiCol a
+</span><a href="#local-6989586621679358651"><span class="hs-identifier hs-var hs-var">incmastern</span></a></span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">IncMasterN</span></span><span> </span><span id="local-6989586621679358644"><span class="annot"><span class="annottext">Int
+</span><a href="#local-6989586621679358644"><span class="hs-identifier hs-var">x</span></a></span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">MultiCol a
+</span><a href="#local-6989586621679358656"><span class="hs-identifier hs-var">l</span></a></span><span> </span><span class="hs-special">{</span><span> </span><span class="annot"><span class="annottext">multiColNWin :: [Int]
+</span><a href="XMonad.Layout.MultiColumns.html#multiColNWin"><span class="hs-identifier hs-var">multiColNWin</span></a></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Int -&gt; [Int] -&gt; [Int]
+forall a. Int -&gt; [a] -&gt; [a]
+</span><span class="hs-identifier hs-var">take</span></span><span> </span><span class="annot"><span class="annottext">Int
+</span><a href="#local-6989586621679358643"><span class="hs-identifier hs-var">a</span></a></span><span> </span><span class="annot"><span class="annottext">[Int]
+</span><a href="#local-6989586621679358642"><span class="hs-identifier hs-var">n</span></a></span><span> </span><span class="annot"><span class="annottext">[Int] -&gt; [Int] -&gt; [Int]
+forall a. [a] -&gt; [a] -&gt; [a]
+</span><span class="hs-operator hs-var">++</span></span><span> </span><span class="hs-special">[</span><span class="annot"><span class="annottext">Int
+</span><a href="#local-6989586621679358641"><span class="hs-identifier hs-var">newval</span></a></span><span class="hs-special">]</span><span> </span><span class="annot"><span class="annottext">[Int] -&gt; [Int] -&gt; [Int]
+forall a. [a] -&gt; [a] -&gt; [a]
+</span><span class="hs-operator hs-var">++</span></span><span> </span><span class="annot"><span class="annottext">[Int] -&gt; [Int]
+forall a. [a] -&gt; [a]
+</span><span class="hs-identifier hs-var">tail</span></span><span> </span><span class="annot"><span class="annottext">[Int]
+</span><a href="#local-6989586621679358639"><span class="hs-identifier hs-var">r</span></a></span><span> </span><span class="hs-special">}</span><span>
+</span><span id="line-100"></span><span>                      </span><span class="hs-keyword">where</span><span> </span><span id="local-6989586621679358641"><span class="annot"><span class="annottext">newval :: Int
+</span><a href="#local-6989586621679358641"><span class="hs-identifier hs-var hs-var">newval</span></a></span></span><span> </span><span class="hs-glyph">=</span><span>  </span><span class="annot"><span class="annottext">Int -&gt; Int -&gt; Int
+forall a. Ord a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-identifier hs-var">max</span></span><span> </span><span class="annot"><span class="annottext">Int
+</span><span class="hs-number">0</span></span><span> </span><span class="annot"><span class="annottext">(Int -&gt; Int) -&gt; Int -&gt; Int
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">[Int] -&gt; Int
+forall a. [a] -&gt; a
+</span><span class="hs-identifier hs-var">head</span></span><span> </span><span class="annot"><span class="annottext">[Int]
+</span><a href="#local-6989586621679358639"><span class="hs-identifier hs-var">r</span></a></span><span> </span><span class="annot"><span class="annottext">Int -&gt; Int -&gt; Int
+forall a. Num a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-operator hs-var">+</span></span><span> </span><span class="annot"><span class="annottext">Int
+</span><a href="#local-6989586621679358644"><span class="hs-identifier hs-var">x</span></a></span><span>
+</span><span id="line-101"></span><span>                            </span><span id="local-6989586621679358639"><span class="annot"><span class="annottext">r :: [Int]
+</span><a href="#local-6989586621679358639"><span class="hs-identifier hs-var hs-var">r</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Int -&gt; [Int] -&gt; [Int]
+forall a. Int -&gt; [a] -&gt; [a]
+</span><span class="hs-identifier hs-var">drop</span></span><span> </span><span class="annot"><span class="annottext">Int
+</span><a href="#local-6989586621679358643"><span class="hs-identifier hs-var">a</span></a></span><span> </span><span class="annot"><span class="annottext">[Int]
+</span><a href="#local-6989586621679358642"><span class="hs-identifier hs-var">n</span></a></span><span>
+</span><span id="line-102"></span><span>                  </span><span id="local-6989586621679358642"><span class="annot"><span class="annottext">n :: [Int]
+</span><a href="#local-6989586621679358642"><span class="hs-identifier hs-var hs-var">n</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">MultiCol a -&gt; [Int]
+forall a. MultiCol a -&gt; [Int]
+</span><a href="XMonad.Layout.MultiColumns.html#multiColNWin"><span class="hs-identifier hs-var hs-var">multiColNWin</span></a></span><span> </span><span class="annot"><span class="annottext">MultiCol a
+</span><a href="#local-6989586621679358656"><span class="hs-identifier hs-var">l</span></a></span><span>
+</span><span id="line-103"></span><span>                  </span><span id="local-6989586621679358648"><span class="annot"><span class="annottext">ds :: Rational
+</span><a href="#local-6989586621679358648"><span class="hs-identifier hs-var hs-var">ds</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">MultiCol a -&gt; Rational
+forall a. MultiCol a -&gt; Rational
+</span><a href="XMonad.Layout.MultiColumns.html#multiColDeltaSize"><span class="hs-identifier hs-var hs-var">multiColDeltaSize</span></a></span><span> </span><span class="annot"><span class="annottext">MultiCol a
+</span><a href="#local-6989586621679358656"><span class="hs-identifier hs-var">l</span></a></span><span>
+</span><span id="line-104"></span><span>                  </span><span id="local-6989586621679358649"><span class="annot"><span class="annottext">s :: Rational
+</span><a href="#local-6989586621679358649"><span class="hs-identifier hs-var hs-var">s</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">MultiCol a -&gt; Rational
+forall a. MultiCol a -&gt; Rational
+</span><a href="XMonad.Layout.MultiColumns.html#multiColSize"><span class="hs-identifier hs-var hs-var">multiColSize</span></a></span><span> </span><span class="annot"><span class="annottext">MultiCol a
+</span><a href="#local-6989586621679358656"><span class="hs-identifier hs-var">l</span></a></span><span>
+</span><span id="line-105"></span><span>                  </span><span id="local-6989586621679358643"><span class="annot"><span class="annottext">a :: Int
+</span><a href="#local-6989586621679358643"><span class="hs-identifier hs-var hs-var">a</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">MultiCol a -&gt; Int
+forall a. MultiCol a -&gt; Int
+</span><a href="XMonad.Layout.MultiColumns.html#multiColActive"><span class="hs-identifier hs-var hs-var">multiColActive</span></a></span><span> </span><span class="annot"><span class="annottext">MultiCol a
+</span><a href="#local-6989586621679358656"><span class="hs-identifier hs-var">l</span></a></span><span>
+</span><span id="line-106"></span><span>    </span><span id="local-6989586621679358636"><span class="annot"><span class="annottext">description :: MultiCol a -&gt; String
+</span><span class="hs-identifier hs-var hs-var hs-var hs-var">description</span></span></span><span> </span><span class="annot"><span class="annottext">MultiCol a
+</span><span class="hs-identifier">_</span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot;MultiCol&quot;</span></span></span><span>
+</span><span id="line-107"></span><span>
+</span><span id="line-108"></span><span id="local-6989586621679358634"><span class="annot"><a href="XMonad.Layout.MultiColumns.html#raiseFocused"><span class="hs-identifier hs-type">raiseFocused</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Int</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="hs-special">[</span><span class="annot"><a href="#local-6989586621679358634"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">]</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="hs-special">[</span><span class="annot"><a href="#local-6989586621679358634"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">]</span></span><span>
+</span><span id="line-109"></span><span id="raiseFocused"><span class="annot"><span class="annottext">raiseFocused :: Int -&gt; [a] -&gt; [a]
+</span><a href="XMonad.Layout.MultiColumns.html#raiseFocused"><span class="hs-identifier hs-var hs-var">raiseFocused</span></a></span></span><span> </span><span id="local-6989586621679358633"><span class="annot"><span class="annottext">Int
+</span><a href="#local-6989586621679358633"><span class="hs-identifier hs-var">n</span></a></span></span><span> </span><span id="local-6989586621679358632"><span class="annot"><span class="annottext">[a]
+</span><a href="#local-6989586621679358632"><span class="hs-identifier hs-var">xs</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">[a]
+</span><a href="#local-6989586621679358631"><span class="hs-identifier hs-var">actual</span></a></span><span> </span><span class="annot"><span class="annottext">[a] -&gt; [a] -&gt; [a]
+forall a. [a] -&gt; [a] -&gt; [a]
+</span><span class="hs-operator hs-var">++</span></span><span> </span><span class="annot"><span class="annottext">[a]
+</span><a href="#local-6989586621679358630"><span class="hs-identifier hs-var">before</span></a></span><span> </span><span class="annot"><span class="annottext">[a] -&gt; [a] -&gt; [a]
+forall a. [a] -&gt; [a] -&gt; [a]
+</span><span class="hs-operator hs-var">++</span></span><span> </span><span class="annot"><span class="annottext">[a]
+</span><a href="#local-6989586621679358629"><span class="hs-identifier hs-var">after</span></a></span><span>
+</span><span id="line-110"></span><span>    </span><span class="hs-keyword">where</span><span> </span><span class="hs-special">(</span><span id="local-6989586621679358630"><span class="annot"><span class="annottext">[a]
+</span><a href="#local-6989586621679358630"><span class="hs-identifier hs-var">before</span></a></span></span><span class="hs-special">,</span><span id="local-6989586621679358628"><span class="annot"><span class="annottext">[a]
+</span><a href="#local-6989586621679358628"><span class="hs-identifier hs-var">rest</span></a></span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Int -&gt; [a] -&gt; ([a], [a])
+forall a. Int -&gt; [a] -&gt; ([a], [a])
+</span><span class="hs-identifier hs-var">splitAt</span></span><span> </span><span class="annot"><span class="annottext">Int
+</span><a href="#local-6989586621679358633"><span class="hs-identifier hs-var">n</span></a></span><span> </span><span class="annot"><span class="annottext">[a]
+</span><a href="#local-6989586621679358632"><span class="hs-identifier hs-var">xs</span></a></span><span>
+</span><span id="line-111"></span><span>          </span><span class="hs-special">(</span><span id="local-6989586621679358631"><span class="annot"><span class="annottext">[a]
+</span><a href="#local-6989586621679358631"><span class="hs-identifier hs-var">actual</span></a></span></span><span class="hs-special">,</span><span id="local-6989586621679358629"><span class="annot"><span class="annottext">[a]
+</span><a href="#local-6989586621679358629"><span class="hs-identifier hs-var">after</span></a></span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Int -&gt; [a] -&gt; ([a], [a])
+forall a. Int -&gt; [a] -&gt; ([a], [a])
+</span><span class="hs-identifier hs-var">splitAt</span></span><span> </span><span class="annot"><span class="annottext">Int
+</span><span class="hs-number">1</span></span><span> </span><span class="annot"><span class="annottext">[a]
+</span><a href="#local-6989586621679358628"><span class="hs-identifier hs-var">rest</span></a></span><span>
+</span><span id="line-112"></span><span>
+</span><span id="line-113"></span><span class="hs-comment">-- | Get which column a window is in, starting at 0.</span><span>
+</span><span id="line-114"></span><span class="annot"><a href="XMonad.Layout.MultiColumns.html#getCol"><span class="hs-identifier hs-type">getCol</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Int</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="hs-special">[</span><span class="annot"><span class="hs-identifier hs-type">Int</span></span><span class="hs-special">]</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Int</span></span><span>
+</span><span id="line-115"></span><span id="getCol"><span class="annot"><span class="annottext">getCol :: Int -&gt; [Int] -&gt; Int
+</span><a href="XMonad.Layout.MultiColumns.html#getCol"><span class="hs-identifier hs-var hs-var">getCol</span></a></span></span><span> </span><span id="local-6989586621679358626"><span class="annot"><span class="annottext">Int
+</span><a href="#local-6989586621679358626"><span class="hs-identifier hs-var">w</span></a></span></span><span> </span><span class="hs-special">(</span><span id="local-6989586621679358625"><span class="annot"><span class="annottext">Int
+</span><a href="#local-6989586621679358625"><span class="hs-identifier hs-var">n</span></a></span></span><span class="annot"><span class="hs-glyph hs-type">:</span></span><span id="local-6989586621679358624"><span class="annot"><span class="annottext">[Int]
+</span><a href="#local-6989586621679358624"><span class="hs-identifier hs-var">ns</span></a></span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-keyword">if</span><span> </span><span class="annot"><span class="annottext">Int
+</span><a href="#local-6989586621679358625"><span class="hs-identifier hs-var">n</span></a></span><span class="annot"><span class="annottext">Int -&gt; Int -&gt; Bool
+forall a. Ord a =&gt; a -&gt; a -&gt; Bool
+</span><span class="hs-operator hs-var">&lt;</span></span><span class="annot"><span class="annottext">Int
+</span><span class="hs-number">1</span></span><span> </span><span class="annot"><span class="annottext">Bool -&gt; Bool -&gt; Bool
+</span><span class="hs-operator hs-var">||</span></span><span> </span><span class="annot"><span class="annottext">Int
+</span><a href="#local-6989586621679358626"><span class="hs-identifier hs-var">w</span></a></span><span> </span><span class="annot"><span class="annottext">Int -&gt; Int -&gt; Bool
+forall a. Ord a =&gt; a -&gt; a -&gt; Bool
+</span><span class="hs-operator hs-var">&lt;</span></span><span> </span><span class="annot"><span class="annottext">Int
+</span><a href="#local-6989586621679358625"><span class="hs-identifier hs-var">n</span></a></span><span>
+</span><span id="line-116"></span><span>                  </span><span class="hs-keyword">then</span><span> </span><span class="annot"><span class="annottext">Int
+</span><span class="hs-number">0</span></span><span>
+</span><span id="line-117"></span><span>                  </span><span class="hs-keyword">else</span><span> </span><span class="annot"><span class="annottext">Int
+</span><span class="hs-number">1</span></span><span> </span><span class="annot"><span class="annottext">Int -&gt; Int -&gt; Int
+forall a. Num a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-operator hs-var">+</span></span><span> </span><span class="annot"><span class="annottext">Int -&gt; [Int] -&gt; Int
+</span><a href="XMonad.Layout.MultiColumns.html#getCol"><span class="hs-identifier hs-var">getCol</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Int
+</span><a href="#local-6989586621679358626"><span class="hs-identifier hs-var">w</span></a></span><span class="annot"><span class="annottext">Int -&gt; Int -&gt; Int
+forall a. Num a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-glyph hs-var">-</span></span><span class="annot"><span class="annottext">Int
+</span><a href="#local-6989586621679358625"><span class="hs-identifier hs-var">n</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">[Int]
+</span><a href="#local-6989586621679358624"><span class="hs-identifier hs-var">ns</span></a></span><span>
+</span><span id="line-118"></span><span class="hs-comment">-- Should never occur...</span><span>
+</span><span id="line-119"></span><span class="annot"><a href="XMonad.Layout.MultiColumns.html#getCol"><span class="hs-identifier hs-var">getCol</span></a></span><span> </span><span class="annot"><span class="annottext">Int
+</span><span class="hs-identifier">_</span></span><span> </span><span class="annot"><span class="annottext">[Int]
+</span><span class="hs-identifier">_</span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-glyph">-</span><span class="annot"><span class="annottext">Int
+</span><span class="hs-number">1</span></span><span>
+</span><span id="line-120"></span><span>
+</span><span id="line-121"></span><span class="annot"><a href="XMonad.Layout.MultiColumns.html#doL"><span class="hs-identifier hs-type">doL</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="hs-special">[</span><span class="annot"><span class="hs-identifier hs-type">Int</span></span><span class="hs-special">]</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Rational</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Rectangle</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Int</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="hs-special">[</span><span class="annot"><span class="hs-identifier hs-type">Rectangle</span></span><span class="hs-special">]</span><span>
+</span><span id="line-122"></span><span id="doL"><span class="annot"><span class="annottext">doL :: [Int] -&gt; Rational -&gt; Rectangle -&gt; Int -&gt; [Rectangle]
+</span><a href="XMonad.Layout.MultiColumns.html#doL"><span class="hs-identifier hs-var hs-var">doL</span></a></span></span><span> </span><span id="local-6989586621679358621"><span class="annot"><span class="annottext">[Int]
+</span><a href="#local-6989586621679358621"><span class="hs-identifier hs-var">nwin</span></a></span></span><span> </span><span id="local-6989586621679358620"><span class="annot"><span class="annottext">Rational
+</span><a href="#local-6989586621679358620"><span class="hs-identifier hs-var">s</span></a></span></span><span> </span><span id="local-6989586621679358619"><span class="annot"><span class="annottext">Rectangle
+</span><a href="#local-6989586621679358619"><span class="hs-identifier hs-var">r</span></a></span></span><span> </span><span id="local-6989586621679358618"><span class="annot"><span class="annottext">Int
+</span><a href="#local-6989586621679358618"><span class="hs-identifier hs-var">n</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">[Rectangle]
+</span><a href="#local-6989586621679358617"><span class="hs-identifier hs-var">rlist</span></a></span><span>
+</span><span id="line-123"></span><span>    </span><span class="hs-keyword">where</span><span> </span><span class="hs-comment">-- Number of columns to tile</span><span>
+</span><span id="line-124"></span><span>          </span><span id="local-6989586621679358616"><span class="annot"><span class="annottext">ncol :: Int
+</span><a href="#local-6989586621679358616"><span class="hs-identifier hs-var hs-var">ncol</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Int -&gt; [Int] -&gt; Int
+</span><a href="XMonad.Layout.MultiColumns.html#getCol"><span class="hs-identifier hs-var">getCol</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Int
+</span><a href="#local-6989586621679358618"><span class="hs-identifier hs-var">n</span></a></span><span class="annot"><span class="annottext">Int -&gt; Int -&gt; Int
+forall a. Num a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-glyph hs-var">-</span></span><span class="annot"><span class="annottext">Int
+</span><span class="hs-number">1</span></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">[Int]
+</span><a href="#local-6989586621679358621"><span class="hs-identifier hs-var">nwin</span></a></span><span> </span><span class="annot"><span class="annottext">Int -&gt; Int -&gt; Int
+forall a. Num a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-operator hs-var">+</span></span><span> </span><span class="annot"><span class="annottext">Int
+</span><span class="hs-number">1</span></span><span>
+</span><span id="line-125"></span><span>          </span><span class="hs-comment">-- Compute the actual size</span><span>
+</span><span id="line-126"></span><span>          </span><span id="local-6989586621679358615"><span class="annot"><span class="annottext">size :: Int
+</span><a href="#local-6989586621679358615"><span class="hs-identifier hs-var hs-var">size</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Rational -&gt; Int
+forall a b. (RealFrac a, Integral b) =&gt; a -&gt; b
+</span><span class="hs-identifier hs-var">floor</span></span><span> </span><span class="annot"><span class="annottext">(Rational -&gt; Int) -&gt; Rational -&gt; Int
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">Rational -&gt; Rational
+forall a. Num a =&gt; a -&gt; a
+</span><span class="hs-identifier hs-var">abs</span></span><span> </span><span class="annot"><span class="annottext">Rational
+</span><a href="#local-6989586621679358620"><span class="hs-identifier hs-var">s</span></a></span><span> </span><span class="annot"><span class="annottext">Rational -&gt; Rational -&gt; Rational
+forall a. Num a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-operator hs-var">*</span></span><span> </span><span class="annot"><span class="annottext">Dimension -&gt; Rational
+forall a b. (Integral a, Num b) =&gt; a -&gt; b
+</span><span class="hs-identifier hs-var">fromIntegral</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Rectangle -&gt; Dimension
+</span><span class="hs-identifier hs-var hs-var">rect_width</span></span><span> </span><span class="annot"><span class="annottext">Rectangle
+</span><a href="#local-6989586621679358619"><span class="hs-identifier hs-var">r</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-127"></span><span>          </span><span class="hs-comment">-- Extract all but last column to tile</span><span>
+</span><span id="line-128"></span><span>          </span><span id="local-6989586621679358610"><span class="annot"><span class="annottext">c :: [Int]
+</span><a href="#local-6989586621679358610"><span class="hs-identifier hs-var hs-var">c</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Int -&gt; [Int] -&gt; [Int]
+forall a. Int -&gt; [a] -&gt; [a]
+</span><span class="hs-identifier hs-var">take</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Int
+</span><a href="#local-6989586621679358616"><span class="hs-identifier hs-var">ncol</span></a></span><span class="annot"><span class="annottext">Int -&gt; Int -&gt; Int
+forall a. Num a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-glyph hs-var">-</span></span><span class="annot"><span class="annottext">Int
+</span><span class="hs-number">1</span></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">[Int]
+</span><a href="#local-6989586621679358621"><span class="hs-identifier hs-var">nwin</span></a></span><span>
+</span><span id="line-129"></span><span>          </span><span class="hs-comment">-- Compute number of windows in last column and add it to the others</span><span>
+</span><span id="line-130"></span><span>          </span><span id="local-6989586621679358609"><span class="annot"><span class="annottext">col :: [Int]
+</span><a href="#local-6989586621679358609"><span class="hs-identifier hs-var hs-var">col</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">[Int]
+</span><a href="#local-6989586621679358610"><span class="hs-identifier hs-var">c</span></a></span><span> </span><span class="annot"><span class="annottext">[Int] -&gt; [Int] -&gt; [Int]
+forall a. [a] -&gt; [a] -&gt; [a]
+</span><span class="hs-operator hs-var">++</span></span><span> </span><span class="hs-special">[</span><span class="annot"><span class="annottext">Int
+</span><a href="#local-6989586621679358618"><span class="hs-identifier hs-var">n</span></a></span><span class="annot"><span class="annottext">Int -&gt; Int -&gt; Int
+forall a. Num a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-glyph hs-var">-</span></span><span class="annot"><span class="annottext">[Int] -&gt; Int
+forall (t :: * -&gt; *) a. (Foldable t, Num a) =&gt; t a -&gt; a
+</span><span class="hs-identifier hs-var">sum</span></span><span> </span><span class="annot"><span class="annottext">[Int]
+</span><a href="#local-6989586621679358610"><span class="hs-identifier hs-var">c</span></a></span><span class="hs-special">]</span><span>
+</span><span id="line-131"></span><span>          </span><span class="hs-comment">-- Compute width of columns</span><span>
+</span><span id="line-132"></span><span>          </span><span id="local-6989586621679358607"><span class="annot"><span class="annottext">width :: [Int]
+</span><a href="#local-6989586621679358607"><span class="hs-identifier hs-var hs-var">width</span></a></span></span><span>
+</span><span id="line-133"></span><span>            </span><span class="hs-glyph">|</span><span> </span><span class="annot"><span class="annottext">Rational
+</span><a href="#local-6989586621679358620"><span class="hs-identifier hs-var">s</span></a></span><span class="annot"><span class="annottext">Rational -&gt; Rational -&gt; Bool
+forall a. Ord a =&gt; a -&gt; a -&gt; Bool
+</span><span class="hs-operator hs-var">&gt;</span></span><span class="annot"><span class="annottext">Rational
+</span><span class="hs-number">0</span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-keyword">if</span><span> </span><span class="annot"><span class="annottext">Int
+</span><a href="#local-6989586621679358616"><span class="hs-identifier hs-var">ncol</span></a></span><span class="annot"><span class="annottext">Int -&gt; Int -&gt; Bool
+forall a. Eq a =&gt; a -&gt; a -&gt; Bool
+</span><span class="hs-operator hs-var">==</span></span><span class="annot"><span class="annottext">Int
+</span><span class="hs-number">1</span></span><span>
+</span><span id="line-134"></span><span>                    </span><span class="hs-comment">-- Only one window</span><span>
+</span><span id="line-135"></span><span>                    </span><span class="hs-keyword">then</span><span> </span><span class="hs-special">[</span><span class="annot"><span class="annottext">Dimension -&gt; Int
+forall a b. (Integral a, Num b) =&gt; a -&gt; b
+</span><span class="hs-identifier hs-var">fromIntegral</span></span><span> </span><span class="annot"><span class="annottext">(Dimension -&gt; Int) -&gt; Dimension -&gt; Int
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">Rectangle -&gt; Dimension
+</span><span class="hs-identifier hs-var hs-var">rect_width</span></span><span> </span><span class="annot"><span class="annottext">Rectangle
+</span><a href="#local-6989586621679358619"><span class="hs-identifier hs-var">r</span></a></span><span class="hs-special">]</span><span>
+</span><span id="line-136"></span><span>                    </span><span class="hs-comment">-- Give the master it's space and split the rest equally for the other columns</span><span>
+</span><span id="line-137"></span><span>                    </span><span class="hs-keyword">else</span><span> </span><span class="annot"><span class="annottext">Int
+</span><a href="#local-6989586621679358615"><span class="hs-identifier hs-var">size</span></a></span><span class="annot"><span class="annottext">Int -&gt; [Int] -&gt; [Int]
+forall a. a -&gt; [a] -&gt; [a]
+</span><span class="hs-glyph hs-var">:</span></span><span class="annot"><span class="annottext">Int -&gt; Int -&gt; [Int]
+forall a. Int -&gt; a -&gt; [a]
+</span><span class="hs-identifier hs-var">replicate</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Int
+</span><a href="#local-6989586621679358616"><span class="hs-identifier hs-var">ncol</span></a></span><span class="annot"><span class="annottext">Int -&gt; Int -&gt; Int
+forall a. Num a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-glyph hs-var">-</span></span><span class="annot"><span class="annottext">Int
+</span><span class="hs-number">1</span></span><span class="hs-special">)</span><span> </span><span class="hs-special">(</span><span class="hs-special">(</span><span class="annot"><span class="annottext">Dimension -&gt; Int
+forall a b. (Integral a, Num b) =&gt; a -&gt; b
+</span><span class="hs-identifier hs-var">fromIntegral</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Rectangle -&gt; Dimension
+</span><span class="hs-identifier hs-var hs-var">rect_width</span></span><span> </span><span class="annot"><span class="annottext">Rectangle
+</span><a href="#local-6989586621679358619"><span class="hs-identifier hs-var">r</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">Int -&gt; Int -&gt; Int
+forall a. Num a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-glyph hs-var">-</span></span><span> </span><span class="annot"><span class="annottext">Int
+</span><a href="#local-6989586621679358615"><span class="hs-identifier hs-var">size</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">Int -&gt; Int -&gt; Int
+forall a. Integral a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-operator hs-var">`div`</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Int
+</span><a href="#local-6989586621679358616"><span class="hs-identifier hs-var">ncol</span></a></span><span class="annot"><span class="annottext">Int -&gt; Int -&gt; Int
+forall a. Num a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-glyph hs-var">-</span></span><span class="annot"><span class="annottext">Int
+</span><span class="hs-number">1</span></span><span class="hs-special">)</span><span class="hs-special">)</span><span>
+</span><span id="line-138"></span><span>            </span><span class="hs-glyph">|</span><span> </span><span class="annot"><span class="annottext">Int -&gt; Rational
+forall a b. (Integral a, Num b) =&gt; a -&gt; b
+</span><span class="hs-identifier hs-var">fromIntegral</span></span><span> </span><span class="annot"><span class="annottext">Int
+</span><a href="#local-6989586621679358616"><span class="hs-identifier hs-var">ncol</span></a></span><span> </span><span class="annot"><span class="annottext">Rational -&gt; Rational -&gt; Rational
+forall a. Num a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-operator hs-var">*</span></span><span> </span><span class="annot"><span class="annottext">Rational -&gt; Rational
+forall a. Num a =&gt; a -&gt; a
+</span><span class="hs-identifier hs-var">abs</span></span><span> </span><span class="annot"><span class="annottext">Rational
+</span><a href="#local-6989586621679358620"><span class="hs-identifier hs-var">s</span></a></span><span> </span><span class="annot"><span class="annottext">Rational -&gt; Rational -&gt; Bool
+forall a. Ord a =&gt; a -&gt; a -&gt; Bool
+</span><span class="hs-operator hs-var">&gt;=</span></span><span> </span><span class="annot"><span class="annottext">Rational
+</span><span class="hs-number">1</span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Int -&gt; Int -&gt; [Int]
+forall a. Int -&gt; a -&gt; [a]
+</span><span class="hs-identifier hs-var">replicate</span></span><span> </span><span class="annot"><span class="annottext">Int
+</span><a href="#local-6989586621679358616"><span class="hs-identifier hs-var">ncol</span></a></span><span> </span><span class="annot"><span class="annottext">(Int -&gt; [Int]) -&gt; Int -&gt; [Int]
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">Dimension -&gt; Int
+forall a b. (Integral a, Num b) =&gt; a -&gt; b
+</span><span class="hs-identifier hs-var">fromIntegral</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Rectangle -&gt; Dimension
+</span><span class="hs-identifier hs-var hs-var">rect_width</span></span><span> </span><span class="annot"><span class="annottext">Rectangle
+</span><a href="#local-6989586621679358619"><span class="hs-identifier hs-var">r</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">Int -&gt; Int -&gt; Int
+forall a. Integral a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-operator hs-var">`div`</span></span><span> </span><span class="annot"><span class="annottext">Int
+</span><a href="#local-6989586621679358616"><span class="hs-identifier hs-var">ncol</span></a></span><span>
+</span><span id="line-139"></span><span>            </span><span class="hs-glyph">|</span><span> </span><span class="annot"><span class="annottext">Bool
+</span><span class="hs-identifier hs-var">otherwise</span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Dimension -&gt; Int
+forall a b. (Integral a, Num b) =&gt; a -&gt; b
+</span><span class="hs-identifier hs-var">fromIntegral</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Rectangle -&gt; Dimension
+</span><span class="hs-identifier hs-var hs-var">rect_width</span></span><span> </span><span class="annot"><span class="annottext">Rectangle
+</span><a href="#local-6989586621679358619"><span class="hs-identifier hs-var">r</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">Int -&gt; Int -&gt; Int
+forall a. Num a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-glyph hs-var">-</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Int
+</span><a href="#local-6989586621679358616"><span class="hs-identifier hs-var">ncol</span></a></span><span class="annot"><span class="annottext">Int -&gt; Int -&gt; Int
+forall a. Num a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-glyph hs-var">-</span></span><span class="annot"><span class="annottext">Int
+</span><span class="hs-number">1</span></span><span class="hs-special">)</span><span class="annot"><span class="annottext">Int -&gt; Int -&gt; Int
+forall a. Num a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-operator hs-var">*</span></span><span class="annot"><span class="annottext">Int
+</span><a href="#local-6989586621679358615"><span class="hs-identifier hs-var">size</span></a></span><span class="hs-special">)</span><span class="annot"><span class="annottext">Int -&gt; [Int] -&gt; [Int]
+forall a. a -&gt; [a] -&gt; [a]
+</span><span class="hs-glyph hs-var">:</span></span><span class="annot"><span class="annottext">Int -&gt; Int -&gt; [Int]
+forall a. Int -&gt; a -&gt; [a]
+</span><span class="hs-identifier hs-var">replicate</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Int
+</span><a href="#local-6989586621679358616"><span class="hs-identifier hs-var">ncol</span></a></span><span class="annot"><span class="annottext">Int -&gt; Int -&gt; Int
+forall a. Num a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-glyph hs-var">-</span></span><span class="annot"><span class="annottext">Int
+</span><span class="hs-number">1</span></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">Int
+</span><a href="#local-6989586621679358615"><span class="hs-identifier hs-var">size</span></a></span><span>
+</span><span id="line-140"></span><span>          </span><span class="hs-comment">-- Compute the horizontal position of columns</span><span>
+</span><span id="line-141"></span><span>          </span><span id="local-6989586621679358603"><span class="annot"><span class="annottext">xpos :: [Int]
+</span><a href="#local-6989586621679358603"><span class="hs-identifier hs-var hs-var">xpos</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Int -&gt; [Int] -&gt; [Int]
+forall t. Num t =&gt; t -&gt; [t] -&gt; [t]
+</span><a href="#local-6989586621679358602"><span class="hs-identifier hs-var">accumEx</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Position -&gt; Int
+forall a b. (Integral a, Num b) =&gt; a -&gt; b
+</span><span class="hs-identifier hs-var">fromIntegral</span></span><span> </span><span class="annot"><span class="annottext">(Position -&gt; Int) -&gt; Position -&gt; Int
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">Rectangle -&gt; Position
+</span><span class="hs-identifier hs-var hs-var">rect_x</span></span><span> </span><span class="annot"><span class="annottext">Rectangle
+</span><a href="#local-6989586621679358619"><span class="hs-identifier hs-var">r</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">[Int]
+</span><a href="#local-6989586621679358607"><span class="hs-identifier hs-var">width</span></a></span><span>
+</span><span id="line-142"></span><span>          </span><span class="hs-comment">-- Exclusive accumulation</span><span>
+</span><span id="line-143"></span><span>          </span><span id="local-6989586621679358602"><span class="annot"><span class="annottext">accumEx :: t -&gt; [t] -&gt; [t]
+</span><a href="#local-6989586621679358602"><span class="hs-identifier hs-var hs-var">accumEx</span></a></span></span><span> </span><span id="local-6989586621679358600"><span class="annot"><span class="annottext">t
+</span><a href="#local-6989586621679358600"><span class="hs-identifier hs-var">a</span></a></span></span><span> </span><span class="hs-special">(</span><span id="local-6989586621679358599"><span class="annot"><span class="annottext">t
+</span><a href="#local-6989586621679358599"><span class="hs-identifier hs-var">x</span></a></span></span><span class="annot"><span class="hs-glyph hs-type">:</span></span><span id="local-6989586621679358598"><span class="annot"><span class="annottext">[t]
+</span><a href="#local-6989586621679358598"><span class="hs-identifier hs-var">xs</span></a></span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">t
+</span><a href="#local-6989586621679358600"><span class="hs-identifier hs-var">a</span></a></span><span class="annot"><span class="annottext">t -&gt; [t] -&gt; [t]
+forall a. a -&gt; [a] -&gt; [a]
+</span><span class="hs-glyph hs-var">:</span></span><span class="annot"><span class="annottext">t -&gt; [t] -&gt; [t]
+</span><a href="#local-6989586621679358602"><span class="hs-identifier hs-var">accumEx</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">t
+</span><a href="#local-6989586621679358600"><span class="hs-identifier hs-var">a</span></a></span><span class="annot"><span class="annottext">t -&gt; t -&gt; t
+forall a. Num a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-operator hs-var">+</span></span><span class="annot"><span class="annottext">t
+</span><a href="#local-6989586621679358599"><span class="hs-identifier hs-var">x</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">[t]
+</span><a href="#local-6989586621679358598"><span class="hs-identifier hs-var">xs</span></a></span><span>
+</span><span id="line-144"></span><span>          </span><span class="annot"><a href="#local-6989586621679358602"><span class="hs-identifier hs-var">accumEx</span></a></span><span> </span><span class="annot"><span class="annottext">t
+</span><span class="hs-identifier">_</span></span><span> </span><span class="annot"><span class="annottext">[t]
+</span><span class="hs-identifier">_</span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-special">[</span><span class="hs-special">]</span><span>
+</span><span id="line-145"></span><span>          </span><span class="hs-comment">-- Create a rectangle for each column</span><span>
+</span><span id="line-146"></span><span>          </span><span id="local-6989586621679358597"><span class="annot"><span class="annottext">cr :: [Rectangle]
+</span><a href="#local-6989586621679358597"><span class="hs-identifier hs-var hs-var">cr</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">(Int -&gt; Int -&gt; Rectangle) -&gt; [Int] -&gt; [Int] -&gt; [Rectangle]
+forall a b c. (a -&gt; b -&gt; c) -&gt; [a] -&gt; [b] -&gt; [c]
+</span><span class="hs-identifier hs-var">zipWith</span></span><span> </span><span class="hs-special">(</span><span class="hs-glyph">\</span><span id="local-6989586621679358595"><span class="annot"><span class="annottext">Int
+</span><a href="#local-6989586621679358595"><span class="hs-identifier hs-var">x</span></a></span></span><span> </span><span id="local-6989586621679358594"><span class="annot"><span class="annottext">Int
+</span><a href="#local-6989586621679358594"><span class="hs-identifier hs-var">w</span></a></span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">Rectangle
+</span><a href="#local-6989586621679358619"><span class="hs-identifier hs-var">r</span></a></span><span> </span><span class="hs-special">{</span><span> </span><span class="annot"><span class="annottext">rect_x :: Position
+</span><span class="hs-identifier hs-var">rect_x</span></span><span class="hs-glyph">=</span><span class="annot"><span class="annottext">Int -&gt; Position
+forall a b. (Integral a, Num b) =&gt; a -&gt; b
+</span><span class="hs-identifier hs-var">fromIntegral</span></span><span> </span><span class="annot"><span class="annottext">Int
+</span><a href="#local-6989586621679358595"><span class="hs-identifier hs-var">x</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">rect_width :: Dimension
+</span><span class="hs-identifier hs-var">rect_width</span></span><span class="hs-glyph">=</span><span class="annot"><span class="annottext">Int -&gt; Dimension
+forall a b. (Integral a, Num b) =&gt; a -&gt; b
+</span><span class="hs-identifier hs-var">fromIntegral</span></span><span> </span><span class="annot"><span class="annottext">Int
+</span><a href="#local-6989586621679358594"><span class="hs-identifier hs-var">w</span></a></span><span> </span><span class="hs-special">}</span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">[Int]
+</span><a href="#local-6989586621679358603"><span class="hs-identifier hs-var">xpos</span></a></span><span> </span><span class="annot"><span class="annottext">[Int]
+</span><a href="#local-6989586621679358607"><span class="hs-identifier hs-var">width</span></a></span><span>
+</span><span id="line-147"></span><span>          </span><span class="hs-comment">-- Split the columns into the windows</span><span>
+</span><span id="line-148"></span><span>          </span><span id="local-6989586621679358617"><span class="annot"><span class="annottext">rlist :: [Rectangle]
+</span><a href="#local-6989586621679358617"><span class="hs-identifier hs-var hs-var">rlist</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">[[Rectangle]] -&gt; [Rectangle]
+forall (t :: * -&gt; *) a. Foldable t =&gt; t [a] -&gt; [a]
+</span><span class="hs-identifier hs-var">concat</span></span><span> </span><span class="annot"><span class="annottext">([[Rectangle]] -&gt; [Rectangle]) -&gt; [[Rectangle]] -&gt; [Rectangle]
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">(Int -&gt; Rectangle -&gt; [Rectangle])
+-&gt; [Int] -&gt; [Rectangle] -&gt; [[Rectangle]]
+forall a b c. (a -&gt; b -&gt; c) -&gt; [a] -&gt; [b] -&gt; [c]
+</span><span class="hs-identifier hs-var">zipWith</span></span><span> </span><span class="annot"><span class="annottext">Int -&gt; Rectangle -&gt; [Rectangle]
+</span><span class="hs-identifier hs-var">splitVertically</span></span><span> </span><span class="annot"><span class="annottext">[Int]
+</span><a href="#local-6989586621679358609"><span class="hs-identifier hs-var">col</span></a></span><span> </span><span class="annot"><span class="annottext">[Rectangle]
+</span><a href="#local-6989586621679358597"><span class="hs-identifier hs-var">cr</span></a></span><span>
+</span><span id="line-149"></span></pre></body></html>
