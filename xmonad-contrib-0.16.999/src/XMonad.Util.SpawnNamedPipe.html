@@ -1,0 +1,150 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd"><html xmlns="http://www.w3.org/1999/xhtml"><head><link rel="stylesheet" type="text/css" href="style.css" /><script type="text/javascript" src="highlight.js"></script></head><body><pre><span class="hs-comment">-----------------------------------------------------------------------------</span><span>
+</span><span id="line-2"></span><span class="hs-comment">-- |</span><span>
+</span><span id="line-3"></span><span class="hs-comment">-- Module      :  XMonad.Util.SpawnNamedPipe</span><span>
+</span><span id="line-4"></span><span class="hs-comment">-- Description :  A module for spawning a pipe whose handle lives in the XMonad state.</span><span>
+</span><span id="line-5"></span><span class="hs-comment">-- Copyright   :  (c) Christian Wills 2014</span><span>
+</span><span id="line-6"></span><span class="hs-comment">-- License     :  BSD3-style (see LICENSE)</span><span>
+</span><span id="line-7"></span><span class="hs-comment">--</span><span>
+</span><span id="line-8"></span><span class="hs-comment">-- Maintainer  :  cwills.dev@gmail.com</span><span>
+</span><span id="line-9"></span><span class="hs-comment">-- Stability   :  unstable</span><span>
+</span><span id="line-10"></span><span class="hs-comment">-- Portability :  not portable</span><span>
+</span><span id="line-11"></span><span class="hs-comment">--</span><span>
+</span><span id="line-12"></span><span class="hs-comment">-- A module for spawning a pipe whose &quot;Handle&quot; lives in the Xmonad state.</span><span>
+</span><span id="line-13"></span><span class="hs-comment">--</span><span>
+</span><span id="line-14"></span><span class="hs-comment">-----------------------------------------------------------------------------</span><span>
+</span><span id="line-15"></span><span>
+</span><span id="line-16"></span><span class="hs-keyword">module</span><span> </span><span class="hs-identifier">XMonad.Util.SpawnNamedPipe</span><span> </span><span class="hs-special">(</span><span>
+</span><span id="line-17"></span><span>  </span><span class="annot"><span class="hs-comment">-- * Usage</span></span><span>
+</span><span id="line-18"></span><span>  </span><span class="annot"><span class="hs-comment">-- $usage</span></span><span>
+</span><span id="line-19"></span><span>    </span><span class="annot"><a href="XMonad.Util.SpawnNamedPipe.html#spawnNamedPipe"><span class="hs-identifier">spawnNamedPipe</span></a></span><span>
+</span><span id="line-20"></span><span>  </span><span class="hs-special">,</span><span> </span><span class="annot"><a href="XMonad.Util.SpawnNamedPipe.html#getNamedPipe"><span class="hs-identifier">getNamedPipe</span></a></span><span>
+</span><span id="line-21"></span><span>  </span><span class="hs-special">)</span><span> </span><span class="hs-keyword">where</span><span>
+</span><span id="line-22"></span><span>
+</span><span id="line-23"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><span class="hs-identifier">XMonad</span></span><span>
+</span><span id="line-24"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><a href="XMonad.Util.Run.html"><span class="hs-identifier">XMonad.Util.Run</span></a></span><span>
+</span><span id="line-25"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><span class="hs-identifier">System.IO</span></span><span>
+</span><span id="line-26"></span><span class="hs-keyword">import</span><span> </span><span class="hs-keyword">qualified</span><span> </span><span class="annot"><a href="XMonad.Util.ExtensibleState.html"><span class="hs-identifier">XMonad.Util.ExtensibleState</span></a></span><span> </span><span class="hs-keyword">as</span><span> </span><span class="annot"><span class="hs-identifier">XS</span></span><span>
+</span><span id="line-27"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><a href="XMonad.Prelude.html"><span class="hs-identifier">XMonad.Prelude</span></a></span><span>
+</span><span id="line-28"></span><span class="hs-keyword">import</span><span> </span><span class="hs-keyword">qualified</span><span> </span><span class="annot"><span class="hs-identifier">Data.Map</span></span><span> </span><span class="hs-keyword">as</span><span> </span><span class="annot"><span class="hs-identifier">Map</span></span><span>
+</span><span id="line-29"></span><span>
+</span><span id="line-30"></span><span class="hs-comment">-- $usage</span><span>
+</span><span id="line-31"></span><span class="hs-comment">-- This module makes it possible to spawn a pipe to Dzen2 in the startupHook</span><span>
+</span><span id="line-32"></span><span class="hs-comment">-- and write to it from inside the logHook without the need for global</span><span>
+</span><span id="line-33"></span><span class="hs-comment">-- variables.</span><span>
+</span><span id="line-34"></span><span class="hs-comment">--</span><span>
+</span><span id="line-35"></span><span class="hs-comment">-- &gt; import XMonad.Util.SpawnNamedPipe</span><span>
+</span><span id="line-36"></span><span class="hs-comment">-- &gt; import Data.Maybe</span><span>
+</span><span id="line-37"></span><span class="hs-comment">-- &gt;</span><span>
+</span><span id="line-38"></span><span class="hs-comment">-- &gt; -- StartupHook</span><span>
+</span><span id="line-39"></span><span class="hs-comment">-- &gt; startupHook' = spawnNamedPipe &quot;dzen2&quot; &quot;dzenPipe&quot;</span><span>
+</span><span id="line-40"></span><span class="hs-comment">-- &gt;</span><span>
+</span><span id="line-41"></span><span class="hs-comment">-- &gt; -- LogHook</span><span>
+</span><span id="line-42"></span><span class="hs-comment">-- &gt; logHook' = do</span><span>
+</span><span id="line-43"></span><span class="hs-comment">-- &gt;     mh &lt;- getNamedPipeHandle &quot;dzenPipe&quot;</span><span>
+</span><span id="line-44"></span><span class="hs-comment">-- &gt;         dynamicLogWithPP $ def {</span><span>
+</span><span id="line-45"></span><span class="hs-comment">-- &gt;             ppOutput = maybe (\s -&gt; return ()) (hPutStrLn) mh}</span><span>
+</span><span id="line-46"></span><span class="hs-comment">-- &gt;</span><span>
+</span><span id="line-47"></span><span class="hs-comment">-- &gt; -- Main</span><span>
+</span><span id="line-48"></span><span class="hs-comment">-- &gt; main = xmonad $ def { startupHook = startupHook'</span><span>
+</span><span id="line-49"></span><span class="hs-comment">-- &gt;                     , logHook = logHook'}</span><span>
+</span><span id="line-50"></span><span class="hs-comment">--</span><span>
+</span><span id="line-51"></span><span>
+</span><span id="line-52"></span><span class="hs-keyword">newtype</span><span> </span><span id="NamedPipes"><span class="annot"><a href="XMonad.Util.SpawnNamedPipe.html#NamedPipes"><span class="hs-identifier hs-var">NamedPipes</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span id="NamedPipes"><span class="annot"><a href="XMonad.Util.SpawnNamedPipe.html#NamedPipes"><span class="hs-identifier hs-var">NamedPipes</span></a></span></span><span> </span><span class="hs-special">{</span><span> </span><span id="pipeMap"><span class="annot"><span class="annottext">NamedPipes -&gt; Map String Handle
+</span><a href="XMonad.Util.SpawnNamedPipe.html#pipeMap"><span class="hs-identifier hs-var hs-var">pipeMap</span></a></span></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Map.Map</span></span><span> </span><span class="annot"><span class="hs-identifier hs-type">String</span></span><span> </span><span class="annot"><span class="hs-identifier hs-type">Handle</span></span><span> </span><span class="hs-special">}</span><span>
+</span><span id="line-53"></span><span>    </span><span class="hs-keyword">deriving</span><span> </span><span class="hs-special">(</span><span id="local-6989586621679380535"><span id="local-6989586621679380537"><span id="local-6989586621679380539"><span class="annot"><span class="annottext">Int -&gt; NamedPipes -&gt; ShowS
+[NamedPipes] -&gt; ShowS
+NamedPipes -&gt; String
+(Int -&gt; NamedPipes -&gt; ShowS)
+-&gt; (NamedPipes -&gt; String)
+-&gt; ([NamedPipes] -&gt; ShowS)
+-&gt; Show NamedPipes
+forall a.
+(Int -&gt; a -&gt; ShowS) -&gt; (a -&gt; String) -&gt; ([a] -&gt; ShowS) -&gt; Show a
+showList :: [NamedPipes] -&gt; ShowS
+$cshowList :: [NamedPipes] -&gt; ShowS
+show :: NamedPipes -&gt; String
+$cshow :: NamedPipes -&gt; String
+showsPrec :: Int -&gt; NamedPipes -&gt; ShowS
+$cshowsPrec :: Int -&gt; NamedPipes -&gt; ShowS
+</span><span class="hs-identifier hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var">Show</span></span></span></span></span><span class="hs-special">)</span><span>
+</span><span id="line-54"></span><span>
+</span><span id="line-55"></span><span class="hs-keyword">instance</span><span> </span><span id="local-6989586621679380530"><span class="annot"><span class="hs-identifier hs-type">ExtensionClass</span></span><span> </span><span class="annot"><a href="XMonad.Util.SpawnNamedPipe.html#NamedPipes"><span class="hs-identifier hs-type">NamedPipes</span></a></span></span><span> </span><span class="hs-keyword">where</span><span>
+</span><span id="line-56"></span><span>    </span><span id="local-6989586621679380528"><span class="annot"><span class="annottext">initialValue :: NamedPipes
+</span><span class="hs-identifier hs-var hs-var hs-var hs-var">initialValue</span></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Map String Handle -&gt; NamedPipes
+</span><a href="XMonad.Util.SpawnNamedPipe.html#NamedPipes"><span class="hs-identifier hs-var">NamedPipes</span></a></span><span> </span><span class="annot"><span class="annottext">Map String Handle
+forall k a. Map k a
+</span><span class="hs-identifier hs-var">Map.empty</span></span><span>
+</span><span id="line-57"></span><span>
+</span><span id="line-58"></span><span class="hs-comment">-- | When 'spawnNamedPipe' is executed with a command &quot;String&quot; and a name</span><span>
+</span><span id="line-59"></span><span class="hs-comment">-- &quot;String&quot; respectively.  The command string is spawned with 'spawnPipe' (as</span><span>
+</span><span id="line-60"></span><span class="hs-comment">-- long as the name chosen hasn't been used already) and the &quot;Handle&quot; returned</span><span>
+</span><span id="line-61"></span><span class="hs-comment">-- is saved in Xmonad's state associated with the name &quot;String&quot;.</span><span>
+</span><span id="line-62"></span><span class="annot"><a href="XMonad.Util.SpawnNamedPipe.html#spawnNamedPipe"><span class="hs-identifier hs-type">spawnNamedPipe</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">String</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">String</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">X</span></span><span> </span><span class="hs-special">(</span><span class="hs-special">)</span><span>
+</span><span id="line-63"></span><span id="spawnNamedPipe"><span class="annot"><span class="annottext">spawnNamedPipe :: String -&gt; String -&gt; X ()
+</span><a href="XMonad.Util.SpawnNamedPipe.html#spawnNamedPipe"><span class="hs-identifier hs-var hs-var">spawnNamedPipe</span></a></span></span><span> </span><span id="local-6989586621679380525"><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679380525"><span class="hs-identifier hs-var">cmd</span></a></span></span><span> </span><span id="local-6989586621679380524"><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679380524"><span class="hs-identifier hs-var">name</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-64"></span><span>  </span><span id="local-6989586621679380523"><span class="annot"><span class="annottext">Bool
+</span><a href="#local-6989586621679380523"><span class="hs-identifier hs-var">b</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">(NamedPipes -&gt; Bool) -&gt; X Bool
+forall a (m :: * -&gt; *) b.
+(ExtensionClass a, XLike m) =&gt;
+(a -&gt; b) -&gt; m b
+</span><a href="XMonad.Util.ExtensibleState.html#gets"><span class="hs-identifier hs-var">XS.gets</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">String -&gt; Map String Handle -&gt; Bool
+forall k a. Ord k =&gt; k -&gt; Map k a -&gt; Bool
+</span><span class="hs-identifier hs-var">Map.member</span></span><span> </span><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679380524"><span class="hs-identifier hs-var">name</span></a></span><span> </span><span class="annot"><span class="annottext">(Map String Handle -&gt; Bool)
+-&gt; (NamedPipes -&gt; Map String Handle) -&gt; NamedPipes -&gt; Bool
+forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">NamedPipes -&gt; Map String Handle
+</span><a href="XMonad.Util.SpawnNamedPipe.html#pipeMap"><span class="hs-identifier hs-var hs-var">pipeMap</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-65"></span><span>  </span><span class="annot"><span class="annottext">Bool -&gt; X () -&gt; X ()
+forall (f :: * -&gt; *). Applicative f =&gt; Bool -&gt; f () -&gt; f ()
+</span><span class="hs-identifier hs-var">unless</span></span><span> </span><span class="annot"><span class="annottext">Bool
+</span><a href="#local-6989586621679380523"><span class="hs-identifier hs-var">b</span></a></span><span> </span><span class="annot"><span class="annottext">(X () -&gt; X ()) -&gt; X () -&gt; X ()
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-66"></span><span>    </span><span id="local-6989586621679380518"><span class="annot"><span class="annottext">Handle
+</span><a href="#local-6989586621679380518"><span class="hs-identifier hs-var">h</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">String -&gt; X Handle
+forall (m :: * -&gt; *). MonadIO m =&gt; String -&gt; m Handle
+</span><a href="XMonad.Util.Run.html#spawnPipe"><span class="hs-identifier hs-var">spawnPipe</span></a></span><span> </span><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679380525"><span class="hs-identifier hs-var">cmd</span></a></span><span>
+</span><span id="line-67"></span><span>    </span><span class="annot"><span class="annottext">(NamedPipes -&gt; NamedPipes) -&gt; X ()
+forall a (m :: * -&gt; *).
+(ExtensionClass a, XLike m) =&gt;
+(a -&gt; a) -&gt; m ()
+</span><a href="XMonad.Util.ExtensibleState.html#modify"><span class="hs-identifier hs-var">XS.modify</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Map String Handle -&gt; NamedPipes
+</span><a href="XMonad.Util.SpawnNamedPipe.html#NamedPipes"><span class="hs-identifier hs-var">NamedPipes</span></a></span><span> </span><span class="annot"><span class="annottext">(Map String Handle -&gt; NamedPipes)
+-&gt; (NamedPipes -&gt; Map String Handle) -&gt; NamedPipes -&gt; NamedPipes
+forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">String -&gt; Handle -&gt; Map String Handle -&gt; Map String Handle
+forall k a. Ord k =&gt; k -&gt; a -&gt; Map k a -&gt; Map k a
+</span><span class="hs-identifier hs-var">Map.insert</span></span><span> </span><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679380524"><span class="hs-identifier hs-var">name</span></a></span><span> </span><span class="annot"><span class="annottext">Handle
+</span><a href="#local-6989586621679380518"><span class="hs-identifier hs-var">h</span></a></span><span> </span><span class="annot"><span class="annottext">(Map String Handle -&gt; Map String Handle)
+-&gt; (NamedPipes -&gt; Map String Handle)
+-&gt; NamedPipes
+-&gt; Map String Handle
+forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">NamedPipes -&gt; Map String Handle
+</span><a href="XMonad.Util.SpawnNamedPipe.html#pipeMap"><span class="hs-identifier hs-var hs-var">pipeMap</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-68"></span><span>
+</span><span id="line-69"></span><span class="hs-comment">-- | Attempts to retrieve a &quot;Handle&quot; to a pipe previously stored in Xmonad's</span><span>
+</span><span id="line-70"></span><span class="hs-comment">-- state associated with the given string via a call to 'spawnNamedPipe'. If the</span><span>
+</span><span id="line-71"></span><span class="hs-comment">-- given string doesn't exist in the map stored in Xmonad's state Nothing is</span><span>
+</span><span id="line-72"></span><span class="hs-comment">-- returned.</span><span>
+</span><span id="line-73"></span><span class="annot"><a href="XMonad.Util.SpawnNamedPipe.html#getNamedPipe"><span class="hs-identifier hs-type">getNamedPipe</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">String</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">X</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">Maybe</span></span><span> </span><span class="annot"><span class="hs-identifier hs-type">Handle</span></span><span class="hs-special">)</span><span>
+</span><span id="line-74"></span><span id="getNamedPipe"><span class="annot"><span class="annottext">getNamedPipe :: String -&gt; X (Maybe Handle)
+</span><a href="XMonad.Util.SpawnNamedPipe.html#getNamedPipe"><span class="hs-identifier hs-var hs-var">getNamedPipe</span></a></span></span><span> </span><span id="local-6989586621679380514"><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679380514"><span class="hs-identifier hs-var">name</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">(NamedPipes -&gt; Maybe Handle) -&gt; X (Maybe Handle)
+forall a (m :: * -&gt; *) b.
+(ExtensionClass a, XLike m) =&gt;
+(a -&gt; b) -&gt; m b
+</span><a href="XMonad.Util.ExtensibleState.html#gets"><span class="hs-identifier hs-var">XS.gets</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">String -&gt; Map String Handle -&gt; Maybe Handle
+forall k a. Ord k =&gt; k -&gt; Map k a -&gt; Maybe a
+</span><span class="hs-identifier hs-var">Map.lookup</span></span><span> </span><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679380514"><span class="hs-identifier hs-var">name</span></a></span><span> </span><span class="annot"><span class="annottext">(Map String Handle -&gt; Maybe Handle)
+-&gt; (NamedPipes -&gt; Map String Handle) -&gt; NamedPipes -&gt; Maybe Handle
+forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">NamedPipes -&gt; Map String Handle
+</span><a href="XMonad.Util.SpawnNamedPipe.html#pipeMap"><span class="hs-identifier hs-var hs-var">pipeMap</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-75"></span></pre></body></html>

@@ -1,0 +1,568 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd"><html xmlns="http://www.w3.org/1999/xhtml"><head><link rel="stylesheet" type="text/css" href="style.css" /><script type="text/javascript" src="highlight.js"></script></head><body><pre><span class="hs-pragma">{-# LANGUAGE FlexibleInstances, MultiParamTypeClasses #-}</span><span>
+</span><span id="line-2"></span><span>
+</span><span id="line-3"></span><span class="hs-comment">-----------------------------------------------------------------------------</span><span>
+</span><span id="line-4"></span><span class="hs-comment">-- |</span><span>
+</span><span id="line-5"></span><span class="hs-comment">-- Module      :  XMonad.Layout.OnHost</span><span>
+</span><span id="line-6"></span><span class="hs-comment">-- Description :  Use layouts and apply layout modifiers selectively, depending on the host.</span><span>
+</span><span id="line-7"></span><span class="hs-comment">-- Copyright   :  (c) Brandon S Allbery, Brent Yorgey</span><span>
+</span><span id="line-8"></span><span class="hs-comment">-- License     :  BSD-style (see LICENSE)</span><span>
+</span><span id="line-9"></span><span class="hs-comment">--</span><span>
+</span><span id="line-10"></span><span class="hs-comment">-- Maintainer  :  &lt;allbery.b@gmail.com&gt;</span><span>
+</span><span id="line-11"></span><span class="hs-comment">-- Stability   :  unstable</span><span>
+</span><span id="line-12"></span><span class="hs-comment">-- Portability :  unportable</span><span>
+</span><span id="line-13"></span><span class="hs-comment">--</span><span>
+</span><span id="line-14"></span><span class="hs-comment">-- Configure layouts on a per-host basis: use layouts and apply</span><span>
+</span><span id="line-15"></span><span class="hs-comment">-- layout modifiers selectively, depending on the host.  Heavily based on</span><span>
+</span><span id="line-16"></span><span class="hs-comment">-- &quot;XMonad.Layout.PerWorkspace&quot; by Brent Yorgey.</span><span>
+</span><span id="line-17"></span><span class="hs-comment">-----------------------------------------------------------------------------</span><span>
+</span><span id="line-18"></span><span>
+</span><span id="line-19"></span><span class="hs-keyword">module</span><span> </span><span class="hs-identifier">XMonad.Layout.OnHost</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-comment">-- * Usage</span></span><span>
+</span><span id="line-20"></span><span>                             </span><span class="annot"><span class="hs-comment">-- $usage</span></span><span>
+</span><span id="line-21"></span><span>                             </span><span class="annot"><a href="XMonad.Layout.OnHost.html#OnHost"><span class="hs-identifier">OnHost</span></a></span><span>
+</span><span id="line-22"></span><span>                            </span><span class="hs-special">,</span><span class="annot"><a href="XMonad.Layout.OnHost.html#onHost"><span class="hs-identifier">onHost</span></a></span><span>
+</span><span id="line-23"></span><span>                            </span><span class="hs-special">,</span><span class="annot"><a href="XMonad.Layout.OnHost.html#onHosts"><span class="hs-identifier">onHosts</span></a></span><span>
+</span><span id="line-24"></span><span>                            </span><span class="hs-special">,</span><span class="annot"><a href="XMonad.Layout.OnHost.html#modHost"><span class="hs-identifier">modHost</span></a></span><span>
+</span><span id="line-25"></span><span>                            </span><span class="hs-special">,</span><span class="annot"><a href="XMonad.Layout.OnHost.html#modHosts"><span class="hs-identifier">modHosts</span></a></span><span>
+</span><span id="line-26"></span><span>                            </span><span class="hs-special">)</span><span> </span><span class="hs-keyword">where</span><span>
+</span><span id="line-27"></span><span>
+</span><span id="line-28"></span><span class="hs-keyword">import</span><span>           </span><span class="annot"><span class="hs-identifier">XMonad</span></span><span>
+</span><span id="line-29"></span><span class="hs-keyword">import</span><span> </span><span class="hs-keyword">qualified</span><span> </span><span class="annot"><span class="hs-identifier">XMonad.StackSet</span></span><span>              </span><span class="hs-keyword">as</span><span> </span><span class="annot"><span class="hs-identifier">W</span></span><span>
+</span><span id="line-30"></span><span>
+</span><span id="line-31"></span><span class="hs-keyword">import</span><span>           </span><span class="annot"><a href="XMonad.Layout.LayoutModifier.html"><span class="hs-identifier">XMonad.Layout.LayoutModifier</span></a></span><span>
+</span><span id="line-32"></span><span>
+</span><span id="line-33"></span><span class="hs-keyword">import</span><span>           </span><span class="annot"><span class="hs-identifier">Data.Maybe</span></span><span>                        </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier">fromMaybe</span></span><span class="hs-special">)</span><span>
+</span><span id="line-34"></span><span class="hs-keyword">import</span><span>           </span><span class="annot"><span class="hs-identifier">System.Posix.Env</span></span><span>                  </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier">getEnv</span></span><span class="hs-special">)</span><span>
+</span><span id="line-35"></span><span>
+</span><span id="line-36"></span><span class="hs-comment">-- $usage</span><span>
+</span><span id="line-37"></span><span class="hs-comment">-- You can use this module by importing it into your ~\/.xmonad\/xmonad.hs file:</span><span>
+</span><span id="line-38"></span><span class="hs-comment">--</span><span>
+</span><span id="line-39"></span><span class="hs-comment">-- &gt; import XMonad.Layout.OnHost</span><span>
+</span><span id="line-40"></span><span class="hs-comment">--</span><span>
+</span><span id="line-41"></span><span class="hs-comment">-- and modifying your 'layoutHook' as follows (for example):</span><span>
+</span><span id="line-42"></span><span class="hs-comment">--</span><span>
+</span><span id="line-43"></span><span class="hs-comment">-- &gt; layoutHook = modHost &quot;baz&quot; m1 $            -- apply layout modifier m1 to all layouts on host &quot;baz&quot;</span><span>
+</span><span id="line-44"></span><span class="hs-comment">-- &gt;              onHost &quot;foo&quot; l1 $             -- layout l1 will be used on host &quot;foo&quot;.</span><span>
+</span><span id="line-45"></span><span class="hs-comment">-- &gt;              onHosts [&quot;bar&quot;,&quot;quux&quot;] l2 $   -- layout l2 will be used on hosts &quot;bar&quot; and &quot;quux&quot;.</span><span>
+</span><span id="line-46"></span><span class="hs-comment">-- &gt;              l3                            -- layout l3 will be used on all other hosts.</span><span>
+</span><span id="line-47"></span><span class="hs-comment">--</span><span>
+</span><span id="line-48"></span><span class="hs-comment">-- Note that @l1@, @l2@, and @l3@ can be arbitrarily complicated</span><span>
+</span><span id="line-49"></span><span class="hs-comment">-- layouts, e.g. @(Full ||| smartBorders $ tabbed shrinkText</span><span>
+</span><span id="line-50"></span><span class="hs-comment">-- def ||| ...)@, and @m1@ can be any layout modifier, i.e. a</span><span>
+</span><span id="line-51"></span><span class="hs-comment">-- function of type @(l a -&gt; ModifiedLayout lm l a)@.</span><span>
+</span><span id="line-52"></span><span class="hs-comment">--</span><span>
+</span><span id="line-53"></span><span class="hs-comment">-- In another scenario, suppose you wanted to have layouts A, B, and C</span><span>
+</span><span id="line-54"></span><span class="hs-comment">-- available on all hosts, except that on host foo you want</span><span>
+</span><span id="line-55"></span><span class="hs-comment">-- layout D instead of C.  You could do that as follows:</span><span>
+</span><span id="line-56"></span><span class="hs-comment">--</span><span>
+</span><span id="line-57"></span><span class="hs-comment">-- &gt; layoutHook = A ||| B ||| onHost &quot;foo&quot; D C</span><span>
+</span><span id="line-58"></span><span class="hs-comment">--</span><span>
+</span><span id="line-59"></span><span class="hs-comment">-- Note that we rely on '$HOST' being set in the environment, as is true on most</span><span>
+</span><span id="line-60"></span><span class="hs-comment">-- modern systems; if it's not, you may want to use a wrapper around xmonad or</span><span>
+</span><span id="line-61"></span><span class="hs-comment">-- perhaps use 'System.Posix.Env.setEnv' (or 'putEnv') to set it in 'main'.</span><span>
+</span><span id="line-62"></span><span class="hs-comment">-- This is to avoid dragging in the network package as an xmonad dependency.</span><span>
+</span><span id="line-63"></span><span class="hs-comment">-- If '$HOST' is not defined, it will behave as if the host name never matches.</span><span>
+</span><span id="line-64"></span><span class="hs-comment">--</span><span>
+</span><span id="line-65"></span><span class="hs-comment">-- Also note that '$HOST' is usually a fully qualified domain name, not a short name.</span><span>
+</span><span id="line-66"></span><span class="hs-comment">-- If you use a short name, this code will try to truncate $HOST to match; this may</span><span>
+</span><span id="line-67"></span><span class="hs-comment">-- prove too magical, though, and may change in the future.</span><span>
+</span><span id="line-68"></span><span>
+</span><span id="line-69"></span><span class="hs-comment">-- | Specify one layout to use on a particular host, and another</span><span>
+</span><span id="line-70"></span><span class="hs-comment">--   to use on all others.  The second layout can be another call to</span><span>
+</span><span id="line-71"></span><span class="hs-comment">--   'onHost', and so on.</span><span>
+</span><span id="line-72"></span><span id="local-6989586621679369750"><span id="local-6989586621679369751"><span id="local-6989586621679369752"><span class="annot"><a href="XMonad.Layout.OnHost.html#onHost"><span class="hs-identifier hs-type">onHost</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">LayoutClass</span></span><span> </span><span class="annot"><a href="#local-6989586621679369752"><span class="hs-identifier hs-type">l1</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679369751"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier hs-type">LayoutClass</span></span><span> </span><span class="annot"><a href="#local-6989586621679369750"><span class="hs-identifier hs-type">l2</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679369751"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-73"></span><span>       </span><span class="hs-glyph">=&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">String</span></span><span> </span><span class="hs-comment">-- ^ the name of the host to match</span><span>
+</span><span id="line-74"></span><span>       </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="#local-6989586621679369752"><span class="hs-identifier hs-type">l1</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679369751"><span class="hs-identifier hs-type">a</span></a></span><span>   </span><span class="hs-comment">-- ^ layout to use on the matched host</span><span>
+</span><span id="line-75"></span><span>       </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="#local-6989586621679369750"><span class="hs-identifier hs-type">l2</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679369751"><span class="hs-identifier hs-type">a</span></a></span><span>   </span><span class="hs-comment">-- ^ layout to use everywhere else</span><span>
+</span><span id="line-76"></span><span>       </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="XMonad.Layout.OnHost.html#OnHost"><span class="hs-identifier hs-type">OnHost</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679369752"><span class="hs-identifier hs-type">l1</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679369750"><span class="hs-identifier hs-type">l2</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679369751"><span class="hs-identifier hs-type">a</span></a></span></span></span></span><span>
+</span><span id="line-77"></span><span id="onHost"><span class="annot"><span class="annottext">onHost :: forall (l1 :: * -&gt; *) a (l2 :: * -&gt; *).
+(LayoutClass l1 a, LayoutClass l2 a) =&gt;
+String -&gt; l1 a -&gt; l2 a -&gt; OnHost l1 l2 a
+</span><a href="XMonad.Layout.OnHost.html#onHost"><span class="hs-identifier hs-var hs-var">onHost</span></a></span></span><span> </span><span id="local-6989586621679369621"><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679369621"><span class="hs-identifier hs-var">host</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">[String] -&gt; l1 a -&gt; l2 a -&gt; OnHost l1 l2 a
+forall (l1 :: * -&gt; *) a (l2 :: * -&gt; *).
+(LayoutClass l1 a, LayoutClass l2 a) =&gt;
+[String] -&gt; l1 a -&gt; l2 a -&gt; OnHost l1 l2 a
+</span><a href="XMonad.Layout.OnHost.html#onHosts"><span class="hs-identifier hs-var">onHosts</span></a></span><span> </span><span class="hs-special">[</span><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679369621"><span class="hs-identifier hs-var">host</span></a></span><span class="hs-special">]</span><span>
+</span><span id="line-78"></span><span>
+</span><span id="line-79"></span><span class="hs-comment">-- | Specify one layout to use on a particular set of hosts, and</span><span>
+</span><span id="line-80"></span><span class="hs-comment">--   another to use on all other hosts.</span><span>
+</span><span id="line-81"></span><span id="local-6989586621679369744"><span id="local-6989586621679369745"><span id="local-6989586621679369746"><span class="annot"><a href="XMonad.Layout.OnHost.html#onHosts"><span class="hs-identifier hs-type">onHosts</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">LayoutClass</span></span><span> </span><span class="annot"><a href="#local-6989586621679369746"><span class="hs-identifier hs-type">l1</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679369745"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier hs-type">LayoutClass</span></span><span> </span><span class="annot"><a href="#local-6989586621679369744"><span class="hs-identifier hs-type">l2</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679369745"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-82"></span><span>        </span><span class="hs-glyph">=&gt;</span><span> </span><span class="hs-special">[</span><span class="annot"><span class="hs-identifier hs-type">String</span></span><span class="hs-special">]</span><span> </span><span class="hs-comment">-- ^ names of hosts to match</span><span>
+</span><span id="line-83"></span><span>        </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="#local-6989586621679369746"><span class="hs-identifier hs-type">l1</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679369745"><span class="hs-identifier hs-type">a</span></a></span><span>     </span><span class="hs-comment">-- ^ layout to use on matched hosts</span><span>
+</span><span id="line-84"></span><span>        </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="#local-6989586621679369744"><span class="hs-identifier hs-type">l2</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679369745"><span class="hs-identifier hs-type">a</span></a></span><span>     </span><span class="hs-comment">-- ^ layout to use everywhere else</span><span>
+</span><span id="line-85"></span><span>        </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="XMonad.Layout.OnHost.html#OnHost"><span class="hs-identifier hs-type">OnHost</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679369746"><span class="hs-identifier hs-type">l1</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679369744"><span class="hs-identifier hs-type">l2</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679369745"><span class="hs-identifier hs-type">a</span></a></span></span></span></span><span>
+</span><span id="line-86"></span><span id="onHosts"><span class="annot"><span class="annottext">onHosts :: forall (l1 :: * -&gt; *) a (l2 :: * -&gt; *).
+(LayoutClass l1 a, LayoutClass l2 a) =&gt;
+[String] -&gt; l1 a -&gt; l2 a -&gt; OnHost l1 l2 a
+</span><a href="XMonad.Layout.OnHost.html#onHosts"><span class="hs-identifier hs-var hs-var">onHosts</span></a></span></span><span> </span><span id="local-6989586621679369618"><span class="annot"><span class="annottext">[String]
+</span><a href="#local-6989586621679369618"><span class="hs-identifier hs-var">hosts</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">[String] -&gt; Bool -&gt; l1 a -&gt; l2 a -&gt; OnHost l1 l2 a
+forall (l1 :: * -&gt; *) (l2 :: * -&gt; *) a.
+[String] -&gt; Bool -&gt; l1 a -&gt; l2 a -&gt; OnHost l1 l2 a
+</span><a href="XMonad.Layout.OnHost.html#OnHost"><span class="hs-identifier hs-var">OnHost</span></a></span><span> </span><span class="annot"><span class="annottext">[String]
+</span><a href="#local-6989586621679369618"><span class="hs-identifier hs-var">hosts</span></a></span><span> </span><span class="annot"><span class="annottext">Bool
+</span><span class="hs-identifier hs-var">False</span></span><span>
+</span><span id="line-87"></span><span>
+</span><span id="line-88"></span><span class="hs-comment">-- | Specify a layout modifier to apply on a particular host; layouts</span><span>
+</span><span id="line-89"></span><span class="hs-comment">--   on all other hosts will remain unmodified.</span><span>
+</span><span id="line-90"></span><span id="local-6989586621679369735"><span id="local-6989586621679369736"><span id="local-6989586621679369737"><span class="annot"><a href="XMonad.Layout.OnHost.html#modHost"><span class="hs-identifier hs-type">modHost</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">LayoutClass</span></span><span> </span><span class="annot"><a href="#local-6989586621679369737"><span class="hs-identifier hs-type">l</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679369736"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-91"></span><span>        </span><span class="hs-glyph">=&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">String</span></span><span>                          </span><span class="hs-comment">-- ^ name of the host to match</span><span>
+</span><span id="line-92"></span><span>        </span><span class="hs-glyph">-&gt;</span><span> </span><span class="hs-special">(</span><span class="annot"><a href="#local-6989586621679369737"><span class="hs-identifier hs-type">l</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679369736"><span class="hs-identifier hs-type">a</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="XMonad.Layout.LayoutModifier.html#ModifiedLayout"><span class="hs-identifier hs-type">ModifiedLayout</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679369735"><span class="hs-identifier hs-type">lm</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679369737"><span class="hs-identifier hs-type">l</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679369736"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">)</span><span>  </span><span class="hs-comment">-- ^ the modifier to apply on the matching host</span><span>
+</span><span id="line-93"></span><span>        </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="#local-6989586621679369737"><span class="hs-identifier hs-type">l</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679369736"><span class="hs-identifier hs-type">a</span></a></span><span>                             </span><span class="hs-comment">-- ^ the base layout</span><span>
+</span><span id="line-94"></span><span>        </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="XMonad.Layout.OnHost.html#OnHost"><span class="hs-identifier hs-type">OnHost</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="XMonad.Layout.LayoutModifier.html#ModifiedLayout"><span class="hs-identifier hs-type">ModifiedLayout</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679369735"><span class="hs-identifier hs-type">lm</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679369737"><span class="hs-identifier hs-type">l</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><a href="#local-6989586621679369737"><span class="hs-identifier hs-type">l</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679369736"><span class="hs-identifier hs-type">a</span></a></span></span></span></span><span>
+</span><span id="line-95"></span><span id="modHost"><span class="annot"><span class="annottext">modHost :: forall (l :: * -&gt; *) a (lm :: * -&gt; *).
+LayoutClass l a =&gt;
+String
+-&gt; (l a -&gt; ModifiedLayout lm l a)
+-&gt; l a
+-&gt; OnHost (ModifiedLayout lm l) l a
+</span><a href="XMonad.Layout.OnHost.html#modHost"><span class="hs-identifier hs-var hs-var">modHost</span></a></span></span><span> </span><span id="local-6989586621679369614"><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679369614"><span class="hs-identifier hs-var">host</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">[String]
+-&gt; (l a -&gt; ModifiedLayout lm l a)
+-&gt; l a
+-&gt; OnHost (ModifiedLayout lm l) l a
+forall (l :: * -&gt; *) a (lm :: * -&gt; *).
+LayoutClass l a =&gt;
+[String]
+-&gt; (l a -&gt; ModifiedLayout lm l a)
+-&gt; l a
+-&gt; OnHost (ModifiedLayout lm l) l a
+</span><a href="XMonad.Layout.OnHost.html#modHosts"><span class="hs-identifier hs-var">modHosts</span></a></span><span> </span><span class="hs-special">[</span><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679369614"><span class="hs-identifier hs-var">host</span></a></span><span class="hs-special">]</span><span>
+</span><span id="line-96"></span><span>
+</span><span id="line-97"></span><span class="hs-comment">-- | Specify a layout modifier to apply on a particular set of</span><span>
+</span><span id="line-98"></span><span class="hs-comment">--   hosts; layouts on all other hosts will remain</span><span>
+</span><span id="line-99"></span><span class="hs-comment">--   unmodified.</span><span>
+</span><span id="line-100"></span><span id="local-6989586621679369728"><span id="local-6989586621679369729"><span id="local-6989586621679369730"><span class="annot"><a href="XMonad.Layout.OnHost.html#modHosts"><span class="hs-identifier hs-type">modHosts</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">LayoutClass</span></span><span> </span><span class="annot"><a href="#local-6989586621679369730"><span class="hs-identifier hs-type">l</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679369729"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-101"></span><span>         </span><span class="hs-glyph">=&gt;</span><span> </span><span class="hs-special">[</span><span class="annot"><span class="hs-identifier hs-type">String</span></span><span class="hs-special">]</span><span>                        </span><span class="hs-comment">-- ^ names of the hosts to match</span><span>
+</span><span id="line-102"></span><span>         </span><span class="hs-glyph">-&gt;</span><span> </span><span class="hs-special">(</span><span class="annot"><a href="#local-6989586621679369730"><span class="hs-identifier hs-type">l</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679369729"><span class="hs-identifier hs-type">a</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="XMonad.Layout.LayoutModifier.html#ModifiedLayout"><span class="hs-identifier hs-type">ModifiedLayout</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679369728"><span class="hs-identifier hs-type">lm</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679369730"><span class="hs-identifier hs-type">l</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679369729"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">)</span><span>  </span><span class="hs-comment">-- ^ the modifier to apply on the matching hosts</span><span>
+</span><span id="line-103"></span><span>         </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="#local-6989586621679369730"><span class="hs-identifier hs-type">l</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679369729"><span class="hs-identifier hs-type">a</span></a></span><span>                             </span><span class="hs-comment">-- ^ the base layout</span><span>
+</span><span id="line-104"></span><span>         </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="XMonad.Layout.OnHost.html#OnHost"><span class="hs-identifier hs-type">OnHost</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="XMonad.Layout.LayoutModifier.html#ModifiedLayout"><span class="hs-identifier hs-type">ModifiedLayout</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679369728"><span class="hs-identifier hs-type">lm</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679369730"><span class="hs-identifier hs-type">l</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><a href="#local-6989586621679369730"><span class="hs-identifier hs-type">l</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679369729"><span class="hs-identifier hs-type">a</span></a></span></span></span></span><span>
+</span><span id="line-105"></span><span id="modHosts"><span class="annot"><span class="annottext">modHosts :: forall (l :: * -&gt; *) a (lm :: * -&gt; *).
+LayoutClass l a =&gt;
+[String]
+-&gt; (l a -&gt; ModifiedLayout lm l a)
+-&gt; l a
+-&gt; OnHost (ModifiedLayout lm l) l a
+</span><a href="XMonad.Layout.OnHost.html#modHosts"><span class="hs-identifier hs-var hs-var">modHosts</span></a></span></span><span> </span><span id="local-6989586621679369612"><span class="annot"><span class="annottext">[String]
+</span><a href="#local-6989586621679369612"><span class="hs-identifier hs-var">hosts</span></a></span></span><span> </span><span id="local-6989586621679369611"><span class="annot"><span class="annottext">l a -&gt; ModifiedLayout lm l a
+</span><a href="#local-6989586621679369611"><span class="hs-identifier hs-var">f</span></a></span></span><span> </span><span id="local-6989586621679369610"><span class="annot"><span class="annottext">l a
+</span><a href="#local-6989586621679369610"><span class="hs-identifier hs-var">l</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">[String]
+-&gt; Bool
+-&gt; ModifiedLayout lm l a
+-&gt; l a
+-&gt; OnHost (ModifiedLayout lm l) l a
+forall (l1 :: * -&gt; *) (l2 :: * -&gt; *) a.
+[String] -&gt; Bool -&gt; l1 a -&gt; l2 a -&gt; OnHost l1 l2 a
+</span><a href="XMonad.Layout.OnHost.html#OnHost"><span class="hs-identifier hs-var">OnHost</span></a></span><span> </span><span class="annot"><span class="annottext">[String]
+</span><a href="#local-6989586621679369612"><span class="hs-identifier hs-var">hosts</span></a></span><span> </span><span class="annot"><span class="annottext">Bool
+</span><span class="hs-identifier hs-var">False</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">l a -&gt; ModifiedLayout lm l a
+</span><a href="#local-6989586621679369611"><span class="hs-identifier hs-var">f</span></a></span><span> </span><span class="annot"><span class="annottext">l a
+</span><a href="#local-6989586621679369610"><span class="hs-identifier hs-var">l</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">l a
+</span><a href="#local-6989586621679369610"><span class="hs-identifier hs-var">l</span></a></span><span>
+</span><span id="line-106"></span><span>
+</span><span id="line-107"></span><span class="hs-comment">-- | Structure for representing a host-specific layout along with</span><span>
+</span><span id="line-108"></span><span class="hs-comment">--   a layout for all other hosts. We store the names of hosts</span><span>
+</span><span id="line-109"></span><span class="hs-comment">--   to be matched, and the two layouts. We save the layout choice in</span><span>
+</span><span id="line-110"></span><span class="hs-comment">--   the Bool, to be used to implement description.</span><span>
+</span><span id="line-111"></span><span class="hs-keyword">data</span><span> </span><span id="OnHost"><span class="annot"><a href="XMonad.Layout.OnHost.html#OnHost"><span class="hs-identifier hs-var">OnHost</span></a></span></span><span> </span><span id="local-6989586621679369740"><span class="annot"><a href="#local-6989586621679369740"><span class="hs-identifier hs-type">l1</span></a></span></span><span> </span><span id="local-6989586621679369738"><span class="annot"><a href="#local-6989586621679369738"><span class="hs-identifier hs-type">l2</span></a></span></span><span> </span><span id="local-6989586621679369739"><span class="annot"><a href="#local-6989586621679369739"><span class="hs-identifier hs-type">a</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span id="OnHost"><span class="annot"><a href="XMonad.Layout.OnHost.html#OnHost"><span class="hs-identifier hs-var">OnHost</span></a></span></span><span> </span><span class="hs-special">[</span><span class="annot"><span class="hs-identifier hs-type">String</span></span><span class="hs-special">]</span><span>
+</span><span id="line-112"></span><span>                             </span><span class="annot"><span class="hs-identifier hs-type">Bool</span></span><span>
+</span><span id="line-113"></span><span>                             </span><span class="hs-special">(</span><span class="annot"><a href="#local-6989586621679369740"><span class="hs-identifier hs-type">l1</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679369739"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-114"></span><span>                             </span><span class="hs-special">(</span><span class="annot"><a href="#local-6989586621679369738"><span class="hs-identifier hs-type">l2</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679369739"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-115"></span><span>    </span><span class="hs-keyword">deriving</span><span> </span><span class="hs-special">(</span><span id="local-6989586621679369587"><span id="local-6989586621679369603"><span id="local-6989586621679369606"><span id="local-6989586621679369608"><span class="annot"><span class="annottext">ReadPrec [OnHost l1 l2 a]
+ReadPrec (OnHost l1 l2 a)
+Int -&gt; ReadS (OnHost l1 l2 a)
+ReadS [OnHost l1 l2 a]
+(Int -&gt; ReadS (OnHost l1 l2 a))
+-&gt; ReadS [OnHost l1 l2 a]
+-&gt; ReadPrec (OnHost l1 l2 a)
+-&gt; ReadPrec [OnHost l1 l2 a]
+-&gt; Read (OnHost l1 l2 a)
+forall a.
+(Int -&gt; ReadS a)
+-&gt; ReadS [a] -&gt; ReadPrec a -&gt; ReadPrec [a] -&gt; Read a
+forall (l1 :: * -&gt; *) (l2 :: * -&gt; *) a.
+(Read (l1 a), Read (l2 a)) =&gt;
+ReadPrec [OnHost l1 l2 a]
+forall (l1 :: * -&gt; *) (l2 :: * -&gt; *) a.
+(Read (l1 a), Read (l2 a)) =&gt;
+ReadPrec (OnHost l1 l2 a)
+forall (l1 :: * -&gt; *) (l2 :: * -&gt; *) a.
+(Read (l1 a), Read (l2 a)) =&gt;
+Int -&gt; ReadS (OnHost l1 l2 a)
+forall (l1 :: * -&gt; *) (l2 :: * -&gt; *) a.
+(Read (l1 a), Read (l2 a)) =&gt;
+ReadS [OnHost l1 l2 a]
+readListPrec :: ReadPrec [OnHost l1 l2 a]
+$creadListPrec :: forall (l1 :: * -&gt; *) (l2 :: * -&gt; *) a.
+(Read (l1 a), Read (l2 a)) =&gt;
+ReadPrec [OnHost l1 l2 a]
+readPrec :: ReadPrec (OnHost l1 l2 a)
+$creadPrec :: forall (l1 :: * -&gt; *) (l2 :: * -&gt; *) a.
+(Read (l1 a), Read (l2 a)) =&gt;
+ReadPrec (OnHost l1 l2 a)
+readList :: ReadS [OnHost l1 l2 a]
+$creadList :: forall (l1 :: * -&gt; *) (l2 :: * -&gt; *) a.
+(Read (l1 a), Read (l2 a)) =&gt;
+ReadS [OnHost l1 l2 a]
+readsPrec :: Int -&gt; ReadS (OnHost l1 l2 a)
+$creadsPrec :: forall (l1 :: * -&gt; *) (l2 :: * -&gt; *) a.
+(Read (l1 a), Read (l2 a)) =&gt;
+Int -&gt; ReadS (OnHost l1 l2 a)
+</span><span class="hs-identifier hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var">Read</span></span></span></span></span></span><span class="hs-special">,</span><span> </span><span id="local-6989586621679369568"><span id="local-6989586621679369570"><span id="local-6989586621679369581"><span class="annot"><span class="annottext">Int -&gt; OnHost l1 l2 a -&gt; ShowS
+[OnHost l1 l2 a] -&gt; ShowS
+OnHost l1 l2 a -&gt; String
+(Int -&gt; OnHost l1 l2 a -&gt; ShowS)
+-&gt; (OnHost l1 l2 a -&gt; String)
+-&gt; ([OnHost l1 l2 a] -&gt; ShowS)
+-&gt; Show (OnHost l1 l2 a)
+forall a.
+(Int -&gt; a -&gt; ShowS) -&gt; (a -&gt; String) -&gt; ([a] -&gt; ShowS) -&gt; Show a
+forall (l1 :: * -&gt; *) (l2 :: * -&gt; *) a.
+(Show (l1 a), Show (l2 a)) =&gt;
+Int -&gt; OnHost l1 l2 a -&gt; ShowS
+forall (l1 :: * -&gt; *) (l2 :: * -&gt; *) a.
+(Show (l1 a), Show (l2 a)) =&gt;
+[OnHost l1 l2 a] -&gt; ShowS
+forall (l1 :: * -&gt; *) (l2 :: * -&gt; *) a.
+(Show (l1 a), Show (l2 a)) =&gt;
+OnHost l1 l2 a -&gt; String
+showList :: [OnHost l1 l2 a] -&gt; ShowS
+$cshowList :: forall (l1 :: * -&gt; *) (l2 :: * -&gt; *) a.
+(Show (l1 a), Show (l2 a)) =&gt;
+[OnHost l1 l2 a] -&gt; ShowS
+show :: OnHost l1 l2 a -&gt; String
+$cshow :: forall (l1 :: * -&gt; *) (l2 :: * -&gt; *) a.
+(Show (l1 a), Show (l2 a)) =&gt;
+OnHost l1 l2 a -&gt; String
+showsPrec :: Int -&gt; OnHost l1 l2 a -&gt; ShowS
+$cshowsPrec :: forall (l1 :: * -&gt; *) (l2 :: * -&gt; *) a.
+(Show (l1 a), Show (l2 a)) =&gt;
+Int -&gt; OnHost l1 l2 a -&gt; ShowS
+</span><span class="hs-identifier hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var">Show</span></span></span></span></span><span class="hs-special">)</span><span>
+</span><span id="line-116"></span><span>
+</span><span id="line-117"></span><span id="local-6989586621679369708"><span id="local-6989586621679369709"><span id="local-6989586621679369710"><span class="hs-keyword">instance</span><span> </span><span id="local-6989586621679369550"><span id="local-6989586621679369553"><span id="local-6989586621679369555"><span id="local-6989586621679369557"><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">LayoutClass</span></span><span> </span><span class="annot"><a href="#local-6989586621679369710"><span class="hs-identifier hs-type">l1</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679369709"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier hs-type">LayoutClass</span></span><span> </span><span class="annot"><a href="#local-6989586621679369708"><span class="hs-identifier hs-type">l2</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679369709"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Show</span></span><span> </span><span class="annot"><a href="#local-6989586621679369709"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">LayoutClass</span></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="XMonad.Layout.OnHost.html#OnHost"><span class="hs-identifier hs-type">OnHost</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679369710"><span class="hs-identifier hs-type">l1</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679369708"><span class="hs-identifier hs-type">l2</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><a href="#local-6989586621679369709"><span class="hs-identifier hs-type">a</span></a></span></span></span></span></span><span> </span><span class="hs-keyword">where</span><span>
+</span><span id="line-118"></span><span>    </span><span id="local-6989586621679369536"><span class="annot"><span class="annottext">runLayout :: Workspace String (OnHost l1 l2 a) a
+-&gt; Rectangle -&gt; X ([(a, Rectangle)], Maybe (OnHost l1 l2 a))
+</span><span class="hs-identifier hs-var hs-var hs-var hs-var">runLayout</span></span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">W.Workspace</span></span><span> </span><span id="local-6989586621679369533"><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679369533"><span class="hs-identifier hs-var">i</span></a></span></span><span> </span><span id="local-6989586621679369532"><span class="annot"><span class="annottext">p :: OnHost l1 l2 a
+</span><a href="#local-6989586621679369532"><span class="hs-identifier hs-var">p</span></a></span></span><span class="hs-glyph">@</span><span class="hs-special">(</span><span class="annot"><a href="XMonad.Layout.OnHost.html#OnHost"><span class="hs-identifier hs-type">OnHost</span></a></span><span> </span><span id="local-6989586621679369531"><span class="annot"><span class="annottext">[String]
+</span><a href="#local-6989586621679369531"><span class="hs-identifier hs-var">hosts</span></a></span></span><span> </span><span class="annot"><span class="annottext">Bool
+</span><span class="hs-identifier">_</span></span><span> </span><span id="local-6989586621679369530"><span class="annot"><span class="annottext">l1 a
+</span><a href="#local-6989586621679369530"><span class="hs-identifier hs-var">lt</span></a></span></span><span> </span><span id="local-6989586621679369529"><span class="annot"><span class="annottext">l2 a
+</span><a href="#local-6989586621679369529"><span class="hs-identifier hs-var">lf</span></a></span></span><span class="hs-special">)</span><span> </span><span id="local-6989586621679369528"><span class="annot"><span class="annottext">Maybe (Stack a)
+</span><a href="#local-6989586621679369528"><span class="hs-identifier hs-var">ms</span></a></span></span><span class="hs-special">)</span><span> </span><span id="local-6989586621679369527"><span class="annot"><span class="annottext">Rectangle
+</span><a href="#local-6989586621679369527"><span class="hs-identifier hs-var">r</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-119"></span><span>      </span><span id="local-6989586621679369526"><span class="annot"><span class="annottext">Maybe String
+</span><a href="#local-6989586621679369526"><span class="hs-identifier hs-var">h</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">IO (Maybe String) -&gt; X (Maybe String)
+forall (m :: * -&gt; *) a. MonadIO m =&gt; IO a -&gt; m a
+</span><span class="hs-identifier hs-var">io</span></span><span> </span><span class="annot"><span class="annottext">(IO (Maybe String) -&gt; X (Maybe String))
+-&gt; IO (Maybe String) -&gt; X (Maybe String)
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">String -&gt; IO (Maybe String)
+</span><span class="hs-identifier hs-var">getEnv</span></span><span> </span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot;HOST&quot;</span></span><span>
+</span><span id="line-120"></span><span>      </span><span class="hs-keyword">if</span><span> </span><span class="annot"><span class="annottext">Bool -&gt; (String -&gt; Bool) -&gt; Maybe String -&gt; Bool
+forall b a. b -&gt; (a -&gt; b) -&gt; Maybe a -&gt; b
+</span><span class="hs-identifier hs-var">maybe</span></span><span> </span><span class="annot"><span class="annottext">Bool
+</span><span class="hs-identifier hs-var">False</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">String -&gt; [String] -&gt; Bool
+</span><a href="XMonad.Layout.OnHost.html#elemFQDN"><span class="hs-operator hs-var">`elemFQDN`</span></a></span><span> </span><span class="annot"><span class="annottext">[String]
+</span><a href="#local-6989586621679369531"><span class="hs-identifier hs-var">hosts</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">Maybe String
+</span><a href="#local-6989586621679369526"><span class="hs-identifier hs-var">h</span></a></span><span>
+</span><span id="line-121"></span><span>        </span><span class="hs-keyword">then</span><span> </span><span class="hs-keyword">do</span><span> </span><span class="hs-special">(</span><span id="local-6989586621679369522"><span class="annot"><span class="annottext">[(a, Rectangle)]
+</span><a href="#local-6989586621679369522"><span class="hs-identifier hs-var">wrs</span></a></span></span><span class="hs-special">,</span><span> </span><span id="local-6989586621679369521"><span class="annot"><span class="annottext">Maybe (l1 a)
+</span><a href="#local-6989586621679369521"><span class="hs-identifier hs-var">mlt'</span></a></span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">Workspace String (l1 a) a
+-&gt; Rectangle -&gt; X ([(a, Rectangle)], Maybe (l1 a))
+forall (layout :: * -&gt; *) a.
+LayoutClass layout a =&gt;
+Workspace String (layout a) a
+-&gt; Rectangle -&gt; X ([(a, Rectangle)], Maybe (layout a))
+</span><span class="hs-identifier hs-var">runLayout</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">String -&gt; l1 a -&gt; Maybe (Stack a) -&gt; Workspace String (l1 a) a
+forall i l a. i -&gt; l -&gt; Maybe (Stack a) -&gt; Workspace i l a
+</span><span class="hs-identifier hs-var">W.Workspace</span></span><span> </span><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679369533"><span class="hs-identifier hs-var">i</span></a></span><span> </span><span class="annot"><span class="annottext">l1 a
+</span><a href="#local-6989586621679369530"><span class="hs-identifier hs-var">lt</span></a></span><span> </span><span class="annot"><span class="annottext">Maybe (Stack a)
+</span><a href="#local-6989586621679369528"><span class="hs-identifier hs-var">ms</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">Rectangle
+</span><a href="#local-6989586621679369527"><span class="hs-identifier hs-var">r</span></a></span><span>
+</span><span id="line-122"></span><span>                </span><span class="annot"><span class="annottext">([(a, Rectangle)], Maybe (OnHost l1 l2 a))
+-&gt; X ([(a, Rectangle)], Maybe (OnHost l1 l2 a))
+forall (m :: * -&gt; *) a. Monad m =&gt; a -&gt; m a
+</span><span class="hs-identifier hs-var">return</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">[(a, Rectangle)]
+</span><a href="#local-6989586621679369522"><span class="hs-identifier hs-var">wrs</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">OnHost l1 l2 a -&gt; Maybe (OnHost l1 l2 a)
+forall a. a -&gt; Maybe a
+</span><span class="hs-identifier hs-var">Just</span></span><span> </span><span class="annot"><span class="annottext">(OnHost l1 l2 a -&gt; Maybe (OnHost l1 l2 a))
+-&gt; OnHost l1 l2 a -&gt; Maybe (OnHost l1 l2 a)
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">OnHost l1 l2 a -&gt; Maybe (l1 a) -&gt; OnHost l1 l2 a
+forall (l1 :: * -&gt; *) (l2 :: * -&gt; *) a.
+OnHost l1 l2 a -&gt; Maybe (l1 a) -&gt; OnHost l1 l2 a
+</span><a href="XMonad.Layout.OnHost.html#mkNewOnHostT"><span class="hs-identifier hs-var">mkNewOnHostT</span></a></span><span> </span><span class="annot"><span class="annottext">OnHost l1 l2 a
+</span><a href="#local-6989586621679369532"><span class="hs-identifier hs-var">p</span></a></span><span> </span><span class="annot"><span class="annottext">Maybe (l1 a)
+</span><a href="#local-6989586621679369521"><span class="hs-identifier hs-var">mlt'</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-123"></span><span>        </span><span class="hs-keyword">else</span><span> </span><span class="hs-keyword">do</span><span> </span><span class="hs-special">(</span><span id="local-6989586621679369519"><span class="annot"><span class="annottext">[(a, Rectangle)]
+</span><a href="#local-6989586621679369519"><span class="hs-identifier hs-var">wrs</span></a></span></span><span class="hs-special">,</span><span> </span><span id="local-6989586621679369518"><span class="annot"><span class="annottext">Maybe (l2 a)
+</span><a href="#local-6989586621679369518"><span class="hs-identifier hs-var">mlt'</span></a></span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">Workspace String (l2 a) a
+-&gt; Rectangle -&gt; X ([(a, Rectangle)], Maybe (l2 a))
+forall (layout :: * -&gt; *) a.
+LayoutClass layout a =&gt;
+Workspace String (layout a) a
+-&gt; Rectangle -&gt; X ([(a, Rectangle)], Maybe (layout a))
+</span><span class="hs-identifier hs-var">runLayout</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">String -&gt; l2 a -&gt; Maybe (Stack a) -&gt; Workspace String (l2 a) a
+forall i l a. i -&gt; l -&gt; Maybe (Stack a) -&gt; Workspace i l a
+</span><span class="hs-identifier hs-var">W.Workspace</span></span><span> </span><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679369533"><span class="hs-identifier hs-var">i</span></a></span><span> </span><span class="annot"><span class="annottext">l2 a
+</span><a href="#local-6989586621679369529"><span class="hs-identifier hs-var">lf</span></a></span><span> </span><span class="annot"><span class="annottext">Maybe (Stack a)
+</span><a href="#local-6989586621679369528"><span class="hs-identifier hs-var">ms</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">Rectangle
+</span><a href="#local-6989586621679369527"><span class="hs-identifier hs-var">r</span></a></span><span>
+</span><span id="line-124"></span><span>                </span><span class="annot"><span class="annottext">([(a, Rectangle)], Maybe (OnHost l1 l2 a))
+-&gt; X ([(a, Rectangle)], Maybe (OnHost l1 l2 a))
+forall (m :: * -&gt; *) a. Monad m =&gt; a -&gt; m a
+</span><span class="hs-identifier hs-var">return</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">[(a, Rectangle)]
+</span><a href="#local-6989586621679369519"><span class="hs-identifier hs-var">wrs</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">OnHost l1 l2 a -&gt; Maybe (OnHost l1 l2 a)
+forall a. a -&gt; Maybe a
+</span><span class="hs-identifier hs-var">Just</span></span><span> </span><span class="annot"><span class="annottext">(OnHost l1 l2 a -&gt; Maybe (OnHost l1 l2 a))
+-&gt; OnHost l1 l2 a -&gt; Maybe (OnHost l1 l2 a)
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">OnHost l1 l2 a -&gt; Maybe (l2 a) -&gt; OnHost l1 l2 a
+forall (l1 :: * -&gt; *) (l2 :: * -&gt; *) a.
+OnHost l1 l2 a -&gt; Maybe (l2 a) -&gt; OnHost l1 l2 a
+</span><a href="XMonad.Layout.OnHost.html#mkNewOnHostF"><span class="hs-identifier hs-var">mkNewOnHostF</span></a></span><span> </span><span class="annot"><span class="annottext">OnHost l1 l2 a
+</span><a href="#local-6989586621679369532"><span class="hs-identifier hs-var">p</span></a></span><span> </span><span class="annot"><span class="annottext">Maybe (l2 a)
+</span><a href="#local-6989586621679369518"><span class="hs-identifier hs-var">mlt'</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-125"></span><span>
+</span><span id="line-126"></span><span>    </span><span id="local-6989586621679369508"><span class="annot"><span class="annottext">handleMessage :: OnHost l1 l2 a -&gt; SomeMessage -&gt; X (Maybe (OnHost l1 l2 a))
+</span><span class="hs-identifier hs-var hs-var hs-var hs-var">handleMessage</span></span></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="XMonad.Layout.OnHost.html#OnHost"><span class="hs-identifier hs-type">OnHost</span></a></span><span> </span><span id="local-6989586621679369506"><span class="annot"><span class="annottext">[String]
+</span><a href="#local-6989586621679369506"><span class="hs-identifier hs-var">hosts</span></a></span></span><span> </span><span id="local-6989586621679369505"><span class="annot"><span class="annottext">Bool
+</span><a href="#local-6989586621679369505"><span class="hs-identifier hs-var">bool</span></a></span></span><span> </span><span id="local-6989586621679369504"><span class="annot"><span class="annottext">l1 a
+</span><a href="#local-6989586621679369504"><span class="hs-identifier hs-var">lt</span></a></span></span><span> </span><span id="local-6989586621679369503"><span class="annot"><span class="annottext">l2 a
+</span><a href="#local-6989586621679369503"><span class="hs-identifier hs-var">lf</span></a></span></span><span class="hs-special">)</span><span> </span><span id="local-6989586621679369502"><span class="annot"><span class="annottext">SomeMessage
+</span><a href="#local-6989586621679369502"><span class="hs-identifier hs-var">m</span></a></span></span><span>
+</span><span id="line-127"></span><span>        </span><span class="hs-glyph">|</span><span> </span><span class="annot"><span class="annottext">Bool
+</span><a href="#local-6989586621679369505"><span class="hs-identifier hs-var">bool</span></a></span><span>      </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">l1 a -&gt; SomeMessage -&gt; X (Maybe (l1 a))
+forall (layout :: * -&gt; *) a.
+LayoutClass layout a =&gt;
+layout a -&gt; SomeMessage -&gt; X (Maybe (layout a))
+</span><span class="hs-identifier hs-var">handleMessage</span></span><span> </span><span class="annot"><span class="annottext">l1 a
+</span><a href="#local-6989586621679369504"><span class="hs-identifier hs-var">lt</span></a></span><span> </span><span class="annot"><span class="annottext">SomeMessage
+</span><a href="#local-6989586621679369502"><span class="hs-identifier hs-var">m</span></a></span><span> </span><span class="annot"><span class="annottext">X (Maybe (l1 a))
+-&gt; (Maybe (l1 a) -&gt; X (Maybe (OnHost l1 l2 a)))
+-&gt; X (Maybe (OnHost l1 l2 a))
+forall (m :: * -&gt; *) a b. Monad m =&gt; m a -&gt; (a -&gt; m b) -&gt; m b
+</span><span class="hs-operator hs-var">&gt;&gt;=</span></span><span> </span><span class="annot"><span class="annottext">X (Maybe (OnHost l1 l2 a))
+-&gt; (l1 a -&gt; X (Maybe (OnHost l1 l2 a)))
+-&gt; Maybe (l1 a)
+-&gt; X (Maybe (OnHost l1 l2 a))
+forall b a. b -&gt; (a -&gt; b) -&gt; Maybe a -&gt; b
+</span><span class="hs-identifier hs-var">maybe</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Maybe (OnHost l1 l2 a) -&gt; X (Maybe (OnHost l1 l2 a))
+forall (m :: * -&gt; *) a. Monad m =&gt; a -&gt; m a
+</span><span class="hs-identifier hs-var">return</span></span><span> </span><span class="annot"><span class="annottext">Maybe (OnHost l1 l2 a)
+forall a. Maybe a
+</span><span class="hs-identifier hs-var">Nothing</span></span><span class="hs-special">)</span><span> </span><span class="hs-special">(</span><span class="hs-glyph">\</span><span id="local-6989586621679369501"><span class="annot"><span class="annottext">l1 a
+</span><a href="#local-6989586621679369501"><span class="hs-identifier hs-var">nt</span></a></span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">Maybe (OnHost l1 l2 a) -&gt; X (Maybe (OnHost l1 l2 a))
+forall (m :: * -&gt; *) a. Monad m =&gt; a -&gt; m a
+</span><span class="hs-identifier hs-var">return</span></span><span> </span><span class="annot"><span class="annottext">(Maybe (OnHost l1 l2 a) -&gt; X (Maybe (OnHost l1 l2 a)))
+-&gt; (OnHost l1 l2 a -&gt; Maybe (OnHost l1 l2 a))
+-&gt; OnHost l1 l2 a
+-&gt; X (Maybe (OnHost l1 l2 a))
+forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">OnHost l1 l2 a -&gt; Maybe (OnHost l1 l2 a)
+forall a. a -&gt; Maybe a
+</span><span class="hs-identifier hs-var">Just</span></span><span> </span><span class="annot"><span class="annottext">(OnHost l1 l2 a -&gt; X (Maybe (OnHost l1 l2 a)))
+-&gt; OnHost l1 l2 a -&gt; X (Maybe (OnHost l1 l2 a))
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">[String] -&gt; Bool -&gt; l1 a -&gt; l2 a -&gt; OnHost l1 l2 a
+forall (l1 :: * -&gt; *) (l2 :: * -&gt; *) a.
+[String] -&gt; Bool -&gt; l1 a -&gt; l2 a -&gt; OnHost l1 l2 a
+</span><a href="XMonad.Layout.OnHost.html#OnHost"><span class="hs-identifier hs-var">OnHost</span></a></span><span> </span><span class="annot"><span class="annottext">[String]
+</span><a href="#local-6989586621679369506"><span class="hs-identifier hs-var">hosts</span></a></span><span> </span><span class="annot"><span class="annottext">Bool
+</span><a href="#local-6989586621679369505"><span class="hs-identifier hs-var">bool</span></a></span><span> </span><span class="annot"><span class="annottext">l1 a
+</span><a href="#local-6989586621679369501"><span class="hs-identifier hs-var">nt</span></a></span><span> </span><span class="annot"><span class="annottext">l2 a
+</span><a href="#local-6989586621679369503"><span class="hs-identifier hs-var">lf</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-128"></span><span>        </span><span class="hs-glyph">|</span><span> </span><span class="annot"><span class="annottext">Bool
+</span><span class="hs-identifier hs-var">otherwise</span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">l2 a -&gt; SomeMessage -&gt; X (Maybe (l2 a))
+forall (layout :: * -&gt; *) a.
+LayoutClass layout a =&gt;
+layout a -&gt; SomeMessage -&gt; X (Maybe (layout a))
+</span><span class="hs-identifier hs-var">handleMessage</span></span><span> </span><span class="annot"><span class="annottext">l2 a
+</span><a href="#local-6989586621679369503"><span class="hs-identifier hs-var">lf</span></a></span><span> </span><span class="annot"><span class="annottext">SomeMessage
+</span><a href="#local-6989586621679369502"><span class="hs-identifier hs-var">m</span></a></span><span> </span><span class="annot"><span class="annottext">X (Maybe (l2 a))
+-&gt; (Maybe (l2 a) -&gt; X (Maybe (OnHost l1 l2 a)))
+-&gt; X (Maybe (OnHost l1 l2 a))
+forall (m :: * -&gt; *) a b. Monad m =&gt; m a -&gt; (a -&gt; m b) -&gt; m b
+</span><span class="hs-operator hs-var">&gt;&gt;=</span></span><span> </span><span class="annot"><span class="annottext">X (Maybe (OnHost l1 l2 a))
+-&gt; (l2 a -&gt; X (Maybe (OnHost l1 l2 a)))
+-&gt; Maybe (l2 a)
+-&gt; X (Maybe (OnHost l1 l2 a))
+forall b a. b -&gt; (a -&gt; b) -&gt; Maybe a -&gt; b
+</span><span class="hs-identifier hs-var">maybe</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Maybe (OnHost l1 l2 a) -&gt; X (Maybe (OnHost l1 l2 a))
+forall (m :: * -&gt; *) a. Monad m =&gt; a -&gt; m a
+</span><span class="hs-identifier hs-var">return</span></span><span> </span><span class="annot"><span class="annottext">Maybe (OnHost l1 l2 a)
+forall a. Maybe a
+</span><span class="hs-identifier hs-var">Nothing</span></span><span class="hs-special">)</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Maybe (OnHost l1 l2 a) -&gt; X (Maybe (OnHost l1 l2 a))
+forall (m :: * -&gt; *) a. Monad m =&gt; a -&gt; m a
+</span><span class="hs-identifier hs-var">return</span></span><span> </span><span class="annot"><span class="annottext">(Maybe (OnHost l1 l2 a) -&gt; X (Maybe (OnHost l1 l2 a)))
+-&gt; (l2 a -&gt; Maybe (OnHost l1 l2 a))
+-&gt; l2 a
+-&gt; X (Maybe (OnHost l1 l2 a))
+forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">OnHost l1 l2 a -&gt; Maybe (OnHost l1 l2 a)
+forall a. a -&gt; Maybe a
+</span><span class="hs-identifier hs-var">Just</span></span><span> </span><span class="annot"><span class="annottext">(OnHost l1 l2 a -&gt; Maybe (OnHost l1 l2 a))
+-&gt; (l2 a -&gt; OnHost l1 l2 a) -&gt; l2 a -&gt; Maybe (OnHost l1 l2 a)
+forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">[String] -&gt; Bool -&gt; l1 a -&gt; l2 a -&gt; OnHost l1 l2 a
+forall (l1 :: * -&gt; *) (l2 :: * -&gt; *) a.
+[String] -&gt; Bool -&gt; l1 a -&gt; l2 a -&gt; OnHost l1 l2 a
+</span><a href="XMonad.Layout.OnHost.html#OnHost"><span class="hs-identifier hs-var">OnHost</span></a></span><span> </span><span class="annot"><span class="annottext">[String]
+</span><a href="#local-6989586621679369506"><span class="hs-identifier hs-var">hosts</span></a></span><span> </span><span class="annot"><span class="annottext">Bool
+</span><a href="#local-6989586621679369505"><span class="hs-identifier hs-var">bool</span></a></span><span> </span><span class="annot"><span class="annottext">l1 a
+</span><a href="#local-6989586621679369504"><span class="hs-identifier hs-var">lt</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-129"></span><span>
+</span><span id="line-130"></span><span>    </span><span id="local-6989586621679369497"><span class="annot"><span class="annottext">description :: OnHost l1 l2 a -&gt; String
+</span><span class="hs-identifier hs-var hs-var hs-var hs-var">description</span></span></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="XMonad.Layout.OnHost.html#OnHost"><span class="hs-identifier hs-type">OnHost</span></a></span><span> </span><span class="annot"><span class="annottext">[String]
+</span><span class="hs-identifier">_</span></span><span> </span><span class="annot"><span class="annottext">Bool
+</span><span class="hs-identifier hs-var">True</span></span><span>  </span><span id="local-6989586621679369495"><span class="annot"><span class="annottext">l1 a
+</span><a href="#local-6989586621679369495"><span class="hs-identifier hs-var">l1</span></a></span></span><span> </span><span class="annot"><span class="annottext">l2 a
+</span><span class="hs-identifier">_</span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">l1 a -&gt; String
+forall (layout :: * -&gt; *) a.
+LayoutClass layout a =&gt;
+layout a -&gt; String
+</span><span class="hs-identifier hs-var">description</span></span><span> </span><span class="annot"><span class="annottext">l1 a
+</span><a href="#local-6989586621679369495"><span class="hs-identifier hs-var">l1</span></a></span><span>
+</span><span id="line-131"></span><span>    </span><span class="annot"><span class="hs-identifier hs-var">description</span></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="XMonad.Layout.OnHost.html#OnHost"><span class="hs-identifier hs-type">OnHost</span></a></span><span> </span><span class="annot"><span class="annottext">[String]
+</span><span class="hs-identifier">_</span></span><span> </span><span class="annot"><span class="annottext">Bool
+</span><span class="hs-identifier">_</span></span><span>     </span><span class="annot"><span class="annottext">l1 a
+</span><span class="hs-identifier">_</span></span><span> </span><span id="local-6989586621679369494"><span class="annot"><span class="annottext">l2 a
+</span><a href="#local-6989586621679369494"><span class="hs-identifier hs-var">l2</span></a></span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">l2 a -&gt; String
+forall (layout :: * -&gt; *) a.
+LayoutClass layout a =&gt;
+layout a -&gt; String
+</span><span class="hs-identifier hs-var">description</span></span><span> </span><span class="annot"><span class="annottext">l2 a
+</span><a href="#local-6989586621679369494"><span class="hs-identifier hs-var">l2</span></a></span></span></span></span><span>
+</span><span id="line-132"></span><span>
+</span><span id="line-133"></span><span class="hs-comment">-- | Construct new OnHost values with possibly modified layouts.</span><span>
+</span><span id="line-134"></span><span id="local-6989586621679369691"><span id="local-6989586621679369692"><span id="local-6989586621679369693"><span class="annot"><a href="XMonad.Layout.OnHost.html#mkNewOnHostT"><span class="hs-identifier hs-type">mkNewOnHostT</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><a href="XMonad.Layout.OnHost.html#OnHost"><span class="hs-identifier hs-type">OnHost</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679369693"><span class="hs-identifier hs-type">l1</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679369692"><span class="hs-identifier hs-type">l2</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679369691"><span class="hs-identifier hs-type">a</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Maybe</span></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="#local-6989586621679369693"><span class="hs-identifier hs-type">l1</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679369691"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="XMonad.Layout.OnHost.html#OnHost"><span class="hs-identifier hs-type">OnHost</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679369693"><span class="hs-identifier hs-type">l1</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679369692"><span class="hs-identifier hs-type">l2</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679369691"><span class="hs-identifier hs-type">a</span></a></span></span></span></span><span>
+</span><span id="line-135"></span><span id="mkNewOnHostT"><span class="annot"><span class="annottext">mkNewOnHostT :: forall (l1 :: * -&gt; *) (l2 :: * -&gt; *) a.
+OnHost l1 l2 a -&gt; Maybe (l1 a) -&gt; OnHost l1 l2 a
+</span><a href="XMonad.Layout.OnHost.html#mkNewOnHostT"><span class="hs-identifier hs-var hs-var">mkNewOnHostT</span></a></span></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="XMonad.Layout.OnHost.html#OnHost"><span class="hs-identifier hs-type">OnHost</span></a></span><span> </span><span id="local-6989586621679369493"><span class="annot"><span class="annottext">[String]
+</span><a href="#local-6989586621679369493"><span class="hs-identifier hs-var">hosts</span></a></span></span><span> </span><span class="annot"><span class="annottext">Bool
+</span><span class="hs-identifier">_</span></span><span> </span><span id="local-6989586621679369492"><span class="annot"><span class="annottext">l1 a
+</span><a href="#local-6989586621679369492"><span class="hs-identifier hs-var">lt</span></a></span></span><span> </span><span id="local-6989586621679369491"><span class="annot"><span class="annottext">l2 a
+</span><a href="#local-6989586621679369491"><span class="hs-identifier hs-var">lf</span></a></span></span><span class="hs-special">)</span><span> </span><span id="local-6989586621679369490"><span class="annot"><span class="annottext">Maybe (l1 a)
+</span><a href="#local-6989586621679369490"><span class="hs-identifier hs-var">mlt'</span></a></span></span><span> </span><span class="hs-glyph">=</span><span>
+</span><span id="line-136"></span><span>  </span><span class="hs-special">(</span><span class="hs-glyph">\</span><span id="local-6989586621679369489"><span class="annot"><span class="annottext">l1 a
+</span><a href="#local-6989586621679369489"><span class="hs-identifier hs-var">lt'</span></a></span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">[String] -&gt; Bool -&gt; l1 a -&gt; l2 a -&gt; OnHost l1 l2 a
+forall (l1 :: * -&gt; *) (l2 :: * -&gt; *) a.
+[String] -&gt; Bool -&gt; l1 a -&gt; l2 a -&gt; OnHost l1 l2 a
+</span><a href="XMonad.Layout.OnHost.html#OnHost"><span class="hs-identifier hs-var">OnHost</span></a></span><span> </span><span class="annot"><span class="annottext">[String]
+</span><a href="#local-6989586621679369493"><span class="hs-identifier hs-var">hosts</span></a></span><span> </span><span class="annot"><span class="annottext">Bool
+</span><span class="hs-identifier hs-var">True</span></span><span> </span><span class="annot"><span class="annottext">l1 a
+</span><a href="#local-6989586621679369489"><span class="hs-identifier hs-var">lt'</span></a></span><span> </span><span class="annot"><span class="annottext">l2 a
+</span><a href="#local-6989586621679369491"><span class="hs-identifier hs-var">lf</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">(l1 a -&gt; OnHost l1 l2 a) -&gt; l1 a -&gt; OnHost l1 l2 a
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">l1 a -&gt; Maybe (l1 a) -&gt; l1 a
+forall a. a -&gt; Maybe a -&gt; a
+</span><span class="hs-identifier hs-var">fromMaybe</span></span><span> </span><span class="annot"><span class="annottext">l1 a
+</span><a href="#local-6989586621679369492"><span class="hs-identifier hs-var">lt</span></a></span><span> </span><span class="annot"><span class="annottext">Maybe (l1 a)
+</span><a href="#local-6989586621679369490"><span class="hs-identifier hs-var">mlt'</span></a></span><span>
+</span><span id="line-137"></span><span>
+</span><span id="line-138"></span><span id="local-6989586621679369688"><span id="local-6989586621679369689"><span id="local-6989586621679369690"><span class="annot"><a href="XMonad.Layout.OnHost.html#mkNewOnHostF"><span class="hs-identifier hs-type">mkNewOnHostF</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><a href="XMonad.Layout.OnHost.html#OnHost"><span class="hs-identifier hs-type">OnHost</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679369690"><span class="hs-identifier hs-type">l1</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679369689"><span class="hs-identifier hs-type">l2</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679369688"><span class="hs-identifier hs-type">a</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Maybe</span></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="#local-6989586621679369689"><span class="hs-identifier hs-type">l2</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679369688"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="XMonad.Layout.OnHost.html#OnHost"><span class="hs-identifier hs-type">OnHost</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679369690"><span class="hs-identifier hs-type">l1</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679369689"><span class="hs-identifier hs-type">l2</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679369688"><span class="hs-identifier hs-type">a</span></a></span></span></span></span><span>
+</span><span id="line-139"></span><span id="mkNewOnHostF"><span class="annot"><span class="annottext">mkNewOnHostF :: forall (l1 :: * -&gt; *) (l2 :: * -&gt; *) a.
+OnHost l1 l2 a -&gt; Maybe (l2 a) -&gt; OnHost l1 l2 a
+</span><a href="XMonad.Layout.OnHost.html#mkNewOnHostF"><span class="hs-identifier hs-var hs-var">mkNewOnHostF</span></a></span></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="XMonad.Layout.OnHost.html#OnHost"><span class="hs-identifier hs-type">OnHost</span></a></span><span> </span><span id="local-6989586621679369488"><span class="annot"><span class="annottext">[String]
+</span><a href="#local-6989586621679369488"><span class="hs-identifier hs-var">hosts</span></a></span></span><span> </span><span class="annot"><span class="annottext">Bool
+</span><span class="hs-identifier">_</span></span><span> </span><span id="local-6989586621679369487"><span class="annot"><span class="annottext">l1 a
+</span><a href="#local-6989586621679369487"><span class="hs-identifier hs-var">lt</span></a></span></span><span> </span><span id="local-6989586621679369486"><span class="annot"><span class="annottext">l2 a
+</span><a href="#local-6989586621679369486"><span class="hs-identifier hs-var">lf</span></a></span></span><span class="hs-special">)</span><span> </span><span id="local-6989586621679369485"><span class="annot"><span class="annottext">Maybe (l2 a)
+</span><a href="#local-6989586621679369485"><span class="hs-identifier hs-var">mlf'</span></a></span></span><span> </span><span class="hs-glyph">=</span><span>
+</span><span id="line-140"></span><span>  </span><span class="annot"><span class="annottext">[String] -&gt; Bool -&gt; l1 a -&gt; l2 a -&gt; OnHost l1 l2 a
+forall (l1 :: * -&gt; *) (l2 :: * -&gt; *) a.
+[String] -&gt; Bool -&gt; l1 a -&gt; l2 a -&gt; OnHost l1 l2 a
+</span><a href="XMonad.Layout.OnHost.html#OnHost"><span class="hs-identifier hs-var">OnHost</span></a></span><span> </span><span class="annot"><span class="annottext">[String]
+</span><a href="#local-6989586621679369488"><span class="hs-identifier hs-var">hosts</span></a></span><span> </span><span class="annot"><span class="annottext">Bool
+</span><span class="hs-identifier hs-var">False</span></span><span> </span><span class="annot"><span class="annottext">l1 a
+</span><a href="#local-6989586621679369487"><span class="hs-identifier hs-var">lt</span></a></span><span> </span><span class="annot"><span class="annottext">(l2 a -&gt; OnHost l1 l2 a) -&gt; l2 a -&gt; OnHost l1 l2 a
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">l2 a -&gt; Maybe (l2 a) -&gt; l2 a
+forall a. a -&gt; Maybe a -&gt; a
+</span><span class="hs-identifier hs-var">fromMaybe</span></span><span> </span><span class="annot"><span class="annottext">l2 a
+</span><a href="#local-6989586621679369486"><span class="hs-identifier hs-var">lf</span></a></span><span> </span><span class="annot"><span class="annottext">Maybe (l2 a)
+</span><a href="#local-6989586621679369485"><span class="hs-identifier hs-var">mlf'</span></a></span><span>
+</span><span id="line-141"></span><span>
+</span><span id="line-142"></span><span class="hs-comment">-- | 'Data.List.elem' except that if one side has a dot and the other doesn't, we truncate</span><span>
+</span><span id="line-143"></span><span class="hs-comment">--   the one that does at the dot.</span><span>
+</span><span id="line-144"></span><span class="annot"><a href="XMonad.Layout.OnHost.html#elemFQDN"><span class="hs-identifier hs-type">elemFQDN</span></a></span><span>           </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">String</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="hs-special">[</span><span class="annot"><span class="hs-identifier hs-type">String</span></span><span class="hs-special">]</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Bool</span></span><span>
+</span><span id="line-145"></span><span id="elemFQDN"><span class="annot"><span class="annottext">elemFQDN :: String -&gt; [String] -&gt; Bool
+</span><a href="XMonad.Layout.OnHost.html#elemFQDN"><span class="hs-identifier hs-var hs-var">elemFQDN</span></a></span></span><span> </span><span class="annot"><span class="annottext">String
+</span><span class="hs-identifier">_</span></span><span>  </span><span class="hs-special">[</span><span class="hs-special">]</span><span>     </span><span class="hs-glyph">=</span><span>  </span><span class="annot"><span class="annottext">Bool
+</span><span class="hs-identifier hs-var">False</span></span><span>
+</span><span id="line-146"></span><span class="annot"><a href="XMonad.Layout.OnHost.html#elemFQDN"><span class="hs-identifier hs-var">elemFQDN</span></a></span><span> </span><span id="local-6989586621679369484"><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679369484"><span class="hs-identifier hs-var">h0</span></a></span></span><span> </span><span class="hs-special">(</span><span id="local-6989586621679369483"><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679369483"><span class="hs-identifier hs-var">h</span></a></span></span><span class="annot"><span class="hs-glyph hs-type">:</span></span><span id="local-6989586621679369482"><span class="annot"><span class="annottext">[String]
+</span><a href="#local-6989586621679369482"><span class="hs-identifier hs-var">hs</span></a></span></span><span class="hs-special">)</span><span>
+</span><span id="line-147"></span><span>  </span><span class="hs-glyph">|</span><span> </span><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679369484"><span class="hs-identifier hs-var">h0</span></a></span><span> </span><span class="annot"><span class="annottext">String -&gt; String -&gt; Bool
+</span><a href="XMonad.Layout.OnHost.html#eqFQDN"><span class="hs-operator hs-var">`eqFQDN`</span></a></span><span> </span><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679369483"><span class="hs-identifier hs-var">h</span></a></span><span>  </span><span class="hs-glyph">=</span><span>  </span><span class="annot"><span class="annottext">Bool
+</span><span class="hs-identifier hs-var">True</span></span><span>
+</span><span id="line-148"></span><span>  </span><span class="hs-glyph">|</span><span> </span><span class="annot"><span class="annottext">Bool
+</span><span class="hs-identifier hs-var">otherwise</span></span><span>      </span><span class="hs-glyph">=</span><span>  </span><span class="annot"><span class="annottext">String -&gt; [String] -&gt; Bool
+</span><a href="XMonad.Layout.OnHost.html#elemFQDN"><span class="hs-identifier hs-var">elemFQDN</span></a></span><span> </span><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679369484"><span class="hs-identifier hs-var">h0</span></a></span><span> </span><span class="annot"><span class="annottext">[String]
+</span><a href="#local-6989586621679369482"><span class="hs-identifier hs-var">hs</span></a></span><span>
+</span><span id="line-149"></span><span>
+</span><span id="line-150"></span><span class="hs-comment">-- | String equality, possibly truncating one side at a dot.</span><span>
+</span><span id="line-151"></span><span class="annot"><a href="XMonad.Layout.OnHost.html#eqFQDN"><span class="hs-identifier hs-type">eqFQDN</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">String</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">String</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Bool</span></span><span>
+</span><span id="line-152"></span><span id="eqFQDN"><span class="annot"><span class="annottext">eqFQDN :: String -&gt; String -&gt; Bool
+</span><a href="XMonad.Layout.OnHost.html#eqFQDN"><span class="hs-identifier hs-var hs-var">eqFQDN</span></a></span></span><span> </span><span id="local-6989586621679369480"><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679369480"><span class="hs-identifier hs-var">a</span></a></span></span><span> </span><span id="local-6989586621679369479"><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679369479"><span class="hs-identifier hs-var">b</span></a></span></span><span>
+</span><span id="line-153"></span><span>  </span><span class="hs-glyph">|</span><span> </span><span class="annot"><span class="annottext">Char
+</span><span class="hs-char">'.'</span></span><span> </span><span class="annot"><span class="annottext">Char -&gt; String -&gt; Bool
+forall (t :: * -&gt; *) a. (Foldable t, Eq a) =&gt; a -&gt; t a -&gt; Bool
+</span><span class="hs-operator hs-var">`elem`</span></span><span> </span><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679369480"><span class="hs-identifier hs-var">a</span></a></span><span> </span><span class="annot"><span class="annottext">Bool -&gt; Bool -&gt; Bool
+</span><span class="hs-operator hs-var">&amp;&amp;</span></span><span> </span><span class="annot"><span class="annottext">Char
+</span><span class="hs-char">'.'</span></span><span> </span><span class="annot"><span class="annottext">Char -&gt; String -&gt; Bool
+forall (t :: * -&gt; *) a. (Foldable t, Eq a) =&gt; a -&gt; t a -&gt; Bool
+</span><span class="hs-operator hs-var">`elem`</span></span><span> </span><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679369479"><span class="hs-identifier hs-var">b</span></a></span><span> </span><span class="hs-glyph">=</span><span>                    </span><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679369480"><span class="hs-identifier hs-var">a</span></a></span><span> </span><span class="annot"><span class="annottext">String -&gt; String -&gt; Bool
+forall a. Eq a =&gt; a -&gt; a -&gt; Bool
+</span><span class="hs-operator hs-var">==</span></span><span>                    </span><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679369479"><span class="hs-identifier hs-var">b</span></a></span><span>
+</span><span id="line-154"></span><span>  </span><span class="hs-glyph">|</span><span> </span><span class="annot"><span class="annottext">Char
+</span><span class="hs-char">'.'</span></span><span> </span><span class="annot"><span class="annottext">Char -&gt; String -&gt; Bool
+forall (t :: * -&gt; *) a. (Foldable t, Eq a) =&gt; a -&gt; t a -&gt; Bool
+</span><span class="hs-operator hs-var">`elem`</span></span><span> </span><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679369480"><span class="hs-identifier hs-var">a</span></a></span><span>                 </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">(Char -&gt; Bool) -&gt; ShowS
+forall a. (a -&gt; Bool) -&gt; [a] -&gt; [a]
+</span><span class="hs-identifier hs-var">takeWhile</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Char -&gt; Char -&gt; Bool
+forall a. Eq a =&gt; a -&gt; a -&gt; Bool
+</span><span class="hs-operator hs-var">/=</span></span><span> </span><span class="annot"><span class="annottext">Char
+</span><span class="hs-char">'.'</span></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679369480"><span class="hs-identifier hs-var">a</span></a></span><span> </span><span class="annot"><span class="annottext">String -&gt; String -&gt; Bool
+forall a. Eq a =&gt; a -&gt; a -&gt; Bool
+</span><span class="hs-operator hs-var">==</span></span><span>                    </span><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679369479"><span class="hs-identifier hs-var">b</span></a></span><span>
+</span><span id="line-155"></span><span>  </span><span class="hs-glyph">|</span><span>                 </span><span class="annot"><span class="annottext">Char
+</span><span class="hs-char">'.'</span></span><span> </span><span class="annot"><span class="annottext">Char -&gt; String -&gt; Bool
+forall (t :: * -&gt; *) a. (Foldable t, Eq a) =&gt; a -&gt; t a -&gt; Bool
+</span><span class="hs-operator hs-var">`elem`</span></span><span> </span><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679369479"><span class="hs-identifier hs-var">b</span></a></span><span> </span><span class="hs-glyph">=</span><span>                    </span><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679369480"><span class="hs-identifier hs-var">a</span></a></span><span> </span><span class="annot"><span class="annottext">String -&gt; String -&gt; Bool
+forall a. Eq a =&gt; a -&gt; a -&gt; Bool
+</span><span class="hs-operator hs-var">==</span></span><span> </span><span class="annot"><span class="annottext">(Char -&gt; Bool) -&gt; ShowS
+forall a. (a -&gt; Bool) -&gt; [a] -&gt; [a]
+</span><span class="hs-identifier hs-var">takeWhile</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Char -&gt; Char -&gt; Bool
+forall a. Eq a =&gt; a -&gt; a -&gt; Bool
+</span><span class="hs-operator hs-var">/=</span></span><span> </span><span class="annot"><span class="annottext">Char
+</span><span class="hs-char">'.'</span></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679369479"><span class="hs-identifier hs-var">b</span></a></span><span>
+</span><span id="line-156"></span><span>  </span><span class="hs-glyph">|</span><span> </span><span class="annot"><span class="annottext">Bool
+</span><span class="hs-identifier hs-var">otherwise</span></span><span>                    </span><span class="hs-glyph">=</span><span>                    </span><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679369480"><span class="hs-identifier hs-var">a</span></a></span><span> </span><span class="annot"><span class="annottext">String -&gt; String -&gt; Bool
+forall a. Eq a =&gt; a -&gt; a -&gt; Bool
+</span><span class="hs-operator hs-var">==</span></span><span>                    </span><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679369479"><span class="hs-identifier hs-var">b</span></a></span><span>
+</span><span id="line-157"></span></pre></body></html>

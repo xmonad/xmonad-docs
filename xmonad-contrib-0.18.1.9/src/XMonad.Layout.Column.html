@@ -1,0 +1,213 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd"><html xmlns="http://www.w3.org/1999/xhtml"><head><link rel="stylesheet" type="text/css" href="style.css" /><script type="text/javascript" src="highlight.js"></script></head><body><pre><span class="hs-pragma">{-# LANGUAGE FlexibleInstances, MultiParamTypeClasses #-}</span><span>
+</span><span id="line-2"></span><span class="hs-comment">-----------------------------------------------------------------------------</span><span>
+</span><span id="line-3"></span><span class="hs-comment">-- |</span><span>
+</span><span id="line-4"></span><span class="hs-comment">-- Module      :  XMonad.Layout.Column</span><span>
+</span><span id="line-5"></span><span class="hs-comment">-- Description :  Layout that places all windows in one column.</span><span>
+</span><span id="line-6"></span><span class="hs-comment">-- Copyright   :  (c) 2009 Ilya Portnov</span><span>
+</span><span id="line-7"></span><span class="hs-comment">-- License     :  BSD3-style (see LICENSE)</span><span>
+</span><span id="line-8"></span><span class="hs-comment">--</span><span>
+</span><span id="line-9"></span><span class="hs-comment">-- Maintainer  :  Ilya Portnov &lt;portnov84@rambler.ru&gt;</span><span>
+</span><span id="line-10"></span><span class="hs-comment">-- Stability   :  unstable</span><span>
+</span><span id="line-11"></span><span class="hs-comment">-- Portability :  unportable</span><span>
+</span><span id="line-12"></span><span class="hs-comment">--</span><span>
+</span><span id="line-13"></span><span class="hs-comment">-- Provides Column layout that places all windows in one column. Windows</span><span>
+</span><span id="line-14"></span><span class="hs-comment">-- heights are calculated from the equation: H1/H2 = H2/H3 = ... = q, where q is</span><span>
+</span><span id="line-15"></span><span class="hs-comment">-- given. With Shrink/Expand messages you can change the q value.</span><span>
+</span><span id="line-16"></span><span class="hs-comment">--</span><span>
+</span><span id="line-17"></span><span class="hs-comment">-----------------------------------------------------------------------------</span><span>
+</span><span id="line-18"></span><span>
+</span><span id="line-19"></span><span class="hs-keyword">module</span><span> </span><span class="hs-identifier">XMonad.Layout.Column</span><span> </span><span class="hs-special">(</span><span>
+</span><span id="line-20"></span><span>                             </span><span class="annot"><span class="hs-comment">-- * Usage</span></span><span>
+</span><span id="line-21"></span><span>                             </span><span class="annot"><span class="hs-comment">-- $usage</span></span><span>
+</span><span id="line-22"></span><span>                             </span><span class="annot"><a href="XMonad.Layout.Column.html#Column"><span class="hs-identifier">Column</span></a></span><span> </span><span class="hs-special">(</span><span class="hs-glyph">..</span><span class="hs-special">)</span><span>
+</span><span id="line-23"></span><span>                            </span><span class="hs-special">)</span><span> </span><span class="hs-keyword">where</span><span>
+</span><span id="line-24"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><span class="hs-identifier">XMonad</span></span><span>
+</span><span id="line-25"></span><span class="hs-keyword">import</span><span> </span><span class="hs-keyword">qualified</span><span> </span><span class="annot"><span class="hs-identifier">XMonad.StackSet</span></span><span> </span><span class="hs-keyword">as</span><span> </span><span class="annot"><span class="hs-identifier">W</span></span><span>
+</span><span id="line-26"></span><span>
+</span><span id="line-27"></span><span class="hs-comment">-- $usage</span><span>
+</span><span id="line-28"></span><span class="hs-comment">-- This module defines layout named Column. It places all windows in one</span><span>
+</span><span id="line-29"></span><span class="hs-comment">-- column. Windows heights are calculated from the equation: H1/H2 = H2/H3 = ... =</span><span>
+</span><span id="line-30"></span><span class="hs-comment">-- q, where `q' is given (thus, windows heights are members of geometric</span><span>
+</span><span id="line-31"></span><span class="hs-comment">-- progression). With Shrink/Expand messages one can change the `q' value.</span><span>
+</span><span id="line-32"></span><span class="hs-comment">--</span><span>
+</span><span id="line-33"></span><span class="hs-comment">-- You can use this module by adding following in your @xmonad.hs@:</span><span>
+</span><span id="line-34"></span><span class="hs-comment">--</span><span>
+</span><span id="line-35"></span><span class="hs-comment">-- &gt; import XMonad.Layout.Column</span><span>
+</span><span id="line-36"></span><span class="hs-comment">--</span><span>
+</span><span id="line-37"></span><span class="hs-comment">-- Then add layouts to your layoutHook:</span><span>
+</span><span id="line-38"></span><span class="hs-comment">--</span><span>
+</span><span id="line-39"></span><span class="hs-comment">-- &gt; myLayoutHook = Column 1.6 ||| ...</span><span>
+</span><span id="line-40"></span><span class="hs-comment">--</span><span>
+</span><span id="line-41"></span><span class="hs-comment">-- In this example, each next window will have height 1.6 times less then</span><span>
+</span><span id="line-42"></span><span class="hs-comment">-- previous window.</span><span>
+</span><span id="line-43"></span><span>
+</span><span id="line-44"></span><span class="hs-keyword">newtype</span><span> </span><span id="Column"><span class="annot"><a href="XMonad.Layout.Column.html#Column"><span class="hs-identifier hs-var">Column</span></a></span></span><span> </span><span id="local-6989586621679405388"><span class="annot"><a href="#local-6989586621679405388"><span class="hs-identifier hs-type">a</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span id="Column"><span class="annot"><a href="XMonad.Layout.Column.html#Column"><span class="hs-identifier hs-var">Column</span></a></span></span><span> </span><span class="annot"><span class="hs-identifier hs-type">Float</span></span><span> </span><span class="hs-keyword">deriving</span><span> </span><span class="hs-special">(</span><span id="local-6989586621679405280"><span id="local-6989586621679405288"><span id="local-6989586621679405291"><span id="local-6989586621679405293"><span class="annot"><span class="annottext">ReadPrec [Column a]
+ReadPrec (Column a)
+ReadS [Column a]
+forall a. ReadPrec [Column a]
+forall a. ReadPrec (Column a)
+forall a. Int -&gt; ReadS (Column a)
+forall a. ReadS [Column a]
+forall a.
+(Int -&gt; ReadS a)
+-&gt; ReadS [a] -&gt; ReadPrec a -&gt; ReadPrec [a] -&gt; Read a
+readListPrec :: ReadPrec [Column a]
+$creadListPrec :: forall a. ReadPrec [Column a]
+readPrec :: ReadPrec (Column a)
+$creadPrec :: forall a. ReadPrec (Column a)
+readList :: ReadS [Column a]
+$creadList :: forall a. ReadS [Column a]
+readsPrec :: Int -&gt; ReadS (Column a)
+$creadsPrec :: forall a. Int -&gt; ReadS (Column a)
+</span><span class="hs-identifier hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var">Read</span></span></span></span></span></span><span class="hs-special">,</span><span id="local-6989586621679405268"><span id="local-6989586621679405270"><span id="local-6989586621679405276"><span class="annot"><span class="annottext">Int -&gt; Column a -&gt; ShowS
+forall a. Int -&gt; Column a -&gt; ShowS
+forall a. [Column a] -&gt; ShowS
+forall a. Column a -&gt; String
+forall a.
+(Int -&gt; a -&gt; ShowS) -&gt; (a -&gt; String) -&gt; ([a] -&gt; ShowS) -&gt; Show a
+showList :: [Column a] -&gt; ShowS
+$cshowList :: forall a. [Column a] -&gt; ShowS
+show :: Column a -&gt; String
+$cshow :: forall a. Column a -&gt; String
+showsPrec :: Int -&gt; Column a -&gt; ShowS
+$cshowsPrec :: forall a. Int -&gt; Column a -&gt; ShowS
+</span><span class="hs-identifier hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var">Show</span></span></span></span></span><span class="hs-special">)</span><span>
+</span><span id="line-45"></span><span>
+</span><span id="line-46"></span><span class="hs-keyword">instance</span><span> </span><span id="local-6989586621679405251"><span id="local-6989586621679405254"><span id="local-6989586621679405256"><span id="local-6989586621679405259"><span id="local-6989586621679405261"><span id="local-6989586621679405378"><span class="annot"><span class="hs-identifier hs-type">LayoutClass</span></span><span> </span><span class="annot"><a href="XMonad.Layout.Column.html#Column"><span class="hs-identifier hs-type">Column</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679405378"><span class="hs-identifier hs-type">a</span></a></span></span></span></span></span></span></span><span> </span><span class="hs-keyword">where</span><span>
+</span><span id="line-47"></span><span>    </span><span id="local-6989586621679405249"><span class="annot"><span class="annottext">pureLayout :: Column a -&gt; Rectangle -&gt; Stack a -&gt; [(a, Rectangle)]
+</span><span class="hs-identifier hs-var hs-var hs-var hs-var">pureLayout</span></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">forall a. Column a -&gt; Rectangle -&gt; Stack a -&gt; [(a, Rectangle)]
+</span><a href="XMonad.Layout.Column.html#columnLayout"><span class="hs-identifier hs-var">columnLayout</span></a></span><span>
+</span><span id="line-48"></span><span>    </span><span id="local-6989586621679405246"><span class="annot"><span class="annottext">pureMessage :: Column a -&gt; SomeMessage -&gt; Maybe (Column a)
+</span><span class="hs-identifier hs-var hs-var hs-var hs-var">pureMessage</span></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">forall a. Column a -&gt; SomeMessage -&gt; Maybe (Column a)
+</span><a href="XMonad.Layout.Column.html#columnMessage"><span class="hs-identifier hs-var">columnMessage</span></a></span><span>
+</span><span id="line-49"></span><span>
+</span><span id="line-50"></span><span id="local-6989586621679405243"><span class="annot"><a href="XMonad.Layout.Column.html#columnMessage"><span class="hs-identifier hs-type">columnMessage</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><a href="XMonad.Layout.Column.html#Column"><span class="hs-identifier hs-type">Column</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679405243"><span class="hs-identifier hs-type">a</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">SomeMessage</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Maybe</span></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="XMonad.Layout.Column.html#Column"><span class="hs-identifier hs-type">Column</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679405243"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">)</span></span><span>
+</span><span id="line-51"></span><span id="columnMessage"><span class="annot"><span class="annottext">columnMessage :: forall a. Column a -&gt; SomeMessage -&gt; Maybe (Column a)
+</span><a href="XMonad.Layout.Column.html#columnMessage"><span class="hs-identifier hs-var hs-var">columnMessage</span></a></span></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="XMonad.Layout.Column.html#Column"><span class="hs-identifier hs-type">Column</span></a></span><span> </span><span id="local-6989586621679405238"><span class="annot"><span class="annottext">Float
+</span><a href="#local-6989586621679405238"><span class="hs-identifier hs-var">q</span></a></span></span><span class="hs-special">)</span><span> </span><span id="local-6989586621679405237"><span class="annot"><span class="annottext">SomeMessage
+</span><a href="#local-6989586621679405237"><span class="hs-identifier hs-var">m</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">forall (f :: * -&gt; *) a b. Functor f =&gt; (a -&gt; b) -&gt; f a -&gt; f b
+</span><span class="hs-identifier hs-var">fmap</span></span><span> </span><span class="annot"><span class="annottext">forall {a}. Resize -&gt; Column a
+</span><a href="#local-6989586621679405236"><span class="hs-identifier hs-var">resize</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">forall m. Message m =&gt; SomeMessage -&gt; Maybe m
+</span><span class="hs-identifier hs-var">fromMessage</span></span><span> </span><span class="annot"><span class="annottext">SomeMessage
+</span><a href="#local-6989586621679405237"><span class="hs-identifier hs-var">m</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-52"></span><span>    </span><span class="hs-keyword">where</span><span> </span><span id="local-6989586621679405236"><span class="annot"><span class="annottext">resize :: Resize -&gt; Column a
+</span><a href="#local-6989586621679405236"><span class="hs-identifier hs-var hs-var">resize</span></a></span></span><span> </span><span class="annot"><span class="annottext">Resize
+</span><span class="hs-identifier hs-var">Shrink</span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">forall a. Float -&gt; Column a
+</span><a href="XMonad.Layout.Column.html#Column"><span class="hs-identifier hs-var">Column</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Float
+</span><a href="#local-6989586621679405238"><span class="hs-identifier hs-var">q</span></a></span><span class="annot"><span class="annottext">forall a. Num a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-glyph hs-var">-</span></span><span class="annot"><span class="annottext">Float
+</span><span class="hs-number">0.1</span></span><span class="hs-special">)</span><span>
+</span><span id="line-53"></span><span>          </span><span class="annot"><a href="#local-6989586621679405236"><span class="hs-identifier hs-var">resize</span></a></span><span> </span><span class="annot"><span class="annottext">Resize
+</span><span class="hs-identifier hs-var">Expand</span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">forall a. Float -&gt; Column a
+</span><a href="XMonad.Layout.Column.html#Column"><span class="hs-identifier hs-var">Column</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Float
+</span><a href="#local-6989586621679405238"><span class="hs-identifier hs-var">q</span></a></span><span class="annot"><span class="annottext">forall a. Num a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-operator hs-var">+</span></span><span class="annot"><span class="annottext">Float
+</span><span class="hs-number">0.1</span></span><span class="hs-special">)</span><span>
+</span><span id="line-54"></span><span>
+</span><span id="line-55"></span><span id="local-6989586621679405227"><span class="annot"><a href="XMonad.Layout.Column.html#columnLayout"><span class="hs-identifier hs-type">columnLayout</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><a href="XMonad.Layout.Column.html#Column"><span class="hs-identifier hs-type">Column</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679405227"><span class="hs-identifier hs-type">a</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Rectangle</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">W.Stack</span></span><span> </span><span class="annot"><a href="#local-6989586621679405227"><span class="hs-identifier hs-type">a</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="hs-special">[</span><span class="hs-special">(</span><span class="annot"><a href="#local-6989586621679405227"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">,</span><span class="annot"><span class="hs-identifier hs-type">Rectangle</span></span><span class="hs-special">)</span><span class="hs-special">]</span></span><span>
+</span><span id="line-56"></span><span id="columnLayout"><span class="annot"><span class="annottext">columnLayout :: forall a. Column a -&gt; Rectangle -&gt; Stack a -&gt; [(a, Rectangle)]
+</span><a href="XMonad.Layout.Column.html#columnLayout"><span class="hs-identifier hs-var hs-var">columnLayout</span></a></span></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="XMonad.Layout.Column.html#Column"><span class="hs-identifier hs-type">Column</span></a></span><span> </span><span id="local-6989586621679405226"><span class="annot"><span class="annottext">Float
+</span><a href="#local-6989586621679405226"><span class="hs-identifier hs-var">q</span></a></span></span><span class="hs-special">)</span><span> </span><span id="local-6989586621679405225"><span class="annot"><span class="annottext">Rectangle
+</span><a href="#local-6989586621679405225"><span class="hs-identifier hs-var">rect</span></a></span></span><span> </span><span id="local-6989586621679405224"><span class="annot"><span class="annottext">Stack a
+</span><a href="#local-6989586621679405224"><span class="hs-identifier hs-var">stack</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">forall a b. [a] -&gt; [b] -&gt; [(a, b)]
+</span><span class="hs-identifier hs-var">zip</span></span><span> </span><span class="annot"><span class="annottext">[a]
+</span><a href="#local-6989586621679405223"><span class="hs-identifier hs-var">ws</span></a></span><span> </span><span class="annot"><span class="annottext">[Rectangle]
+</span><a href="#local-6989586621679405222"><span class="hs-identifier hs-var">rects</span></a></span><span>
+</span><span id="line-57"></span><span>    </span><span class="hs-keyword">where</span><span> </span><span id="local-6989586621679405223"><span class="annot"><span class="annottext">ws :: [a]
+</span><a href="#local-6989586621679405223"><span class="hs-identifier hs-var hs-var">ws</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">forall a. Stack a -&gt; [a]
+</span><span class="hs-identifier hs-var">W.integrate</span></span><span> </span><span class="annot"><span class="annottext">Stack a
+</span><a href="#local-6989586621679405224"><span class="hs-identifier hs-var">stack</span></a></span><span>
+</span><span id="line-58"></span><span>          </span><span id="local-6989586621679405218"><span class="annot"><span class="annottext">n :: Int
+</span><a href="#local-6989586621679405218"><span class="hs-identifier hs-var hs-var">n</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">forall (t :: * -&gt; *) a. Foldable t =&gt; t a -&gt; Int
+</span><span class="hs-identifier hs-var">length</span></span><span> </span><span class="annot"><span class="annottext">[a]
+</span><a href="#local-6989586621679405223"><span class="hs-identifier hs-var">ws</span></a></span><span>
+</span><span id="line-59"></span><span>          </span><span id="local-6989586621679405213"><span class="annot"><span class="annottext">heights :: [Dimension]
+</span><a href="#local-6989586621679405213"><span class="hs-identifier hs-var hs-var">heights</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">forall a b. (a -&gt; b) -&gt; [a] -&gt; [b]
+</span><span class="hs-identifier hs-var">map</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Int -&gt; Rectangle -&gt; Float -&gt; Int -&gt; Dimension
+</span><a href="XMonad.Layout.Column.html#xn"><span class="hs-identifier hs-var">xn</span></a></span><span> </span><span class="annot"><span class="annottext">Int
+</span><a href="#local-6989586621679405218"><span class="hs-identifier hs-var">n</span></a></span><span> </span><span class="annot"><span class="annottext">Rectangle
+</span><a href="#local-6989586621679405225"><span class="hs-identifier hs-var">rect</span></a></span><span> </span><span class="annot"><span class="annottext">Float
+</span><a href="#local-6989586621679405226"><span class="hs-identifier hs-var">q</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-special">[</span><span class="annot"><span class="annottext">Int
+</span><span class="hs-number">1</span></span><span class="hs-glyph">..</span><span class="annot"><span class="annottext">Int
+</span><a href="#local-6989586621679405218"><span class="hs-identifier hs-var">n</span></a></span><span class="hs-special">]</span><span>
+</span><span id="line-60"></span><span>          </span><span id="local-6989586621679405203"><span class="annot"><span class="annottext">ys :: [Position]
+</span><a href="#local-6989586621679405203"><span class="hs-identifier hs-var hs-var">ys</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-special">[</span><span class="annot"><span class="annottext">forall a b. (Integral a, Num b) =&gt; a -&gt; b
+</span><span class="hs-identifier hs-var">fromIntegral</span></span><span> </span><span class="annot"><span class="annottext">forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">forall (t :: * -&gt; *) a. (Foldable t, Num a) =&gt; t a -&gt; a
+</span><span class="hs-identifier hs-var">sum</span></span><span> </span><span class="annot"><span class="annottext">forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">forall a. Int -&gt; [a] -&gt; [a]
+</span><span class="hs-identifier hs-var">take</span></span><span> </span><span class="annot"><span class="annottext">Int
+</span><a href="#local-6989586621679405200"><span class="hs-identifier hs-var">k</span></a></span><span> </span><span class="annot"><span class="annottext">[Dimension]
+</span><a href="#local-6989586621679405213"><span class="hs-identifier hs-var">heights</span></a></span><span> </span><span class="hs-glyph">|</span><span> </span><span id="local-6989586621679405200"><span class="annot"><span class="annottext">Int
+</span><a href="#local-6989586621679405200"><span class="hs-identifier hs-var">k</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="hs-special">[</span><span class="annot"><span class="annottext">Int
+</span><span class="hs-number">0</span></span><span class="hs-glyph">..</span><span class="annot"><span class="annottext">Int
+</span><a href="#local-6989586621679405218"><span class="hs-identifier hs-var">n</span></a></span><span class="annot"><span class="annottext">forall a. Num a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-glyph hs-var">-</span></span><span class="annot"><span class="annottext">Int
+</span><span class="hs-number">1</span></span><span class="hs-special">]</span><span class="hs-special">]</span><span>
+</span><span id="line-61"></span><span>          </span><span id="local-6989586621679405222"><span class="annot"><span class="annottext">rects :: [Rectangle]
+</span><a href="#local-6989586621679405222"><span class="hs-identifier hs-var hs-var">rects</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">forall a b c. (a -&gt; b -&gt; c) -&gt; [a] -&gt; [b] -&gt; [c]
+</span><span class="hs-identifier hs-var">zipWith</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">forall a b c. ((a, b) -&gt; c) -&gt; a -&gt; b -&gt; c
+</span><span class="hs-identifier hs-var">curry</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Rectangle -&gt; (Dimension, Position) -&gt; Rectangle
+</span><a href="XMonad.Layout.Column.html#mkRect"><span class="hs-identifier hs-var">mkRect</span></a></span><span> </span><span class="annot"><span class="annottext">Rectangle
+</span><a href="#local-6989586621679405225"><span class="hs-identifier hs-var">rect</span></a></span><span class="hs-special">)</span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">[Dimension]
+</span><a href="#local-6989586621679405213"><span class="hs-identifier hs-var">heights</span></a></span><span> </span><span class="annot"><span class="annottext">[Position]
+</span><a href="#local-6989586621679405203"><span class="hs-identifier hs-var">ys</span></a></span><span>
+</span><span id="line-62"></span><span>
+</span><span id="line-63"></span><span class="annot"><a href="XMonad.Layout.Column.html#mkRect"><span class="hs-identifier hs-type">mkRect</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Rectangle</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">Dimension</span></span><span class="hs-special">,</span><span class="annot"><span class="hs-identifier hs-type">Position</span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Rectangle</span></span><span>
+</span><span id="line-64"></span><span id="mkRect"><span class="annot"><span class="annottext">mkRect :: Rectangle -&gt; (Dimension, Position) -&gt; Rectangle
+</span><a href="XMonad.Layout.Column.html#mkRect"><span class="hs-identifier hs-var hs-var">mkRect</span></a></span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">Rectangle</span></span><span> </span><span id="local-6989586621679405195"><span class="annot"><span class="annottext">Position
+</span><a href="#local-6989586621679405195"><span class="hs-identifier hs-var">xs</span></a></span></span><span> </span><span id="local-6989586621679405194"><span class="annot"><span class="annottext">Position
+</span><a href="#local-6989586621679405194"><span class="hs-identifier hs-var">ys</span></a></span></span><span> </span><span id="local-6989586621679405193"><span class="annot"><span class="annottext">Dimension
+</span><a href="#local-6989586621679405193"><span class="hs-identifier hs-var">ws</span></a></span></span><span> </span><span class="annot"><span class="annottext">Dimension
+</span><span class="hs-identifier">_</span></span><span class="hs-special">)</span><span> </span><span class="hs-special">(</span><span id="local-6989586621679405192"><span class="annot"><span class="annottext">Dimension
+</span><a href="#local-6989586621679405192"><span class="hs-identifier hs-var">h</span></a></span></span><span class="hs-special">,</span><span id="local-6989586621679405191"><span class="annot"><span class="annottext">Position
+</span><a href="#local-6989586621679405191"><span class="hs-identifier hs-var">y</span></a></span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Position -&gt; Position -&gt; Dimension -&gt; Dimension -&gt; Rectangle
+</span><span class="hs-identifier hs-var">Rectangle</span></span><span> </span><span class="annot"><span class="annottext">Position
+</span><a href="#local-6989586621679405195"><span class="hs-identifier hs-var">xs</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Position
+</span><a href="#local-6989586621679405194"><span class="hs-identifier hs-var">ys</span></a></span><span class="annot"><span class="annottext">forall a. Num a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-operator hs-var">+</span></span><span class="annot"><span class="annottext">forall a b. (Integral a, Num b) =&gt; a -&gt; b
+</span><span class="hs-identifier hs-var">fromIntegral</span></span><span> </span><span class="annot"><span class="annottext">Position
+</span><a href="#local-6989586621679405191"><span class="hs-identifier hs-var">y</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">Dimension
+</span><a href="#local-6989586621679405193"><span class="hs-identifier hs-var">ws</span></a></span><span> </span><span class="annot"><span class="annottext">Dimension
+</span><a href="#local-6989586621679405192"><span class="hs-identifier hs-var">h</span></a></span><span>
+</span><span id="line-65"></span><span>
+</span><span id="line-66"></span><span class="annot"><a href="XMonad.Layout.Column.html#xn"><span class="hs-identifier hs-type">xn</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Int</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Rectangle</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Float</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Int</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Dimension</span></span><span>
+</span><span id="line-67"></span><span id="xn"><span class="annot"><span class="annottext">xn :: Int -&gt; Rectangle -&gt; Float -&gt; Int -&gt; Dimension
+</span><a href="XMonad.Layout.Column.html#xn"><span class="hs-identifier hs-var hs-var">xn</span></a></span></span><span> </span><span id="local-6989586621679405190"><span class="annot"><span class="annottext">Int
+</span><a href="#local-6989586621679405190"><span class="hs-identifier hs-var">n</span></a></span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">Rectangle</span></span><span> </span><span class="annot"><span class="annottext">Position
+</span><span class="hs-identifier">_</span></span><span> </span><span class="annot"><span class="annottext">Position
+</span><span class="hs-identifier">_</span></span><span> </span><span class="annot"><span class="annottext">Dimension
+</span><span class="hs-identifier">_</span></span><span> </span><span id="local-6989586621679405189"><span class="annot"><span class="annottext">Dimension
+</span><a href="#local-6989586621679405189"><span class="hs-identifier hs-var">h</span></a></span></span><span class="hs-special">)</span><span> </span><span id="local-6989586621679405188"><span class="annot"><span class="annottext">Float
+</span><a href="#local-6989586621679405188"><span class="hs-identifier hs-var">q</span></a></span></span><span> </span><span id="local-6989586621679405187"><span class="annot"><span class="annottext">Int
+</span><a href="#local-6989586621679405187"><span class="hs-identifier hs-var">k</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-keyword">if</span><span> </span><span class="annot"><span class="annottext">Float
+</span><a href="#local-6989586621679405188"><span class="hs-identifier hs-var">q</span></a></span><span class="annot"><span class="annottext">forall a. Eq a =&gt; a -&gt; a -&gt; Bool
+</span><span class="hs-operator hs-var">==</span></span><span class="annot"><span class="annottext">Float
+</span><span class="hs-number">1</span></span><span> </span><span class="hs-keyword">then</span><span>
+</span><span id="line-68"></span><span>                                  </span><span class="annot"><span class="annottext">Dimension
+</span><a href="#local-6989586621679405189"><span class="hs-identifier hs-var">h</span></a></span><span> </span><span class="annot"><span class="annottext">forall a. Integral a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-operator hs-var">`div`</span></span><span> </span><span class="annot"><span class="annottext">forall a b. (Integral a, Num b) =&gt; a -&gt; b
+</span><span class="hs-identifier hs-var">fromIntegral</span></span><span> </span><span class="annot"><span class="annottext">Int
+</span><a href="#local-6989586621679405190"><span class="hs-identifier hs-var">n</span></a></span><span>
+</span><span id="line-69"></span><span>                               </span><span class="hs-keyword">else</span><span>
+</span><span id="line-70"></span><span>                                  </span><span class="annot"><span class="annottext">forall a b. (RealFrac a, Integral b) =&gt; a -&gt; b
+</span><span class="hs-identifier hs-var">round</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">forall a b. (Integral a, Num b) =&gt; a -&gt; b
+</span><span class="hs-identifier hs-var">fromIntegral</span></span><span> </span><span class="annot"><span class="annottext">Dimension
+</span><a href="#local-6989586621679405189"><span class="hs-identifier hs-var">h</span></a></span><span class="annot"><span class="annottext">forall a. Num a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-operator hs-var">*</span></span><span class="annot"><span class="annottext">Float
+</span><a href="#local-6989586621679405188"><span class="hs-identifier hs-var">q</span></a></span><span class="annot"><span class="annottext">forall a b. (Num a, Integral b) =&gt; a -&gt; b -&gt; a
+</span><span class="hs-operator hs-var">^</span></span><span class="hs-special">(</span><span class="annot"><span class="annottext">Int
+</span><a href="#local-6989586621679405190"><span class="hs-identifier hs-var">n</span></a></span><span class="annot"><span class="annottext">forall a. Num a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-glyph hs-var">-</span></span><span class="annot"><span class="annottext">Int
+</span><a href="#local-6989586621679405187"><span class="hs-identifier hs-var">k</span></a></span><span class="hs-special">)</span><span class="annot"><span class="annottext">forall a. Num a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-operator hs-var">*</span></span><span class="hs-special">(</span><span class="annot"><span class="annottext">Float
+</span><span class="hs-number">1</span></span><span class="annot"><span class="annottext">forall a. Num a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-glyph hs-var">-</span></span><span class="annot"><span class="annottext">Float
+</span><a href="#local-6989586621679405188"><span class="hs-identifier hs-var">q</span></a></span><span class="hs-special">)</span><span class="annot"><span class="annottext">forall a. Fractional a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-operator hs-var">/</span></span><span class="hs-special">(</span><span class="annot"><span class="annottext">Float
+</span><span class="hs-number">1</span></span><span class="annot"><span class="annottext">forall a. Num a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-glyph hs-var">-</span></span><span class="annot"><span class="annottext">Float
+</span><a href="#local-6989586621679405188"><span class="hs-identifier hs-var">q</span></a></span><span class="annot"><span class="annottext">forall a b. (Num a, Integral b) =&gt; a -&gt; b -&gt; a
+</span><span class="hs-operator hs-var">^</span></span><span class="annot"><span class="annottext">Int
+</span><a href="#local-6989586621679405190"><span class="hs-identifier hs-var">n</span></a></span><span class="hs-special">)</span><span class="hs-special">)</span><span>
+</span><span id="line-71"></span></pre></body></html>

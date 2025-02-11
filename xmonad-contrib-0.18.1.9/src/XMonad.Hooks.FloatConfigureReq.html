@@ -1,0 +1,234 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd"><html xmlns="http://www.w3.org/1999/xhtml"><head><link rel="stylesheet" type="text/css" href="style.css" /><script type="text/javascript" src="highlight.js"></script></head><body><pre><span class="hs-pragma">{-# LANGUAGE LambdaCase #-}</span><span>
+</span><span id="line-2"></span><span class="hs-comment">-- |</span><span>
+</span><span id="line-3"></span><span class="hs-comment">-- Module      :  XMonad.Hooks.FloatConfigureReq</span><span>
+</span><span id="line-4"></span><span class="hs-comment">-- Description :  Customize handling of floating windows' move\/resize\/restack requests (ConfigureRequest).</span><span>
+</span><span id="line-5"></span><span class="hs-comment">-- Copyright   :  (c) 2024 Tom&#225;&#353; Janou&#353;ek &lt;tomi@nomi.cz&gt;</span><span>
+</span><span id="line-6"></span><span class="hs-comment">-- License     :  BSD3</span><span>
+</span><span id="line-7"></span><span class="hs-comment">-- Maintainer  :  Tom&#225;&#353; Janou&#353;ek &lt;tomi@nomi.cz&gt;</span><span>
+</span><span id="line-8"></span><span class="hs-comment">--</span><span>
+</span><span id="line-9"></span><span class="hs-comment">-- xmonad normally honours those requests by doing exactly what the client</span><span>
+</span><span id="line-10"></span><span class="hs-comment">-- application asked, and refreshing. There are some misbehaving clients,</span><span>
+</span><span id="line-11"></span><span class="hs-comment">-- however, that:</span><span>
+</span><span id="line-12"></span><span class="hs-comment">--</span><span>
+</span><span id="line-13"></span><span class="hs-comment">-- * try to move their window to the last known absolute position regardless</span><span>
+</span><span id="line-14"></span><span class="hs-comment">--   of the current xrandr/xinerama layout</span><span>
+</span><span id="line-15"></span><span class="hs-comment">--</span><span>
+</span><span id="line-16"></span><span class="hs-comment">-- * move their window to 0, 0 for no particular reason (e.g. rxvt-unicode)</span><span>
+</span><span id="line-17"></span><span class="hs-comment">--</span><span>
+</span><span id="line-18"></span><span class="hs-comment">-- * issue lots of no-op requests causing flickering (e.g. Steam)</span><span>
+</span><span id="line-19"></span><span class="hs-comment">--</span><span>
+</span><span id="line-20"></span><span class="hs-comment">-- This module provides a replacement handler for 'ConfigureRequestEvent' to</span><span>
+</span><span id="line-21"></span><span class="hs-comment">-- work around such misbehaviours.</span><span>
+</span><span id="line-22"></span><span class="hs-comment">--</span><span>
+</span><span id="line-23"></span><span class="hs-keyword">module</span><span> </span><span class="hs-identifier">XMonad.Hooks.FloatConfigureReq</span><span> </span><span class="hs-special">(</span><span>
+</span><span id="line-24"></span><span>    </span><span class="annot"><span class="hs-comment">-- * Usage</span></span><span>
+</span><span id="line-25"></span><span>    </span><span class="annot"><span class="hs-comment">-- $usage</span></span><span>
+</span><span id="line-26"></span><span>    </span><span class="annot"><a href="XMonad.Hooks.FloatConfigureReq.html#MaybeMaybeManageHook"><span class="hs-identifier">MaybeMaybeManageHook</span></a></span><span class="hs-special">,</span><span>
+</span><span id="line-27"></span><span>    </span><span class="annot"><a href="XMonad.Hooks.FloatConfigureReq.html#floatConfReqHook"><span class="hs-identifier">floatConfReqHook</span></a></span><span class="hs-special">,</span><span>
+</span><span id="line-28"></span><span>
+</span><span id="line-29"></span><span>    </span><span class="annot"><span class="hs-comment">-- * Known workarounds</span></span><span>
+</span><span id="line-30"></span><span>    </span><span class="annot"><a href="XMonad.Hooks.FloatConfigureReq.html#fixSteamFlicker"><span class="hs-identifier">fixSteamFlicker</span></a></span><span class="hs-special">,</span><span>
+</span><span id="line-31"></span><span>    </span><span class="annot"><a href="XMonad.Hooks.FloatConfigureReq.html#fixSteamFlickerMMMH"><span class="hs-identifier">fixSteamFlickerMMMH</span></a></span><span class="hs-special">,</span><span>
+</span><span id="line-32"></span><span>    </span><span class="hs-special">)</span><span> </span><span class="hs-keyword">where</span><span>
+</span><span id="line-33"></span><span>
+</span><span id="line-34"></span><span class="hs-keyword">import</span><span> </span><span class="hs-keyword">qualified</span><span> </span><span class="annot"><span class="hs-identifier">Data.Map.Strict</span></span><span> </span><span class="hs-keyword">as</span><span> </span><span class="annot"><span class="hs-identifier">M</span></span><span>
+</span><span id="line-35"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><span class="hs-identifier">XMonad</span></span><span>
+</span><span id="line-36"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><a href="XMonad.Hooks.ManageHelpers.html"><span class="hs-identifier">XMonad.Hooks.ManageHelpers</span></a></span><span>
+</span><span id="line-37"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><a href="XMonad.Prelude.html"><span class="hs-identifier">XMonad.Prelude</span></a></span><span>
+</span><span id="line-38"></span><span class="hs-keyword">import</span><span> </span><span class="hs-keyword">qualified</span><span> </span><span class="annot"><span class="hs-identifier">XMonad.StackSet</span></span><span> </span><span class="hs-keyword">as</span><span> </span><span class="annot"><span class="hs-identifier">W</span></span><span>
+</span><span id="line-39"></span><span>
+</span><span id="line-40"></span><span class="hs-comment">-- $usage</span><span>
+</span><span id="line-41"></span><span class="hs-comment">-- To use this, include the following in your @xmonad.hs@:</span><span>
+</span><span id="line-42"></span><span class="hs-comment">--</span><span>
+</span><span id="line-43"></span><span class="hs-comment">-- &gt; import XMonad.Hooks.FloatConfigureReq</span><span>
+</span><span id="line-44"></span><span class="hs-comment">-- &gt; import XMonad.Hooks.ManageHelpers</span><span>
+</span><span id="line-45"></span><span class="hs-comment">--</span><span>
+</span><span id="line-46"></span><span class="hs-comment">-- &gt; myFloatConfReqHook :: MaybeMaybeManageHook</span><span>
+</span><span id="line-47"></span><span class="hs-comment">-- &gt; myFloatConfReqHook = composeAll</span><span>
+</span><span id="line-48"></span><span class="hs-comment">-- &gt;     [ &#8230; ]</span><span>
+</span><span id="line-49"></span><span class="hs-comment">--</span><span>
+</span><span id="line-50"></span><span class="hs-comment">-- &gt; myEventHook :: Event -&gt; X All</span><span>
+</span><span id="line-51"></span><span class="hs-comment">-- &gt; myEventHook = mconcat</span><span>
+</span><span id="line-52"></span><span class="hs-comment">-- &gt;     [ &#8230;</span><span>
+</span><span id="line-53"></span><span class="hs-comment">-- &gt;     , floatConfReqHook myFloatConfReqHook</span><span>
+</span><span id="line-54"></span><span class="hs-comment">-- &gt;     , &#8230; ]</span><span>
+</span><span id="line-55"></span><span class="hs-comment">--</span><span>
+</span><span id="line-56"></span><span class="hs-comment">-- &gt; main = xmonad $ &#8230;</span><span>
+</span><span id="line-57"></span><span class="hs-comment">-- &gt;               $ def{ handleEventHook = myEventHook</span><span>
+</span><span id="line-58"></span><span class="hs-comment">-- &gt;                    , &#8230; }</span><span>
+</span><span id="line-59"></span><span class="hs-comment">--</span><span>
+</span><span id="line-60"></span><span class="hs-comment">-- Then fill the @myFloatConfReqHook@ with whatever custom rules you need.</span><span>
+</span><span id="line-61"></span><span class="hs-comment">--</span><span>
+</span><span id="line-62"></span><span class="hs-comment">-- As an example, the following will prevent rxvt-unicode from moving its</span><span>
+</span><span id="line-63"></span><span class="hs-comment">-- (floating) window to 0, 0 after a font change but still ensure its size</span><span>
+</span><span id="line-64"></span><span class="hs-comment">-- increment hints are respected:</span><span>
+</span><span id="line-65"></span><span class="hs-comment">--</span><span>
+</span><span id="line-66"></span><span class="hs-comment">-- &gt; className =? &quot;URxvt&quot; -?&gt; pure &lt;$&gt; doFloat</span><span>
+</span><span id="line-67"></span><span class="hs-comment">--</span><span>
+</span><span id="line-68"></span><span class="hs-comment">-- Another example that avoids flickering and xmonad slowdowns caused by the</span><span>
+</span><span id="line-69"></span><span class="hs-comment">-- Steam client (completely ignore all its requests, none of which are</span><span>
+</span><span id="line-70"></span><span class="hs-comment">-- meaningful in the context of a tiling WM):</span><span>
+</span><span id="line-71"></span><span class="hs-comment">--</span><span>
+</span><span id="line-72"></span><span class="hs-comment">-- &gt; map toLower `fmap` className =? &quot;steam&quot; -?&gt; mempty</span><span>
+</span><span id="line-73"></span><span class="hs-comment">--</span><span>
+</span><span id="line-74"></span><span class="hs-comment">-- (this example is also available as 'fixSteamFlickerMMMH' to be added to</span><span>
+</span><span id="line-75"></span><span class="hs-comment">-- one's @myFloatConfReqHook@ and also 'fixSteamFlicker' to be added directly</span><span>
+</span><span id="line-76"></span><span class="hs-comment">-- to one's 'handleEventHook')</span><span>
+</span><span id="line-77"></span><span>
+</span><span id="line-78"></span><span class="hs-comment">-- | A variant of 'MaybeManageHook' that additionally may or may not make</span><span>
+</span><span id="line-79"></span><span class="hs-comment">-- changes to the 'WindowSet'.</span><span>
+</span><span id="line-80"></span><span class="hs-keyword">type</span><span> </span><span id="MaybeMaybeManageHook"><span class="annot"><a href="XMonad.Hooks.FloatConfigureReq.html#MaybeMaybeManageHook"><span class="hs-identifier hs-var">MaybeMaybeManageHook</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Query</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">Maybe</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">Maybe</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">Endo</span></span><span> </span><span class="annot"><span class="hs-identifier hs-type">WindowSet</span></span><span class="hs-special">)</span><span class="hs-special">)</span><span class="hs-special">)</span><span>
+</span><span id="line-81"></span><span>
+</span><span id="line-82"></span><span class="hs-comment">-- | Customizable handler for a 'ConfigureRequestEvent'. If the event's</span><span>
+</span><span id="line-83"></span><span class="hs-comment">-- 'ev_window' is a managed floating window, the provided</span><span>
+</span><span id="line-84"></span><span class="hs-comment">-- 'MaybeMaybeManageHook' is consulted and its result interpreted as follows:</span><span>
+</span><span id="line-85"></span><span class="hs-comment">--</span><span>
+</span><span id="line-86"></span><span class="hs-comment">--  * @Nothing@ - no match, fall back to the default handler</span><span>
+</span><span id="line-87"></span><span class="hs-comment">--</span><span>
+</span><span id="line-88"></span><span class="hs-comment">--  * @Just Nothing@ - match but ignore, no refresh, just send ConfigureNotify</span><span>
+</span><span id="line-89"></span><span class="hs-comment">--</span><span>
+</span><span id="line-90"></span><span class="hs-comment">--  * @Just (Just a)@ - match, modify 'WindowSet', refresh, send ConfigureNotify</span><span>
+</span><span id="line-91"></span><span class="annot"><a href="XMonad.Hooks.FloatConfigureReq.html#floatConfReqHook"><span class="hs-identifier hs-type">floatConfReqHook</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><a href="XMonad.Hooks.FloatConfigureReq.html#MaybeMaybeManageHook"><span class="hs-identifier hs-type">MaybeMaybeManageHook</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Event</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">X</span></span><span> </span><span class="annot"><span class="hs-identifier hs-type">All</span></span><span>
+</span><span id="line-92"></span><span id="floatConfReqHook"><span class="annot"><span class="annottext">floatConfReqHook :: MaybeMaybeManageHook -&gt; Event -&gt; X All
+</span><a href="XMonad.Hooks.FloatConfigureReq.html#floatConfReqHook"><span class="hs-identifier hs-var hs-var">floatConfReqHook</span></a></span></span><span> </span><span id="local-6989586621679472267"><span class="annot"><span class="annottext">MaybeMaybeManageHook
+</span><a href="#local-6989586621679472267"><span class="hs-identifier hs-var">mh</span></a></span></span><span> </span><span class="annot"><span class="hs-identifier hs-type">ConfigureRequestEvent</span></span><span class="hs-special">{</span><span class="annot"><span class="annottext">ev_window :: Event -&gt; Window
+</span><span class="hs-identifier hs-var">ev_window</span></span><span> </span><span class="hs-glyph">=</span><span> </span><span id="local-6989586621679472264"><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679472264"><span class="hs-identifier hs-var">w</span></a></span></span><span class="hs-special">}</span><span> </span><span class="hs-glyph">=</span><span>
+</span><span id="line-93"></span><span>    </span><span class="annot"><span class="annottext">forall a. Query a -&gt; Window -&gt; X a
+</span><span class="hs-identifier hs-var">runQuery</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">forall (m :: * -&gt; *) a. Monad m =&gt; m (m a) -&gt; m a
+</span><span class="hs-identifier hs-var">join</span></span><span> </span><span class="annot"><span class="annottext">forall (f :: * -&gt; *) a b. Functor f =&gt; (a -&gt; b) -&gt; f a -&gt; f b
+</span><span class="hs-operator hs-var">&lt;$&gt;</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Query Bool
+</span><a href="XMonad.Hooks.FloatConfigureReq.html#isFloatQ"><span class="hs-identifier hs-var">isFloatQ</span></a></span><span> </span><span class="annot"><span class="annottext">forall (m :: * -&gt; *) a.
+(Functor m, Monad m) =&gt;
+m Bool -&gt; m a -&gt; m (Maybe a)
+</span><a href="XMonad.Hooks.ManageHelpers.html#-%3F%3E"><span class="hs-operator hs-var">-?&gt;</span></a></span><span> </span><span class="annot"><span class="annottext">MaybeMaybeManageHook
+</span><a href="#local-6989586621679472267"><span class="hs-identifier hs-var">mh</span></a></span><span class="hs-special">)</span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679472264"><span class="hs-identifier hs-var">w</span></a></span><span> </span><span class="annot"><span class="annottext">forall (m :: * -&gt; *) a b. Monad m =&gt; m a -&gt; (a -&gt; m b) -&gt; m b
+</span><span class="hs-operator hs-var">&gt;&gt;=</span></span><span> </span><span class="hs-glyph">\</span><span class="hs-glyph">case</span><span>
+</span><span id="line-94"></span><span>        </span><span class="annot"><span class="annottext">Maybe (Maybe (Endo WindowSet))
+</span><span class="hs-identifier hs-var">Nothing</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">forall a. Monoid a =&gt; a
+</span><span class="hs-identifier hs-var">mempty</span></span><span>
+</span><span id="line-95"></span><span>        </span><span class="annot"><span class="hs-identifier hs-type">Just</span></span><span> </span><span id="local-6989586621679472259"><span class="annot"><span class="annottext">Maybe (Endo WindowSet)
+</span><a href="#local-6989586621679472259"><span class="hs-identifier hs-var">e</span></a></span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-96"></span><span>            </span><span class="annot"><span class="annottext">forall (m :: * -&gt; *) a. Monad m =&gt; Maybe a -&gt; (a -&gt; m ()) -&gt; m ()
+</span><span class="hs-identifier hs-var">whenJust</span></span><span> </span><span class="annot"><span class="annottext">Maybe (Endo WindowSet)
+</span><a href="#local-6989586621679472259"><span class="hs-identifier hs-var">e</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">(WindowSet -&gt; WindowSet) -&gt; X ()
+</span><span class="hs-identifier hs-var">windows</span></span><span> </span><span class="annot"><span class="annottext">forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">forall a. Endo a -&gt; a -&gt; a
+</span><span class="hs-identifier hs-var">appEndo</span></span><span class="hs-special">)</span><span>
+</span><span id="line-97"></span><span>            </span><span class="annot"><span class="annottext">X ()
+</span><a href="#local-6989586621679472254"><span class="hs-identifier hs-var">sendConfEvent</span></a></span><span>
+</span><span id="line-98"></span><span>            </span><span class="annot"><span class="annottext">forall (f :: * -&gt; *) a. Applicative f =&gt; a -&gt; f a
+</span><span class="hs-identifier hs-var">pure</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Bool -&gt; All
+</span><span class="hs-identifier hs-var">All</span></span><span> </span><span class="annot"><span class="annottext">Bool
+</span><span class="hs-identifier hs-var">False</span></span><span class="hs-special">)</span><span>
+</span><span id="line-99"></span><span>  </span><span class="hs-keyword">where</span><span>
+</span><span id="line-100"></span><span>    </span><span id="local-6989586621679472254"><span class="annot"><span class="annottext">sendConfEvent :: X ()
+</span><a href="#local-6989586621679472254"><span class="hs-identifier hs-var hs-var">sendConfEvent</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">forall a. (Display -&gt; X a) -&gt; X a
+</span><span class="hs-identifier hs-var">withDisplay</span></span><span> </span><span class="annot"><span class="annottext">forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="hs-glyph">\</span><span id="local-6989586621679472244"><span class="annot"><span class="annottext">Display
+</span><a href="#local-6989586621679472244"><span class="hs-identifier hs-var">dpy</span></a></span></span><span> </span><span class="hs-glyph">-&gt;</span><span>
+</span><span id="line-101"></span><span>        </span><span class="annot"><span class="annottext">Display -&gt; Window -&gt; (WindowAttributes -&gt; X ()) -&gt; X ()
+</span><span class="hs-identifier hs-var">withWindowAttributes</span></span><span> </span><span class="annot"><span class="annottext">Display
+</span><a href="#local-6989586621679472244"><span class="hs-identifier hs-var">dpy</span></a></span><span> </span><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679472264"><span class="hs-identifier hs-var">w</span></a></span><span> </span><span class="annot"><span class="annottext">forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="hs-glyph">\</span><span id="local-6989586621679472242"><span class="annot"><span class="annottext">WindowAttributes
+</span><a href="#local-6989586621679472242"><span class="hs-identifier hs-var">wa</span></a></span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-102"></span><span>            </span><span class="annot"><span class="annottext">forall (m :: * -&gt; *) a. MonadIO m =&gt; IO a -&gt; m a
+</span><span class="hs-identifier hs-var">io</span></span><span> </span><span class="annot"><span class="annottext">forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">forall a. (XEventPtr -&gt; IO a) -&gt; IO a
+</span><span class="hs-identifier hs-var">allocaXEvent</span></span><span> </span><span class="annot"><span class="annottext">forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="hs-glyph">\</span><span id="local-6989586621679472239"><span class="annot"><span class="annottext">XEventPtr
+</span><a href="#local-6989586621679472239"><span class="hs-identifier hs-var">ev</span></a></span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-103"></span><span>                </span><span class="hs-comment">-- We may have made no changes to the window size/position</span><span>
+</span><span id="line-104"></span><span>                </span><span class="hs-comment">-- and thus the X server didn't emit any ConfigureNotify,</span><span>
+</span><span id="line-105"></span><span>                </span><span class="hs-comment">-- so we need to send the ConfigureNotify ourselves to make</span><span>
+</span><span id="line-106"></span><span>                </span><span class="hs-comment">-- sure there is a reply to this ConfigureRequestEvent and the</span><span>
+</span><span id="line-107"></span><span>                </span><span class="hs-comment">-- window knows we (possibly) ignored its request.</span><span>
+</span><span id="line-108"></span><span>                </span><span class="annot"><span class="annottext">XEventPtr -&gt; EventType -&gt; IO ()
+</span><span class="hs-identifier hs-var">setEventType</span></span><span> </span><span class="annot"><span class="annottext">XEventPtr
+</span><a href="#local-6989586621679472239"><span class="hs-identifier hs-var">ev</span></a></span><span> </span><span class="annot"><span class="annottext">EventType
+</span><span class="hs-identifier hs-var">configureNotify</span></span><span>
+</span><span id="line-109"></span><span>                </span><span class="annot"><span class="annottext">XEventPtr
+-&gt; Window
+-&gt; Window
+-&gt; CInt
+-&gt; CInt
+-&gt; CInt
+-&gt; CInt
+-&gt; CInt
+-&gt; Window
+-&gt; Bool
+-&gt; IO ()
+</span><span class="hs-identifier hs-var">setConfigureEvent</span></span><span> </span><span class="annot"><span class="annottext">XEventPtr
+</span><a href="#local-6989586621679472239"><span class="hs-identifier hs-var">ev</span></a></span><span> </span><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679472264"><span class="hs-identifier hs-var">w</span></a></span><span> </span><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679472264"><span class="hs-identifier hs-var">w</span></a></span><span>
+</span><span id="line-110"></span><span>                    </span><span class="hs-special">(</span><span class="annot"><span class="annottext">WindowAttributes -&gt; CInt
+</span><span class="hs-identifier hs-var">wa_x</span></span><span> </span><span class="annot"><span class="annottext">WindowAttributes
+</span><a href="#local-6989586621679472242"><span class="hs-identifier hs-var">wa</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">WindowAttributes -&gt; CInt
+</span><span class="hs-identifier hs-var">wa_y</span></span><span> </span><span class="annot"><span class="annottext">WindowAttributes
+</span><a href="#local-6989586621679472242"><span class="hs-identifier hs-var">wa</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">WindowAttributes -&gt; CInt
+</span><span class="hs-identifier hs-var">wa_width</span></span><span> </span><span class="annot"><span class="annottext">WindowAttributes
+</span><a href="#local-6989586621679472242"><span class="hs-identifier hs-var">wa</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-111"></span><span>                    </span><span class="hs-special">(</span><span class="annot"><span class="annottext">WindowAttributes -&gt; CInt
+</span><span class="hs-identifier hs-var">wa_height</span></span><span> </span><span class="annot"><span class="annottext">WindowAttributes
+</span><a href="#local-6989586621679472242"><span class="hs-identifier hs-var">wa</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">WindowAttributes -&gt; CInt
+</span><span class="hs-identifier hs-var">wa_border_width</span></span><span> </span><span class="annot"><span class="annottext">WindowAttributes
+</span><a href="#local-6989586621679472242"><span class="hs-identifier hs-var">wa</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">Window
+</span><span class="hs-identifier hs-var">none</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">WindowAttributes -&gt; Bool
+</span><span class="hs-identifier hs-var">wa_override_redirect</span></span><span> </span><span class="annot"><span class="annottext">WindowAttributes
+</span><a href="#local-6989586621679472242"><span class="hs-identifier hs-var">wa</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-112"></span><span>                </span><span class="annot"><span class="annottext">Display -&gt; Window -&gt; Bool -&gt; Window -&gt; XEventPtr -&gt; IO ()
+</span><span class="hs-identifier hs-var">sendEvent</span></span><span> </span><span class="annot"><span class="annottext">Display
+</span><a href="#local-6989586621679472244"><span class="hs-identifier hs-var">dpy</span></a></span><span> </span><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679472264"><span class="hs-identifier hs-var">w</span></a></span><span> </span><span class="annot"><span class="annottext">Bool
+</span><span class="hs-identifier hs-var">False</span></span><span> </span><span class="annot"><span class="annottext">Window
+</span><span class="hs-number">0</span></span><span> </span><span class="annot"><span class="annottext">XEventPtr
+</span><a href="#local-6989586621679472239"><span class="hs-identifier hs-var">ev</span></a></span><span>
+</span><span id="line-113"></span><span class="annot"><a href="XMonad.Hooks.FloatConfigureReq.html#floatConfReqHook"><span class="hs-identifier hs-var">floatConfReqHook</span></a></span><span> </span><span class="annot"><span class="annottext">MaybeMaybeManageHook
+</span><span class="hs-identifier">_</span></span><span> </span><span class="annot"><span class="annottext">Event
+</span><span class="hs-identifier">_</span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">forall a. Monoid a =&gt; a
+</span><span class="hs-identifier hs-var">mempty</span></span><span>
+</span><span id="line-114"></span><span>
+</span><span id="line-115"></span><span class="hs-comment">-- | A 'Query' to determine if a window is floating.</span><span>
+</span><span id="line-116"></span><span class="annot"><a href="XMonad.Hooks.FloatConfigureReq.html#isFloatQ"><span class="hs-identifier hs-type">isFloatQ</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Query</span></span><span> </span><span class="annot"><span class="hs-identifier hs-type">Bool</span></span><span>
+</span><span id="line-117"></span><span id="isFloatQ"><span class="annot"><span class="annottext">isFloatQ :: Query Bool
+</span><a href="XMonad.Hooks.FloatConfigureReq.html#isFloatQ"><span class="hs-identifier hs-var hs-var">isFloatQ</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">forall r (m :: * -&gt; *). MonadReader r m =&gt; m r
+</span><span class="hs-identifier hs-var">ask</span></span><span> </span><span class="annot"><span class="annottext">forall (m :: * -&gt; *) a b. Monad m =&gt; m a -&gt; (a -&gt; m b) -&gt; m b
+</span><span class="hs-operator hs-var">&gt;&gt;=</span></span><span> </span><span class="hs-glyph">\</span><span id="local-6989586621679472226"><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679472226"><span class="hs-identifier hs-var">w</span></a></span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">forall a. X a -&gt; Query a
+</span><span class="hs-identifier hs-var">liftX</span></span><span> </span><span class="annot"><span class="annottext">forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">forall s (m :: * -&gt; *) a. MonadState s m =&gt; (s -&gt; a) -&gt; m a
+</span><span class="hs-identifier hs-var">gets</span></span><span> </span><span class="annot"><span class="annottext">forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">forall k a. Ord k =&gt; k -&gt; Map k a -&gt; Bool
+</span><span class="hs-identifier hs-var">M.member</span></span><span> </span><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679472226"><span class="hs-identifier hs-var">w</span></a></span><span> </span><span class="annot"><span class="annottext">forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">forall i l a sid sd. StackSet i l a sid sd -&gt; Map a RationalRect
+</span><span class="hs-identifier hs-var">W.floating</span></span><span> </span><span class="annot"><span class="annottext">forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">XState -&gt; WindowSet
+</span><span class="hs-identifier hs-var">windowset</span></span><span>
+</span><span id="line-118"></span><span>
+</span><span id="line-119"></span><span class="hs-comment">-- | A pre-packaged 'floatConfReqHook' that fixes flickering of the Steam client by ignoring 'ConfigureRequestEvent's on any of its floating windows.</span><span>
+</span><span id="line-120"></span><span class="hs-comment">--</span><span>
+</span><span id="line-121"></span><span class="hs-comment">-- To use this, add 'fixSteamFlicker' to your 'handleEventHook'.</span><span>
+</span><span id="line-122"></span><span class="annot"><a href="XMonad.Hooks.FloatConfigureReq.html#fixSteamFlicker"><span class="hs-identifier hs-type">fixSteamFlicker</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Event</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">X</span></span><span> </span><span class="annot"><span class="hs-identifier hs-type">All</span></span><span>
+</span><span id="line-123"></span><span id="fixSteamFlicker"><span class="annot"><span class="annottext">fixSteamFlicker :: Event -&gt; X All
+</span><a href="XMonad.Hooks.FloatConfigureReq.html#fixSteamFlicker"><span class="hs-identifier hs-var hs-var">fixSteamFlicker</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">MaybeMaybeManageHook -&gt; Event -&gt; X All
+</span><a href="XMonad.Hooks.FloatConfigureReq.html#floatConfReqHook"><span class="hs-identifier hs-var">floatConfReqHook</span></a></span><span> </span><span class="annot"><span class="annottext">MaybeMaybeManageHook
+</span><a href="XMonad.Hooks.FloatConfigureReq.html#fixSteamFlickerMMMH"><span class="hs-identifier hs-var">fixSteamFlickerMMMH</span></a></span><span>
+</span><span id="line-124"></span><span>
+</span><span id="line-125"></span><span class="annot"><a href="XMonad.Hooks.FloatConfigureReq.html#fixSteamFlickerMMMH"><span class="hs-identifier hs-type">fixSteamFlickerMMMH</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><a href="XMonad.Hooks.FloatConfigureReq.html#MaybeMaybeManageHook"><span class="hs-identifier hs-type">MaybeMaybeManageHook</span></a></span><span>
+</span><span id="line-126"></span><span id="fixSteamFlickerMMMH"><span class="annot"><span class="annottext">fixSteamFlickerMMMH :: MaybeMaybeManageHook
+</span><a href="XMonad.Hooks.FloatConfigureReq.html#fixSteamFlickerMMMH"><span class="hs-identifier hs-var hs-var">fixSteamFlickerMMMH</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">forall a b. (a -&gt; b) -&gt; [a] -&gt; [b]
+</span><span class="hs-identifier hs-var">map</span></span><span> </span><span class="annot"><span class="annottext">Char -&gt; Char
+</span><span class="hs-identifier hs-var">toLower</span></span><span> </span><span class="annot"><span class="annottext">forall (f :: * -&gt; *) a b. Functor f =&gt; (a -&gt; b) -&gt; f a -&gt; f b
+</span><span class="hs-operator hs-var">`fmap`</span></span><span> </span><span class="annot"><span class="annottext">Query [Char]
+</span><span class="hs-identifier hs-var">className</span></span><span> </span><span class="annot"><span class="annottext">forall a. Eq a =&gt; Query a -&gt; a -&gt; Query Bool
+</span><span class="hs-operator hs-var">=?</span></span><span> </span><span class="annot"><span class="annottext">[Char]
+</span><span class="hs-string">&quot;steam&quot;</span></span><span> </span><span class="annot"><span class="annottext">forall (m :: * -&gt; *) a.
+(Functor m, Monad m) =&gt;
+m Bool -&gt; m a -&gt; m (Maybe a)
+</span><a href="XMonad.Hooks.ManageHelpers.html#-%3F%3E"><span class="hs-operator hs-var">-?&gt;</span></a></span><span> </span><span class="annot"><span class="annottext">forall a. Monoid a =&gt; a
+</span><span class="hs-identifier hs-var">mempty</span></span><span>
+</span><span id="line-127"></span></pre></body></html>

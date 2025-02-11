@@ -1,0 +1,260 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd"><html xmlns="http://www.w3.org/1999/xhtml"><head><link rel="stylesheet" type="text/css" href="style.css" /><script type="text/javascript" src="highlight.js"></script></head><body><pre><span class="hs-comment">-----------------------------------------------------------------------------</span><span>
+</span><span id="line-2"></span><span class="hs-comment">-- |</span><span>
+</span><span id="line-3"></span><span class="hs-comment">-- Module      :  XMonad.Hooks.DynamicHooks</span><span>
+</span><span id="line-4"></span><span class="hs-comment">-- Description :  One-shot and permanent ManageHooks that can be updated at runtime.</span><span>
+</span><span id="line-5"></span><span class="hs-comment">-- Copyright   :  (c) Braden Shepherdson 2008</span><span>
+</span><span id="line-6"></span><span class="hs-comment">-- License     :  BSD-style (as xmonad)</span><span>
+</span><span id="line-7"></span><span class="hs-comment">--</span><span>
+</span><span id="line-8"></span><span class="hs-comment">-- Maintainer  :  Braden.Shepherdson@gmail.com</span><span>
+</span><span id="line-9"></span><span class="hs-comment">-- Stability   :  unstable</span><span>
+</span><span id="line-10"></span><span class="hs-comment">-- Portability :  unportable</span><span>
+</span><span id="line-11"></span><span class="hs-comment">--</span><span>
+</span><span id="line-12"></span><span class="hs-comment">-- One-shot and permanent ManageHooks that can be updated at runtime.</span><span>
+</span><span id="line-13"></span><span class="hs-comment">--</span><span>
+</span><span id="line-14"></span><span class="hs-comment">-----------------------------------------------------------------------------</span><span>
+</span><span id="line-15"></span><span>
+</span><span id="line-16"></span><span class="hs-keyword">module</span><span> </span><span class="hs-identifier">XMonad.Hooks.DynamicHooks</span><span> </span><span class="hs-special">(</span><span>
+</span><span id="line-17"></span><span>  </span><span class="annot"><span class="hs-comment">-- * Usage</span></span><span>
+</span><span id="line-18"></span><span>  </span><span class="annot"><span class="hs-comment">-- $usage</span></span><span>
+</span><span id="line-19"></span><span>  </span><span class="annot"><a href="XMonad.Hooks.DynamicHooks.html#dynamicMasterHook"><span class="hs-identifier">dynamicMasterHook</span></a></span><span>
+</span><span id="line-20"></span><span>  </span><span class="hs-special">,</span><span class="annot"><a href="XMonad.Hooks.DynamicHooks.html#addDynamicHook"><span class="hs-identifier">addDynamicHook</span></a></span><span>
+</span><span id="line-21"></span><span>  </span><span class="hs-special">,</span><span class="annot"><a href="XMonad.Hooks.DynamicHooks.html#updateDynamicHook"><span class="hs-identifier">updateDynamicHook</span></a></span><span>
+</span><span id="line-22"></span><span>  </span><span class="hs-special">,</span><span class="annot"><a href="XMonad.Hooks.DynamicHooks.html#oneShotHook"><span class="hs-identifier">oneShotHook</span></a></span><span>
+</span><span id="line-23"></span><span>  </span><span class="hs-special">)</span><span> </span><span class="hs-keyword">where</span><span>
+</span><span id="line-24"></span><span>
+</span><span id="line-25"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><span class="hs-identifier">XMonad</span></span><span>
+</span><span id="line-26"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><a href="XMonad.Prelude.html"><span class="hs-identifier">XMonad.Prelude</span></a></span><span>
+</span><span id="line-27"></span><span class="hs-keyword">import</span><span> </span><span class="hs-keyword">qualified</span><span> </span><span class="annot"><a href="XMonad.Util.ExtensibleState.html"><span class="hs-identifier">XMonad.Util.ExtensibleState</span></a></span><span> </span><span class="hs-keyword">as</span><span> </span><span class="annot"><span class="hs-identifier">XS</span></span><span>
+</span><span id="line-28"></span><span>
+</span><span id="line-29"></span><span class="hs-comment">-- $usage</span><span>
+</span><span id="line-30"></span><span class="hs-comment">-- Provides two new kinds of 'ManageHooks' that can be defined at runtime.</span><span>
+</span><span id="line-31"></span><span class="hs-comment">--</span><span>
+</span><span id="line-32"></span><span class="hs-comment">-- * One-shot 'ManageHooks' that are deleted after they execute.</span><span>
+</span><span id="line-33"></span><span class="hs-comment">--</span><span>
+</span><span id="line-34"></span><span class="hs-comment">-- * Permanent 'ManageHooks' (unless you want to destroy them)</span><span>
+</span><span id="line-35"></span><span class="hs-comment">--</span><span>
+</span><span id="line-36"></span><span class="hs-comment">-- Note that you will lose all dynamically defined 'ManageHook's when you @mod+q@!</span><span>
+</span><span id="line-37"></span><span class="hs-comment">-- If you want them to last, you should create them as normal in your @xmonad.hs@.</span><span>
+</span><span id="line-38"></span><span class="hs-comment">--</span><span>
+</span><span id="line-39"></span><span class="hs-comment">-- To use this module, add 'dynamicMasterHook' to your 'manageHook':</span><span>
+</span><span id="line-40"></span><span class="hs-comment">--</span><span>
+</span><span id="line-41"></span><span class="hs-comment">-- &gt; xmonad { manageHook = myManageHook &lt;&gt; dynamicMasterHook }</span><span>
+</span><span id="line-42"></span><span class="hs-comment">--</span><span>
+</span><span id="line-43"></span><span class="hs-comment">-- You can then use the supplied functions in your keybindings:</span><span>
+</span><span id="line-44"></span><span class="hs-comment">--</span><span>
+</span><span id="line-45"></span><span class="hs-comment">-- &gt; ((modMask,xK_a), oneShotHook (className =? &quot;example&quot;) doFloat)</span><span>
+</span><span id="line-46"></span><span class="hs-comment">--</span><span>
+</span><span id="line-47"></span><span>
+</span><span id="line-48"></span><span class="hs-keyword">data</span><span> </span><span id="DynamicHooks"><span class="annot"><a href="XMonad.Hooks.DynamicHooks.html#DynamicHooks"><span class="hs-identifier hs-var">DynamicHooks</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span id="DynamicHooks"><span class="annot"><a href="XMonad.Hooks.DynamicHooks.html#DynamicHooks"><span class="hs-identifier hs-var">DynamicHooks</span></a></span></span><span>
+</span><span id="line-49"></span><span>    </span><span class="hs-special">{</span><span> </span><span id="transients"><span class="annot"><span class="annottext">DynamicHooks -&gt; [(Query Bool, ManageHook)]
+</span><a href="XMonad.Hooks.DynamicHooks.html#transients"><span class="hs-identifier hs-var hs-var">transients</span></a></span></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="hs-special">[</span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">Query</span></span><span> </span><span class="annot"><span class="hs-identifier hs-type">Bool</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier hs-type">ManageHook</span></span><span class="hs-special">)</span><span class="hs-special">]</span><span>
+</span><span id="line-50"></span><span>    </span><span class="hs-special">,</span><span> </span><span id="permanent"><span class="annot"><span class="annottext">DynamicHooks -&gt; ManageHook
+</span><a href="XMonad.Hooks.DynamicHooks.html#permanent"><span class="hs-identifier hs-var hs-var">permanent</span></a></span></span><span>  </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">ManageHook</span></span><span> </span><span class="hs-special">}</span><span>
+</span><span id="line-51"></span><span>
+</span><span id="line-52"></span><span class="hs-keyword">instance</span><span> </span><span id="local-6989586621679392254"><span class="annot"><span class="hs-identifier hs-type">ExtensionClass</span></span><span> </span><span class="annot"><a href="XMonad.Hooks.DynamicHooks.html#DynamicHooks"><span class="hs-identifier hs-type">DynamicHooks</span></a></span></span><span> </span><span class="hs-keyword">where</span><span>
+</span><span id="line-53"></span><span>    </span><span id="local-6989586621679392248"><span class="annot"><span class="annottext">initialValue :: DynamicHooks
+</span><span class="hs-identifier hs-var hs-var hs-var hs-var">initialValue</span></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">[(Query Bool, ManageHook)] -&gt; ManageHook -&gt; DynamicHooks
+</span><a href="XMonad.Hooks.DynamicHooks.html#DynamicHooks"><span class="hs-identifier hs-var">DynamicHooks</span></a></span><span> </span><span class="hs-special">[</span><span class="hs-special">]</span><span> </span><span class="annot"><span class="annottext">ManageHook
+forall m. Monoid m =&gt; m
+</span><span class="hs-identifier hs-var">idHook</span></span><span>
+</span><span id="line-54"></span><span>
+</span><span id="line-55"></span><span class="hs-comment">-- this hook is always executed, and the contents of the stored hooks checked.</span><span>
+</span><span id="line-56"></span><span class="hs-comment">-- note that transient hooks are run second, therefore taking precedence</span><span>
+</span><span id="line-57"></span><span class="hs-comment">-- over permanent ones on matters such as which workspace to shift to.</span><span>
+</span><span id="line-58"></span><span class="hs-comment">-- doFloat and doIgnore are idempotent.</span><span>
+</span><span id="line-59"></span><span class="hs-comment">-- | Master 'ManageHook' that must be in your @xmonad.hs@ 'ManageHook'.</span><span>
+</span><span id="line-60"></span><span class="annot"><a href="XMonad.Hooks.DynamicHooks.html#dynamicMasterHook"><span class="hs-identifier hs-type">dynamicMasterHook</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">ManageHook</span></span><span>
+</span><span id="line-61"></span><span id="dynamicMasterHook"><span class="annot"><span class="annottext">dynamicMasterHook :: ManageHook
+</span><a href="XMonad.Hooks.DynamicHooks.html#dynamicMasterHook"><span class="hs-identifier hs-var hs-var">dynamicMasterHook</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Query Window
+forall r (m :: * -&gt; *). MonadReader r m =&gt; m r
+</span><span class="hs-identifier hs-var">ask</span></span><span> </span><span class="annot"><span class="annottext">Query Window -&gt; (Window -&gt; ManageHook) -&gt; ManageHook
+forall (m :: * -&gt; *) a b. Monad m =&gt; m a -&gt; (a -&gt; m b) -&gt; m b
+</span><span class="hs-operator hs-var">&gt;&gt;=</span></span><span> </span><span class="hs-glyph">\</span><span id="local-6989586621679392244"><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679392244"><span class="hs-identifier hs-var">w</span></a></span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">X (Endo WindowSet) -&gt; ManageHook
+forall a. X a -&gt; Query a
+</span><span class="hs-identifier hs-var">liftX</span></span><span> </span><span class="annot"><span class="annottext">(X (Endo WindowSet) -&gt; ManageHook)
+-&gt; X (Endo WindowSet) -&gt; ManageHook
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-62"></span><span>  </span><span id="local-6989586621679392242"><span class="annot"><span class="annottext">DynamicHooks
+</span><a href="#local-6989586621679392242"><span class="hs-identifier hs-var">dh</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">X DynamicHooks
+forall a (m :: * -&gt; *). (ExtensionClass a, XLike m) =&gt; m a
+</span><a href="XMonad.Util.ExtensibleState.html#get"><span class="hs-identifier hs-var">XS.get</span></a></span><span>
+</span><span id="line-63"></span><span>  </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">Endo</span></span><span> </span><span id="local-6989586621679392239"><span class="annot"><span class="annottext">WindowSet -&gt; WindowSet
+</span><a href="#local-6989586621679392239"><span class="hs-identifier hs-var">f</span></a></span></span><span class="hs-special">)</span><span>  </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">ManageHook -&gt; Window -&gt; X (Endo WindowSet)
+forall a. Query a -&gt; Window -&gt; X a
+</span><span class="hs-identifier hs-var">runQuery</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">DynamicHooks -&gt; ManageHook
+</span><a href="XMonad.Hooks.DynamicHooks.html#permanent"><span class="hs-identifier hs-var hs-var">permanent</span></a></span><span> </span><span class="annot"><span class="annottext">DynamicHooks
+</span><a href="#local-6989586621679392242"><span class="hs-identifier hs-var">dh</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679392244"><span class="hs-identifier hs-var">w</span></a></span><span>
+</span><span id="line-64"></span><span>  </span><span id="local-6989586621679392237"><span class="annot"><span class="annottext">[(Bool, (Query Bool, ManageHook))]
+</span><a href="#local-6989586621679392237"><span class="hs-identifier hs-var">ts</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">((Query Bool, ManageHook) -&gt; X (Bool, (Query Bool, ManageHook)))
+-&gt; [(Query Bool, ManageHook)]
+-&gt; X [(Bool, (Query Bool, ManageHook))]
+forall (t :: * -&gt; *) (m :: * -&gt; *) a b.
+(Traversable t, Monad m) =&gt;
+(a -&gt; m b) -&gt; t a -&gt; m (t b)
+</span><span class="hs-identifier hs-var">mapM</span></span><span> </span><span class="hs-special">(</span><span class="hs-glyph">\</span><span class="hs-special">(</span><span id="local-6989586621679392235"><span class="annot"><span class="annottext">Query Bool
+</span><a href="#local-6989586621679392235"><span class="hs-identifier hs-var">q</span></a></span></span><span class="hs-special">,</span><span id="local-6989586621679392234"><span class="annot"><span class="annottext">ManageHook
+</span><a href="#local-6989586621679392234"><span class="hs-identifier hs-var">a</span></a></span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">Query Bool -&gt; Window -&gt; X Bool
+forall a. Query a -&gt; Window -&gt; X a
+</span><span class="hs-identifier hs-var">runQuery</span></span><span> </span><span class="annot"><span class="annottext">Query Bool
+</span><a href="#local-6989586621679392235"><span class="hs-identifier hs-var">q</span></a></span><span> </span><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679392244"><span class="hs-identifier hs-var">w</span></a></span><span> </span><span class="annot"><span class="annottext">X Bool
+-&gt; (Bool -&gt; X (Bool, (Query Bool, ManageHook)))
+-&gt; X (Bool, (Query Bool, ManageHook))
+forall (m :: * -&gt; *) a b. Monad m =&gt; m a -&gt; (a -&gt; m b) -&gt; m b
+</span><span class="hs-operator hs-var">&gt;&gt;=</span></span><span> </span><span class="hs-glyph">\</span><span id="local-6989586621679392233"><span class="annot"><span class="annottext">Bool
+</span><a href="#local-6989586621679392233"><span class="hs-identifier hs-var">x</span></a></span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">(Bool, (Query Bool, ManageHook))
+-&gt; X (Bool, (Query Bool, ManageHook))
+forall (m :: * -&gt; *) a. Monad m =&gt; a -&gt; m a
+</span><span class="hs-identifier hs-var">return</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Bool
+</span><a href="#local-6989586621679392233"><span class="hs-identifier hs-var">x</span></a></span><span class="hs-special">,</span><span class="hs-special">(</span><span class="annot"><span class="annottext">Query Bool
+</span><a href="#local-6989586621679392235"><span class="hs-identifier hs-var">q</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">ManageHook
+</span><a href="#local-6989586621679392234"><span class="hs-identifier hs-var">a</span></a></span><span class="hs-special">)</span><span class="hs-special">)</span><span class="hs-special">)</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">DynamicHooks -&gt; [(Query Bool, ManageHook)]
+</span><a href="XMonad.Hooks.DynamicHooks.html#transients"><span class="hs-identifier hs-var hs-var">transients</span></a></span><span> </span><span class="annot"><span class="annottext">DynamicHooks
+</span><a href="#local-6989586621679392242"><span class="hs-identifier hs-var">dh</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-65"></span><span>  </span><span class="hs-keyword">let</span><span> </span><span class="hs-special">(</span><span id="local-6989586621679392232"><span class="annot"><span class="annottext">[(Bool, (Query Bool, ManageHook))]
+</span><a href="#local-6989586621679392232"><span class="hs-identifier hs-var">ts'</span></a></span></span><span class="hs-special">,</span><span id="local-6989586621679392231"><span class="annot"><span class="annottext">[(Bool, (Query Bool, ManageHook))]
+</span><a href="#local-6989586621679392231"><span class="hs-identifier hs-var">nts</span></a></span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">((Bool, (Query Bool, ManageHook)) -&gt; Bool)
+-&gt; [(Bool, (Query Bool, ManageHook))]
+-&gt; ([(Bool, (Query Bool, ManageHook))],
+    [(Bool, (Query Bool, ManageHook))])
+forall a. (a -&gt; Bool) -&gt; [a] -&gt; ([a], [a])
+</span><span class="hs-identifier hs-var">partition</span></span><span> </span><span class="annot"><span class="annottext">(Bool, (Query Bool, ManageHook)) -&gt; Bool
+forall a b. (a, b) -&gt; a
+</span><span class="hs-identifier hs-var">fst</span></span><span> </span><span class="annot"><span class="annottext">[(Bool, (Query Bool, ManageHook))]
+</span><a href="#local-6989586621679392237"><span class="hs-identifier hs-var">ts</span></a></span><span>
+</span><span id="line-66"></span><span>  </span><span id="local-6989586621679392229"><span class="annot"><span class="annottext">[Endo WindowSet]
+</span><a href="#local-6989586621679392229"><span class="hs-identifier hs-var">gs</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">((Bool, (Query Bool, ManageHook)) -&gt; X (Endo WindowSet))
+-&gt; [(Bool, (Query Bool, ManageHook))] -&gt; X [Endo WindowSet]
+forall (t :: * -&gt; *) (m :: * -&gt; *) a b.
+(Traversable t, Monad m) =&gt;
+(a -&gt; m b) -&gt; t a -&gt; m (t b)
+</span><span class="hs-identifier hs-var">mapM</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">(ManageHook -&gt; Window -&gt; X (Endo WindowSet))
+-&gt; Window -&gt; ManageHook -&gt; X (Endo WindowSet)
+forall a b c. (a -&gt; b -&gt; c) -&gt; b -&gt; a -&gt; c
+</span><span class="hs-identifier hs-var">flip</span></span><span> </span><span class="annot"><span class="annottext">ManageHook -&gt; Window -&gt; X (Endo WindowSet)
+forall a. Query a -&gt; Window -&gt; X a
+</span><span class="hs-identifier hs-var">runQuery</span></span><span> </span><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679392244"><span class="hs-identifier hs-var">w</span></a></span><span> </span><span class="annot"><span class="annottext">(ManageHook -&gt; X (Endo WindowSet))
+-&gt; ((Bool, (Query Bool, ManageHook)) -&gt; ManageHook)
+-&gt; (Bool, (Query Bool, ManageHook))
+-&gt; X (Endo WindowSet)
+forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">(Query Bool, ManageHook) -&gt; ManageHook
+forall a b. (a, b) -&gt; b
+</span><span class="hs-identifier hs-var">snd</span></span><span> </span><span class="annot"><span class="annottext">((Query Bool, ManageHook) -&gt; ManageHook)
+-&gt; ((Bool, (Query Bool, ManageHook)) -&gt; (Query Bool, ManageHook))
+-&gt; (Bool, (Query Bool, ManageHook))
+-&gt; ManageHook
+forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">(Bool, (Query Bool, ManageHook)) -&gt; (Query Bool, ManageHook)
+forall a b. (a, b) -&gt; b
+</span><span class="hs-identifier hs-var">snd</span></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">[(Bool, (Query Bool, ManageHook))]
+</span><a href="#local-6989586621679392232"><span class="hs-identifier hs-var">ts'</span></a></span><span>
+</span><span id="line-67"></span><span>  </span><span class="hs-keyword">let</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">Endo</span></span><span> </span><span id="local-6989586621679392226"><span class="annot"><span class="annottext">WindowSet -&gt; WindowSet
+</span><a href="#local-6989586621679392226"><span class="hs-identifier hs-var">g</span></a></span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Endo WindowSet -&gt; Maybe (Endo WindowSet) -&gt; Endo WindowSet
+forall a. a -&gt; Maybe a -&gt; a
+</span><span class="hs-identifier hs-var">fromMaybe</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">(WindowSet -&gt; WindowSet) -&gt; Endo WindowSet
+forall a. (a -&gt; a) -&gt; Endo a
+</span><span class="hs-identifier hs-var">Endo</span></span><span> </span><span class="annot"><span class="annottext">WindowSet -&gt; WindowSet
+forall a. a -&gt; a
+</span><span class="hs-identifier hs-var">id</span></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">(Maybe (Endo WindowSet) -&gt; Endo WindowSet)
+-&gt; Maybe (Endo WindowSet) -&gt; Endo WindowSet
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">[Endo WindowSet] -&gt; Maybe (Endo WindowSet)
+forall a. [a] -&gt; Maybe a
+</span><span class="hs-identifier hs-var">listToMaybe</span></span><span> </span><span class="annot"><span class="annottext">[Endo WindowSet]
+</span><a href="#local-6989586621679392229"><span class="hs-identifier hs-var">gs</span></a></span><span>
+</span><span id="line-68"></span><span>  </span><span class="annot"><span class="annottext">DynamicHooks -&gt; X ()
+forall a (m :: * -&gt; *). (ExtensionClass a, XLike m) =&gt; a -&gt; m ()
+</span><a href="XMonad.Util.ExtensibleState.html#put"><span class="hs-identifier hs-var">XS.put</span></a></span><span> </span><span class="annot"><span class="annottext">(DynamicHooks -&gt; X ()) -&gt; DynamicHooks -&gt; X ()
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">DynamicHooks
+</span><a href="#local-6989586621679392242"><span class="hs-identifier hs-var">dh</span></a></span><span> </span><span class="hs-special">{</span><span> </span><span class="annot"><span class="annottext">transients :: [(Query Bool, ManageHook)]
+</span><a href="XMonad.Hooks.DynamicHooks.html#transients"><span class="hs-identifier hs-var">transients</span></a></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">((Bool, (Query Bool, ManageHook)) -&gt; (Query Bool, ManageHook))
+-&gt; [(Bool, (Query Bool, ManageHook))] -&gt; [(Query Bool, ManageHook)]
+forall a b. (a -&gt; b) -&gt; [a] -&gt; [b]
+</span><span class="hs-identifier hs-var">map</span></span><span> </span><span class="annot"><span class="annottext">(Bool, (Query Bool, ManageHook)) -&gt; (Query Bool, ManageHook)
+forall a b. (a, b) -&gt; b
+</span><span class="hs-identifier hs-var">snd</span></span><span> </span><span class="annot"><span class="annottext">[(Bool, (Query Bool, ManageHook))]
+</span><a href="#local-6989586621679392231"><span class="hs-identifier hs-var">nts</span></a></span><span> </span><span class="hs-special">}</span><span>
+</span><span id="line-69"></span><span>  </span><span class="annot"><span class="annottext">Endo WindowSet -&gt; X (Endo WindowSet)
+forall (m :: * -&gt; *) a. Monad m =&gt; a -&gt; m a
+</span><span class="hs-identifier hs-var">return</span></span><span> </span><span class="annot"><span class="annottext">(Endo WindowSet -&gt; X (Endo WindowSet))
+-&gt; Endo WindowSet -&gt; X (Endo WindowSet)
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">(WindowSet -&gt; WindowSet) -&gt; Endo WindowSet
+forall a. (a -&gt; a) -&gt; Endo a
+</span><span class="hs-identifier hs-var">Endo</span></span><span> </span><span class="annot"><span class="annottext">((WindowSet -&gt; WindowSet) -&gt; Endo WindowSet)
+-&gt; (WindowSet -&gt; WindowSet) -&gt; Endo WindowSet
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">WindowSet -&gt; WindowSet
+</span><a href="#local-6989586621679392239"><span class="hs-identifier hs-var">f</span></a></span><span> </span><span class="annot"><span class="annottext">(WindowSet -&gt; WindowSet)
+-&gt; (WindowSet -&gt; WindowSet) -&gt; WindowSet -&gt; WindowSet
+forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">WindowSet -&gt; WindowSet
+</span><a href="#local-6989586621679392226"><span class="hs-identifier hs-var">g</span></a></span><span>
+</span><span id="line-70"></span><span>
+</span><span id="line-71"></span><span class="hs-comment">-- | Appends the given 'ManageHook' to the permanent dynamic 'ManageHook'.</span><span>
+</span><span id="line-72"></span><span class="annot"><a href="XMonad.Hooks.DynamicHooks.html#addDynamicHook"><span class="hs-identifier hs-type">addDynamicHook</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">ManageHook</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">X</span></span><span> </span><span class="hs-special">(</span><span class="hs-special">)</span><span>
+</span><span id="line-73"></span><span id="addDynamicHook"><span class="annot"><span class="annottext">addDynamicHook :: ManageHook -&gt; X ()
+</span><a href="XMonad.Hooks.DynamicHooks.html#addDynamicHook"><span class="hs-identifier hs-var hs-var">addDynamicHook</span></a></span></span><span> </span><span id="local-6989586621679392221"><span class="annot"><span class="annottext">ManageHook
+</span><a href="#local-6989586621679392221"><span class="hs-identifier hs-var">m</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">(ManageHook -&gt; ManageHook) -&gt; X ()
+</span><a href="XMonad.Hooks.DynamicHooks.html#updateDynamicHook"><span class="hs-identifier hs-var">updateDynamicHook</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">ManageHook -&gt; ManageHook -&gt; ManageHook
+forall a. Semigroup a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-operator hs-var">&lt;&gt;</span></span><span> </span><span class="annot"><span class="annottext">ManageHook
+</span><a href="#local-6989586621679392221"><span class="hs-identifier hs-var">m</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-74"></span><span>
+</span><span id="line-75"></span><span class="hs-comment">-- | Modifies the permanent 'ManageHook' with an arbitrary function.</span><span>
+</span><span id="line-76"></span><span class="annot"><a href="XMonad.Hooks.DynamicHooks.html#updateDynamicHook"><span class="hs-identifier hs-type">updateDynamicHook</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">ManageHook</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">ManageHook</span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">X</span></span><span> </span><span class="hs-special">(</span><span class="hs-special">)</span><span>
+</span><span id="line-77"></span><span id="updateDynamicHook"><span class="annot"><span class="annottext">updateDynamicHook :: (ManageHook -&gt; ManageHook) -&gt; X ()
+</span><a href="XMonad.Hooks.DynamicHooks.html#updateDynamicHook"><span class="hs-identifier hs-var hs-var">updateDynamicHook</span></a></span></span><span> </span><span id="local-6989586621679392220"><span class="annot"><span class="annottext">ManageHook -&gt; ManageHook
+</span><a href="#local-6989586621679392220"><span class="hs-identifier hs-var">f</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">(DynamicHooks -&gt; DynamicHooks) -&gt; X ()
+forall a (m :: * -&gt; *).
+(ExtensionClass a, XLike m) =&gt;
+(a -&gt; a) -&gt; m ()
+</span><a href="XMonad.Util.ExtensibleState.html#modify"><span class="hs-identifier hs-var">XS.modify</span></a></span><span> </span><span class="annot"><span class="annottext">((DynamicHooks -&gt; DynamicHooks) -&gt; X ())
+-&gt; (DynamicHooks -&gt; DynamicHooks) -&gt; X ()
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="hs-glyph">\</span><span id="local-6989586621679392218"><span class="annot"><span class="annottext">DynamicHooks
+</span><a href="#local-6989586621679392218"><span class="hs-identifier hs-var">dh</span></a></span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">DynamicHooks
+</span><a href="#local-6989586621679392218"><span class="hs-identifier hs-var">dh</span></a></span><span> </span><span class="hs-special">{</span><span> </span><span class="annot"><span class="annottext">permanent :: ManageHook
+</span><a href="XMonad.Hooks.DynamicHooks.html#permanent"><span class="hs-identifier hs-var">permanent</span></a></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">ManageHook -&gt; ManageHook
+</span><a href="#local-6989586621679392220"><span class="hs-identifier hs-var">f</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">DynamicHooks -&gt; ManageHook
+</span><a href="XMonad.Hooks.DynamicHooks.html#permanent"><span class="hs-identifier hs-var hs-var">permanent</span></a></span><span> </span><span class="annot"><span class="annottext">DynamicHooks
+</span><a href="#local-6989586621679392218"><span class="hs-identifier hs-var">dh</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-special">}</span><span>
+</span><span id="line-78"></span><span>
+</span><span id="line-79"></span><span class="hs-comment">-- | Creates a one-shot 'ManageHook'. Note that you have to specify the two</span><span>
+</span><span id="line-80"></span><span class="hs-comment">-- parts of the 'ManageHook' separately. Where you would usually write:</span><span>
+</span><span id="line-81"></span><span class="hs-comment">--</span><span>
+</span><span id="line-82"></span><span class="hs-comment">-- &gt; className =? &quot;example&quot; --&gt; doFloat</span><span>
+</span><span id="line-83"></span><span class="hs-comment">--</span><span>
+</span><span id="line-84"></span><span class="hs-comment">-- you must call 'oneShotHook' as</span><span>
+</span><span id="line-85"></span><span class="hs-comment">--</span><span>
+</span><span id="line-86"></span><span class="hs-comment">-- &gt; oneShotHook dynHooksRef (className =? &quot;example) doFloat</span><span>
+</span><span id="line-87"></span><span class="hs-comment">--</span><span>
+</span><span id="line-88"></span><span class="annot"><a href="XMonad.Hooks.DynamicHooks.html#oneShotHook"><span class="hs-identifier hs-type">oneShotHook</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Query</span></span><span> </span><span class="annot"><span class="hs-identifier hs-type">Bool</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">ManageHook</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">X</span></span><span> </span><span class="hs-special">(</span><span class="hs-special">)</span><span>
+</span><span id="line-89"></span><span id="oneShotHook"><span class="annot"><span class="annottext">oneShotHook :: Query Bool -&gt; ManageHook -&gt; X ()
+</span><a href="XMonad.Hooks.DynamicHooks.html#oneShotHook"><span class="hs-identifier hs-var hs-var">oneShotHook</span></a></span></span><span> </span><span id="local-6989586621679392217"><span class="annot"><span class="annottext">Query Bool
+</span><a href="#local-6989586621679392217"><span class="hs-identifier hs-var">q</span></a></span></span><span> </span><span id="local-6989586621679392216"><span class="annot"><span class="annottext">ManageHook
+</span><a href="#local-6989586621679392216"><span class="hs-identifier hs-var">a</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">(DynamicHooks -&gt; DynamicHooks) -&gt; X ()
+forall a (m :: * -&gt; *).
+(ExtensionClass a, XLike m) =&gt;
+(a -&gt; a) -&gt; m ()
+</span><a href="XMonad.Util.ExtensibleState.html#modify"><span class="hs-identifier hs-var">XS.modify</span></a></span><span> </span><span class="annot"><span class="annottext">((DynamicHooks -&gt; DynamicHooks) -&gt; X ())
+-&gt; (DynamicHooks -&gt; DynamicHooks) -&gt; X ()
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="hs-glyph">\</span><span id="local-6989586621679392215"><span class="annot"><span class="annottext">DynamicHooks
+</span><a href="#local-6989586621679392215"><span class="hs-identifier hs-var">dh</span></a></span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">DynamicHooks
+</span><a href="#local-6989586621679392215"><span class="hs-identifier hs-var">dh</span></a></span><span> </span><span class="hs-special">{</span><span> </span><span class="annot"><span class="annottext">transients :: [(Query Bool, ManageHook)]
+</span><a href="XMonad.Hooks.DynamicHooks.html#transients"><span class="hs-identifier hs-var">transients</span></a></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Query Bool
+</span><a href="#local-6989586621679392217"><span class="hs-identifier hs-var">q</span></a></span><span class="hs-special">,</span><span class="annot"><span class="annottext">ManageHook
+</span><a href="#local-6989586621679392216"><span class="hs-identifier hs-var">a</span></a></span><span class="hs-special">)</span><span class="annot"><span class="annottext">(Query Bool, ManageHook)
+-&gt; [(Query Bool, ManageHook)] -&gt; [(Query Bool, ManageHook)]
+forall a. a -&gt; [a] -&gt; [a]
+</span><span class="hs-glyph hs-var">:</span></span><span class="annot"><span class="annottext">DynamicHooks -&gt; [(Query Bool, ManageHook)]
+</span><a href="XMonad.Hooks.DynamicHooks.html#transients"><span class="hs-identifier hs-var hs-var">transients</span></a></span><span> </span><span class="annot"><span class="annottext">DynamicHooks
+</span><a href="#local-6989586621679392215"><span class="hs-identifier hs-var">dh</span></a></span><span> </span><span class="hs-special">}</span><span>
+</span><span id="line-90"></span></pre></body></html>

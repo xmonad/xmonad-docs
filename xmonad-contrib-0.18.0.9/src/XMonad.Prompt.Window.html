@@ -1,0 +1,375 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd"><html xmlns="http://www.w3.org/1999/xhtml"><head><link rel="stylesheet" type="text/css" href="style.css" /><script type="text/javascript" src="highlight.js"></script></head><body><pre><span class="hs-comment">-----------------------------------------------------------------------------</span><span>
+</span><span id="line-2"></span><span class="hs-comment">-- |</span><span>
+</span><span id="line-3"></span><span class="hs-comment">-- Module      :  XMonad.Prompt.Window</span><span>
+</span><span id="line-4"></span><span class="hs-comment">-- Description :  A prompt for bringing windows to you, and bring you to windows.</span><span>
+</span><span id="line-5"></span><span class="hs-comment">-- Copyright   :  Devin Mullins &lt;me@twifkak.com&gt;</span><span>
+</span><span id="line-6"></span><span class="hs-comment">--                Andrea Rossato &lt;andrea.rossato@unibz.it&gt;</span><span>
+</span><span id="line-7"></span><span class="hs-comment">-- License     :  BSD-style (see LICENSE)</span><span>
+</span><span id="line-8"></span><span class="hs-comment">--</span><span>
+</span><span id="line-9"></span><span class="hs-comment">-- Maintainer  :  Devin  Mullins &lt;me@twifkak.com&gt;</span><span>
+</span><span id="line-10"></span><span class="hs-comment">--                Andrea Rossato &lt;andrea.rossato@unibz.it&gt;</span><span>
+</span><span id="line-11"></span><span class="hs-comment">-- Stability   :  unstable</span><span>
+</span><span id="line-12"></span><span class="hs-comment">-- Portability :  unportable</span><span>
+</span><span id="line-13"></span><span class="hs-comment">--</span><span>
+</span><span id="line-14"></span><span class="hs-comment">-- xprompt operations to bring windows to you, and bring you to windows.</span><span>
+</span><span id="line-15"></span><span class="hs-comment">--</span><span>
+</span><span id="line-16"></span><span class="hs-comment">-----------------------------------------------------------------------------</span><span>
+</span><span id="line-17"></span><span>
+</span><span id="line-18"></span><span class="hs-keyword">module</span><span> </span><span class="hs-identifier">XMonad.Prompt.Window</span><span>
+</span><span id="line-19"></span><span>    </span><span class="hs-special">(</span><span>
+</span><span id="line-20"></span><span>    </span><span class="annot"><span class="hs-comment">-- * Usage</span></span><span>
+</span><span id="line-21"></span><span>    </span><span class="annot"><span class="hs-comment">-- $usage</span></span><span>
+</span><span id="line-22"></span><span>    </span><span class="annot"><a href="XMonad.Prompt.Window.html#WindowPrompt"><span class="hs-identifier">WindowPrompt</span></a></span><span class="hs-special">(</span><span class="hs-glyph">..</span><span class="hs-special">)</span><span class="hs-special">,</span><span>
+</span><span id="line-23"></span><span>    </span><span class="annot"><a href="XMonad.Prompt.Window.html#windowPrompt"><span class="hs-identifier">windowPrompt</span></a></span><span class="hs-special">,</span><span>
+</span><span id="line-24"></span><span>    </span><span class="annot"><a href="XMonad.Prompt.Window.html#windowMultiPrompt"><span class="hs-identifier">windowMultiPrompt</span></a></span><span class="hs-special">,</span><span>
+</span><span id="line-25"></span><span>    </span><span class="annot"><a href="XMonad.Prompt.Window.html#allWindows"><span class="hs-identifier">allWindows</span></a></span><span class="hs-special">,</span><span>
+</span><span id="line-26"></span><span>    </span><span class="annot"><a href="XMonad.Prompt.Window.html#allApplications"><span class="hs-identifier">allApplications</span></a></span><span class="hs-special">,</span><span>
+</span><span id="line-27"></span><span>    </span><span class="annot"><a href="XMonad.Prompt.Window.html#wsWindows"><span class="hs-identifier">wsWindows</span></a></span><span class="hs-special">,</span><span>
+</span><span id="line-28"></span><span>    </span><span class="annot"><a href="XMonad.Prompt.Window.html#XWindowMap"><span class="hs-identifier">XWindowMap</span></a></span><span class="hs-special">,</span><span>
+</span><span id="line-29"></span><span>    </span><span class="hs-special">)</span><span> </span><span class="hs-keyword">where</span><span>
+</span><span id="line-30"></span><span>
+</span><span id="line-31"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><a href="XMonad.Prelude.html"><span class="hs-identifier">XMonad.Prelude</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier">forM</span></span><span class="hs-special">)</span><span>
+</span><span id="line-32"></span><span class="hs-keyword">import</span><span> </span><span class="hs-keyword">qualified</span><span> </span><span class="annot"><span class="hs-identifier">Data.Map</span></span><span> </span><span class="hs-keyword">as</span><span> </span><span class="annot"><span class="hs-identifier">M</span></span><span>
+</span><span id="line-33"></span><span>
+</span><span id="line-34"></span><span class="hs-keyword">import</span><span> </span><span class="hs-keyword">qualified</span><span> </span><span class="annot"><span class="hs-identifier">XMonad.StackSet</span></span><span> </span><span class="hs-keyword">as</span><span> </span><span class="annot"><span class="hs-identifier">W</span></span><span>
+</span><span id="line-35"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><span class="hs-identifier">XMonad</span></span><span>
+</span><span id="line-36"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><a href="XMonad.Prompt.html"><span class="hs-identifier">XMonad.Prompt</span></a></span><span>
+</span><span id="line-37"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><a href="XMonad.Actions.CopyWindow.html"><span class="hs-identifier">XMonad.Actions.CopyWindow</span></a></span><span>
+</span><span id="line-38"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><a href="XMonad.Actions.WindowBringer.html"><span class="hs-identifier">XMonad.Actions.WindowBringer</span></a></span><span>
+</span><span id="line-39"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><a href="XMonad.Util.NamedWindows.html"><span class="hs-identifier">XMonad.Util.NamedWindows</span></a></span><span>
+</span><span id="line-40"></span><span>
+</span><span id="line-41"></span><span class="hs-comment">-- $usage</span><span>
+</span><span id="line-42"></span><span class="hs-comment">-- WindowPrompt brings windows to you and you to windows. That is to</span><span>
+</span><span id="line-43"></span><span class="hs-comment">-- say, it pops up a prompt with window names, in case you forgot</span><span>
+</span><span id="line-44"></span><span class="hs-comment">-- where you left your XChat. It also offers helpers to build the</span><span>
+</span><span id="line-45"></span><span class="hs-comment">-- subset of windows which is used for the prompt completion.</span><span>
+</span><span id="line-46"></span><span class="hs-comment">--</span><span>
+</span><span id="line-47"></span><span class="hs-comment">-- You can use this module with the following in your @xmonad.hs@:</span><span>
+</span><span id="line-48"></span><span class="hs-comment">--</span><span>
+</span><span id="line-49"></span><span class="hs-comment">-- &gt; import XMonad.Prompt</span><span>
+</span><span id="line-50"></span><span class="hs-comment">-- &gt; import XMonad.Prompt.Window</span><span>
+</span><span id="line-51"></span><span class="hs-comment">--</span><span>
+</span><span id="line-52"></span><span class="hs-comment">-- and in the keys definition:</span><span>
+</span><span id="line-53"></span><span class="hs-comment">--</span><span>
+</span><span id="line-54"></span><span class="hs-comment">-- &gt; , ((modm .|. shiftMask, xK_g     ), windowPrompt def Goto wsWindows)</span><span>
+</span><span id="line-55"></span><span class="hs-comment">-- &gt; , ((modm .|. shiftMask, xK_b     ), windowPrompt def Bring allWindows)</span><span>
+</span><span id="line-56"></span><span class="hs-comment">--</span><span>
+</span><span id="line-57"></span><span class="hs-comment">-- The autoComplete option is a handy complement here:</span><span>
+</span><span id="line-58"></span><span class="hs-comment">--</span><span>
+</span><span id="line-59"></span><span class="hs-comment">-- &gt; , ((modm .|. shiftMask, xK_g     ), windowPrompt</span><span>
+</span><span id="line-60"></span><span class="hs-comment">-- &gt;                                        def { autoComplete = Just 500000 }</span><span>
+</span><span id="line-61"></span><span class="hs-comment">-- &gt;                                        Goto allWindows)</span><span>
+</span><span id="line-62"></span><span class="hs-comment">--</span><span>
+</span><span id="line-63"></span><span class="hs-comment">-- The \'500000\' is the number of microseconds to pause before sending you to</span><span>
+</span><span id="line-64"></span><span class="hs-comment">-- your new window. This is useful so that you don't accidentally send some</span><span>
+</span><span id="line-65"></span><span class="hs-comment">-- keystrokes to the selected client.</span><span>
+</span><span id="line-66"></span><span class="hs-comment">--</span><span>
+</span><span id="line-67"></span><span class="hs-comment">-- For detailed instruction on editing the key binding see</span><span>
+</span><span id="line-68"></span><span class="hs-comment">-- &lt;https://xmonad.org/TUTORIAL.html#customizing-xmonad the tutorial&gt;.</span><span>
+</span><span id="line-69"></span><span>
+</span><span id="line-70"></span><span class="hs-comment">-- Describe actions that can applied  on the selected window</span><span>
+</span><span id="line-71"></span><span class="hs-keyword">data</span><span> </span><span id="WindowPrompt"><span class="annot"><a href="XMonad.Prompt.Window.html#WindowPrompt"><span class="hs-identifier hs-var">WindowPrompt</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span id="Goto"><span class="annot"><a href="XMonad.Prompt.Window.html#Goto"><span class="hs-identifier hs-var">Goto</span></a></span></span><span> </span><span class="hs-glyph">|</span><span> </span><span id="Bring"><span class="annot"><a href="XMonad.Prompt.Window.html#Bring"><span class="hs-identifier hs-var">Bring</span></a></span></span><span> </span><span class="hs-glyph">|</span><span> </span><span id="BringCopy"><span class="annot"><a href="XMonad.Prompt.Window.html#BringCopy"><span class="hs-identifier hs-var">BringCopy</span></a></span></span><span> </span><span class="hs-glyph">|</span><span> </span><span id="BringToMaster"><span class="annot"><a href="XMonad.Prompt.Window.html#BringToMaster"><span class="hs-identifier hs-var">BringToMaster</span></a></span></span><span> </span><span class="hs-glyph">|</span><span> </span><span id="WithWindow"><span class="annot"><a href="XMonad.Prompt.Window.html#WithWindow"><span class="hs-identifier hs-var">WithWindow</span></a></span></span><span> </span><span class="annot"><span class="hs-identifier hs-type">String</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">Window</span></span><span> </span><span class="hs-glyph">-&gt;</span><span>  </span><span class="annot"><span class="hs-identifier hs-type">X</span></span><span class="hs-special">(</span><span class="hs-special">)</span><span class="hs-special">)</span><span>
+</span><span id="line-72"></span><span class="hs-keyword">instance</span><span> </span><span id="local-6989586621679469603"><span id="local-6989586621679469605"><span id="local-6989586621679469607"><span class="annot"><a href="XMonad.Prompt.html#XPrompt"><span class="hs-identifier hs-type">XPrompt</span></a></span><span> </span><span class="annot"><a href="XMonad.Prompt.Window.html#WindowPrompt"><span class="hs-identifier hs-type">WindowPrompt</span></a></span></span></span></span><span> </span><span class="hs-keyword">where</span><span>
+</span><span id="line-73"></span><span>    </span><span id="local-6989586621679469601"><span class="annot"><span class="annottext">showXPrompt :: WindowPrompt -&gt; WorkspaceId
+</span><a href="XMonad.Prompt.html#showXPrompt"><span class="hs-identifier hs-var hs-var hs-var hs-var">showXPrompt</span></a></span></span><span> </span><span class="annot"><span class="annottext">WindowPrompt
+</span><a href="XMonad.Prompt.Window.html#Goto"><span class="hs-identifier hs-var">Goto</span></a></span><span>      </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">WorkspaceId
+</span><span class="hs-string">&quot;Go to window: &quot;</span></span><span>
+</span><span id="line-74"></span><span>    </span><span class="annot"><a href="XMonad.Prompt.html#showXPrompt"><span class="hs-identifier hs-var">showXPrompt</span></a></span><span> </span><span class="annot"><span class="annottext">WindowPrompt
+</span><a href="XMonad.Prompt.Window.html#Bring"><span class="hs-identifier hs-var">Bring</span></a></span><span>     </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">WorkspaceId
+</span><span class="hs-string">&quot;Bring window: &quot;</span></span><span>
+</span><span id="line-75"></span><span>    </span><span class="annot"><a href="XMonad.Prompt.html#showXPrompt"><span class="hs-identifier hs-var">showXPrompt</span></a></span><span> </span><span class="annot"><span class="annottext">WindowPrompt
+</span><a href="XMonad.Prompt.Window.html#BringToMaster"><span class="hs-identifier hs-var">BringToMaster</span></a></span><span>
+</span><span id="line-76"></span><span>                          </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">WorkspaceId
+</span><span class="hs-string">&quot;Bring window to master: &quot;</span></span><span>
+</span><span id="line-77"></span><span>    </span><span class="annot"><a href="XMonad.Prompt.html#showXPrompt"><span class="hs-identifier hs-var">showXPrompt</span></a></span><span> </span><span class="annot"><span class="annottext">WindowPrompt
+</span><a href="XMonad.Prompt.Window.html#BringCopy"><span class="hs-identifier hs-var">BringCopy</span></a></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">WorkspaceId
+</span><span class="hs-string">&quot;Bring a copy: &quot;</span></span><span>
+</span><span id="line-78"></span><span>    </span><span class="annot"><a href="XMonad.Prompt.html#showXPrompt"><span class="hs-identifier hs-var">showXPrompt</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="XMonad.Prompt.Window.html#WithWindow"><span class="hs-identifier hs-type">WithWindow</span></a></span><span> </span><span id="local-6989586621679469599"><span class="annot"><span class="annottext">WorkspaceId
+</span><a href="#local-6989586621679469599"><span class="hs-identifier hs-var">xs</span></a></span></span><span> </span><span class="annot"><span class="annottext">Window -&gt; X ()
+</span><span class="hs-identifier">_</span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">WorkspaceId
+</span><a href="#local-6989586621679469599"><span class="hs-identifier hs-var">xs</span></a></span><span>
+</span><span id="line-79"></span><span>    </span><span id="local-6989586621679469598"><span class="annot"><span class="annottext">commandToComplete :: WindowPrompt -&gt; WorkspaceId -&gt; WorkspaceId
+</span><a href="XMonad.Prompt.html#commandToComplete"><span class="hs-identifier hs-var hs-var hs-var hs-var">commandToComplete</span></a></span></span><span> </span><span class="annot"><span class="annottext">WindowPrompt
+</span><span class="hs-identifier">_</span></span><span> </span><span id="local-6989586621679469596"><span class="annot"><span class="annottext">WorkspaceId
+</span><a href="#local-6989586621679469596"><span class="hs-identifier hs-var">c</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">WorkspaceId
+</span><a href="#local-6989586621679469596"><span class="hs-identifier hs-var">c</span></a></span><span>
+</span><span id="line-80"></span><span>    </span><span id="local-6989586621679469595"><span class="annot"><span class="annottext">nextCompletion :: WindowPrompt -&gt; WorkspaceId -&gt; [WorkspaceId] -&gt; WorkspaceId
+</span><a href="XMonad.Prompt.html#nextCompletion"><span class="hs-identifier hs-var hs-var hs-var hs-var">nextCompletion</span></a></span></span><span>      </span><span class="annot"><span class="annottext">WindowPrompt
+</span><span class="hs-identifier">_</span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">WorkspaceId -&gt; [WorkspaceId] -&gt; WorkspaceId
+</span><a href="XMonad.Prompt.html#getNextCompletion"><span class="hs-identifier hs-var">getNextCompletion</span></a></span><span>
+</span><span id="line-81"></span><span>
+</span><span id="line-82"></span><span class="hs-comment">-- | Internal type used for the multiple mode prompt.</span><span>
+</span><span id="line-83"></span><span class="hs-keyword">data</span><span> </span><span id="WindowModePrompt"><span class="annot"><a href="XMonad.Prompt.Window.html#WindowModePrompt"><span class="hs-identifier hs-var">WindowModePrompt</span></a></span></span><span> </span><span class="hs-glyph">=</span><span>
+</span><span id="line-84"></span><span>  </span><span id="WindowModePrompt"><span class="annot"><a href="XMonad.Prompt.Window.html#WindowModePrompt"><span class="hs-identifier hs-var">WindowModePrompt</span></a></span></span><span> </span><span class="annot"><a href="XMonad.Prompt.Window.html#WindowPrompt"><span class="hs-identifier hs-type">WindowPrompt</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">M.Map</span></span><span> </span><span class="annot"><span class="hs-identifier hs-type">String</span></span><span> </span><span class="annot"><span class="hs-identifier hs-type">Window</span></span><span class="hs-special">)</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">String</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">String</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Bool</span></span><span class="hs-special">)</span><span>
+</span><span id="line-85"></span><span>
+</span><span id="line-86"></span><span class="hs-keyword">instance</span><span> </span><span id="local-6989586621679469585"><span id="local-6989586621679469587"><span id="local-6989586621679469589"><span class="annot"><a href="XMonad.Prompt.html#XPrompt"><span class="hs-identifier hs-type">XPrompt</span></a></span><span> </span><span class="annot"><a href="XMonad.Prompt.Window.html#WindowModePrompt"><span class="hs-identifier hs-type">WindowModePrompt</span></a></span></span></span></span><span> </span><span class="hs-keyword">where</span><span>
+</span><span id="line-87"></span><span>    </span><span id="local-6989586621679469581"><span class="annot"><span class="annottext">showXPrompt :: WindowModePrompt -&gt; WorkspaceId
+</span><a href="#local-6989586621679469581"><span class="hs-identifier hs-var hs-var hs-var hs-var">showXPrompt</span></a></span></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="XMonad.Prompt.Window.html#WindowModePrompt"><span class="hs-identifier hs-type">WindowModePrompt</span></a></span><span> </span><span id="local-6989586621679469580"><span class="annot"><span class="annottext">WindowPrompt
+</span><a href="#local-6989586621679469580"><span class="hs-identifier hs-var">action</span></a></span></span><span> </span><span class="annot"><span class="annottext">Map WorkspaceId Window
+</span><span class="hs-identifier">_</span></span><span> </span><span class="annot"><span class="annottext">WorkspaceId -&gt; WorkspaceId -&gt; Bool
+</span><span class="hs-identifier">_</span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=</span><span>
+</span><span id="line-88"></span><span>        </span><span class="annot"><span class="annottext">forall t. XPrompt t =&gt; t -&gt; WorkspaceId
+</span><a href="XMonad.Prompt.html#showXPrompt"><span class="hs-identifier hs-var">showXPrompt</span></a></span><span> </span><span class="annot"><span class="annottext">WindowPrompt
+</span><a href="#local-6989586621679469580"><span class="hs-identifier hs-var">action</span></a></span><span>
+</span><span id="line-89"></span><span>
+</span><span id="line-90"></span><span>    </span><span id="local-6989586621679469577"><span class="annot"><span class="annottext">completionFunction :: WindowModePrompt -&gt; ComplFunction
+</span><a href="XMonad.Prompt.html#completionFunction"><span class="hs-identifier hs-var hs-var hs-var hs-var">completionFunction</span></a></span></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="XMonad.Prompt.Window.html#WindowModePrompt"><span class="hs-identifier hs-type">WindowModePrompt</span></a></span><span> </span><span class="annot"><span class="annottext">WindowPrompt
+</span><span class="hs-identifier">_</span></span><span> </span><span id="local-6989586621679469575"><span class="annot"><span class="annottext">Map WorkspaceId Window
+</span><a href="#local-6989586621679469575"><span class="hs-identifier hs-var">winmap</span></a></span></span><span> </span><span id="local-6989586621679469574"><span class="annot"><span class="annottext">WorkspaceId -&gt; WorkspaceId -&gt; Bool
+</span><a href="#local-6989586621679469574"><span class="hs-identifier hs-var">predicate</span></a></span></span><span class="hs-special">)</span><span> </span><span id="local-6989586621679469573"><span class="annot"><span class="annottext">WorkspaceId
+</span><a href="#local-6989586621679469573"><span class="hs-identifier hs-var">s</span></a></span></span><span> </span><span class="hs-glyph">=</span><span>
+</span><span id="line-91"></span><span>        </span><span class="annot"><span class="annottext">forall (m :: * -&gt; *) a. Monad m =&gt; a -&gt; m a
+</span><span class="hs-identifier hs-var">return</span></span><span> </span><span class="annot"><span class="annottext">forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">forall a. (a -&gt; Bool) -&gt; [a] -&gt; [a]
+</span><span class="hs-identifier hs-var">filter</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">WorkspaceId -&gt; WorkspaceId -&gt; Bool
+</span><a href="#local-6989586621679469574"><span class="hs-identifier hs-var">predicate</span></a></span><span> </span><span class="annot"><span class="annottext">WorkspaceId
+</span><a href="#local-6989586621679469573"><span class="hs-identifier hs-var">s</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">forall a b. (a -&gt; b) -&gt; [a] -&gt; [b]
+</span><span class="hs-identifier hs-var">map</span></span><span> </span><span class="annot"><span class="annottext">forall a b. (a, b) -&gt; a
+</span><span class="hs-identifier hs-var">fst</span></span><span> </span><span class="annot"><span class="annottext">forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">forall k a. Map k a -&gt; [(k, a)]
+</span><span class="hs-identifier hs-var">M.toList</span></span><span> </span><span class="annot"><span class="annottext">forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">Map WorkspaceId Window
+</span><a href="#local-6989586621679469575"><span class="hs-identifier hs-var">winmap</span></a></span><span>
+</span><span id="line-92"></span><span>
+</span><span id="line-93"></span><span>    </span><span id="local-6989586621679469570"><span class="annot"><span class="annottext">modeAction :: WindowModePrompt -&gt; WorkspaceId -&gt; WorkspaceId -&gt; X ()
+</span><a href="XMonad.Prompt.html#modeAction"><span class="hs-identifier hs-var hs-var hs-var hs-var">modeAction</span></a></span></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="XMonad.Prompt.Window.html#WindowModePrompt"><span class="hs-identifier hs-type">WindowModePrompt</span></a></span><span> </span><span id="local-6989586621679469568"><span class="annot"><span class="annottext">WindowPrompt
+</span><a href="#local-6989586621679469568"><span class="hs-identifier hs-var">action</span></a></span></span><span> </span><span id="local-6989586621679469567"><span class="annot"><span class="annottext">Map WorkspaceId Window
+</span><a href="#local-6989586621679469567"><span class="hs-identifier hs-var">winmap</span></a></span></span><span> </span><span class="annot"><span class="annottext">WorkspaceId -&gt; WorkspaceId -&gt; Bool
+</span><span class="hs-identifier">_</span></span><span class="hs-special">)</span><span> </span><span id="local-6989586621679469566"><span class="annot"><span class="annottext">WorkspaceId
+</span><a href="#local-6989586621679469566"><span class="hs-identifier hs-var">buf</span></a></span></span><span> </span><span id="local-6989586621679469565"><span class="annot"><span class="annottext">WorkspaceId
+</span><a href="#local-6989586621679469565"><span class="hs-identifier hs-var">auto</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-94"></span><span>        </span><span class="hs-keyword">let</span><span> </span><span id="local-6989586621679469562"><span class="annot"><span class="annottext">name :: WorkspaceId
+</span><a href="#local-6989586621679469562"><span class="hs-identifier hs-var hs-var">name</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-keyword">if</span><span> </span><span class="annot"><span class="annottext">forall (t :: * -&gt; *) a. Foldable t =&gt; t a -&gt; Bool
+</span><span class="hs-identifier hs-var">null</span></span><span> </span><span class="annot"><span class="annottext">WorkspaceId
+</span><a href="#local-6989586621679469565"><span class="hs-identifier hs-var">auto</span></a></span><span> </span><span class="hs-keyword">then</span><span> </span><span class="annot"><span class="annottext">WorkspaceId
+</span><a href="#local-6989586621679469566"><span class="hs-identifier hs-var">buf</span></a></span><span> </span><span class="hs-keyword">else</span><span> </span><span class="annot"><span class="annottext">WorkspaceId
+</span><a href="#local-6989586621679469565"><span class="hs-identifier hs-var">auto</span></a></span><span>
+</span><span id="line-95"></span><span>            </span><span id="local-6989586621679469559"><span class="annot"><span class="annottext">a :: WorkspaceId -&gt; X ()
+</span><a href="#local-6989586621679469559"><span class="hs-identifier hs-var hs-var">a</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-keyword">case</span><span> </span><span class="annot"><span class="annottext">WindowPrompt
+</span><a href="#local-6989586621679469568"><span class="hs-identifier hs-var">action</span></a></span><span> </span><span class="hs-keyword">of</span><span>
+</span><span id="line-96"></span><span>                  </span><span class="annot"><span class="annottext">WindowPrompt
+</span><a href="XMonad.Prompt.Window.html#Goto"><span class="hs-identifier hs-var">Goto</span></a></span><span>           </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">WorkspaceId -&gt; X ()
+</span><a href="#local-6989586621679469558"><span class="hs-identifier hs-var">gotoAction</span></a></span><span>
+</span><span id="line-97"></span><span>                  </span><span class="annot"><span class="annottext">WindowPrompt
+</span><a href="XMonad.Prompt.Window.html#Bring"><span class="hs-identifier hs-var">Bring</span></a></span><span>          </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">WorkspaceId -&gt; X ()
+</span><a href="#local-6989586621679469557"><span class="hs-identifier hs-var">bringAction</span></a></span><span>
+</span><span id="line-98"></span><span>                  </span><span class="annot"><span class="annottext">WindowPrompt
+</span><a href="XMonad.Prompt.Window.html#BringCopy"><span class="hs-identifier hs-var">BringCopy</span></a></span><span>      </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">WorkspaceId -&gt; X ()
+</span><a href="#local-6989586621679469556"><span class="hs-identifier hs-var">bringCopyAction</span></a></span><span>
+</span><span id="line-99"></span><span>                  </span><span class="annot"><span class="annottext">WindowPrompt
+</span><a href="XMonad.Prompt.Window.html#BringToMaster"><span class="hs-identifier hs-var">BringToMaster</span></a></span><span>  </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">WorkspaceId -&gt; X ()
+</span><a href="#local-6989586621679469555"><span class="hs-identifier hs-var">bringToMaster</span></a></span><span>
+</span><span id="line-100"></span><span>                  </span><span class="annot"><a href="XMonad.Prompt.Window.html#WithWindow"><span class="hs-identifier hs-type">WithWindow</span></a></span><span> </span><span class="annot"><span class="annottext">WorkspaceId
+</span><span class="hs-identifier">_</span></span><span> </span><span id="local-6989586621679469554"><span class="annot"><span class="annottext">Window -&gt; X ()
+</span><a href="#local-6989586621679469554"><span class="hs-identifier hs-var">f</span></a></span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">forall {m :: * -&gt; *}.
+Monad m =&gt;
+(Window -&gt; m ()) -&gt; WorkspaceId -&gt; m ()
+</span><a href="#local-6989586621679469553"><span class="hs-identifier hs-var">withWindow</span></a></span><span> </span><span class="annot"><span class="annottext">Window -&gt; X ()
+</span><a href="#local-6989586621679469554"><span class="hs-identifier hs-var">f</span></a></span><span>
+</span><span id="line-101"></span><span>        </span><span class="annot"><span class="annottext">WorkspaceId -&gt; X ()
+</span><a href="#local-6989586621679469559"><span class="hs-identifier hs-var">a</span></a></span><span> </span><span class="annot"><span class="annottext">WorkspaceId
+</span><a href="#local-6989586621679469562"><span class="hs-identifier hs-var">name</span></a></span><span>
+</span><span id="line-102"></span><span>      </span><span class="hs-keyword">where</span><span>
+</span><span id="line-103"></span><span>        </span><span id="local-6989586621679469553"><span class="annot"><span class="annottext">withWindow :: (Window -&gt; m ()) -&gt; WorkspaceId -&gt; m ()
+</span><a href="#local-6989586621679469553"><span class="hs-identifier hs-var hs-var">withWindow</span></a></span></span><span> </span><span id="local-6989586621679469546"><span class="annot"><span class="annottext">Window -&gt; m ()
+</span><a href="#local-6989586621679469546"><span class="hs-identifier hs-var">f</span></a></span></span><span>     </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">forall a b c. (a -&gt; b -&gt; c) -&gt; b -&gt; a -&gt; c
+</span><span class="hs-identifier hs-var">flip</span></span><span> </span><span class="annot"><span class="annottext">forall (m :: * -&gt; *) a. Monad m =&gt; Maybe a -&gt; (a -&gt; m ()) -&gt; m ()
+</span><span class="hs-identifier hs-var">whenJust</span></span><span> </span><span class="annot"><span class="annottext">Window -&gt; m ()
+</span><a href="#local-6989586621679469546"><span class="hs-identifier hs-var">f</span></a></span><span> </span><span class="annot"><span class="annottext">forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">forall a b c. (a -&gt; b -&gt; c) -&gt; b -&gt; a -&gt; c
+</span><span class="hs-identifier hs-var">flip</span></span><span> </span><span class="annot"><span class="annottext">forall k a. Ord k =&gt; k -&gt; Map k a -&gt; Maybe a
+</span><span class="hs-identifier hs-var">M.lookup</span></span><span> </span><span class="annot"><span class="annottext">Map WorkspaceId Window
+</span><a href="#local-6989586621679469567"><span class="hs-identifier hs-var">winmap</span></a></span><span>
+</span><span id="line-104"></span><span>        </span><span id="local-6989586621679469541"><span class="annot"><span class="annottext">winAction :: (Window -&gt; WindowSet -&gt; WindowSet) -&gt; WorkspaceId -&gt; X ()
+</span><a href="#local-6989586621679469541"><span class="hs-identifier hs-var hs-var">winAction</span></a></span></span><span> </span><span id="local-6989586621679469540"><span class="annot"><span class="annottext">Window -&gt; WindowSet -&gt; WindowSet
+</span><a href="#local-6989586621679469540"><span class="hs-identifier hs-var">a</span></a></span></span><span>      </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">forall {m :: * -&gt; *}.
+Monad m =&gt;
+(Window -&gt; m ()) -&gt; WorkspaceId -&gt; m ()
+</span><a href="#local-6989586621679469553"><span class="hs-identifier hs-var">withWindow</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">(WindowSet -&gt; WindowSet) -&gt; X ()
+</span><span class="hs-identifier hs-var">windows</span></span><span> </span><span class="annot"><span class="annottext">forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">Window -&gt; WindowSet -&gt; WindowSet
+</span><a href="#local-6989586621679469540"><span class="hs-identifier hs-var">a</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-105"></span><span>        </span><span id="local-6989586621679469558"><span class="annot"><span class="annottext">gotoAction :: WorkspaceId -&gt; X ()
+</span><a href="#local-6989586621679469558"><span class="hs-identifier hs-var hs-var">gotoAction</span></a></span></span><span>       </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">(Window -&gt; WindowSet -&gt; WindowSet) -&gt; WorkspaceId -&gt; X ()
+</span><a href="#local-6989586621679469541"><span class="hs-identifier hs-var">winAction</span></a></span><span> </span><span class="annot"><span class="annottext">forall s a i l sd.
+(Eq s, Eq a, Eq i) =&gt;
+a -&gt; StackSet i l a s sd -&gt; StackSet i l a s sd
+</span><span class="hs-identifier hs-var">W.focusWindow</span></span><span>
+</span><span id="line-106"></span><span>        </span><span id="local-6989586621679469557"><span class="annot"><span class="annottext">bringAction :: WorkspaceId -&gt; X ()
+</span><a href="#local-6989586621679469557"><span class="hs-identifier hs-var hs-var">bringAction</span></a></span></span><span>      </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">(Window -&gt; WindowSet -&gt; WindowSet) -&gt; WorkspaceId -&gt; X ()
+</span><a href="#local-6989586621679469541"><span class="hs-identifier hs-var">winAction</span></a></span><span> </span><span class="annot"><span class="annottext">Window -&gt; WindowSet -&gt; WindowSet
+</span><a href="XMonad.Actions.WindowBringer.html#bringWindow"><span class="hs-identifier hs-var">bringWindow</span></a></span><span>
+</span><span id="line-107"></span><span>        </span><span id="local-6989586621679469556"><span class="annot"><span class="annottext">bringCopyAction :: WorkspaceId -&gt; X ()
+</span><a href="#local-6989586621679469556"><span class="hs-identifier hs-var hs-var">bringCopyAction</span></a></span></span><span>  </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">(Window -&gt; WindowSet -&gt; WindowSet) -&gt; WorkspaceId -&gt; X ()
+</span><a href="#local-6989586621679469541"><span class="hs-identifier hs-var">winAction</span></a></span><span> </span><span class="annot"><span class="annottext">Window -&gt; WindowSet -&gt; WindowSet
+</span><a href="XMonad.Prompt.Window.html#bringCopyWindow"><span class="hs-identifier hs-var">bringCopyWindow</span></a></span><span>
+</span><span id="line-108"></span><span>        </span><span id="local-6989586621679469555"><span class="annot"><span class="annottext">bringToMaster :: WorkspaceId -&gt; X ()
+</span><a href="#local-6989586621679469555"><span class="hs-identifier hs-var hs-var">bringToMaster</span></a></span></span><span>    </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">(Window -&gt; WindowSet -&gt; WindowSet) -&gt; WorkspaceId -&gt; X ()
+</span><a href="#local-6989586621679469541"><span class="hs-identifier hs-var">winAction</span></a></span><span> </span><span class="hs-special">(</span><span class="hs-glyph">\</span><span id="local-6989586621679469527"><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679469527"><span class="hs-identifier hs-var">w</span></a></span></span><span> </span><span id="local-6989586621679469526"><span class="annot"><span class="annottext">WindowSet
+</span><a href="#local-6989586621679469526"><span class="hs-identifier hs-var">s</span></a></span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">forall i l a s sd. StackSet i l a s sd -&gt; StackSet i l a s sd
+</span><span class="hs-identifier hs-var">W.shiftMaster</span></span><span> </span><span class="annot"><span class="annottext">forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">forall s a i l sd.
+(Eq s, Eq a, Eq i) =&gt;
+a -&gt; StackSet i l a s sd -&gt; StackSet i l a s sd
+</span><span class="hs-identifier hs-var">W.focusWindow</span></span><span> </span><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679469527"><span class="hs-identifier hs-var">w</span></a></span><span> </span><span class="annot"><span class="annottext">forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">Window -&gt; WindowSet -&gt; WindowSet
+</span><a href="XMonad.Actions.WindowBringer.html#bringWindow"><span class="hs-identifier hs-var">bringWindow</span></a></span><span> </span><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679469527"><span class="hs-identifier hs-var">w</span></a></span><span> </span><span class="annot"><span class="annottext">WindowSet
+</span><a href="#local-6989586621679469526"><span class="hs-identifier hs-var">s</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-109"></span><span>
+</span><span id="line-110"></span><span class="hs-comment">-- | A helper to get the map of all windows.</span><span>
+</span><span id="line-111"></span><span class="annot"><a href="XMonad.Prompt.Window.html#allWindows"><span class="hs-identifier hs-type">allWindows</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><a href="XMonad.Prompt.Window.html#XWindowMap"><span class="hs-identifier hs-type">XWindowMap</span></a></span><span>
+</span><span id="line-112"></span><span id="allWindows"><span class="annot"><span class="annottext">allWindows :: XWindowMap
+</span><a href="XMonad.Prompt.Window.html#allWindows"><span class="hs-identifier hs-var hs-var">allWindows</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">XWindowMap
+</span><a href="XMonad.Actions.WindowBringer.html#windowMap"><span class="hs-identifier hs-var">windowMap</span></a></span><span>
+</span><span id="line-113"></span><span>
+</span><span id="line-114"></span><span class="hs-comment">-- | A helper to get the map of all applications</span><span>
+</span><span id="line-115"></span><span class="annot"><a href="XMonad.Prompt.Window.html#allApplications"><span class="hs-identifier hs-type">allApplications</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><a href="XMonad.Prompt.Window.html#XWindowMap"><span class="hs-identifier hs-type">XWindowMap</span></a></span><span>
+</span><span id="line-116"></span><span id="allApplications"><span class="annot"><span class="annottext">allApplications :: XWindowMap
+</span><a href="XMonad.Prompt.Window.html#allApplications"><span class="hs-identifier hs-var hs-var">allApplications</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">XWindowMap
+</span><a href="XMonad.Actions.WindowBringer.html#windowAppMap"><span class="hs-identifier hs-var">windowAppMap</span></a></span><span>
+</span><span id="line-117"></span><span>
+</span><span id="line-118"></span><span class="hs-comment">-- | A helper to get the map of windows of the current workspace.</span><span>
+</span><span id="line-119"></span><span class="annot"><a href="XMonad.Prompt.Window.html#wsWindows"><span class="hs-identifier hs-type">wsWindows</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><a href="XMonad.Prompt.Window.html#XWindowMap"><span class="hs-identifier hs-type">XWindowMap</span></a></span><span>
+</span><span id="line-120"></span><span id="wsWindows"><span class="annot"><span class="annottext">wsWindows :: XWindowMap
+</span><a href="XMonad.Prompt.Window.html#wsWindows"><span class="hs-identifier hs-var hs-var">wsWindows</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">forall a. (WindowSet -&gt; X a) -&gt; X a
+</span><span class="hs-identifier hs-var">withWindowSet</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">forall (m :: * -&gt; *) a. Monad m =&gt; a -&gt; m a
+</span><span class="hs-identifier hs-var">return</span></span><span> </span><span class="annot"><span class="annottext">forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">forall i l a s sd. StackSet i l a s sd -&gt; [a]
+</span><span class="hs-identifier hs-var">W.index</span></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">forall (m :: * -&gt; *) a b. Monad m =&gt; m a -&gt; (a -&gt; m b) -&gt; m b
+</span><span class="hs-operator hs-var">&gt;&gt;=</span></span><span> </span><span class="annot"><span class="annottext">[Window] -&gt; XWindowMap
+</span><a href="#local-6989586621679469520"><span class="hs-identifier hs-var">winmap</span></a></span><span>
+</span><span id="line-121"></span><span>    </span><span class="hs-keyword">where</span><span>
+</span><span id="line-122"></span><span>      </span><span id="local-6989586621679469520"><span class="annot"><span class="annottext">winmap :: [Window] -&gt; XWindowMap
+</span><a href="#local-6989586621679469520"><span class="hs-identifier hs-var hs-var">winmap</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">forall (f :: * -&gt; *) a b. Functor f =&gt; (a -&gt; b) -&gt; f a -&gt; f b
+</span><span class="hs-identifier hs-var">fmap</span></span><span> </span><span class="annot"><span class="annottext">forall k a. Ord k =&gt; [(k, a)] -&gt; Map k a
+</span><span class="hs-identifier hs-var">M.fromList</span></span><span> </span><span class="annot"><span class="annottext">forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">forall (t :: * -&gt; *) (m :: * -&gt; *) a b.
+(Traversable t, Monad m) =&gt;
+(a -&gt; m b) -&gt; t a -&gt; m (t b)
+</span><span class="hs-identifier hs-var">mapM</span></span><span> </span><span class="annot"><span class="annottext">Window -&gt; X (WorkspaceId, Window)
+</span><a href="#local-6989586621679469511"><span class="hs-identifier hs-var">pair</span></a></span><span>
+</span><span id="line-123"></span><span>      </span><span id="local-6989586621679469511"><span class="annot"><span class="annottext">pair :: Window -&gt; X (WorkspaceId, Window)
+</span><a href="#local-6989586621679469511"><span class="hs-identifier hs-var hs-var">pair</span></a></span></span><span> </span><span id="local-6989586621679469505"><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679469505"><span class="hs-identifier hs-var">w</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-keyword">do</span><span> </span><span id="local-6989586621679469504"><span class="annot"><span class="annottext">WorkspaceId
+</span><a href="#local-6989586621679469504"><span class="hs-identifier hs-var">name</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">forall a. Show a =&gt; a -&gt; WorkspaceId
+</span><span class="hs-identifier hs-var">show</span></span><span> </span><span class="annot"><span class="annottext">forall (f :: * -&gt; *) a b. Functor f =&gt; (a -&gt; b) -&gt; f a -&gt; f b
+</span><span class="hs-operator hs-var">&lt;$&gt;</span></span><span> </span><span class="annot"><span class="annottext">Window -&gt; X NamedWindow
+</span><a href="XMonad.Util.NamedWindows.html#getName"><span class="hs-identifier hs-var">getName</span></a></span><span> </span><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679469505"><span class="hs-identifier hs-var">w</span></a></span><span>
+</span><span id="line-124"></span><span>                  </span><span class="annot"><span class="annottext">forall (m :: * -&gt; *) a. Monad m =&gt; a -&gt; m a
+</span><span class="hs-identifier hs-var">return</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">WorkspaceId
+</span><a href="#local-6989586621679469504"><span class="hs-identifier hs-var">name</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679469505"><span class="hs-identifier hs-var">w</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-125"></span><span>
+</span><span id="line-126"></span><span class="hs-comment">-- | A Map where keys are pretty printable window names and values are</span><span>
+</span><span id="line-127"></span><span class="hs-comment">-- Xmonad windows identifier.</span><span>
+</span><span id="line-128"></span><span class="hs-keyword">type</span><span> </span><span id="XWindowMap"><span class="annot"><a href="XMonad.Prompt.Window.html#XWindowMap"><span class="hs-identifier hs-var">XWindowMap</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="hs-identifier hs-type">X</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">M.Map</span></span><span> </span><span class="annot"><span class="hs-identifier hs-type">String</span></span><span> </span><span class="annot"><span class="hs-identifier hs-type">Window</span></span><span class="hs-special">)</span><span>
+</span><span id="line-129"></span><span>
+</span><span id="line-130"></span><span class="hs-comment">-- | Pops open a prompt with window titles belonging to</span><span>
+</span><span id="line-131"></span><span class="hs-comment">-- winmap. Choose one, and an action is applied on the</span><span>
+</span><span id="line-132"></span><span class="hs-comment">-- selected window, according to WindowPrompt.</span><span>
+</span><span id="line-133"></span><span class="annot"><a href="XMonad.Prompt.Window.html#windowPrompt"><span class="hs-identifier hs-type">windowPrompt</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><a href="XMonad.Prompt.html#XPConfig"><span class="hs-identifier hs-type">XPConfig</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="XMonad.Prompt.Window.html#WindowPrompt"><span class="hs-identifier hs-type">WindowPrompt</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="XMonad.Prompt.Window.html#XWindowMap"><span class="hs-identifier hs-type">XWindowMap</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">X</span></span><span> </span><span class="hs-special">(</span><span class="hs-special">)</span><span>
+</span><span id="line-134"></span><span id="windowPrompt"><span class="annot"><span class="annottext">windowPrompt :: XPConfig -&gt; WindowPrompt -&gt; XWindowMap -&gt; X ()
+</span><a href="XMonad.Prompt.Window.html#windowPrompt"><span class="hs-identifier hs-var hs-var">windowPrompt</span></a></span></span><span> </span><span id="local-6989586621679469500"><span class="annot"><span class="annottext">XPConfig
+</span><a href="#local-6989586621679469500"><span class="hs-identifier hs-var">c</span></a></span></span><span> </span><span id="local-6989586621679469499"><span class="annot"><span class="annottext">WindowPrompt
+</span><a href="#local-6989586621679469499"><span class="hs-identifier hs-var">t</span></a></span></span><span> </span><span id="local-6989586621679469498"><span class="annot"><span class="annottext">XWindowMap
+</span><a href="#local-6989586621679469498"><span class="hs-identifier hs-var">winmap</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-135"></span><span>  </span><span id="local-6989586621679469497"><span class="annot"><span class="annottext">Map WorkspaceId Window
+</span><a href="#local-6989586621679469497"><span class="hs-identifier hs-var">wm</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">XWindowMap
+</span><a href="#local-6989586621679469498"><span class="hs-identifier hs-var">winmap</span></a></span><span>
+</span><span id="line-136"></span><span>  </span><span class="hs-keyword">let</span><span> </span><span id="local-6989586621679469496"><span class="annot"><span class="annottext">mode :: WindowModePrompt
+</span><a href="#local-6989586621679469496"><span class="hs-identifier hs-var hs-var">mode</span></a></span></span><span>     </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">WindowPrompt
+-&gt; Map WorkspaceId Window
+-&gt; (WorkspaceId -&gt; WorkspaceId -&gt; Bool)
+-&gt; WindowModePrompt
+</span><a href="XMonad.Prompt.Window.html#WindowModePrompt"><span class="hs-identifier hs-var">WindowModePrompt</span></a></span><span> </span><span class="annot"><span class="annottext">WindowPrompt
+</span><a href="#local-6989586621679469499"><span class="hs-identifier hs-var">t</span></a></span><span> </span><span class="annot"><span class="annottext">Map WorkspaceId Window
+</span><a href="#local-6989586621679469497"><span class="hs-identifier hs-var">wm</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">XPConfig -&gt; WorkspaceId -&gt; WorkspaceId -&gt; Bool
+</span><a href="XMonad.Prompt.html#searchPredicate"><span class="hs-identifier hs-var">searchPredicate</span></a></span><span> </span><span class="annot"><span class="annottext">XPConfig
+</span><a href="#local-6989586621679469500"><span class="hs-identifier hs-var">c</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-137"></span><span>      </span><span id="local-6989586621679469493"><span class="annot"><span class="annottext">action :: WorkspaceId -&gt; WorkspaceId -&gt; X ()
+</span><a href="#local-6989586621679469493"><span class="hs-identifier hs-var hs-var">action</span></a></span></span><span>   </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">forall t. XPrompt t =&gt; t -&gt; WorkspaceId -&gt; WorkspaceId -&gt; X ()
+</span><a href="XMonad.Prompt.html#modeAction"><span class="hs-identifier hs-var">modeAction</span></a></span><span> </span><span class="annot"><span class="annottext">WindowModePrompt
+</span><a href="#local-6989586621679469496"><span class="hs-identifier hs-var">mode</span></a></span><span>
+</span><span id="line-138"></span><span>      </span><span id="local-6989586621679469491"><span class="annot"><span class="annottext">compList :: ComplFunction
+</span><a href="#local-6989586621679469491"><span class="hs-identifier hs-var hs-var">compList</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">forall t. XPrompt t =&gt; t -&gt; ComplFunction
+</span><a href="XMonad.Prompt.html#completionFunction"><span class="hs-identifier hs-var">completionFunction</span></a></span><span> </span><span class="annot"><span class="annottext">WindowModePrompt
+</span><a href="#local-6989586621679469496"><span class="hs-identifier hs-var">mode</span></a></span><span>
+</span><span id="line-139"></span><span>  </span><span class="annot"><span class="annottext">forall p.
+XPrompt p =&gt;
+p -&gt; XPConfig -&gt; ComplFunction -&gt; (WorkspaceId -&gt; X ()) -&gt; X ()
+</span><a href="XMonad.Prompt.html#mkXPrompt"><span class="hs-identifier hs-var">mkXPrompt</span></a></span><span> </span><span class="annot"><span class="annottext">WindowPrompt
+</span><a href="#local-6989586621679469499"><span class="hs-identifier hs-var">t</span></a></span><span> </span><span class="annot"><span class="annottext">XPConfig
+</span><a href="#local-6989586621679469500"><span class="hs-identifier hs-var">c</span></a></span><span> </span><span class="annot"><span class="annottext">ComplFunction
+</span><a href="#local-6989586621679469491"><span class="hs-identifier hs-var">compList</span></a></span><span> </span><span class="hs-special">(</span><span class="hs-glyph">\</span><span id="local-6989586621679469489"><span class="annot"><span class="annottext">WorkspaceId
+</span><a href="#local-6989586621679469489"><span class="hs-identifier hs-var">s</span></a></span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">WorkspaceId -&gt; WorkspaceId -&gt; X ()
+</span><a href="#local-6989586621679469493"><span class="hs-identifier hs-var">action</span></a></span><span> </span><span class="annot"><span class="annottext">WorkspaceId
+</span><a href="#local-6989586621679469489"><span class="hs-identifier hs-var">s</span></a></span><span> </span><span class="annot"><span class="annottext">WorkspaceId
+</span><a href="#local-6989586621679469489"><span class="hs-identifier hs-var">s</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-140"></span><span>
+</span><span id="line-141"></span><span class="hs-comment">-- | Like 'windowPrompt', but uses the multiple modes feature of</span><span>
+</span><span id="line-142"></span><span class="hs-comment">-- @Prompt@ (via 'mkXPromptWithModes').</span><span>
+</span><span id="line-143"></span><span class="hs-comment">--</span><span>
+</span><span id="line-144"></span><span class="hs-comment">-- Given a list of actions along with the windows they should work</span><span>
+</span><span id="line-145"></span><span class="hs-comment">-- with, display the appropriate prompt with the ability to switch</span><span>
+</span><span id="line-146"></span><span class="hs-comment">-- between them using the @changeModeKey@.</span><span>
+</span><span id="line-147"></span><span class="hs-comment">--</span><span>
+</span><span id="line-148"></span><span class="hs-comment">-- For example, to have a prompt that first shows you all windows, but</span><span>
+</span><span id="line-149"></span><span class="hs-comment">-- allows you to narrow the list down to just the windows on the</span><span>
+</span><span id="line-150"></span><span class="hs-comment">-- current workspace:</span><span>
+</span><span id="line-151"></span><span class="hs-comment">--</span><span>
+</span><span id="line-152"></span><span class="hs-comment">-- &gt; windowMultiPrompt config [(Goto, allWindows), (Goto, wsWindows)]</span><span>
+</span><span id="line-153"></span><span class="annot"><a href="XMonad.Prompt.Window.html#windowMultiPrompt"><span class="hs-identifier hs-type">windowMultiPrompt</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><a href="XMonad.Prompt.html#XPConfig"><span class="hs-identifier hs-type">XPConfig</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="hs-special">[</span><span class="hs-special">(</span><span class="annot"><a href="XMonad.Prompt.Window.html#WindowPrompt"><span class="hs-identifier hs-type">WindowPrompt</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><a href="XMonad.Prompt.Window.html#XWindowMap"><span class="hs-identifier hs-type">XWindowMap</span></a></span><span class="hs-special">)</span><span class="hs-special">]</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">X</span></span><span> </span><span class="hs-special">(</span><span class="hs-special">)</span><span>
+</span><span id="line-154"></span><span id="windowMultiPrompt"><span class="annot"><span class="annottext">windowMultiPrompt :: XPConfig -&gt; [(WindowPrompt, XWindowMap)] -&gt; X ()
+</span><a href="XMonad.Prompt.Window.html#windowMultiPrompt"><span class="hs-identifier hs-var hs-var">windowMultiPrompt</span></a></span></span><span> </span><span id="local-6989586621679469488"><span class="annot"><span class="annottext">XPConfig
+</span><a href="#local-6989586621679469488"><span class="hs-identifier hs-var">c</span></a></span></span><span> </span><span id="local-6989586621679469487"><span class="annot"><span class="annottext">[(WindowPrompt, XWindowMap)]
+</span><a href="#local-6989586621679469487"><span class="hs-identifier hs-var">modes</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-155"></span><span>  </span><span id="local-6989586621679469486"><span class="annot"><span class="annottext">[XPType]
+</span><a href="#local-6989586621679469486"><span class="hs-identifier hs-var">modes'</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">forall (t :: * -&gt; *) (m :: * -&gt; *) a b.
+(Traversable t, Monad m) =&gt;
+t a -&gt; (a -&gt; m b) -&gt; m (t b)
+</span><span class="hs-identifier hs-var">forM</span></span><span> </span><span class="annot"><span class="annottext">[(WindowPrompt, XWindowMap)]
+</span><a href="#local-6989586621679469487"><span class="hs-identifier hs-var">modes</span></a></span><span> </span><span class="annot"><span class="annottext">forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="hs-glyph">\</span><span class="hs-special">(</span><span id="local-6989586621679469485"><span class="annot"><span class="annottext">WindowPrompt
+</span><a href="#local-6989586621679469485"><span class="hs-identifier hs-var">t</span></a></span></span><span class="hs-special">,</span><span> </span><span id="local-6989586621679469484"><span class="annot"><span class="annottext">XWindowMap
+</span><a href="#local-6989586621679469484"><span class="hs-identifier hs-var">wm</span></a></span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-156"></span><span>    </span><span id="local-6989586621679469483"><span class="annot"><span class="annottext">Map WorkspaceId Window
+</span><a href="#local-6989586621679469483"><span class="hs-identifier hs-var">wm'</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">XWindowMap
+</span><a href="#local-6989586621679469484"><span class="hs-identifier hs-var">wm</span></a></span><span>
+</span><span id="line-157"></span><span>    </span><span class="annot"><span class="annottext">forall (m :: * -&gt; *) a. Monad m =&gt; a -&gt; m a
+</span><span class="hs-identifier hs-var">return</span></span><span> </span><span class="annot"><span class="annottext">forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">forall p. XPrompt p =&gt; p -&gt; XPType
+</span><a href="XMonad.Prompt.html#XPT"><span class="hs-identifier hs-var">XPT</span></a></span><span> </span><span class="annot"><span class="annottext">forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">WindowPrompt
+-&gt; Map WorkspaceId Window
+-&gt; (WorkspaceId -&gt; WorkspaceId -&gt; Bool)
+-&gt; WindowModePrompt
+</span><a href="XMonad.Prompt.Window.html#WindowModePrompt"><span class="hs-identifier hs-var">WindowModePrompt</span></a></span><span> </span><span class="annot"><span class="annottext">WindowPrompt
+</span><a href="#local-6989586621679469485"><span class="hs-identifier hs-var">t</span></a></span><span> </span><span class="annot"><span class="annottext">Map WorkspaceId Window
+</span><a href="#local-6989586621679469483"><span class="hs-identifier hs-var">wm'</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">XPConfig -&gt; WorkspaceId -&gt; WorkspaceId -&gt; Bool
+</span><a href="XMonad.Prompt.html#searchPredicate"><span class="hs-identifier hs-var">searchPredicate</span></a></span><span> </span><span class="annot"><span class="annottext">XPConfig
+</span><a href="#local-6989586621679469488"><span class="hs-identifier hs-var">c</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-158"></span><span>
+</span><span id="line-159"></span><span>  </span><span class="annot"><span class="annottext">[XPType] -&gt; XPConfig -&gt; X ()
+</span><a href="XMonad.Prompt.html#mkXPromptWithModes"><span class="hs-identifier hs-var">mkXPromptWithModes</span></a></span><span> </span><span class="annot"><span class="annottext">[XPType]
+</span><a href="#local-6989586621679469486"><span class="hs-identifier hs-var">modes'</span></a></span><span> </span><span class="annot"><span class="annottext">XPConfig
+</span><a href="#local-6989586621679469488"><span class="hs-identifier hs-var">c</span></a></span><span>
+</span><span id="line-160"></span><span>
+</span><span id="line-161"></span><span class="hs-comment">-- | Brings a copy of the specified window into the current workspace.</span><span>
+</span><span id="line-162"></span><span class="annot"><a href="XMonad.Prompt.Window.html#bringCopyWindow"><span class="hs-identifier hs-type">bringCopyWindow</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Window</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">WindowSet</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">WindowSet</span></span><span>
+</span><span id="line-163"></span><span id="bringCopyWindow"><span class="annot"><span class="annottext">bringCopyWindow :: Window -&gt; WindowSet -&gt; WindowSet
+</span><a href="XMonad.Prompt.Window.html#bringCopyWindow"><span class="hs-identifier hs-var hs-var">bringCopyWindow</span></a></span></span><span> </span><span id="local-6989586621679469480"><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679469480"><span class="hs-identifier hs-var">w</span></a></span></span><span> </span><span id="local-6989586621679469479"><span class="annot"><span class="annottext">WindowSet
+</span><a href="#local-6989586621679469479"><span class="hs-identifier hs-var">ws</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">forall a i s l sd.
+(Eq a, Eq i, Eq s) =&gt;
+a -&gt; i -&gt; StackSet i l a s sd -&gt; StackSet i l a s sd
+</span><a href="XMonad.Actions.CopyWindow.html#copyWindow"><span class="hs-identifier hs-var">copyWindow</span></a></span><span> </span><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679469480"><span class="hs-identifier hs-var">w</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">forall i l a s sd. StackSet i l a s sd -&gt; i
+</span><span class="hs-identifier hs-var">W.currentTag</span></span><span> </span><span class="annot"><span class="annottext">WindowSet
+</span><a href="#local-6989586621679469479"><span class="hs-identifier hs-var">ws</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">WindowSet
+</span><a href="#local-6989586621679469479"><span class="hs-identifier hs-var">ws</span></a></span><span>
+</span><span id="line-164"></span></pre></body></html>

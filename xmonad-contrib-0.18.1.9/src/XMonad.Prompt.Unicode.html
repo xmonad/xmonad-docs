@@ -1,0 +1,375 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd"><html xmlns="http://www.w3.org/1999/xhtml"><head><link rel="stylesheet" type="text/css" href="style.css" /><script type="text/javascript" src="highlight.js"></script></head><body><pre><span class="hs-comment">{- |
+Module      :  XMonad.Prompt.Unicode
+Description :  A prompt for inputting Unicode characters.
+Copyright   :  (c) 2016 Joachim Breitner
+                   2017 Nick Hu
+License     :  BSD-style (see LICENSE)
+
+Maintainer  :  &lt;mail@joachim-breitner.de&gt;
+Stability   :  stable
+
+A prompt for searching unicode characters by name and inserting them into
+the clipboard.
+
+The provided @unicodePrompt@ and @typeUnicodePrompt@ use @xsel@ and @xdotool@
+respectively.
+-}</span><span>
+</span><span id="line-17"></span><span>
+</span><span id="line-18"></span><span class="hs-keyword">module</span><span> </span><span class="hs-identifier">XMonad.Prompt.Unicode</span><span> </span><span class="hs-special">(</span><span>
+</span><span id="line-19"></span><span> </span><span class="annot"><span class="hs-comment">-- * Usage</span></span><span>
+</span><span id="line-20"></span><span> </span><span class="annot"><span class="hs-comment">-- $usage</span></span><span>
+</span><span id="line-21"></span><span> </span><span class="annot"><a href="XMonad.Prompt.Unicode.html#unicodePrompt"><span class="hs-identifier">unicodePrompt</span></a></span><span class="hs-special">,</span><span>
+</span><span id="line-22"></span><span> </span><span class="annot"><a href="XMonad.Prompt.Unicode.html#typeUnicodePrompt"><span class="hs-identifier">typeUnicodePrompt</span></a></span><span class="hs-special">,</span><span>
+</span><span id="line-23"></span><span> </span><span class="annot"><a href="XMonad.Prompt.Unicode.html#mkUnicodePrompt"><span class="hs-identifier">mkUnicodePrompt</span></a></span><span>
+</span><span id="line-24"></span><span> </span><span class="hs-special">)</span><span> </span><span class="hs-keyword">where</span><span>
+</span><span id="line-25"></span><span>
+</span><span id="line-26"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><span class="hs-identifier">Codec.Binary.UTF8.String</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier">decodeString</span></span><span class="hs-special">)</span><span>
+</span><span id="line-27"></span><span class="hs-keyword">import</span><span> </span><span class="hs-keyword">qualified</span><span> </span><span class="annot"><span class="hs-identifier">Data.ByteString.Char8</span></span><span> </span><span class="hs-keyword">as</span><span> </span><span class="annot"><span class="hs-identifier">BS</span></span><span>
+</span><span id="line-28"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><span class="hs-identifier">Numeric</span></span><span>
+</span><span id="line-29"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><span class="hs-identifier">System.IO</span></span><span>
+</span><span id="line-30"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><span class="hs-identifier">System.IO.Error</span></span><span>
+</span><span id="line-31"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><span class="hs-identifier">Text.Printf</span></span><span>
+</span><span id="line-32"></span><span>
+</span><span id="line-33"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><span class="hs-identifier">XMonad</span></span><span>
+</span><span id="line-34"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><a href="XMonad.Prelude.html"><span class="hs-identifier">XMonad.Prelude</span></a></span><span>
+</span><span id="line-35"></span><span class="hs-keyword">import</span><span> </span><span class="hs-keyword">qualified</span><span> </span><span class="annot"><a href="XMonad.Util.ExtensibleState.html"><span class="hs-identifier">XMonad.Util.ExtensibleState</span></a></span><span> </span><span class="hs-keyword">as</span><span> </span><span class="annot"><span class="hs-identifier">XS</span></span><span>
+</span><span id="line-36"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><a href="XMonad.Util.Run.html"><span class="hs-identifier">XMonad.Util.Run</span></a></span><span>
+</span><span id="line-37"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><a href="XMonad.Prompt.html"><span class="hs-identifier">XMonad.Prompt</span></a></span><span>
+</span><span id="line-38"></span><span>
+</span><span id="line-39"></span><span class="hs-keyword">data</span><span> </span><span id="Unicode"><span class="annot"><a href="XMonad.Prompt.Unicode.html#Unicode"><span class="hs-identifier hs-var">Unicode</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span id="Unicode"><span class="annot"><a href="XMonad.Prompt.Unicode.html#Unicode"><span class="hs-identifier hs-var">Unicode</span></a></span></span><span>
+</span><span id="line-40"></span><span class="hs-keyword">instance</span><span> </span><span id="local-6989586621679459381"><span id="local-6989586621679459383"><span id="local-6989586621679459385"><span class="annot"><a href="XMonad.Prompt.html#XPrompt"><span class="hs-identifier hs-type">XPrompt</span></a></span><span> </span><span class="annot"><a href="XMonad.Prompt.Unicode.html#Unicode"><span class="hs-identifier hs-type">Unicode</span></a></span></span></span></span><span> </span><span class="hs-keyword">where</span><span>
+</span><span id="line-41"></span><span>  </span><span id="local-6989586621679459379"><span class="annot"><span class="annottext">showXPrompt :: Unicode -&gt; [Char]
+</span><a href="XMonad.Prompt.html#showXPrompt"><span class="hs-identifier hs-var hs-var hs-var hs-var">showXPrompt</span></a></span></span><span> </span><span class="annot"><span class="annottext">Unicode
+</span><a href="XMonad.Prompt.Unicode.html#Unicode"><span class="hs-identifier hs-var">Unicode</span></a></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">[Char]
+</span><span class="hs-string">&quot;Unicode: &quot;</span></span><span>
+</span><span id="line-42"></span><span>  </span><span id="local-6989586621679459377"><span class="annot"><span class="annottext">commandToComplete :: Unicode -&gt; [Char] -&gt; [Char]
+</span><a href="XMonad.Prompt.html#commandToComplete"><span class="hs-identifier hs-var hs-var hs-var hs-var">commandToComplete</span></a></span></span><span> </span><span class="annot"><span class="annottext">Unicode
+</span><a href="XMonad.Prompt.Unicode.html#Unicode"><span class="hs-identifier hs-var">Unicode</span></a></span><span> </span><span id="local-6989586621679459375"><span class="annot"><span class="annottext">[Char]
+</span><a href="#local-6989586621679459375"><span class="hs-identifier hs-var">s</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">[Char]
+</span><a href="#local-6989586621679459375"><span class="hs-identifier hs-var">s</span></a></span><span>
+</span><span id="line-43"></span><span>  </span><span id="local-6989586621679459374"><span class="annot"><span class="annottext">nextCompletion :: Unicode -&gt; [Char] -&gt; [[Char]] -&gt; [Char]
+</span><a href="XMonad.Prompt.html#nextCompletion"><span class="hs-identifier hs-var hs-var hs-var hs-var">nextCompletion</span></a></span></span><span> </span><span class="annot"><span class="annottext">Unicode
+</span><a href="XMonad.Prompt.Unicode.html#Unicode"><span class="hs-identifier hs-var">Unicode</span></a></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">[Char] -&gt; [[Char]] -&gt; [Char]
+</span><a href="XMonad.Prompt.html#getNextCompletion"><span class="hs-identifier hs-var">getNextCompletion</span></a></span><span>
+</span><span id="line-44"></span><span>
+</span><span id="line-45"></span><span class="hs-keyword">newtype</span><span> </span><span id="UnicodeData"><span class="annot"><a href="XMonad.Prompt.Unicode.html#UnicodeData"><span class="hs-identifier hs-var">UnicodeData</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span id="UnicodeData"><span class="annot"><a href="XMonad.Prompt.Unicode.html#UnicodeData"><span class="hs-identifier hs-var">UnicodeData</span></a></span></span><span> </span><span class="hs-special">{</span><span> </span><span id="getUnicodeData"><span class="annot"><span class="annottext">UnicodeData -&gt; [(Char, [Char])]
+</span><a href="XMonad.Prompt.Unicode.html#getUnicodeData"><span class="hs-identifier hs-var hs-var">getUnicodeData</span></a></span></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="hs-special">[</span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">Char</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier hs-type">String</span></span><span class="hs-special">)</span><span class="hs-special">]</span><span> </span><span class="hs-special">}</span><span>
+</span><span id="line-46"></span><span>  </span><span class="hs-keyword">deriving</span><span> </span><span class="hs-special">(</span><span id="local-6989586621679459352"><span id="local-6989586621679459363"><span id="local-6989586621679459366"><span id="local-6989586621679459368"><span class="annot"><span class="annottext">ReadPrec [UnicodeData]
+ReadPrec UnicodeData
+Int -&gt; ReadS UnicodeData
+ReadS [UnicodeData]
+forall a.
+(Int -&gt; ReadS a)
+-&gt; ReadS [a] -&gt; ReadPrec a -&gt; ReadPrec [a] -&gt; Read a
+readListPrec :: ReadPrec [UnicodeData]
+$creadListPrec :: ReadPrec [UnicodeData]
+readPrec :: ReadPrec UnicodeData
+$creadPrec :: ReadPrec UnicodeData
+readList :: ReadS [UnicodeData]
+$creadList :: ReadS [UnicodeData]
+readsPrec :: Int -&gt; ReadS UnicodeData
+$creadsPrec :: Int -&gt; ReadS UnicodeData
+</span><span class="hs-identifier hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var">Read</span></span></span></span></span></span><span class="hs-special">,</span><span> </span><span id="local-6989586621679459336"><span id="local-6989586621679459338"><span id="local-6989586621679459344"><span class="annot"><span class="annottext">Int -&gt; UnicodeData -&gt; [Char] -&gt; [Char]
+[UnicodeData] -&gt; [Char] -&gt; [Char]
+UnicodeData -&gt; [Char]
+forall a.
+(Int -&gt; a -&gt; [Char] -&gt; [Char])
+-&gt; (a -&gt; [Char]) -&gt; ([a] -&gt; [Char] -&gt; [Char]) -&gt; Show a
+showList :: [UnicodeData] -&gt; [Char] -&gt; [Char]
+$cshowList :: [UnicodeData] -&gt; [Char] -&gt; [Char]
+show :: UnicodeData -&gt; [Char]
+$cshow :: UnicodeData -&gt; [Char]
+showsPrec :: Int -&gt; UnicodeData -&gt; [Char] -&gt; [Char]
+$cshowsPrec :: Int -&gt; UnicodeData -&gt; [Char] -&gt; [Char]
+</span><span class="hs-identifier hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var">Show</span></span></span></span></span><span class="hs-special">)</span><span>
+</span><span id="line-47"></span><span>
+</span><span id="line-48"></span><span class="hs-keyword">instance</span><span> </span><span class="annot"><span class="hs-identifier hs-type">ExtensionClass</span></span><span> </span><span class="annot"><a href="XMonad.Prompt.Unicode.html#UnicodeData"><span class="hs-identifier hs-type">UnicodeData</span></a></span><span> </span><span class="hs-keyword">where</span><span>
+</span><span id="line-49"></span><span>  </span><span id="local-6989586621679459325"><span class="annot"><span class="annottext">initialValue :: UnicodeData
+</span><span class="hs-identifier hs-var hs-var hs-var hs-var">initialValue</span></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">[(Char, [Char])] -&gt; UnicodeData
+</span><a href="XMonad.Prompt.Unicode.html#UnicodeData"><span class="hs-identifier hs-var">UnicodeData</span></a></span><span> </span><span class="hs-special">[</span><span class="hs-special">]</span><span>
+</span><span id="line-50"></span><span>  </span><span id="local-6989586621679459322"><span class="annot"><span class="annottext">extensionType :: UnicodeData -&gt; StateExtension
+</span><span class="hs-identifier hs-var hs-var hs-var hs-var">extensionType</span></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">forall a. ExtensionClass a =&gt; a -&gt; StateExtension
+</span><span class="hs-identifier hs-var">StateExtension</span></span><span>
+</span><span id="line-51"></span><span>
+</span><span id="line-52"></span><span class="hs-comment">{- $usage
+
+You can use this module by importing it, along with
+&quot;XMonad.Prompt&quot;, into your @xmonad.hs@ file:
+
+&gt; import XMonad.Prompt
+&gt; import XMonad.Prompt.Unicode
+
+and adding an appropriate keybinding, for example:
+
+&gt;  , ((modm .|. controlMask, xK_u), unicodePrompt &quot;/path/to/unicode-data&quot; def)
+
+A path to a @UnicodeData.txt@ file or equivalent must be provided.  This file
+should be available through your package manager; search for @unicode-data@.
+If no package is found, one may opt to download this file directly from
+[unicode.org](http://www.unicode.org/Public/UNIDATA/UnicodeData.txt).
+
+More flexibility is given by the @mkUnicodePrompt@ function, which takes a
+command and a list of arguments to pass as its first two arguments. See
+@unicodePrompt@ for details.
+-}</span><span>
+</span><span id="line-73"></span><span>
+</span><span id="line-74"></span><span class="annot"><a href="XMonad.Prompt.Unicode.html#populateEntries"><span class="hs-identifier hs-type">populateEntries</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">String</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">X</span></span><span> </span><span class="annot"><span class="hs-identifier hs-type">Bool</span></span><span>
+</span><span id="line-75"></span><span id="populateEntries"><span class="annot"><span class="annottext">populateEntries :: [Char] -&gt; X Bool
+</span><a href="XMonad.Prompt.Unicode.html#populateEntries"><span class="hs-identifier hs-var hs-var">populateEntries</span></a></span></span><span> </span><span id="local-6989586621679459318"><span class="annot"><span class="annottext">[Char]
+</span><a href="#local-6989586621679459318"><span class="hs-identifier hs-var">unicodeDataFilename</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-76"></span><span>  </span><span id="local-6989586621679459317"><span class="annot"><span class="annottext">[(Char, [Char])]
+</span><a href="#local-6989586621679459317"><span class="hs-identifier hs-var">entries</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">forall (f :: * -&gt; *) a b. Functor f =&gt; (a -&gt; b) -&gt; f a -&gt; f b
+</span><span class="hs-identifier hs-var">fmap</span></span><span> </span><span class="annot"><span class="annottext">UnicodeData -&gt; [(Char, [Char])]
+</span><a href="XMonad.Prompt.Unicode.html#getUnicodeData"><span class="hs-identifier hs-var">getUnicodeData</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">forall a (m :: * -&gt; *). (ExtensionClass a, XLike m) =&gt; m a
+</span><a href="XMonad.Util.ExtensibleState.html#get"><span class="hs-identifier hs-var">XS.get</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">X</span></span><span> </span><span class="annot"><a href="XMonad.Prompt.Unicode.html#UnicodeData"><span class="hs-identifier hs-type">UnicodeData</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-77"></span><span>  </span><span class="hs-keyword">if</span><span> </span><span class="annot"><span class="annottext">forall (t :: * -&gt; *) a. Foldable t =&gt; t a -&gt; Bool
+</span><span class="hs-identifier hs-var">null</span></span><span> </span><span class="annot"><span class="annottext">[(Char, [Char])]
+</span><a href="#local-6989586621679459317"><span class="hs-identifier hs-var">entries</span></a></span><span>
+</span><span id="line-78"></span><span>    </span><span class="hs-keyword">then</span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-79"></span><span>      </span><span id="local-6989586621679459314"><span class="annot"><span class="annottext">Either IOError ByteString
+</span><a href="#local-6989586621679459314"><span class="hs-identifier hs-var">datE</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">forall (m :: * -&gt; *) a. MonadIO m =&gt; IO a -&gt; m a
+</span><span class="hs-identifier hs-var">liftIO</span></span><span> </span><span class="annot"><span class="annottext">forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">forall a. IO a -&gt; IO (Either IOError a)
+</span><span class="hs-identifier hs-var">tryIOError</span></span><span> </span><span class="annot"><span class="annottext">forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">[Char] -&gt; IO ByteString
+</span><span class="hs-identifier hs-var">BS.readFile</span></span><span> </span><span class="annot"><span class="annottext">[Char]
+</span><a href="#local-6989586621679459318"><span class="hs-identifier hs-var">unicodeDataFilename</span></a></span><span>
+</span><span id="line-80"></span><span>      </span><span class="hs-keyword">case</span><span> </span><span class="annot"><span class="annottext">Either IOError ByteString
+</span><a href="#local-6989586621679459314"><span class="hs-identifier hs-var">datE</span></a></span><span> </span><span class="hs-keyword">of</span><span>
+</span><span id="line-81"></span><span>        </span><span class="annot"><span class="hs-identifier hs-type">Left</span></span><span> </span><span id="local-6989586621679459309"><span class="annot"><span class="annottext">IOError
+</span><a href="#local-6989586621679459309"><span class="hs-identifier hs-var">e</span></a></span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">forall (m :: * -&gt; *) a. MonadIO m =&gt; IO a -&gt; m a
+</span><span class="hs-identifier hs-var">liftIO</span></span><span> </span><span class="annot"><span class="annottext">forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-82"></span><span>          </span><span class="annot"><span class="annottext">Handle -&gt; [Char] -&gt; IO ()
+</span><span class="hs-identifier hs-var">hPutStrLn</span></span><span> </span><span class="annot"><span class="annottext">Handle
+</span><span class="hs-identifier hs-var">stderr</span></span><span> </span><span class="annot"><span class="annottext">forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">[Char]
+</span><span class="hs-string">&quot;Could not read file \&quot;&quot;</span></span><span> </span><span class="annot"><span class="annottext">forall a. [a] -&gt; [a] -&gt; [a]
+</span><span class="hs-operator hs-var">++</span></span><span> </span><span class="annot"><span class="annottext">[Char]
+</span><a href="#local-6989586621679459318"><span class="hs-identifier hs-var">unicodeDataFilename</span></a></span><span> </span><span class="annot"><span class="annottext">forall a. [a] -&gt; [a] -&gt; [a]
+</span><span class="hs-operator hs-var">++</span></span><span> </span><span class="annot"><span class="annottext">[Char]
+</span><span class="hs-string">&quot;\&quot;&quot;</span></span><span>
+</span><span id="line-83"></span><span>          </span><span class="annot"><span class="annottext">forall a. Show a =&gt; Handle -&gt; a -&gt; IO ()
+</span><span class="hs-identifier hs-var">hPrint</span></span><span> </span><span class="annot"><span class="annottext">Handle
+</span><span class="hs-identifier hs-var">stderr</span></span><span> </span><span class="annot"><span class="annottext">IOError
+</span><a href="#local-6989586621679459309"><span class="hs-identifier hs-var">e</span></a></span><span>
+</span><span id="line-84"></span><span>          </span><span class="annot"><span class="annottext">Handle -&gt; [Char] -&gt; IO ()
+</span><span class="hs-identifier hs-var">hPutStrLn</span></span><span> </span><span class="annot"><span class="annottext">Handle
+</span><span class="hs-identifier hs-var">stderr</span></span><span> </span><span class="annot"><span class="annottext">[Char]
+</span><span class="hs-string">&quot;Do you have unicode-data installed?&quot;</span></span><span>
+</span><span id="line-85"></span><span>          </span><span class="annot"><span class="annottext">forall (m :: * -&gt; *) a. Monad m =&gt; a -&gt; m a
+</span><span class="hs-identifier hs-var">return</span></span><span> </span><span class="annot"><span class="annottext">Bool
+</span><span class="hs-identifier hs-var">False</span></span><span>
+</span><span id="line-86"></span><span>        </span><span class="annot"><span class="hs-identifier hs-type">Right</span></span><span> </span><span id="local-6989586621679459305"><span class="annot"><span class="annottext">ByteString
+</span><a href="#local-6989586621679459305"><span class="hs-identifier hs-var">dat</span></a></span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-87"></span><span>          </span><span class="annot"><span class="annottext">forall a (m :: * -&gt; *). (ExtensionClass a, XLike m) =&gt; a -&gt; m ()
+</span><a href="XMonad.Util.ExtensibleState.html#put"><span class="hs-identifier hs-var">XS.put</span></a></span><span> </span><span class="annot"><span class="annottext">forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">[(Char, [Char])] -&gt; UnicodeData
+</span><a href="XMonad.Prompt.Unicode.html#UnicodeData"><span class="hs-identifier hs-var">UnicodeData</span></a></span><span> </span><span class="annot"><span class="annottext">forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">forall b a. Ord b =&gt; (a -&gt; b) -&gt; [a] -&gt; [a]
+</span><span class="hs-identifier hs-var">sortOn</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">forall (t :: * -&gt; *) a. Foldable t =&gt; t a -&gt; Int
+</span><span class="hs-identifier hs-var">length</span></span><span> </span><span class="annot"><span class="annottext">forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">forall a b. (a, b) -&gt; b
+</span><span class="hs-identifier hs-var">snd</span></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">ByteString -&gt; [(Char, [Char])]
+</span><a href="XMonad.Prompt.Unicode.html#parseUnicodeData"><span class="hs-identifier hs-var">parseUnicodeData</span></a></span><span> </span><span class="annot"><span class="annottext">ByteString
+</span><a href="#local-6989586621679459305"><span class="hs-identifier hs-var">dat</span></a></span><span>
+</span><span id="line-88"></span><span>          </span><span class="annot"><span class="annottext">forall (m :: * -&gt; *) a. Monad m =&gt; a -&gt; m a
+</span><span class="hs-identifier hs-var">return</span></span><span> </span><span class="annot"><span class="annottext">Bool
+</span><span class="hs-identifier hs-var">True</span></span><span>
+</span><span id="line-89"></span><span>    </span><span class="hs-keyword">else</span><span> </span><span class="annot"><span class="annottext">forall (m :: * -&gt; *) a. Monad m =&gt; a -&gt; m a
+</span><span class="hs-identifier hs-var">return</span></span><span> </span><span class="annot"><span class="annottext">Bool
+</span><span class="hs-identifier hs-var">True</span></span><span>
+</span><span id="line-90"></span><span>
+</span><span id="line-91"></span><span class="annot"><a href="XMonad.Prompt.Unicode.html#parseUnicodeData"><span class="hs-identifier hs-type">parseUnicodeData</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">BS.ByteString</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="hs-special">[</span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">Char</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier hs-type">String</span></span><span class="hs-special">)</span><span class="hs-special">]</span><span>
+</span><span id="line-92"></span><span id="parseUnicodeData"><span class="annot"><span class="annottext">parseUnicodeData :: ByteString -&gt; [(Char, [Char])]
+</span><a href="XMonad.Prompt.Unicode.html#parseUnicodeData"><span class="hs-identifier hs-var hs-var">parseUnicodeData</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">forall a b. (a -&gt; Maybe b) -&gt; [a] -&gt; [b]
+</span><span class="hs-identifier hs-var">mapMaybe</span></span><span> </span><span class="annot"><span class="annottext">forall {m :: * -&gt; *}. MonadFail m =&gt; ByteString -&gt; m (Char, [Char])
+</span><a href="#local-6989586621679459299"><span class="hs-identifier hs-var">parseLine</span></a></span><span> </span><span class="annot"><span class="annottext">forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">ByteString -&gt; [ByteString]
+</span><span class="hs-identifier hs-var">BS.lines</span></span><span>
+</span><span id="line-93"></span><span>  </span><span class="hs-keyword">where</span><span> </span><span id="local-6989586621679459299"><span class="annot"><span class="annottext">parseLine :: ByteString -&gt; m (Char, [Char])
+</span><a href="#local-6989586621679459299"><span class="hs-identifier hs-var hs-var">parseLine</span></a></span></span><span> </span><span id="local-6989586621679459281"><span class="annot"><span class="annottext">ByteString
+</span><a href="#local-6989586621679459281"><span class="hs-identifier hs-var">l</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-94"></span><span>          </span><span id="local-6989586621679459280"><span class="annot"><span class="annottext">ByteString
+</span><a href="#local-6989586621679459280"><span class="hs-identifier hs-var">field1</span></a></span></span><span> </span><span class="annot"><span class="hs-glyph hs-type">:</span></span><span> </span><span id="local-6989586621679459279"><span class="annot"><span class="annottext">ByteString
+</span><a href="#local-6989586621679459279"><span class="hs-identifier hs-var">field2</span></a></span></span><span> </span><span class="annot"><span class="hs-glyph hs-type">:</span></span><span> </span><span class="annot"><span class="annottext">[ByteString]
+</span><span class="hs-identifier">_</span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">forall (m :: * -&gt; *) a. Monad m =&gt; a -&gt; m a
+</span><span class="hs-identifier hs-var">return</span></span><span> </span><span class="annot"><span class="annottext">forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">Char -&gt; ByteString -&gt; [ByteString]
+</span><span class="hs-identifier hs-var">BS.split</span></span><span> </span><span class="annot"><span class="annottext">Char
+</span><span class="hs-char">';'</span></span><span> </span><span class="annot"><span class="annottext">ByteString
+</span><a href="#local-6989586621679459281"><span class="hs-identifier hs-var">l</span></a></span><span>
+</span><span id="line-95"></span><span>          </span><span class="hs-special">[</span><span class="hs-special">(</span><span id="local-6989586621679459277"><span class="annot"><span class="annottext">Int
+</span><a href="#local-6989586621679459277"><span class="hs-identifier hs-var">c</span></a></span></span><span class="hs-special">,</span><span class="annot"><span class="annottext">[Char]
+</span><span class="hs-string">&quot;&quot;</span></span><span class="hs-special">)</span><span class="hs-special">]</span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">forall (m :: * -&gt; *) a. Monad m =&gt; a -&gt; m a
+</span><span class="hs-identifier hs-var">return</span></span><span> </span><span class="annot"><span class="annottext">forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">forall a. (Eq a, Num a) =&gt; ReadS a
+</span><span class="hs-identifier hs-var">readHex</span></span><span> </span><span class="annot"><span class="annottext">forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">ByteString -&gt; [Char]
+</span><span class="hs-identifier hs-var">BS.unpack</span></span><span> </span><span class="annot"><span class="annottext">ByteString
+</span><a href="#local-6989586621679459280"><span class="hs-identifier hs-var">field1</span></a></span><span>
+</span><span id="line-96"></span><span>          </span><span id="local-6989586621679459274"><span class="annot"><span class="annottext">[Char]
+</span><a href="#local-6989586621679459274"><span class="hs-identifier hs-var">desc</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">forall (m :: * -&gt; *) a. Monad m =&gt; a -&gt; m a
+</span><span class="hs-identifier hs-var">return</span></span><span> </span><span class="annot"><span class="annottext">forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">[Char] -&gt; [Char]
+</span><span class="hs-identifier hs-var">decodeString</span></span><span> </span><span class="annot"><span class="annottext">forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">ByteString -&gt; [Char]
+</span><span class="hs-identifier hs-var">BS.unpack</span></span><span> </span><span class="annot"><span class="annottext">ByteString
+</span><a href="#local-6989586621679459279"><span class="hs-identifier hs-var">field2</span></a></span><span>
+</span><span id="line-97"></span><span>          </span><span class="annot"><span class="annottext">forall (m :: * -&gt; *) a. Monad m =&gt; a -&gt; m a
+</span><span class="hs-identifier hs-var">return</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Int -&gt; Char
+</span><span class="hs-identifier hs-var">chr</span></span><span> </span><span class="annot"><span class="annottext">Int
+</span><a href="#local-6989586621679459277"><span class="hs-identifier hs-var">c</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">[Char]
+</span><a href="#local-6989586621679459274"><span class="hs-identifier hs-var">desc</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-98"></span><span>
+</span><span id="line-99"></span><span class="hs-keyword">type</span><span> </span><span id="Predicate"><span class="annot"><a href="XMonad.Prompt.Unicode.html#Predicate"><span class="hs-identifier hs-var">Predicate</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="hs-identifier hs-type">String</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">String</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Bool</span></span><span>
+</span><span id="line-100"></span><span>
+</span><span id="line-101"></span><span class="annot"><a href="XMonad.Prompt.Unicode.html#searchUnicode"><span class="hs-identifier hs-type">searchUnicode</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="hs-special">[</span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">Char</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier hs-type">String</span></span><span class="hs-special">)</span><span class="hs-special">]</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="XMonad.Prompt.Unicode.html#Predicate"><span class="hs-identifier hs-type">Predicate</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">String</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="hs-special">[</span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">Char</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier hs-type">String</span></span><span class="hs-special">)</span><span class="hs-special">]</span><span>
+</span><span id="line-102"></span><span id="searchUnicode"><span class="annot"><span class="annottext">searchUnicode :: [(Char, [Char])] -&gt; Predicate -&gt; [Char] -&gt; [(Char, [Char])]
+</span><a href="XMonad.Prompt.Unicode.html#searchUnicode"><span class="hs-identifier hs-var hs-var">searchUnicode</span></a></span></span><span> </span><span id="local-6989586621679459271"><span class="annot"><span class="annottext">[(Char, [Char])]
+</span><a href="#local-6989586621679459271"><span class="hs-identifier hs-var">entries</span></a></span></span><span> </span><span id="local-6989586621679459270"><span class="annot"><span class="annottext">Predicate
+</span><a href="#local-6989586621679459270"><span class="hs-identifier hs-var">p</span></a></span></span><span> </span><span id="local-6989586621679459269"><span class="annot"><span class="annottext">[Char]
+</span><a href="#local-6989586621679459269"><span class="hs-identifier hs-var">s</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">forall a. (a -&gt; Bool) -&gt; [a] -&gt; [a]
+</span><span class="hs-identifier hs-var">filter</span></span><span> </span><span class="annot"><span class="annottext">forall {a}. (a, [Char]) -&gt; Bool
+</span><a href="#local-6989586621679459268"><span class="hs-identifier hs-var">go</span></a></span><span> </span><span class="annot"><span class="annottext">[(Char, [Char])]
+</span><a href="#local-6989586621679459271"><span class="hs-identifier hs-var">entries</span></a></span><span>
+</span><span id="line-103"></span><span>  </span><span class="hs-keyword">where</span><span> </span><span id="local-6989586621679459264"><span class="annot"><span class="annottext">w :: [[Char]]
+</span><a href="#local-6989586621679459264"><span class="hs-identifier hs-var hs-var">w</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">forall a. (a -&gt; Bool) -&gt; [a] -&gt; [a]
+</span><span class="hs-identifier hs-var">filter</span></span><span> </span><span class="hs-special">(</span><span class="hs-special">(</span><span class="annot"><span class="annottext">forall a. Ord a =&gt; a -&gt; a -&gt; Bool
+</span><span class="hs-operator hs-var">&gt;</span></span><span> </span><span class="annot"><span class="annottext">Int
+</span><span class="hs-number">1</span></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">forall (t :: * -&gt; *) a. Foldable t =&gt; t a -&gt; Int
+</span><span class="hs-identifier hs-var">length</span></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">[Char] -&gt; [[Char]]
+</span><span class="hs-identifier hs-var">words</span></span><span> </span><span class="annot"><span class="annottext">forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">forall a b. (a -&gt; b) -&gt; [a] -&gt; [b]
+</span><span class="hs-identifier hs-var">map</span></span><span> </span><span class="annot"><span class="annottext">Char -&gt; Char
+</span><span class="hs-identifier hs-var">toUpper</span></span><span> </span><span class="annot"><span class="annottext">[Char]
+</span><a href="#local-6989586621679459269"><span class="hs-identifier hs-var">s</span></a></span><span>
+</span><span id="line-104"></span><span>        </span><span id="local-6989586621679459268"><span class="annot"><span class="annottext">go :: (a, [Char]) -&gt; Bool
+</span><a href="#local-6989586621679459268"><span class="hs-identifier hs-var hs-var">go</span></a></span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">a
+</span><span class="hs-identifier">_</span></span><span class="hs-special">,</span><span> </span><span id="local-6989586621679459259"><span class="annot"><span class="annottext">[Char]
+</span><a href="#local-6989586621679459259"><span class="hs-identifier hs-var">d</span></a></span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">forall (t :: * -&gt; *) a. Foldable t =&gt; (a -&gt; Bool) -&gt; t a -&gt; Bool
+</span><span class="hs-identifier hs-var">all</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Predicate
+</span><a href="#local-6989586621679459270"><span class="hs-operator hs-var">`p`</span></a></span><span> </span><span class="annot"><span class="annottext">[Char]
+</span><a href="#local-6989586621679459259"><span class="hs-identifier hs-var">d</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">[[Char]]
+</span><a href="#local-6989586621679459264"><span class="hs-identifier hs-var">w</span></a></span><span>
+</span><span id="line-105"></span><span>
+</span><span id="line-106"></span><span class="annot"><a href="XMonad.Prompt.Unicode.html#mkUnicodePrompt"><span class="hs-identifier hs-type">mkUnicodePrompt</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">String</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="hs-special">[</span><span class="annot"><span class="hs-identifier hs-type">String</span></span><span class="hs-special">]</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">String</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="XMonad.Prompt.html#XPConfig"><span class="hs-identifier hs-type">XPConfig</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">X</span></span><span> </span><span class="hs-special">(</span><span class="hs-special">)</span><span>
+</span><span id="line-107"></span><span id="mkUnicodePrompt"><span class="annot"><span class="annottext">mkUnicodePrompt :: [Char] -&gt; [[Char]] -&gt; [Char] -&gt; XPConfig -&gt; X ()
+</span><a href="XMonad.Prompt.Unicode.html#mkUnicodePrompt"><span class="hs-identifier hs-var hs-var">mkUnicodePrompt</span></a></span></span><span> </span><span id="local-6989586621679459257"><span class="annot"><span class="annottext">[Char]
+</span><a href="#local-6989586621679459257"><span class="hs-identifier hs-var">prog</span></a></span></span><span> </span><span id="local-6989586621679459256"><span class="annot"><span class="annottext">[[Char]]
+</span><a href="#local-6989586621679459256"><span class="hs-identifier hs-var">args</span></a></span></span><span> </span><span id="local-6989586621679459255"><span class="annot"><span class="annottext">[Char]
+</span><a href="#local-6989586621679459255"><span class="hs-identifier hs-var">unicodeDataFilename</span></a></span></span><span> </span><span id="local-6989586621679459254"><span class="annot"><span class="annottext">XPConfig
+</span><a href="#local-6989586621679459254"><span class="hs-identifier hs-var">xpCfg</span></a></span></span><span> </span><span class="hs-glyph">=</span><span>
+</span><span id="line-108"></span><span>  </span><span class="annot"><span class="annottext">X Bool -&gt; X () -&gt; X ()
+</span><span class="hs-identifier hs-var">whenX</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">[Char] -&gt; X Bool
+</span><a href="XMonad.Prompt.Unicode.html#populateEntries"><span class="hs-identifier hs-var">populateEntries</span></a></span><span> </span><span class="annot"><span class="annottext">[Char]
+</span><a href="#local-6989586621679459255"><span class="hs-identifier hs-var">unicodeDataFilename</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-109"></span><span>    </span><span id="local-6989586621679459252"><span class="annot"><span class="annottext">[(Char, [Char])]
+</span><a href="#local-6989586621679459252"><span class="hs-identifier hs-var">entries</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">forall (f :: * -&gt; *) a b. Functor f =&gt; (a -&gt; b) -&gt; f a -&gt; f b
+</span><span class="hs-identifier hs-var">fmap</span></span><span> </span><span class="annot"><span class="annottext">UnicodeData -&gt; [(Char, [Char])]
+</span><a href="XMonad.Prompt.Unicode.html#getUnicodeData"><span class="hs-identifier hs-var">getUnicodeData</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">forall a (m :: * -&gt; *). (ExtensionClass a, XLike m) =&gt; m a
+</span><a href="XMonad.Util.ExtensibleState.html#get"><span class="hs-identifier hs-var">XS.get</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">X</span></span><span> </span><span class="annot"><a href="XMonad.Prompt.Unicode.html#UnicodeData"><span class="hs-identifier hs-type">UnicodeData</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-110"></span><span>    </span><span class="annot"><span class="annottext">forall p.
+XPrompt p =&gt;
+p -&gt; XPConfig -&gt; ComplFunction -&gt; ([Char] -&gt; X ()) -&gt; X ()
+</span><a href="XMonad.Prompt.html#mkXPrompt"><span class="hs-identifier hs-var">mkXPrompt</span></a></span><span>
+</span><span id="line-111"></span><span>      </span><span class="annot"><span class="annottext">Unicode
+</span><a href="XMonad.Prompt.Unicode.html#Unicode"><span class="hs-identifier hs-var">Unicode</span></a></span><span>
+</span><span id="line-112"></span><span>      </span><span class="hs-special">(</span><span class="annot"><span class="annottext">XPConfig
+</span><a href="#local-6989586621679459254"><span class="hs-identifier hs-var">xpCfg</span></a></span><span> </span><span class="hs-special">{</span><span class="annot"><span class="annottext">sorter :: [Char] -&gt; [[Char]] -&gt; [[Char]]
+</span><a href="XMonad.Prompt.html#sorter"><span class="hs-identifier hs-var">sorter</span></a></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">XPConfig -&gt; [Char] -&gt; [[Char]] -&gt; [[Char]]
+</span><a href="XMonad.Prompt.html#sorter"><span class="hs-identifier hs-var">sorter</span></a></span><span> </span><span class="annot"><span class="annottext">XPConfig
+</span><a href="#local-6989586621679459254"><span class="hs-identifier hs-var">xpCfg</span></a></span><span> </span><span class="annot"><span class="annottext">forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">forall a b. (a -&gt; b) -&gt; [a] -&gt; [b]
+</span><span class="hs-identifier hs-var">map</span></span><span> </span><span class="annot"><span class="annottext">Char -&gt; Char
+</span><span class="hs-identifier hs-var">toUpper</span></span><span class="hs-special">}</span><span class="hs-special">)</span><span>
+</span><span id="line-113"></span><span>      </span><span class="hs-special">(</span><span class="annot"><span class="annottext">[(Char, [Char])] -&gt; Predicate -&gt; ComplFunction
+</span><a href="#local-6989586621679459249"><span class="hs-identifier hs-var">unicodeCompl</span></a></span><span> </span><span class="annot"><span class="annottext">[(Char, [Char])]
+</span><a href="#local-6989586621679459252"><span class="hs-identifier hs-var">entries</span></a></span><span> </span><span class="annot"><span class="annottext">forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">XPConfig -&gt; Predicate
+</span><a href="XMonad.Prompt.html#searchPredicate"><span class="hs-identifier hs-var">searchPredicate</span></a></span><span> </span><span class="annot"><span class="annottext">XPConfig
+</span><a href="#local-6989586621679459254"><span class="hs-identifier hs-var">xpCfg</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-114"></span><span>      </span><span class="annot"><span class="annottext">forall {m :: * -&gt; *}. MonadIO m =&gt; [Char] -&gt; m ()
+</span><a href="#local-6989586621679459247"><span class="hs-identifier hs-var">paste</span></a></span><span>
+</span><span id="line-115"></span><span>  </span><span class="hs-keyword">where</span><span>
+</span><span id="line-116"></span><span>    </span><span class="annot"><a href="#local-6989586621679459249"><span class="hs-identifier hs-type">unicodeCompl</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="hs-special">[</span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">Char</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier hs-type">String</span></span><span class="hs-special">)</span><span class="hs-special">]</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="XMonad.Prompt.Unicode.html#Predicate"><span class="hs-identifier hs-type">Predicate</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">String</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">IO</span></span><span> </span><span class="hs-special">[</span><span class="annot"><span class="hs-identifier hs-type">String</span></span><span class="hs-special">]</span><span>
+</span><span id="line-117"></span><span>    </span><span id="local-6989586621679459249"><span class="annot"><span class="annottext">unicodeCompl :: [(Char, [Char])] -&gt; Predicate -&gt; ComplFunction
+</span><a href="#local-6989586621679459249"><span class="hs-identifier hs-var hs-var">unicodeCompl</span></a></span></span><span> </span><span class="annot"><span class="annottext">[(Char, [Char])]
+</span><span class="hs-identifier">_</span></span><span> </span><span class="annot"><span class="annottext">Predicate
+</span><span class="hs-identifier">_</span></span><span> </span><span class="annot"><span class="annottext">[Char]
+</span><span class="hs-string">&quot;&quot;</span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">forall (m :: * -&gt; *) a. Monad m =&gt; a -&gt; m a
+</span><span class="hs-identifier hs-var">return</span></span><span> </span><span class="hs-special">[</span><span class="hs-special">]</span><span>
+</span><span id="line-118"></span><span>    </span><span class="annot"><a href="#local-6989586621679459249"><span class="hs-identifier hs-var">unicodeCompl</span></a></span><span> </span><span id="local-6989586621679459246"><span class="annot"><span class="annottext">[(Char, [Char])]
+</span><a href="#local-6989586621679459246"><span class="hs-identifier hs-var">entries</span></a></span></span><span> </span><span id="local-6989586621679459245"><span class="annot"><span class="annottext">Predicate
+</span><a href="#local-6989586621679459245"><span class="hs-identifier hs-var">p</span></a></span></span><span> </span><span id="local-6989586621679459244"><span class="annot"><span class="annottext">[Char]
+</span><a href="#local-6989586621679459244"><span class="hs-identifier hs-var">s</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-119"></span><span>      </span><span class="hs-keyword">let</span><span> </span><span id="local-6989586621679459243"><span class="annot"><span class="annottext">m :: [(Char, [Char])]
+</span><a href="#local-6989586621679459243"><span class="hs-identifier hs-var hs-var">m</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">[(Char, [Char])] -&gt; Predicate -&gt; [Char] -&gt; [(Char, [Char])]
+</span><a href="XMonad.Prompt.Unicode.html#searchUnicode"><span class="hs-identifier hs-var">searchUnicode</span></a></span><span> </span><span class="annot"><span class="annottext">[(Char, [Char])]
+</span><a href="#local-6989586621679459246"><span class="hs-identifier hs-var">entries</span></a></span><span> </span><span class="annot"><span class="annottext">Predicate
+</span><a href="#local-6989586621679459245"><span class="hs-identifier hs-var">p</span></a></span><span> </span><span class="annot"><span class="annottext">[Char]
+</span><a href="#local-6989586621679459244"><span class="hs-identifier hs-var">s</span></a></span><span>
+</span><span id="line-120"></span><span>      </span><span class="annot"><span class="annottext">forall (m :: * -&gt; *) a. Monad m =&gt; a -&gt; m a
+</span><span class="hs-identifier hs-var">return</span></span><span> </span><span class="annot"><span class="annottext">forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">forall a b. (a -&gt; b) -&gt; [a] -&gt; [b]
+</span><span class="hs-identifier hs-var">map</span></span><span> </span><span class="hs-special">(</span><span class="hs-glyph">\</span><span class="hs-special">(</span><span id="local-6989586621679459242"><span class="annot"><span class="annottext">Char
+</span><a href="#local-6989586621679459242"><span class="hs-identifier hs-var">c</span></a></span></span><span class="hs-special">,</span><span id="local-6989586621679459241"><span class="annot"><span class="annottext">[Char]
+</span><a href="#local-6989586621679459241"><span class="hs-identifier hs-var">d</span></a></span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">forall r. PrintfType r =&gt; [Char] -&gt; r
+</span><span class="hs-identifier hs-var">printf</span></span><span> </span><span class="annot"><span class="annottext">[Char]
+</span><span class="hs-string">&quot;%s %s&quot;</span></span><span> </span><span class="hs-special">[</span><span class="annot"><span class="annottext">Char
+</span><a href="#local-6989586621679459242"><span class="hs-identifier hs-var">c</span></a></span><span class="hs-special">]</span><span> </span><span class="annot"><span class="annottext">[Char]
+</span><a href="#local-6989586621679459241"><span class="hs-identifier hs-var">d</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">forall a. Int -&gt; [a] -&gt; [a]
+</span><span class="hs-identifier hs-var">take</span></span><span> </span><span class="annot"><span class="annottext">Int
+</span><span class="hs-number">20</span></span><span> </span><span class="annot"><span class="annottext">[(Char, [Char])]
+</span><a href="#local-6989586621679459243"><span class="hs-identifier hs-var">m</span></a></span><span>
+</span><span id="line-121"></span><span>    </span><span id="local-6989586621679459247"><span class="annot"><span class="annottext">paste :: [Char] -&gt; m ()
+</span><a href="#local-6989586621679459247"><span class="hs-identifier hs-var hs-var">paste</span></a></span></span><span> </span><span class="hs-special">[</span><span class="hs-special">]</span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">forall (m :: * -&gt; *) a. Monad m =&gt; a -&gt; m a
+</span><span class="hs-identifier hs-var">return</span></span><span> </span><span class="hs-special">(</span><span class="hs-special">)</span><span>
+</span><span id="line-122"></span><span>    </span><span class="annot"><a href="#local-6989586621679459247"><span class="hs-identifier hs-var">paste</span></a></span><span> </span><span class="hs-special">(</span><span id="local-6989586621679459227"><span class="annot"><span class="annottext">Char
+</span><a href="#local-6989586621679459227"><span class="hs-identifier hs-var">c</span></a></span></span><span class="annot"><span class="hs-glyph hs-type">:</span></span><span class="annot"><span class="annottext">[Char]
+</span><span class="hs-identifier">_</span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">forall (m :: * -&gt; *) a. MonadIO m =&gt; IO a -&gt; m a
+</span><span class="hs-identifier hs-var">liftIO</span></span><span> </span><span class="annot"><span class="annottext">forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-123"></span><span>      </span><span id="local-6989586621679459226"><span class="annot"><span class="annottext">Handle
+</span><a href="#local-6989586621679459226"><span class="hs-identifier hs-var">handle</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">forall (m :: * -&gt; *). MonadIO m =&gt; [Char] -&gt; m Handle
+</span><a href="XMonad.Util.Run.html#spawnPipe"><span class="hs-identifier hs-var">spawnPipe</span></a></span><span> </span><span class="annot"><span class="annottext">forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">[[Char]] -&gt; [Char]
+</span><span class="hs-identifier hs-var">unwords</span></span><span> </span><span class="annot"><span class="annottext">forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">[Char]
+</span><a href="#local-6989586621679459257"><span class="hs-identifier hs-var">prog</span></a></span><span> </span><span class="annot"><span class="annottext">forall a. a -&gt; [a] -&gt; [a]
+</span><span class="hs-glyph hs-var">:</span></span><span> </span><span class="annot"><span class="annottext">[[Char]]
+</span><a href="#local-6989586621679459256"><span class="hs-identifier hs-var">args</span></a></span><span>
+</span><span id="line-124"></span><span>      </span><span class="annot"><span class="annottext">Handle -&gt; Char -&gt; IO ()
+</span><span class="hs-identifier hs-var">hPutChar</span></span><span> </span><span class="annot"><span class="annottext">Handle
+</span><a href="#local-6989586621679459226"><span class="hs-identifier hs-var">handle</span></a></span><span> </span><span class="annot"><span class="annottext">Char
+</span><a href="#local-6989586621679459227"><span class="hs-identifier hs-var">c</span></a></span><span>
+</span><span id="line-125"></span><span>      </span><span class="annot"><span class="annottext">Handle -&gt; IO ()
+</span><span class="hs-identifier hs-var">hClose</span></span><span> </span><span class="annot"><span class="annottext">Handle
+</span><a href="#local-6989586621679459226"><span class="hs-identifier hs-var">handle</span></a></span><span>
+</span><span id="line-126"></span><span>      </span><span class="annot"><span class="annottext">forall (m :: * -&gt; *) a. Monad m =&gt; a -&gt; m a
+</span><span class="hs-identifier hs-var">return</span></span><span> </span><span class="hs-special">(</span><span class="hs-special">)</span><span>
+</span><span id="line-127"></span><span>
+</span><span id="line-128"></span><span class="hs-comment">-- | Prompt the user for a Unicode character to be inserted into the paste buffer of the X server.</span><span>
+</span><span id="line-129"></span><span class="annot"><a href="XMonad.Prompt.Unicode.html#unicodePrompt"><span class="hs-identifier hs-type">unicodePrompt</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">String</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="XMonad.Prompt.html#XPConfig"><span class="hs-identifier hs-type">XPConfig</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">X</span></span><span> </span><span class="hs-special">(</span><span class="hs-special">)</span><span>
+</span><span id="line-130"></span><span id="unicodePrompt"><span class="annot"><span class="annottext">unicodePrompt :: [Char] -&gt; XPConfig -&gt; X ()
+</span><a href="XMonad.Prompt.Unicode.html#unicodePrompt"><span class="hs-identifier hs-var hs-var">unicodePrompt</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">[Char] -&gt; [[Char]] -&gt; [Char] -&gt; XPConfig -&gt; X ()
+</span><a href="XMonad.Prompt.Unicode.html#mkUnicodePrompt"><span class="hs-identifier hs-var">mkUnicodePrompt</span></a></span><span> </span><span class="annot"><span class="annottext">[Char]
+</span><span class="hs-string">&quot;xsel&quot;</span></span><span> </span><span class="hs-special">[</span><span class="annot"><span class="annottext">[Char]
+</span><span class="hs-string">&quot;-i&quot;</span></span><span class="hs-special">]</span><span>
+</span><span id="line-131"></span><span>
+</span><span id="line-132"></span><span class="hs-comment">-- | Prompt the user for a Unicode character to be typed by @xdotool@.</span><span>
+</span><span id="line-133"></span><span class="annot"><a href="XMonad.Prompt.Unicode.html#typeUnicodePrompt"><span class="hs-identifier hs-type">typeUnicodePrompt</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">String</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="XMonad.Prompt.html#XPConfig"><span class="hs-identifier hs-type">XPConfig</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">X</span></span><span> </span><span class="hs-special">(</span><span class="hs-special">)</span><span>
+</span><span id="line-134"></span><span id="typeUnicodePrompt"><span class="annot"><span class="annottext">typeUnicodePrompt :: [Char] -&gt; XPConfig -&gt; X ()
+</span><a href="XMonad.Prompt.Unicode.html#typeUnicodePrompt"><span class="hs-identifier hs-var hs-var">typeUnicodePrompt</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">[Char] -&gt; [[Char]] -&gt; [Char] -&gt; XPConfig -&gt; X ()
+</span><a href="XMonad.Prompt.Unicode.html#mkUnicodePrompt"><span class="hs-identifier hs-var">mkUnicodePrompt</span></a></span><span> </span><span class="annot"><span class="annottext">[Char]
+</span><span class="hs-string">&quot;xdotool&quot;</span></span><span> </span><span class="hs-special">[</span><span class="annot"><span class="annottext">[Char]
+</span><span class="hs-string">&quot;type&quot;</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">[Char]
+</span><span class="hs-string">&quot;--clearmodifiers&quot;</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">[Char]
+</span><span class="hs-string">&quot;--file&quot;</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">[Char]
+</span><span class="hs-string">&quot;-&quot;</span></span><span class="hs-special">]</span><span>
+</span><span id="line-135"></span></pre></body></html>

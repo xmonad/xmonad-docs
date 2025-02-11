@@ -1,0 +1,235 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd"><html xmlns="http://www.w3.org/1999/xhtml"><head><link rel="stylesheet" type="text/css" href="style.css" /><script type="text/javascript" src="highlight.js"></script></head><body><pre><span class="hs-comment">-----------------------------------------------------------------------------</span><span>
+</span><span id="line-2"></span><span class="hs-comment">-- |</span><span>
+</span><span id="line-3"></span><span class="hs-comment">-- Module      :  XMonad.Actions.CycleWorkspaceByScreen</span><span>
+</span><span id="line-4"></span><span class="hs-comment">-- Description :  Cycle workspaces in a screen-aware fashion.</span><span>
+</span><span id="line-5"></span><span class="hs-comment">-- Copyright   :  (c) 2017 Ivan Malison</span><span>
+</span><span id="line-6"></span><span class="hs-comment">-- License     :  BSD3-style (see LICENSE)</span><span>
+</span><span id="line-7"></span><span class="hs-comment">--</span><span>
+</span><span id="line-8"></span><span class="hs-comment">-- Maintainer  :  IvanMalison@gmail.com</span><span>
+</span><span id="line-9"></span><span class="hs-comment">-- Stability   :  unstable</span><span>
+</span><span id="line-10"></span><span class="hs-comment">-- Portability :  unportable</span><span>
+</span><span id="line-11"></span><span class="hs-comment">--</span><span>
+</span><span id="line-12"></span><span class="hs-comment">-- Cycle through previously viewed workspaces in the order they were viewed most</span><span>
+</span><span id="line-13"></span><span class="hs-comment">-- recently on the screen where cycling is taking place.</span><span>
+</span><span id="line-14"></span><span class="hs-comment">--</span><span>
+</span><span id="line-15"></span><span class="hs-comment">-----------------------------------------------------------------------------</span><span>
+</span><span id="line-16"></span><span>
+</span><span id="line-17"></span><span class="hs-keyword">module</span><span> </span><span class="hs-identifier">XMonad.Actions.CycleWorkspaceByScreen</span><span> </span><span class="hs-special">(</span><span>
+</span><span id="line-18"></span><span>    </span><span class="annot"><span class="hs-comment">-- * Usage</span></span><span>
+</span><span id="line-19"></span><span>    </span><span class="annot"><span class="hs-comment">-- $usage</span></span><span>
+</span><span id="line-20"></span><span>    </span><span class="annot"><a href="XMonad.Actions.CycleWorkspaceByScreen.html#cycleWorkspaceOnScreen"><span class="hs-identifier">cycleWorkspaceOnScreen</span></a></span><span>
+</span><span id="line-21"></span><span>  </span><span class="hs-special">,</span><span> </span><span class="annot"><a href="XMonad.Actions.CycleWorkspaceByScreen.html#cycleWorkspaceOnCurrentScreen"><span class="hs-identifier">cycleWorkspaceOnCurrentScreen</span></a></span><span>
+</span><span id="line-22"></span><span>  </span><span class="hs-special">,</span><span> </span><span class="annot"><a href="XMonad.Actions.CycleWorkspaceByScreen.html#handleKeyEvent"><span class="hs-identifier">handleKeyEvent</span></a></span><span>
+</span><span id="line-23"></span><span>  </span><span class="hs-special">,</span><span> </span><span class="annot"><a href="XMonad.Actions.CycleWorkspaceByScreen.html#repeatableAction"><span class="hs-identifier">repeatableAction</span></a></span><span>
+</span><span id="line-24"></span><span>  </span><span class="hs-special">)</span><span> </span><span class="hs-keyword">where</span><span>
+</span><span id="line-25"></span><span>
+</span><span id="line-26"></span><span class="hs-keyword">import</span><span>           </span><span class="annot"><span class="hs-identifier">Data.IORef</span></span><span>
+</span><span id="line-27"></span><span>
+</span><span id="line-28"></span><span class="hs-keyword">import</span><span>           </span><span class="annot"><span class="hs-identifier">XMonad</span></span><span>
+</span><span id="line-29"></span><span class="hs-keyword">import</span><span>           </span><span class="annot"><a href="XMonad.Prelude.html"><span class="hs-identifier">XMonad.Prelude</span></a></span><span>
+</span><span id="line-30"></span><span class="hs-keyword">import</span><span>           </span><span class="annot"><a href="XMonad.Hooks.WorkspaceHistory.html"><span class="hs-identifier">XMonad.Hooks.WorkspaceHistory</span></a></span><span>
+</span><span id="line-31"></span><span class="hs-keyword">import</span><span>           </span><span class="annot"><a href="XMonad.Actions.Repeatable.html"><span class="hs-identifier">XMonad.Actions.Repeatable</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="XMonad.Actions.Repeatable.html#repeatable"><span class="hs-identifier">repeatable</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-32"></span><span class="hs-keyword">import</span><span> </span><span class="hs-keyword">qualified</span><span> </span><span class="annot"><span class="hs-identifier">XMonad.StackSet</span></span><span> </span><span class="hs-keyword">as</span><span> </span><span class="annot"><span class="hs-identifier">W</span></span><span>
+</span><span id="line-33"></span><span>
+</span><span id="line-34"></span><span class="hs-comment">-- $usage</span><span>
+</span><span id="line-35"></span><span class="hs-comment">--</span><span>
+</span><span id="line-36"></span><span class="hs-comment">-- To use this module, first import it as well as</span><span>
+</span><span id="line-37"></span><span class="hs-comment">-- &quot;XMonad.Hooks.WorkspaceHistory&quot;:</span><span>
+</span><span id="line-38"></span><span class="hs-comment">--</span><span>
+</span><span id="line-39"></span><span class="hs-comment">-- &gt; import XMonad.Hooks.WorkspaceHistory (workspaceHistoryHook)</span><span>
+</span><span id="line-40"></span><span class="hs-comment">-- &gt; import XMonad.Actions.CycleWorkspaceByScreen</span><span>
+</span><span id="line-41"></span><span class="hs-comment">--</span><span>
+</span><span id="line-42"></span><span class="hs-comment">-- Then add 'workspaceHistoryHook' to your @logHook@ like this:</span><span>
+</span><span id="line-43"></span><span class="hs-comment">--</span><span>
+</span><span id="line-44"></span><span class="hs-comment">-- &gt; main :: IO ()</span><span>
+</span><span id="line-45"></span><span class="hs-comment">-- &gt; main = xmonad $ def</span><span>
+</span><span id="line-46"></span><span class="hs-comment">-- &gt;    { ...</span><span>
+</span><span id="line-47"></span><span class="hs-comment">-- &gt;    , logHook = workspaceHistoryHook &gt;&gt; ...</span><span>
+</span><span id="line-48"></span><span class="hs-comment">-- &gt;    }</span><span>
+</span><span id="line-49"></span><span class="hs-comment">--</span><span>
+</span><span id="line-50"></span><span class="hs-comment">-- Finally, define a new keybinding for cycling (seen) workspaces per</span><span>
+</span><span id="line-51"></span><span class="hs-comment">-- screen:</span><span>
+</span><span id="line-52"></span><span class="hs-comment">--</span><span>
+</span><span id="line-53"></span><span class="hs-comment">-- &gt; , ((mod4Mask, xK_slash), cycleWorkspaceOnCurrentScreen [xK_Super_L] xK_slash xK_p)</span><span>
+</span><span id="line-54"></span><span>
+</span><span id="line-55"></span><span class="hs-pragma">{-# DEPRECATED</span><span> </span><span class="hs-pragma">repeatableAction</span><span> </span><span class="hs-pragma">&quot;Use XMonad.Actions.Repeatable.repeatable&quot;</span><span> </span><span class="hs-pragma">#-}</span><span>
+</span><span id="line-56"></span><span class="annot"><a href="XMonad.Actions.CycleWorkspaceByScreen.html#repeatableAction"><span class="hs-identifier hs-type">repeatableAction</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="hs-special">[</span><span class="annot"><span class="hs-identifier hs-type">KeySym</span></span><span class="hs-special">]</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">KeySym</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">EventType</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">KeySym</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">X</span></span><span> </span><span class="hs-special">(</span><span class="hs-special">)</span><span class="hs-special">)</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">X</span></span><span> </span><span class="hs-special">(</span><span class="hs-special">)</span><span>
+</span><span id="line-57"></span><span id="repeatableAction"><span class="annot"><span class="annottext">repeatableAction :: [KeySym] -&gt; KeySym -&gt; (EventType -&gt; KeySym -&gt; X ()) -&gt; X ()
+</span><a href="XMonad.Actions.CycleWorkspaceByScreen.html#repeatableAction"><span class="hs-identifier hs-var hs-var">repeatableAction</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">[KeySym] -&gt; KeySym -&gt; (EventType -&gt; KeySym -&gt; X ()) -&gt; X ()
+</span><a href="XMonad.Actions.Repeatable.html#repeatable"><span class="hs-identifier hs-var">repeatable</span></a></span><span>
+</span><span id="line-58"></span><span>
+</span><span id="line-59"></span><span class="annot"><a href="XMonad.Actions.CycleWorkspaceByScreen.html#handleKeyEvent"><span class="hs-identifier hs-type">handleKeyEvent</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">EventType</span></span><span>
+</span><span id="line-60"></span><span>               </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">KeySym</span></span><span>
+</span><span id="line-61"></span><span>               </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">X</span></span><span> </span><span class="hs-special">(</span><span class="hs-special">)</span><span>
+</span><span id="line-62"></span><span>               </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">EventType</span></span><span>
+</span><span id="line-63"></span><span>               </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">KeySym</span></span><span>
+</span><span id="line-64"></span><span>               </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Maybe</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">X</span></span><span> </span><span class="hs-special">(</span><span class="hs-special">)</span><span class="hs-special">)</span><span>
+</span><span id="line-65"></span><span id="handleKeyEvent"><span class="annot"><span class="annottext">handleKeyEvent :: EventType -&gt; KeySym -&gt; X () -&gt; EventType -&gt; KeySym -&gt; Maybe (X ())
+</span><a href="XMonad.Actions.CycleWorkspaceByScreen.html#handleKeyEvent"><span class="hs-identifier hs-var hs-var">handleKeyEvent</span></a></span></span><span> </span><span id="local-6989586621679436298"><span class="annot"><span class="annottext">EventType
+</span><a href="#local-6989586621679436298"><span class="hs-identifier hs-var">eventType</span></a></span></span><span> </span><span id="local-6989586621679436297"><span class="annot"><span class="annottext">KeySym
+</span><a href="#local-6989586621679436297"><span class="hs-identifier hs-var">key</span></a></span></span><span> </span><span id="local-6989586621679436296"><span class="annot"><span class="annottext">X ()
+</span><a href="#local-6989586621679436296"><span class="hs-identifier hs-var">action</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">EventType -&gt; KeySym -&gt; Maybe (X ())
+</span><a href="#local-6989586621679436295"><span class="hs-identifier hs-var">helper</span></a></span><span>
+</span><span id="line-66"></span><span>  </span><span class="hs-keyword">where</span><span>
+</span><span id="line-67"></span><span>  </span><span id="local-6989586621679436295"><span class="annot"><span class="annottext">helper :: EventType -&gt; KeySym -&gt; Maybe (X ())
+</span><a href="#local-6989586621679436295"><span class="hs-identifier hs-var hs-var">helper</span></a></span></span><span> </span><span id="local-6989586621679436290"><span class="annot"><span class="annottext">EventType
+</span><a href="#local-6989586621679436290"><span class="hs-identifier hs-var">et</span></a></span></span><span> </span><span id="local-6989586621679436289"><span class="annot"><span class="annottext">KeySym
+</span><a href="#local-6989586621679436289"><span class="hs-identifier hs-var">k</span></a></span></span><span>
+</span><span id="line-68"></span><span>    </span><span class="hs-glyph">|</span><span> </span><span class="annot"><span class="annottext">EventType
+</span><a href="#local-6989586621679436290"><span class="hs-identifier hs-var">et</span></a></span><span> </span><span class="annot"><span class="annottext">forall a. Eq a =&gt; a -&gt; a -&gt; Bool
+</span><span class="hs-operator hs-var">==</span></span><span> </span><span class="annot"><span class="annottext">EventType
+</span><a href="#local-6989586621679436298"><span class="hs-identifier hs-var">eventType</span></a></span><span> </span><span class="annot"><span class="annottext">Bool -&gt; Bool -&gt; Bool
+</span><span class="hs-operator hs-var">&amp;&amp;</span></span><span> </span><span class="annot"><span class="annottext">KeySym
+</span><a href="#local-6989586621679436289"><span class="hs-identifier hs-var">k</span></a></span><span> </span><span class="annot"><span class="annottext">forall a. Eq a =&gt; a -&gt; a -&gt; Bool
+</span><span class="hs-operator hs-var">==</span></span><span> </span><span class="annot"><span class="annottext">KeySym
+</span><a href="#local-6989586621679436297"><span class="hs-identifier hs-var">key</span></a></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">forall a. a -&gt; Maybe a
+</span><span class="hs-identifier hs-var">Just</span></span><span> </span><span class="annot"><span class="annottext">X ()
+</span><a href="#local-6989586621679436296"><span class="hs-identifier hs-var">action</span></a></span><span>
+</span><span id="line-69"></span><span>    </span><span class="hs-glyph">|</span><span> </span><span class="annot"><span class="annottext">Bool
+</span><span class="hs-identifier hs-var">otherwise</span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">forall a. Maybe a
+</span><span class="hs-identifier hs-var">Nothing</span></span><span>
+</span><span id="line-70"></span><span>
+</span><span id="line-71"></span><span>
+</span><span id="line-72"></span><span class="annot"><a href="XMonad.Actions.CycleWorkspaceByScreen.html#runFirst"><span class="hs-identifier hs-type">runFirst</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="hs-special">[</span><span class="annot"><span class="hs-identifier hs-type">EventType</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">KeySym</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Maybe</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">X</span></span><span> </span><span class="hs-special">(</span><span class="hs-special">)</span><span class="hs-special">)</span><span class="hs-special">]</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">EventType</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">KeySym</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">X</span></span><span> </span><span class="hs-special">(</span><span class="hs-special">)</span><span>
+</span><span id="line-73"></span><span id="runFirst"><span class="annot"><span class="annottext">runFirst :: [EventType -&gt; KeySym -&gt; Maybe (X ())]
+-&gt; EventType -&gt; KeySym -&gt; X ()
+</span><a href="XMonad.Actions.CycleWorkspaceByScreen.html#runFirst"><span class="hs-identifier hs-var hs-var">runFirst</span></a></span></span><span> </span><span id="local-6989586621679436286"><span class="annot"><span class="annottext">[EventType -&gt; KeySym -&gt; Maybe (X ())]
+</span><a href="#local-6989586621679436286"><span class="hs-identifier hs-var">matchers</span></a></span></span><span> </span><span id="local-6989586621679436285"><span class="annot"><span class="annottext">EventType
+</span><a href="#local-6989586621679436285"><span class="hs-identifier hs-var">eventType</span></a></span></span><span> </span><span id="local-6989586621679436284"><span class="annot"><span class="annottext">KeySym
+</span><a href="#local-6989586621679436284"><span class="hs-identifier hs-var">key</span></a></span></span><span> </span><span class="hs-glyph">=</span><span>
+</span><span id="line-74"></span><span>  </span><span class="annot"><span class="annottext">forall a. a -&gt; Maybe a -&gt; a
+</span><span class="hs-identifier hs-var">fromMaybe</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">forall (m :: * -&gt; *) a. Monad m =&gt; a -&gt; m a
+</span><span class="hs-identifier hs-var">return</span></span><span> </span><span class="hs-special">(</span><span class="hs-special">)</span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">forall (m :: * -&gt; *) a. Monad m =&gt; m (m a) -&gt; m a
+</span><span class="hs-identifier hs-var">join</span></span><span> </span><span class="annot"><span class="annottext">forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">forall (t :: * -&gt; *) a. Foldable t =&gt; (a -&gt; Bool) -&gt; t a -&gt; Maybe a
+</span><span class="hs-identifier hs-var">find</span></span><span> </span><span class="annot"><span class="annottext">forall a. Maybe a -&gt; Bool
+</span><span class="hs-identifier hs-var">isJust</span></span><span> </span><span class="annot"><span class="annottext">forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">forall a b. (a -&gt; b) -&gt; [a] -&gt; [b]
+</span><span class="hs-identifier hs-var">map</span></span><span> </span><span class="hs-special">(</span><span class="hs-glyph">\</span><span id="local-6989586621679436280"><span class="annot"><span class="annottext">EventType -&gt; KeySym -&gt; Maybe (X ())
+</span><a href="#local-6989586621679436280"><span class="hs-identifier hs-var">fn</span></a></span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">EventType -&gt; KeySym -&gt; Maybe (X ())
+</span><a href="#local-6989586621679436280"><span class="hs-identifier hs-var">fn</span></a></span><span> </span><span class="annot"><span class="annottext">EventType
+</span><a href="#local-6989586621679436285"><span class="hs-identifier hs-var">eventType</span></a></span><span> </span><span class="annot"><span class="annottext">KeySym
+</span><a href="#local-6989586621679436284"><span class="hs-identifier hs-var">key</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">[EventType -&gt; KeySym -&gt; Maybe (X ())]
+</span><a href="#local-6989586621679436286"><span class="hs-identifier hs-var">matchers</span></a></span><span>
+</span><span id="line-75"></span><span>
+</span><span id="line-76"></span><span class="hs-comment">-- | Like 'XMonad.Actions.CycleRecentWS.cycleRecentWS', but only cycle</span><span>
+</span><span id="line-77"></span><span class="hs-comment">-- through the most recent workspaces on the given screen.</span><span>
+</span><span id="line-78"></span><span class="annot"><a href="XMonad.Actions.CycleWorkspaceByScreen.html#cycleWorkspaceOnScreen"><span class="hs-identifier hs-type">cycleWorkspaceOnScreen</span></a></span><span>
+</span><span id="line-79"></span><span>  </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">ScreenId</span></span><span> </span><span class="hs-comment">-- ^ The screen to cycle on.</span><span>
+</span><span id="line-80"></span><span>  </span><span class="hs-glyph">-&gt;</span><span> </span><span class="hs-special">[</span><span class="annot"><span class="hs-identifier hs-type">KeySym</span></span><span class="hs-special">]</span><span> </span><span class="hs-comment">-- ^ A list of modifier keys used when invoking this</span><span>
+</span><span id="line-81"></span><span>              </span><span class="hs-comment">--   action; as soon as one of them is released, the final</span><span>
+</span><span id="line-82"></span><span>              </span><span class="hs-comment">--   switch is made.</span><span>
+</span><span id="line-83"></span><span>  </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">KeySym</span></span><span>   </span><span class="hs-comment">-- ^ Key used to switch to next workspace.</span><span>
+</span><span id="line-84"></span><span>  </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">KeySym</span></span><span>   </span><span class="hs-comment">-- ^ Key used to switch to previous workspace.</span><span>
+</span><span id="line-85"></span><span>  </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">X</span></span><span> </span><span class="hs-special">(</span><span class="hs-special">)</span><span>
+</span><span id="line-86"></span><span id="cycleWorkspaceOnScreen"><span class="annot"><span class="annottext">cycleWorkspaceOnScreen :: ScreenId -&gt; [KeySym] -&gt; KeySym -&gt; KeySym -&gt; X ()
+</span><a href="XMonad.Actions.CycleWorkspaceByScreen.html#cycleWorkspaceOnScreen"><span class="hs-identifier hs-var hs-var">cycleWorkspaceOnScreen</span></a></span></span><span> </span><span id="local-6989586621679436279"><span class="annot"><span class="annottext">ScreenId
+</span><a href="#local-6989586621679436279"><span class="hs-identifier hs-var">screenId</span></a></span></span><span> </span><span id="local-6989586621679436278"><span class="annot"><span class="annottext">[KeySym]
+</span><a href="#local-6989586621679436278"><span class="hs-identifier hs-var">mods</span></a></span></span><span> </span><span id="local-6989586621679436277"><span class="annot"><span class="annottext">KeySym
+</span><a href="#local-6989586621679436277"><span class="hs-identifier hs-var">nextKey</span></a></span></span><span> </span><span id="local-6989586621679436276"><span class="annot"><span class="annottext">KeySym
+</span><a href="#local-6989586621679436276"><span class="hs-identifier hs-var">prevKey</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">X () -&gt; X ()
+</span><a href="XMonad.Hooks.WorkspaceHistory.html#workspaceHistoryTransaction"><span class="hs-identifier hs-var">workspaceHistoryTransaction</span></a></span><span> </span><span class="annot"><span class="annottext">forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-87"></span><span>  </span><span id="local-6989586621679436274"><span class="annot"><span class="annottext">[(ScreenId, [WorkspaceId])]
+</span><a href="#local-6989586621679436274"><span class="hs-identifier hs-var">startingHistory</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">X [(ScreenId, [WorkspaceId])]
+</span><a href="XMonad.Hooks.WorkspaceHistory.html#workspaceHistoryByScreen"><span class="hs-identifier hs-var">workspaceHistoryByScreen</span></a></span><span>
+</span><span id="line-88"></span><span>  </span><span id="local-6989586621679436272"><span class="annot"><span class="annottext">IORef Int
+</span><a href="#local-6989586621679436272"><span class="hs-identifier hs-var">currentWSIndex</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">forall (m :: * -&gt; *) a. MonadIO m =&gt; IO a -&gt; m a
+</span><span class="hs-identifier hs-var">io</span></span><span> </span><span class="annot"><span class="annottext">forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">forall a. a -&gt; IO (IORef a)
+</span><span class="hs-identifier hs-var">newIORef</span></span><span> </span><span class="annot"><span class="annottext">Int
+</span><span class="hs-number">1</span></span><span>
+</span><span id="line-89"></span><span>  </span><span class="hs-keyword">let</span><span> </span><span id="local-6989586621679436267"><span class="annot"><span class="annottext">cycleWorkspaces :: [WorkspaceId]
+</span><a href="#local-6989586621679436267"><span class="hs-identifier hs-var hs-var">cycleWorkspaces</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">forall a. a -&gt; Maybe a -&gt; a
+</span><span class="hs-identifier hs-var">fromMaybe</span></span><span> </span><span class="hs-special">[</span><span class="hs-special">]</span><span> </span><span class="annot"><span class="annottext">forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">forall a b. Eq a =&gt; a -&gt; [(a, b)] -&gt; Maybe b
+</span><span class="hs-identifier hs-var">lookup</span></span><span> </span><span class="annot"><span class="annottext">ScreenId
+</span><a href="#local-6989586621679436279"><span class="hs-identifier hs-var">screenId</span></a></span><span> </span><span class="annot"><span class="annottext">[(ScreenId, [WorkspaceId])]
+</span><a href="#local-6989586621679436274"><span class="hs-identifier hs-var">startingHistory</span></a></span><span>
+</span><span id="line-90"></span><span>      </span><span id="local-6989586621679436257"><span class="annot"><span class="annottext">getAndIncrementWS :: Int -&gt; IO WorkspaceId
+</span><a href="#local-6989586621679436257"><span class="hs-identifier hs-var hs-var">getAndIncrementWS</span></a></span></span><span> </span><span id="local-6989586621679436256"><span class="annot"><span class="annottext">Int
+</span><a href="#local-6989586621679436256"><span class="hs-identifier hs-var">increment</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-91"></span><span>        </span><span id="local-6989586621679436255"><span class="annot"><span class="annottext">Int
+</span><a href="#local-6989586621679436255"><span class="hs-identifier hs-var">current</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">forall a. IORef a -&gt; IO a
+</span><span class="hs-identifier hs-var">readIORef</span></span><span> </span><span class="annot"><span class="annottext">IORef Int
+</span><a href="#local-6989586621679436272"><span class="hs-identifier hs-var">currentWSIndex</span></a></span><span>
+</span><span id="line-92"></span><span>        </span><span class="annot"><span class="annottext">forall a. IORef a -&gt; (a -&gt; a) -&gt; IO ()
+</span><span class="hs-identifier hs-var">modifyIORef</span></span><span>
+</span><span id="line-93"></span><span>          </span><span class="annot"><span class="annottext">IORef Int
+</span><a href="#local-6989586621679436272"><span class="hs-identifier hs-var">currentWSIndex</span></a></span><span>
+</span><span id="line-94"></span><span>          </span><span class="hs-special">(</span><span class="hs-special">(</span><span class="annot"><span class="annottext">forall a. Integral a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-operator hs-var">`mod`</span></span><span> </span><span class="annot"><span class="annottext">forall (t :: * -&gt; *) a. Foldable t =&gt; t a -&gt; Int
+</span><span class="hs-identifier hs-var">length</span></span><span> </span><span class="annot"><span class="annottext">[WorkspaceId]
+</span><a href="#local-6989586621679436267"><span class="hs-identifier hs-var">cycleWorkspaces</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">forall a. Num a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-operator hs-var">+</span></span><span> </span><span class="annot"><span class="annottext">Int
+</span><a href="#local-6989586621679436256"><span class="hs-identifier hs-var">increment</span></a></span><span class="hs-special">)</span><span class="hs-special">)</span><span>
+</span><span id="line-95"></span><span>        </span><span class="annot"><span class="annottext">forall (m :: * -&gt; *) a. Monad m =&gt; a -&gt; m a
+</span><span class="hs-identifier hs-var">return</span></span><span> </span><span class="annot"><span class="annottext">forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">[WorkspaceId]
+</span><a href="#local-6989586621679436267"><span class="hs-identifier hs-var">cycleWorkspaces</span></a></span><span> </span><span class="annot"><span class="annottext">forall a. [a] -&gt; Int -&gt; a
+</span><span class="hs-operator hs-var">!!</span></span><span> </span><span class="annot"><span class="annottext">Int
+</span><a href="#local-6989586621679436255"><span class="hs-identifier hs-var">current</span></a></span><span>
+</span><span id="line-96"></span><span>      </span><span id="local-6989586621679436240"><span class="annot"><span class="annottext">focusIncrement :: Int -&gt; X ()
+</span><a href="#local-6989586621679436240"><span class="hs-identifier hs-var hs-var">focusIncrement</span></a></span></span><span> </span><span id="local-6989586621679436239"><span class="annot"><span class="annottext">Int
+</span><a href="#local-6989586621679436239"><span class="hs-identifier hs-var">i</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">forall (m :: * -&gt; *) a. MonadIO m =&gt; IO a -&gt; m a
+</span><span class="hs-identifier hs-var">io</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Int -&gt; IO WorkspaceId
+</span><a href="#local-6989586621679436257"><span class="hs-identifier hs-var">getAndIncrementWS</span></a></span><span> </span><span class="annot"><span class="annottext">Int
+</span><a href="#local-6989586621679436239"><span class="hs-identifier hs-var">i</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">forall (m :: * -&gt; *) a b. Monad m =&gt; m a -&gt; (a -&gt; m b) -&gt; m b
+</span><span class="hs-operator hs-var">&gt;&gt;=</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">(WindowSet -&gt; WindowSet) -&gt; X ()
+</span><span class="hs-identifier hs-var">windows</span></span><span> </span><span class="annot"><span class="annottext">forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">forall s i l a sd.
+(Eq s, Eq i) =&gt;
+i -&gt; StackSet i l a s sd -&gt; StackSet i l a s sd
+</span><span class="hs-identifier hs-var">W.greedyView</span></span><span class="hs-special">)</span><span>
+</span><span id="line-97"></span><span>
+</span><span id="line-98"></span><span>  </span><span class="annot"><span class="annottext">[KeySym] -&gt; KeySym -&gt; (EventType -&gt; KeySym -&gt; X ()) -&gt; X ()
+</span><a href="XMonad.Actions.Repeatable.html#repeatable"><span class="hs-identifier hs-var">repeatable</span></a></span><span> </span><span class="annot"><span class="annottext">[KeySym]
+</span><a href="#local-6989586621679436278"><span class="hs-identifier hs-var">mods</span></a></span><span> </span><span class="annot"><span class="annottext">KeySym
+</span><a href="#local-6989586621679436277"><span class="hs-identifier hs-var">nextKey</span></a></span><span> </span><span class="annot"><span class="annottext">forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span>
+</span><span id="line-99"></span><span>    </span><span class="annot"><span class="annottext">[EventType -&gt; KeySym -&gt; Maybe (X ())]
+-&gt; EventType -&gt; KeySym -&gt; X ()
+</span><a href="XMonad.Actions.CycleWorkspaceByScreen.html#runFirst"><span class="hs-identifier hs-var">runFirst</span></a></span><span>
+</span><span id="line-100"></span><span>      </span><span class="hs-special">[</span><span> </span><span class="annot"><span class="annottext">EventType -&gt; KeySym -&gt; X () -&gt; EventType -&gt; KeySym -&gt; Maybe (X ())
+</span><a href="XMonad.Actions.CycleWorkspaceByScreen.html#handleKeyEvent"><span class="hs-identifier hs-var">handleKeyEvent</span></a></span><span> </span><span class="annot"><span class="annottext">EventType
+</span><span class="hs-identifier hs-var">keyPress</span></span><span> </span><span class="annot"><span class="annottext">KeySym
+</span><a href="#local-6989586621679436277"><span class="hs-identifier hs-var">nextKey</span></a></span><span> </span><span class="annot"><span class="annottext">forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">Int -&gt; X ()
+</span><a href="#local-6989586621679436240"><span class="hs-identifier hs-var">focusIncrement</span></a></span><span> </span><span class="annot"><span class="annottext">Int
+</span><span class="hs-number">1</span></span><span>
+</span><span id="line-101"></span><span>      </span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">EventType -&gt; KeySym -&gt; X () -&gt; EventType -&gt; KeySym -&gt; Maybe (X ())
+</span><a href="XMonad.Actions.CycleWorkspaceByScreen.html#handleKeyEvent"><span class="hs-identifier hs-var">handleKeyEvent</span></a></span><span> </span><span class="annot"><span class="annottext">EventType
+</span><span class="hs-identifier hs-var">keyPress</span></span><span> </span><span class="annot"><span class="annottext">KeySym
+</span><a href="#local-6989586621679436276"><span class="hs-identifier hs-var">prevKey</span></a></span><span> </span><span class="annot"><span class="annottext">forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">Int -&gt; X ()
+</span><a href="#local-6989586621679436240"><span class="hs-identifier hs-var">focusIncrement</span></a></span><span> </span><span class="hs-special">(</span><span class="hs-glyph">-</span><span class="annot"><span class="annottext">Int
+</span><span class="hs-number">1</span></span><span class="hs-special">)</span><span>
+</span><span id="line-102"></span><span>      </span><span class="hs-special">]</span><span>
+</span><span id="line-103"></span><span>  </span><span class="annot"><span class="annottext">forall (m :: * -&gt; *) a. Monad m =&gt; a -&gt; m a
+</span><span class="hs-identifier hs-var">return</span></span><span> </span><span class="hs-special">(</span><span class="hs-special">)</span><span>
+</span><span id="line-104"></span><span>
+</span><span id="line-105"></span><span class="hs-comment">-- | Like 'cycleWorkspaceOnScreen', but supply the currently focused</span><span>
+</span><span id="line-106"></span><span class="hs-comment">-- screen as the @screenId@.</span><span>
+</span><span id="line-107"></span><span class="annot"><a href="XMonad.Actions.CycleWorkspaceByScreen.html#cycleWorkspaceOnCurrentScreen"><span class="hs-identifier hs-type">cycleWorkspaceOnCurrentScreen</span></a></span><span>
+</span><span id="line-108"></span><span>  </span><span class="hs-glyph">::</span><span> </span><span class="hs-special">[</span><span class="annot"><span class="hs-identifier hs-type">KeySym</span></span><span class="hs-special">]</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">KeySym</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">KeySym</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">X</span></span><span> </span><span class="hs-special">(</span><span class="hs-special">)</span><span>
+</span><span id="line-109"></span><span id="cycleWorkspaceOnCurrentScreen"><span class="annot"><span class="annottext">cycleWorkspaceOnCurrentScreen :: [KeySym] -&gt; KeySym -&gt; KeySym -&gt; X ()
+</span><a href="XMonad.Actions.CycleWorkspaceByScreen.html#cycleWorkspaceOnCurrentScreen"><span class="hs-identifier hs-var hs-var">cycleWorkspaceOnCurrentScreen</span></a></span></span><span> </span><span id="local-6989586621679436235"><span class="annot"><span class="annottext">[KeySym]
+</span><a href="#local-6989586621679436235"><span class="hs-identifier hs-var">mods</span></a></span></span><span> </span><span id="local-6989586621679436234"><span class="annot"><span class="annottext">KeySym
+</span><a href="#local-6989586621679436234"><span class="hs-identifier hs-var">n</span></a></span></span><span> </span><span id="local-6989586621679436233"><span class="annot"><span class="annottext">KeySym
+</span><a href="#local-6989586621679436233"><span class="hs-identifier hs-var">p</span></a></span></span><span> </span><span class="hs-glyph">=</span><span>
+</span><span id="line-110"></span><span>  </span><span class="annot"><span class="annottext">forall a. (WindowSet -&gt; X a) -&gt; X a
+</span><span class="hs-identifier hs-var">withWindowSet</span></span><span> </span><span class="annot"><span class="annottext">forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="hs-glyph">\</span><span id="local-6989586621679436231"><span class="annot"><span class="annottext">WindowSet
+</span><a href="#local-6989586621679436231"><span class="hs-identifier hs-var">ws</span></a></span></span><span> </span><span class="hs-glyph">-&gt;</span><span>
+</span><span id="line-111"></span><span>    </span><span class="annot"><span class="annottext">ScreenId -&gt; [KeySym] -&gt; KeySym -&gt; KeySym -&gt; X ()
+</span><a href="XMonad.Actions.CycleWorkspaceByScreen.html#cycleWorkspaceOnScreen"><span class="hs-identifier hs-var">cycleWorkspaceOnScreen</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">forall i l a sid sd. Screen i l a sid sd -&gt; sid
+</span><span class="hs-identifier hs-var">W.screen</span></span><span> </span><span class="annot"><span class="annottext">forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">forall i l a sid sd. StackSet i l a sid sd -&gt; Screen i l a sid sd
+</span><span class="hs-identifier hs-var">W.current</span></span><span> </span><span class="annot"><span class="annottext">WindowSet
+</span><a href="#local-6989586621679436231"><span class="hs-identifier hs-var">ws</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">[KeySym]
+</span><a href="#local-6989586621679436235"><span class="hs-identifier hs-var">mods</span></a></span><span> </span><span class="annot"><span class="annottext">KeySym
+</span><a href="#local-6989586621679436234"><span class="hs-identifier hs-var">n</span></a></span><span> </span><span class="annot"><span class="annottext">KeySym
+</span><a href="#local-6989586621679436233"><span class="hs-identifier hs-var">p</span></a></span><span>
+</span><span id="line-112"></span></pre></body></html>

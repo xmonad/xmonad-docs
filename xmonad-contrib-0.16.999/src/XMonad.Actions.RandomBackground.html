@@ -1,0 +1,271 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd"><html xmlns="http://www.w3.org/1999/xhtml"><head><link rel="stylesheet" type="text/css" href="style.css" /><script type="text/javascript" src="highlight.js"></script></head><body><pre><span class="hs-comment">-----------------------------------------------------------------------------</span><span>
+</span><span id="line-2"></span><span class="hs-comment">-- |</span><span>
+</span><span id="line-3"></span><span class="hs-comment">-- Module      :  XMonad.Actions.RandomBackground</span><span>
+</span><span id="line-4"></span><span class="hs-comment">-- Description :  Start terminals with a random background color.</span><span>
+</span><span id="line-5"></span><span class="hs-comment">-- Copyright   :  (c) 2009 Anze Slosar</span><span>
+</span><span id="line-6"></span><span class="hs-comment">--                translation to Haskell by Adam Vogt</span><span>
+</span><span id="line-7"></span><span class="hs-comment">-- License     :  BSD3-style (see LICENSE)</span><span>
+</span><span id="line-8"></span><span class="hs-comment">--</span><span>
+</span><span id="line-9"></span><span class="hs-comment">-- Maintainer  :  &lt;vogt.adam@gmail.com&gt;</span><span>
+</span><span id="line-10"></span><span class="hs-comment">-- Stability   :  unstable</span><span>
+</span><span id="line-11"></span><span class="hs-comment">-- Portability :  unportable</span><span>
+</span><span id="line-12"></span><span class="hs-comment">--</span><span>
+</span><span id="line-13"></span><span class="hs-comment">-- An action to start terminals with a random background color</span><span>
+</span><span id="line-14"></span><span class="hs-comment">--</span><span>
+</span><span id="line-15"></span><span class="hs-comment">-----------------------------------------------------------------------------</span><span>
+</span><span id="line-16"></span><span>
+</span><span id="line-17"></span><span class="hs-keyword">module</span><span> </span><span class="hs-identifier">XMonad.Actions.RandomBackground</span><span> </span><span class="hs-special">(</span><span>
+</span><span id="line-18"></span><span>    </span><span class="annot"><span class="hs-comment">-- * Usage</span></span><span>
+</span><span id="line-19"></span><span>    </span><span class="annot"><span class="hs-comment">-- $usage</span></span><span>
+</span><span id="line-20"></span><span>    </span><span class="annot"><a href="XMonad.Actions.RandomBackground.html#randomBg%27"><span class="hs-identifier">randomBg'</span></a></span><span class="hs-special">,</span><span>
+</span><span id="line-21"></span><span>    </span><span class="annot"><a href="XMonad.Actions.RandomBackground.html#randomBg"><span class="hs-identifier">randomBg</span></a></span><span class="hs-special">,</span><span>
+</span><span id="line-22"></span><span>    </span><span class="annot"><a href="XMonad.Actions.RandomBackground.html#RandomColor"><span class="hs-identifier">RandomColor</span></a></span><span class="hs-special">(</span><span class="annot"><a href="XMonad.Actions.RandomBackground.html#HSV"><span class="hs-identifier">HSV</span></a></span><span class="hs-special">,</span><span class="annot"><a href="XMonad.Actions.RandomBackground.html#RGB"><span class="hs-identifier">RGB</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-23"></span><span>    </span><span class="hs-special">)</span><span> </span><span class="hs-keyword">where</span><span>
+</span><span id="line-24"></span><span>
+</span><span id="line-25"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><span class="hs-identifier">XMonad</span></span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier">X</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier">XConf</span></span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier">config</span></span><span class="hs-special">)</span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier">XConfig</span></span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier">terminal</span></span><span class="hs-special">)</span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier">io</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier">spawn</span></span><span class="hs-special">,</span><span>
+</span><span id="line-26"></span><span>              </span><span class="annot"><span class="hs-identifier">MonadIO</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier">asks</span></span><span class="hs-special">)</span><span>
+</span><span id="line-27"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><span class="hs-identifier">System.Random</span></span><span>
+</span><span id="line-28"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><span class="hs-identifier">Numeric</span></span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier">showHex</span></span><span class="hs-special">)</span><span>
+</span><span id="line-29"></span><span>
+</span><span id="line-30"></span><span class="hs-comment">-- $usage</span><span>
+</span><span id="line-31"></span><span class="hs-comment">--</span><span>
+</span><span id="line-32"></span><span class="hs-comment">-- Add to your keybindings something like:</span><span>
+</span><span id="line-33"></span><span class="hs-comment">--</span><span>
+</span><span id="line-34"></span><span class="hs-comment">-- &gt; ,((modm .|. shiftMask, xK_Return), randomBg $ HSV 0xff 0x20</span><span>
+</span><span id="line-35"></span><span>
+</span><span id="line-36"></span><span class="hs-comment">-- | RandomColor fixes constraints when generating random colors. All</span><span>
+</span><span id="line-37"></span><span class="hs-comment">-- parameters should be in the range 0 -- 0xff</span><span>
+</span><span id="line-38"></span><span class="hs-keyword">data</span><span> </span><span id="RandomColor"><span class="annot"><a href="XMonad.Actions.RandomBackground.html#RandomColor"><span class="hs-identifier hs-var">RandomColor</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span id="RGB"><span class="annot"><a href="XMonad.Actions.RandomBackground.html#RGB"><span class="hs-identifier hs-var">RGB</span></a></span></span><span> </span><span class="hs-special">{</span><span> </span><span id="_colorMin"><span class="annot"><span class="annottext">RandomColor -&gt; Int
+</span><a href="XMonad.Actions.RandomBackground.html#_colorMin"><span class="hs-identifier hs-var hs-var">_colorMin</span></a></span></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Int</span></span><span>
+</span><span id="line-39"></span><span>                       </span><span class="hs-special">,</span><span> </span><span id="_colorMax"><span class="annot"><span class="annottext">RandomColor -&gt; Int
+</span><a href="XMonad.Actions.RandomBackground.html#_colorMax"><span class="hs-identifier hs-var hs-var">_colorMax</span></a></span></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Int</span></span><span>
+</span><span id="line-40"></span><span>                       </span><span class="hs-special">}</span><span> </span><span class="hs-comment">-- ^ specify the minimum and maximum lowest values for each color channel.</span><span>
+</span><span id="line-41"></span><span>                 </span><span class="hs-glyph">|</span><span> </span><span id="HSV"><span class="annot"><a href="XMonad.Actions.RandomBackground.html#HSV"><span class="hs-identifier hs-var">HSV</span></a></span></span><span> </span><span class="hs-special">{</span><span> </span><span id="_colorSaturation"><span class="annot"><span class="annottext">RandomColor -&gt; Double
+</span><a href="XMonad.Actions.RandomBackground.html#_colorSaturation"><span class="hs-identifier hs-var hs-var">_colorSaturation</span></a></span></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Double</span></span><span>
+</span><span id="line-42"></span><span>                       </span><span class="hs-special">,</span><span> </span><span id="_colorValue"><span class="annot"><span class="annottext">RandomColor -&gt; Double
+</span><a href="XMonad.Actions.RandomBackground.html#_colorValue"><span class="hs-identifier hs-var hs-var">_colorValue</span></a></span></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Double</span></span><span>
+</span><span id="line-43"></span><span>                       </span><span class="hs-special">}</span><span> </span><span class="hs-comment">-- ^ specify the saturation and value, leaving the hue random.</span><span>
+</span><span id="line-44"></span><span>
+</span><span id="line-45"></span><span class="annot"><a href="XMonad.Actions.RandomBackground.html#toHex"><span class="hs-identifier hs-type">toHex</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="hs-special">[</span><span class="annot"><span class="hs-identifier hs-type">Int</span></span><span class="hs-special">]</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">String</span></span><span>
+</span><span id="line-46"></span><span id="toHex"><span class="annot"><span class="annottext">toHex :: [Int] -&gt; String
+</span><a href="XMonad.Actions.RandomBackground.html#toHex"><span class="hs-identifier hs-var hs-var">toHex</span></a></span></span><span> </span><span class="hs-glyph">=</span><span>  </span><span class="hs-special">(</span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot;'#&quot;</span></span><span class="annot"><span class="annottext">String -&gt; String -&gt; String
+forall a. [a] -&gt; [a] -&gt; [a]
+</span><span class="hs-operator hs-var">++</span></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">(String -&gt; String) -&gt; ([Int] -&gt; String) -&gt; [Int] -&gt; String
+forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">String -&gt; String -&gt; String
+forall a. [a] -&gt; [a] -&gt; [a]
+</span><span class="hs-operator hs-var">++</span></span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot;'&quot;</span></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">(String -&gt; String) -&gt; ([Int] -&gt; String) -&gt; [Int] -&gt; String
+forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">(Int -&gt; String) -&gt; [Int] -&gt; String
+forall (t :: * -&gt; *) a b. Foldable t =&gt; (a -&gt; [b]) -&gt; t a -&gt; [b]
+</span><span class="hs-identifier hs-var">concatMap</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Int -&gt; String -&gt; String
+</span><a href="#local-6989586621679354097"><span class="hs-identifier hs-var">ensure</span></a></span><span> </span><span class="annot"><span class="annottext">Int
+</span><span class="hs-number">2</span></span><span> </span><span class="annot"><span class="annottext">(String -&gt; String) -&gt; (Int -&gt; String) -&gt; Int -&gt; String
+forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">(String -&gt; String) -&gt; String -&gt; String
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot;&quot;</span></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">((String -&gt; String) -&gt; String)
+-&gt; (Int -&gt; String -&gt; String) -&gt; Int -&gt; String
+forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">Int -&gt; String -&gt; String
+forall a. (Integral a, Show a) =&gt; a -&gt; String -&gt; String
+</span><span class="hs-identifier hs-var">showHex</span></span><span class="hs-special">)</span><span>
+</span><span id="line-47"></span><span>    </span><span class="hs-keyword">where</span><span> </span><span id="local-6989586621679354097"><span class="annot"><span class="annottext">ensure :: Int -&gt; String -&gt; String
+</span><a href="#local-6989586621679354097"><span class="hs-identifier hs-var hs-var">ensure</span></a></span></span><span> </span><span id="local-6989586621679354096"><span class="annot"><span class="annottext">Int
+</span><a href="#local-6989586621679354096"><span class="hs-identifier hs-var">x</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">String -&gt; String
+forall a. [a] -&gt; [a]
+</span><span class="hs-identifier hs-var">reverse</span></span><span> </span><span class="annot"><span class="annottext">(String -&gt; String) -&gt; (String -&gt; String) -&gt; String -&gt; String
+forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">Int -&gt; String -&gt; String
+forall a. Int -&gt; [a] -&gt; [a]
+</span><span class="hs-identifier hs-var">take</span></span><span> </span><span class="annot"><span class="annottext">Int
+</span><a href="#local-6989586621679354096"><span class="hs-identifier hs-var">x</span></a></span><span> </span><span class="annot"><span class="annottext">(String -&gt; String) -&gt; (String -&gt; String) -&gt; String -&gt; String
+forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">String -&gt; String -&gt; String
+forall a. [a] -&gt; [a] -&gt; [a]
+</span><span class="hs-operator hs-var">++</span></span><span class="annot"><span class="annottext">Char -&gt; String
+forall a. a -&gt; [a]
+</span><span class="hs-identifier hs-var">repeat</span></span><span> </span><span class="annot"><span class="annottext">Char
+</span><span class="hs-char">'0'</span></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">(String -&gt; String) -&gt; (String -&gt; String) -&gt; String -&gt; String
+forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">String -&gt; String
+forall a. [a] -&gt; [a]
+</span><span class="hs-identifier hs-var">reverse</span></span><span>
+</span><span id="line-48"></span><span>
+</span><span id="line-49"></span><span id="local-6989586621679354127"><span id="local-6989586621679354128"><span class="annot"><a href="XMonad.Actions.RandomBackground.html#randPermutation"><span class="hs-identifier hs-type">randPermutation</span></a></span><span> </span><span class="hs-glyph">::</span><span>  </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">RandomGen</span></span><span> </span><span class="annot"><a href="#local-6989586621679354128"><span class="hs-identifier hs-type">g</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=&gt;</span><span> </span><span class="hs-special">[</span><span class="annot"><a href="#local-6989586621679354127"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">]</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="#local-6989586621679354128"><span class="hs-identifier hs-type">g</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="hs-special">[</span><span class="annot"><a href="#local-6989586621679354127"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">]</span></span></span><span>
+</span><span id="line-50"></span><span id="randPermutation"><span class="annot"><span class="annottext">randPermutation :: [a] -&gt; g -&gt; [a]
+</span><a href="XMonad.Actions.RandomBackground.html#randPermutation"><span class="hs-identifier hs-var hs-var">randPermutation</span></a></span></span><span> </span><span id="local-6989586621679354091"><span class="annot"><span class="annottext">[a]
+</span><a href="#local-6989586621679354091"><span class="hs-identifier hs-var">xs</span></a></span></span><span> </span><span id="local-6989586621679354090"><span class="annot"><span class="annottext">g
+</span><a href="#local-6989586621679354090"><span class="hs-identifier hs-var">g</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">[(Bool, a)] -&gt; [a]
+forall b. [(Bool, b)] -&gt; [b]
+</span><a href="#local-6989586621679354089"><span class="hs-identifier hs-var">swap</span></a></span><span> </span><span class="annot"><span class="annottext">([(Bool, a)] -&gt; [a]) -&gt; [(Bool, a)] -&gt; [a]
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">[Bool] -&gt; [a] -&gt; [(Bool, a)]
+forall a b. [a] -&gt; [b] -&gt; [(a, b)]
+</span><span class="hs-identifier hs-var">zip</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">g -&gt; [Bool]
+forall a g. (Random a, RandomGen g) =&gt; g -&gt; [a]
+</span><span class="hs-identifier hs-var">randoms</span></span><span> </span><span class="annot"><span class="annottext">g
+</span><a href="#local-6989586621679354090"><span class="hs-identifier hs-var">g</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">[a]
+</span><a href="#local-6989586621679354091"><span class="hs-identifier hs-var">xs</span></a></span><span>
+</span><span id="line-51"></span><span>  </span><span class="hs-keyword">where</span><span>
+</span><span id="line-52"></span><span>    </span><span id="local-6989586621679354089"><span class="annot"><span class="annottext">swap :: [(Bool, b)] -&gt; [b]
+</span><a href="#local-6989586621679354089"><span class="hs-identifier hs-var hs-var">swap</span></a></span></span><span> </span><span class="hs-special">(</span><span class="hs-special">(</span><span class="annot"><span class="annottext">Bool
+</span><span class="hs-identifier hs-var">True</span></span><span class="hs-special">,</span><span id="local-6989586621679354087"><span class="annot"><span class="annottext">b
+</span><a href="#local-6989586621679354087"><span class="hs-identifier hs-var">x</span></a></span></span><span class="hs-special">)</span><span class="annot"><span class="hs-glyph hs-type">:</span></span><span class="hs-special">(</span><span id="local-6989586621679354086"><span class="annot"><span class="annottext">Bool
+</span><a href="#local-6989586621679354086"><span class="hs-identifier hs-var">c</span></a></span></span><span class="hs-special">,</span><span id="local-6989586621679354085"><span class="annot"><span class="annottext">b
+</span><a href="#local-6989586621679354085"><span class="hs-identifier hs-var">y</span></a></span></span><span class="hs-special">)</span><span class="annot"><span class="hs-glyph hs-type">:</span></span><span id="local-6989586621679354084"><span class="annot"><span class="annottext">[(Bool, b)]
+</span><a href="#local-6989586621679354084"><span class="hs-identifier hs-var">ys</span></a></span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">b
+</span><a href="#local-6989586621679354085"><span class="hs-identifier hs-var">y</span></a></span><span class="annot"><span class="annottext">b -&gt; [b] -&gt; [b]
+forall a. a -&gt; [a] -&gt; [a]
+</span><span class="hs-glyph hs-var">:</span></span><span class="annot"><span class="annottext">[(Bool, b)] -&gt; [b]
+</span><a href="#local-6989586621679354089"><span class="hs-identifier hs-var">swap</span></a></span><span> </span><span class="hs-special">(</span><span class="hs-special">(</span><span class="annot"><span class="annottext">Bool
+</span><a href="#local-6989586621679354086"><span class="hs-identifier hs-var">c</span></a></span><span class="hs-special">,</span><span class="annot"><span class="annottext">b
+</span><a href="#local-6989586621679354087"><span class="hs-identifier hs-var">x</span></a></span><span class="hs-special">)</span><span class="annot"><span class="annottext">(Bool, b) -&gt; [(Bool, b)] -&gt; [(Bool, b)]
+forall a. a -&gt; [a] -&gt; [a]
+</span><span class="hs-glyph hs-var">:</span></span><span class="annot"><span class="annottext">[(Bool, b)]
+</span><a href="#local-6989586621679354084"><span class="hs-identifier hs-var">ys</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-53"></span><span>    </span><span class="annot"><a href="#local-6989586621679354089"><span class="hs-identifier hs-var">swap</span></a></span><span> </span><span class="hs-special">(</span><span class="hs-special">(</span><span class="annot"><span class="annottext">Bool
+</span><span class="hs-identifier hs-var">False</span></span><span class="hs-special">,</span><span id="local-6989586621679354083"><span class="annot"><span class="annottext">b
+</span><a href="#local-6989586621679354083"><span class="hs-identifier hs-var">x</span></a></span></span><span class="hs-special">)</span><span class="annot"><span class="hs-glyph hs-type">:</span></span><span id="local-6989586621679354082"><span class="annot"><span class="annottext">[(Bool, b)]
+</span><a href="#local-6989586621679354082"><span class="hs-identifier hs-var">ys</span></a></span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">b
+</span><a href="#local-6989586621679354083"><span class="hs-identifier hs-var">x</span></a></span><span class="annot"><span class="annottext">b -&gt; [b] -&gt; [b]
+forall a. a -&gt; [a] -&gt; [a]
+</span><span class="hs-glyph hs-var">:</span></span><span class="annot"><span class="annottext">[(Bool, b)] -&gt; [b]
+</span><a href="#local-6989586621679354089"><span class="hs-identifier hs-var">swap</span></a></span><span> </span><span class="annot"><span class="annottext">[(Bool, b)]
+</span><a href="#local-6989586621679354082"><span class="hs-identifier hs-var">ys</span></a></span><span>
+</span><span id="line-54"></span><span>    </span><span class="annot"><a href="#local-6989586621679354089"><span class="hs-identifier hs-var">swap</span></a></span><span> </span><span id="local-6989586621679354081"><span class="annot"><span class="annottext">[(Bool, b)]
+</span><a href="#local-6989586621679354081"><span class="hs-identifier hs-var">x</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">((Bool, b) -&gt; b) -&gt; [(Bool, b)] -&gt; [b]
+forall a b. (a -&gt; b) -&gt; [a] -&gt; [b]
+</span><span class="hs-identifier hs-var">map</span></span><span> </span><span class="annot"><span class="annottext">(Bool, b) -&gt; b
+forall a b. (a, b) -&gt; b
+</span><span class="hs-identifier hs-var">snd</span></span><span> </span><span class="annot"><span class="annottext">[(Bool, b)]
+</span><a href="#local-6989586621679354081"><span class="hs-identifier hs-var">x</span></a></span><span>
+</span><span id="line-55"></span><span>
+</span><span id="line-56"></span><span class="hs-comment">-- | @randomBg'@ produces a random hex number in the form @'#xxyyzz'@</span><span>
+</span><span id="line-57"></span><span id="local-6989586621679354116"><span class="annot"><a href="XMonad.Actions.RandomBackground.html#randomBg%27"><span class="hs-identifier hs-type">randomBg'</span></a></span><span> </span><span class="hs-glyph">::</span><span>  </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">MonadIO</span></span><span> </span><span class="annot"><a href="#local-6989586621679354116"><span class="hs-identifier hs-type">m</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=&gt;</span><span> </span><span class="annot"><a href="XMonad.Actions.RandomBackground.html#RandomColor"><span class="hs-identifier hs-type">RandomColor</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="#local-6989586621679354116"><span class="hs-identifier hs-type">m</span></a></span><span> </span><span class="annot"><span class="hs-identifier hs-type">String</span></span></span><span>
+</span><span id="line-58"></span><span id="randomBg%27"><span class="annot"><span class="annottext">randomBg' :: RandomColor -&gt; m String
+</span><a href="XMonad.Actions.RandomBackground.html#randomBg%27"><span class="hs-identifier hs-var hs-var">randomBg'</span></a></span></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="XMonad.Actions.RandomBackground.html#RGB"><span class="hs-identifier hs-type">RGB</span></a></span><span> </span><span id="local-6989586621679354080"><span class="annot"><span class="annottext">Int
+</span><a href="#local-6989586621679354080"><span class="hs-identifier hs-var">l</span></a></span></span><span> </span><span id="local-6989586621679354079"><span class="annot"><span class="annottext">Int
+</span><a href="#local-6989586621679354079"><span class="hs-identifier hs-var">h</span></a></span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">IO String -&gt; m String
+forall (m :: * -&gt; *) a. MonadIO m =&gt; IO a -&gt; m a
+</span><span class="hs-identifier hs-var">io</span></span><span> </span><span class="annot"><span class="annottext">(IO String -&gt; m String) -&gt; IO String -&gt; m String
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">(StdGen -&gt; String) -&gt; IO StdGen -&gt; IO String
+forall (f :: * -&gt; *) a b. Functor f =&gt; (a -&gt; b) -&gt; f a -&gt; f b
+</span><span class="hs-identifier hs-var">fmap</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">[Int] -&gt; String
+</span><a href="XMonad.Actions.RandomBackground.html#toHex"><span class="hs-identifier hs-var">toHex</span></a></span><span> </span><span class="annot"><span class="annottext">([Int] -&gt; String) -&gt; (StdGen -&gt; [Int]) -&gt; StdGen -&gt; String
+forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">Int -&gt; [Int] -&gt; [Int]
+forall a. Int -&gt; [a] -&gt; [a]
+</span><span class="hs-identifier hs-var">take</span></span><span> </span><span class="annot"><span class="annottext">Int
+</span><span class="hs-number">3</span></span><span> </span><span class="annot"><span class="annottext">([Int] -&gt; [Int]) -&gt; (StdGen -&gt; [Int]) -&gt; StdGen -&gt; [Int]
+forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">(Int, Int) -&gt; StdGen -&gt; [Int]
+forall a g. (Random a, RandomGen g) =&gt; (a, a) -&gt; g -&gt; [a]
+</span><span class="hs-identifier hs-var">randomRs</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Int
+</span><a href="#local-6989586621679354080"><span class="hs-identifier hs-var">l</span></a></span><span class="hs-special">,</span><span class="annot"><span class="annottext">Int
+</span><a href="#local-6989586621679354079"><span class="hs-identifier hs-var">h</span></a></span><span class="hs-special">)</span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">IO StdGen
+</span><span class="hs-identifier hs-var">newStdGen</span></span><span>
+</span><span id="line-59"></span><span class="annot"><a href="XMonad.Actions.RandomBackground.html#randomBg%27"><span class="hs-identifier hs-var">randomBg'</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="XMonad.Actions.RandomBackground.html#HSV"><span class="hs-identifier hs-type">HSV</span></a></span><span> </span><span id="local-6989586621679354076"><span class="annot"><span class="annottext">Double
+</span><a href="#local-6989586621679354076"><span class="hs-identifier hs-var">s</span></a></span></span><span> </span><span id="local-6989586621679354075"><span class="annot"><span class="annottext">Double
+</span><a href="#local-6989586621679354075"><span class="hs-identifier hs-var">v</span></a></span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">IO String -&gt; m String
+forall (m :: * -&gt; *) a. MonadIO m =&gt; IO a -&gt; m a
+</span><span class="hs-identifier hs-var">io</span></span><span> </span><span class="annot"><span class="annottext">(IO String -&gt; m String) -&gt; IO String -&gt; m String
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-60"></span><span>    </span><span id="local-6989586621679354074"><span class="annot"><span class="annottext">StdGen
+</span><a href="#local-6989586621679354074"><span class="hs-identifier hs-var">g</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">IO StdGen
+</span><span class="hs-identifier hs-var">newStdGen</span></span><span>
+</span><span id="line-61"></span><span>    </span><span class="hs-keyword">let</span><span> </span><span id="local-6989586621679354073"><span class="annot"><span class="annottext">x :: Double
+</span><a href="#local-6989586621679354073"><span class="hs-identifier hs-var hs-var">x</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Double -&gt; Int -&gt; Double
+forall a b. (Num a, Integral b) =&gt; a -&gt; b -&gt; a
+</span><span class="hs-operator hs-var">^</span></span><span class="hs-special">(</span><span class="annot"><span class="annottext">Int
+</span><span class="hs-number">2</span></span><span class="hs-glyph">::</span><span class="annot"><span class="hs-identifier hs-type">Int</span></span><span class="hs-special">)</span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">(Double -&gt; Double) -&gt; Double -&gt; Double
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">(Double, StdGen) -&gt; Double
+forall a b. (a, b) -&gt; a
+</span><span class="hs-identifier hs-var">fst</span></span><span> </span><span class="annot"><span class="annottext">((Double, StdGen) -&gt; Double) -&gt; (Double, StdGen) -&gt; Double
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">(Double, Double) -&gt; StdGen -&gt; (Double, StdGen)
+forall a g. (Random a, RandomGen g) =&gt; (a, a) -&gt; g -&gt; (a, g)
+</span><span class="hs-identifier hs-var">randomR</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Double
+</span><span class="hs-number">0</span></span><span class="hs-special">,</span><span class="annot"><span class="annottext">Double -&gt; Double
+forall a. Floating a =&gt; a -&gt; a
+</span><span class="hs-identifier hs-var">sqrt</span></span><span> </span><span class="annot"><span class="annottext">(Double -&gt; Double) -&gt; Double -&gt; Double
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">Double
+forall a. Floating a =&gt; a
+</span><span class="hs-identifier hs-var">pi</span></span><span> </span><span class="annot"><span class="annottext">Double -&gt; Double -&gt; Double
+forall a. Fractional a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-operator hs-var">/</span></span><span> </span><span class="annot"><span class="annottext">Double
+</span><span class="hs-number">3</span></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">StdGen
+</span><a href="#local-6989586621679354074"><span class="hs-identifier hs-var">g</span></a></span><span>
+</span><span id="line-62"></span><span>    </span><span class="annot"><span class="annottext">String -&gt; IO String
+forall (m :: * -&gt; *) a. Monad m =&gt; a -&gt; m a
+</span><span class="hs-identifier hs-var">return</span></span><span> </span><span class="annot"><span class="annottext">(String -&gt; IO String) -&gt; String -&gt; IO String
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">[Int] -&gt; String
+</span><a href="XMonad.Actions.RandomBackground.html#toHex"><span class="hs-identifier hs-var">toHex</span></a></span><span> </span><span class="annot"><span class="annottext">([Int] -&gt; String) -&gt; [Int] -&gt; String
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">(Double -&gt; Int) -&gt; [Double] -&gt; [Int]
+forall a b. (a -&gt; b) -&gt; [a] -&gt; [b]
+</span><span class="hs-identifier hs-var">map</span></span><span> </span><span class="annot"><span class="annottext">Double -&gt; Int
+forall a b. (RealFrac a, Integral b) =&gt; a -&gt; b
+</span><span class="hs-identifier hs-var">round</span></span><span> </span><span class="annot"><span class="annottext">([Double] -&gt; [Int]) -&gt; [Double] -&gt; [Int]
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">[Double] -&gt; StdGen -&gt; [Double]
+forall g a. RandomGen g =&gt; [a] -&gt; g -&gt; [a]
+</span><a href="XMonad.Actions.RandomBackground.html#randPermutation"><span class="hs-identifier hs-var">randPermutation</span></a></span><span> </span><span class="hs-special">[</span><span class="annot"><span class="annottext">Double
+</span><a href="#local-6989586621679354075"><span class="hs-identifier hs-var">v</span></a></span><span class="hs-special">,</span><span class="hs-special">(</span><span class="annot"><span class="annottext">Double
+</span><a href="#local-6989586621679354075"><span class="hs-identifier hs-var">v</span></a></span><span class="annot"><span class="annottext">Double -&gt; Double -&gt; Double
+forall a. Num a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-glyph hs-var">-</span></span><span class="annot"><span class="annottext">Double
+</span><a href="#local-6989586621679354076"><span class="hs-identifier hs-var">s</span></a></span><span class="hs-special">)</span><span class="annot"><span class="annottext">Double -&gt; Double -&gt; Double
+forall a. Num a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-operator hs-var">*</span></span><span class="annot"><span class="annottext">Double
+</span><a href="#local-6989586621679354073"><span class="hs-identifier hs-var">x</span></a></span><span> </span><span class="annot"><span class="annottext">Double -&gt; Double -&gt; Double
+forall a. Num a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-operator hs-var">+</span></span><span> </span><span class="annot"><span class="annottext">Double
+</span><a href="#local-6989586621679354076"><span class="hs-identifier hs-var">s</span></a></span><span class="hs-special">,</span><span class="annot"><span class="annottext">Double
+</span><a href="#local-6989586621679354076"><span class="hs-identifier hs-var">s</span></a></span><span class="hs-special">]</span><span> </span><span class="annot"><span class="annottext">StdGen
+</span><a href="#local-6989586621679354074"><span class="hs-identifier hs-var">g</span></a></span><span>
+</span><span id="line-63"></span><span>
+</span><span id="line-64"></span><span class="hs-comment">-- | @randomBg@ starts a terminal with the background color taken from 'randomBg''</span><span>
+</span><span id="line-65"></span><span class="hs-comment">--</span><span>
+</span><span id="line-66"></span><span class="hs-comment">-- This depends on the your 'terminal' configuration field accepting an</span><span>
+</span><span id="line-67"></span><span class="hs-comment">-- argument like @-bg '#ff0023'@</span><span>
+</span><span id="line-68"></span><span class="annot"><a href="XMonad.Actions.RandomBackground.html#randomBg"><span class="hs-identifier hs-type">randomBg</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><a href="XMonad.Actions.RandomBackground.html#RandomColor"><span class="hs-identifier hs-type">RandomColor</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">X</span></span><span> </span><span class="hs-special">(</span><span class="hs-special">)</span><span>
+</span><span id="line-69"></span><span id="randomBg"><span class="annot"><span class="annottext">randomBg :: RandomColor -&gt; X ()
+</span><a href="XMonad.Actions.RandomBackground.html#randomBg"><span class="hs-identifier hs-var hs-var">randomBg</span></a></span></span><span> </span><span id="local-6989586621679354064"><span class="annot"><span class="annottext">RandomColor
+</span><a href="#local-6989586621679354064"><span class="hs-identifier hs-var">x</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-70"></span><span>    </span><span id="local-6989586621679354063"><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679354063"><span class="hs-identifier hs-var">t</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">(XConf -&gt; String) -&gt; X String
+forall r (m :: * -&gt; *) a. MonadReader r m =&gt; (r -&gt; a) -&gt; m a
+</span><span class="hs-identifier hs-var">asks</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">XConfig Layout -&gt; String
+forall (l :: * -&gt; *). XConfig l -&gt; String
+</span><span class="hs-identifier hs-var hs-var">terminal</span></span><span> </span><span class="annot"><span class="annottext">(XConfig Layout -&gt; String)
+-&gt; (XConf -&gt; XConfig Layout) -&gt; XConf -&gt; String
+forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">XConf -&gt; XConfig Layout
+</span><span class="hs-identifier hs-var hs-var">config</span></span><span class="hs-special">)</span><span>
+</span><span id="line-71"></span><span>    </span><span id="local-6989586621679354062"><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679354062"><span class="hs-identifier hs-var">c</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">RandomColor -&gt; X String
+forall (m :: * -&gt; *). MonadIO m =&gt; RandomColor -&gt; m String
+</span><a href="XMonad.Actions.RandomBackground.html#randomBg%27"><span class="hs-identifier hs-var">randomBg'</span></a></span><span> </span><span class="annot"><span class="annottext">RandomColor
+</span><a href="#local-6989586621679354064"><span class="hs-identifier hs-var">x</span></a></span><span>
+</span><span id="line-72"></span><span>    </span><span class="annot"><span class="annottext">String -&gt; X ()
+forall (m :: * -&gt; *). MonadIO m =&gt; String -&gt; m ()
+</span><span class="hs-identifier hs-var">spawn</span></span><span> </span><span class="annot"><span class="annottext">(String -&gt; X ()) -&gt; String -&gt; X ()
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679354063"><span class="hs-identifier hs-var">t</span></a></span><span> </span><span class="annot"><span class="annottext">String -&gt; String -&gt; String
+forall a. [a] -&gt; [a] -&gt; [a]
+</span><span class="hs-operator hs-var">++</span></span><span> </span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot; -bg &quot;</span></span><span> </span><span class="annot"><span class="annottext">String -&gt; String -&gt; String
+forall a. [a] -&gt; [a] -&gt; [a]
+</span><span class="hs-operator hs-var">++</span></span><span> </span><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679354062"><span class="hs-identifier hs-var">c</span></a></span><span>
+</span><span id="line-73"></span></pre></body></html>

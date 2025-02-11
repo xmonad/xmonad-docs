@@ -1,0 +1,975 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd"><html xmlns="http://www.w3.org/1999/xhtml"><head><link rel="stylesheet" type="text/css" href="style.css" /><script type="text/javascript" src="highlight.js"></script></head><body><pre><span class="hs-comment">-----------------------------------------------------------------------------</span><span>
+</span><span id="line-2"></span><span class="hs-comment">-- |</span><span>
+</span><span id="line-3"></span><span class="hs-comment">-- Module      :  XMonad.Actions.WindowNavigation</span><span>
+</span><span id="line-4"></span><span class="hs-comment">-- Description :  Experimental rewrite of &quot;XMonad.Layout.WindowNavigation&quot;.</span><span>
+</span><span id="line-5"></span><span class="hs-comment">-- Copyright   :  (c) 2007  David Roundy &lt;droundy@darcs.net&gt;,</span><span>
+</span><span id="line-6"></span><span class="hs-comment">--                          Devin Mullins &lt;me@twifkak.com&gt;</span><span>
+</span><span id="line-7"></span><span class="hs-comment">-- Maintainer  :  Devin Mullins &lt;me@twifkak.com&gt;</span><span>
+</span><span id="line-8"></span><span class="hs-comment">-- License     :  BSD3-style (see LICENSE)</span><span>
+</span><span id="line-9"></span><span class="hs-comment">-- Stability   :  unstable</span><span>
+</span><span id="line-10"></span><span class="hs-comment">-- Portability :  unportable</span><span>
+</span><span id="line-11"></span><span class="hs-comment">--</span><span>
+</span><span id="line-12"></span><span class="hs-comment">-- This is a rewrite of &quot;XMonad.Layout.WindowNavigation&quot;.  WindowNavigation</span><span>
+</span><span id="line-13"></span><span class="hs-comment">-- lets you assign keys to move up\/down\/left\/right, based on actual cartesian</span><span>
+</span><span id="line-14"></span><span class="hs-comment">-- window coordinates, rather than just going j\/k on the stack.</span><span>
+</span><span id="line-15"></span><span class="hs-comment">--</span><span>
+</span><span id="line-16"></span><span class="hs-comment">-- This module is experimental. You'll have better luck with the original.</span><span>
+</span><span id="line-17"></span><span class="hs-comment">--</span><span>
+</span><span id="line-18"></span><span class="hs-comment">-- This module differs from the other in a few ways:</span><span>
+</span><span id="line-19"></span><span class="hs-comment">--</span><span>
+</span><span id="line-20"></span><span class="hs-comment">--   (1) You can go up\/down\/left\/right across multiple screens.</span><span>
+</span><span id="line-21"></span><span class="hs-comment">--</span><span>
+</span><span id="line-22"></span><span class="hs-comment">--   (2) It doesn't provide little border colors for your neighboring windows.</span><span>
+</span><span id="line-23"></span><span class="hs-comment">--</span><span>
+</span><span id="line-24"></span><span class="hs-comment">--   (3) It doesn't provide the \'Move\' action, which seems to be related to</span><span>
+</span><span id="line-25"></span><span class="hs-comment">--      the XMonad.Layout.Combo extension.</span><span>
+</span><span id="line-26"></span><span class="hs-comment">--</span><span>
+</span><span id="line-27"></span><span class="hs-comment">--   (4) It tries to be slightly smarter about tracking your current position.</span><span>
+</span><span id="line-28"></span><span class="hs-comment">--</span><span>
+</span><span id="line-29"></span><span class="hs-comment">--   (5) Configuration is different.</span><span>
+</span><span id="line-30"></span><span class="hs-comment">--</span><span>
+</span><span id="line-31"></span><span class="hs-comment">-----------------------------------------------------------------------------</span><span>
+</span><span id="line-32"></span><span>
+</span><span id="line-33"></span><span class="hs-keyword">module</span><span> </span><span class="hs-identifier">XMonad.Actions.WindowNavigation</span><span> </span><span class="hs-special">(</span><span>
+</span><span id="line-34"></span><span>                                       </span><span class="annot"><span class="hs-comment">-- * Usage</span></span><span>
+</span><span id="line-35"></span><span>                                       </span><span class="annot"><span class="hs-comment">-- $usage</span></span><span>
+</span><span id="line-36"></span><span>                                       </span><span class="annot"><a href="XMonad.Actions.WindowNavigation.html#withWindowNavigation"><span class="hs-identifier">withWindowNavigation</span></a></span><span class="hs-special">,</span><span>
+</span><span id="line-37"></span><span>                                       </span><span class="annot"><a href="XMonad.Actions.WindowNavigation.html#withWindowNavigationKeys"><span class="hs-identifier">withWindowNavigationKeys</span></a></span><span class="hs-special">,</span><span>
+</span><span id="line-38"></span><span>                                       </span><span class="annot"><a href="XMonad.Actions.WindowNavigation.html#WNAction"><span class="hs-identifier">WNAction</span></a></span><span class="hs-special">(</span><span class="hs-glyph">..</span><span class="hs-special">)</span><span class="hs-special">,</span><span>
+</span><span id="line-39"></span><span>                                       </span><span class="annot"><a href="XMonad.Actions.WindowNavigation.html#go"><span class="hs-identifier">go</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><a href="XMonad.Actions.WindowNavigation.html#swap"><span class="hs-identifier">swap</span></a></span><span class="hs-special">,</span><span>
+</span><span id="line-40"></span><span>                                       </span><span class="annot"><a href="XMonad.Util.Types.html#Direction2D"><span class="hs-identifier">Direction2D</span></a></span><span class="hs-special">(</span><span class="hs-glyph">..</span><span class="hs-special">)</span><span class="hs-special">,</span><span> </span><span class="annot"><a href="XMonad.Actions.WindowNavigation.html#WNState"><span class="hs-identifier">WNState</span></a></span><span class="hs-special">,</span><span>
+</span><span id="line-41"></span><span>                                       </span><span class="hs-special">)</span><span> </span><span class="hs-keyword">where</span><span>
+</span><span id="line-42"></span><span>
+</span><span id="line-43"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><span class="hs-identifier">XMonad</span></span><span>
+</span><span id="line-44"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><a href="XMonad.Prelude.html"><span class="hs-identifier">XMonad.Prelude</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier">catMaybes</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier">fromMaybe</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier">listToMaybe</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier">sortOn</span></span><span class="hs-special">)</span><span>
+</span><span id="line-45"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><a href="XMonad.Util.Types.html"><span class="hs-identifier">XMonad.Util.Types</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="XMonad.Util.Types.html#Direction2D"><span class="hs-identifier">Direction2D</span></a></span><span class="hs-special">(</span><span class="hs-glyph">..</span><span class="hs-special">)</span><span class="hs-special">)</span><span>
+</span><span id="line-46"></span><span class="hs-keyword">import</span><span> </span><span class="hs-keyword">qualified</span><span> </span><span class="annot"><span class="hs-identifier">XMonad.StackSet</span></span><span> </span><span class="hs-keyword">as</span><span> </span><span class="annot"><span class="hs-identifier">W</span></span><span>
+</span><span id="line-47"></span><span>
+</span><span id="line-48"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><span class="hs-identifier">Control.Arrow</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier">second</span></span><span class="hs-special">)</span><span>
+</span><span id="line-49"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><span class="hs-identifier">Data.IORef</span></span><span>
+</span><span id="line-50"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><span class="hs-identifier">Data.Map</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier">Map</span></span><span class="hs-special">(</span><span class="hs-special">)</span><span class="hs-special">)</span><span>
+</span><span id="line-51"></span><span class="hs-keyword">import</span><span> </span><span class="hs-keyword">qualified</span><span> </span><span class="annot"><span class="hs-identifier">Data.Map</span></span><span> </span><span class="hs-keyword">as</span><span> </span><span class="annot"><span class="hs-identifier">M</span></span><span>
+</span><span id="line-52"></span><span class="hs-keyword">import</span><span> </span><span class="hs-keyword">qualified</span><span> </span><span class="annot"><span class="hs-identifier">Data.Set</span></span><span> </span><span class="hs-keyword">as</span><span> </span><span class="annot"><span class="hs-identifier">S</span></span><span>
+</span><span id="line-53"></span><span>
+</span><span id="line-54"></span><span class="hs-comment">-- $usage</span><span>
+</span><span id="line-55"></span><span class="hs-comment">--</span><span>
+</span><span id="line-56"></span><span class="hs-comment">-- To use it, you're going to apply the 'withWindowNavigation' function.</span><span>
+</span><span id="line-57"></span><span class="hs-comment">-- 'withWindowNavigation' performs some IO operations, so the syntax you'll use</span><span>
+</span><span id="line-58"></span><span class="hs-comment">-- is the same as the spawnPipe example in &quot;XMonad.Hooks.DynamicLog&quot;.</span><span>
+</span><span id="line-59"></span><span class="hs-comment">-- In particular:</span><span>
+</span><span id="line-60"></span><span class="hs-comment">--</span><span>
+</span><span id="line-61"></span><span class="hs-comment">-- &gt; main = do</span><span>
+</span><span id="line-62"></span><span class="hs-comment">-- &gt;     config &lt;- withWindowNavigation (xK_w, xK_a, xK_s, xK_d)</span><span>
+</span><span id="line-63"></span><span class="hs-comment">-- &gt;             $ def { ... }</span><span>
+</span><span id="line-64"></span><span class="hs-comment">-- &gt;     xmonad config</span><span>
+</span><span id="line-65"></span><span class="hs-comment">--</span><span>
+</span><span id="line-66"></span><span class="hs-comment">-- Or, for the brave souls:</span><span>
+</span><span id="line-67"></span><span class="hs-comment">--</span><span>
+</span><span id="line-68"></span><span class="hs-comment">-- &gt; main = xmonad =&lt;&lt; withWindowNavigation (xK_w, xK_a, xK_s, xK_d)</span><span>
+</span><span id="line-69"></span><span class="hs-comment">-- &gt;             $ def { ... }</span><span>
+</span><span id="line-70"></span><span class="hs-comment">--</span><span>
+</span><span id="line-71"></span><span class="hs-comment">-- Here, we pass in the keys for navigation in counter-clockwise order from up.</span><span>
+</span><span id="line-72"></span><span class="hs-comment">-- It creates keybindings for @modMask@ to move to window, and @modMask .|. shiftMask@</span><span>
+</span><span id="line-73"></span><span class="hs-comment">-- to swap windows.</span><span>
+</span><span id="line-74"></span><span class="hs-comment">--</span><span>
+</span><span id="line-75"></span><span class="hs-comment">-- If you want more flexibility over your keybindings, you can use</span><span>
+</span><span id="line-76"></span><span class="hs-comment">-- 'withWindowNavigationKeys', which takes a list of @keys@-esque entries rather</span><span>
+</span><span id="line-77"></span><span class="hs-comment">-- than a tuple of the four directional keys. See the source code of</span><span>
+</span><span id="line-78"></span><span class="hs-comment">-- 'withWindowNavigation' for an example.</span><span>
+</span><span id="line-79"></span><span>
+</span><span id="line-80"></span><span class="hs-comment">-- TODO:</span><span>
+</span><span id="line-81"></span><span class="hs-comment">--  - monad for WNState?</span><span>
+</span><span id="line-82"></span><span class="hs-comment">--  - cleanup (including inr)</span><span>
+</span><span id="line-83"></span><span class="hs-comment">--  - more documentation</span><span>
+</span><span id="line-84"></span><span class="hs-comment">--  - tests? (esp. for edge cases in currentPosition)</span><span>
+</span><span id="line-85"></span><span class="hs-comment">--  - screen 1, 1+2/w 3, M-d, M-w, M-2 (1+2/w 2), M-e, M-a - goes to w 3, should be w 2</span><span>
+</span><span id="line-86"></span><span class="hs-comment">--  - solve the 2+3, middle right to bottom left problem</span><span>
+</span><span id="line-87"></span><span class="hs-comment">--  - command to iteratively swapUp/swapDown instead of directly swapping with target</span><span>
+</span><span id="line-88"></span><span class="hs-comment">--  - manageHook to draw window decos?</span><span>
+</span><span id="line-89"></span><span>
+</span><span id="line-90"></span><span id="local-6989586621679386032"><span class="annot"><a href="XMonad.Actions.WindowNavigation.html#withWindowNavigation"><span class="hs-identifier hs-type">withWindowNavigation</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">KeySym</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier hs-type">KeySym</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier hs-type">KeySym</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier hs-type">KeySym</span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">XConfig</span></span><span> </span><span class="annot"><a href="#local-6989586621679386032"><span class="hs-identifier hs-type">l</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">IO</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">XConfig</span></span><span> </span><span class="annot"><a href="#local-6989586621679386032"><span class="hs-identifier hs-type">l</span></a></span><span class="hs-special">)</span></span><span>
+</span><span id="line-91"></span><span id="withWindowNavigation"><span class="annot"><span class="annottext">withWindowNavigation :: (KeySym, KeySym, KeySym, KeySym) -&gt; XConfig l -&gt; IO (XConfig l)
+</span><a href="XMonad.Actions.WindowNavigation.html#withWindowNavigation"><span class="hs-identifier hs-var hs-var">withWindowNavigation</span></a></span></span><span> </span><span class="hs-special">(</span><span id="local-6989586621679386031"><span class="annot"><span class="annottext">KeySym
+</span><a href="#local-6989586621679386031"><span class="hs-identifier hs-var">u</span></a></span></span><span class="hs-special">,</span><span id="local-6989586621679386030"><span class="annot"><span class="annottext">KeySym
+</span><a href="#local-6989586621679386030"><span class="hs-identifier hs-var">l</span></a></span></span><span class="hs-special">,</span><span id="local-6989586621679386029"><span class="annot"><span class="annottext">KeySym
+</span><a href="#local-6989586621679386029"><span class="hs-identifier hs-var">d</span></a></span></span><span class="hs-special">,</span><span id="local-6989586621679386028"><span class="annot"><span class="annottext">KeySym
+</span><a href="#local-6989586621679386028"><span class="hs-identifier hs-var">r</span></a></span></span><span class="hs-special">)</span><span> </span><span id="local-6989586621679386027"><span class="annot"><span class="annottext">conf :: XConfig l
+</span><a href="#local-6989586621679386027"><span class="hs-identifier hs-var">conf</span></a></span></span><span class="hs-glyph">@</span><span class="annot"><span class="hs-identifier hs-type">XConfig</span></span><span class="hs-special">{</span><span class="annot"><span class="annottext">modMask :: forall (l :: * -&gt; *). XConfig l -&gt; KeyMask
+</span><span class="hs-identifier hs-var">modMask</span></span><span class="hs-glyph">=</span><span id="local-6989586621679386024"><span class="annot"><span class="annottext">KeyMask
+</span><a href="#local-6989586621679386024"><span class="hs-identifier hs-var">modm</span></a></span></span><span class="hs-special">}</span><span> </span><span class="hs-glyph">=</span><span>
+</span><span id="line-92"></span><span>    </span><span class="annot"><span class="annottext">[((KeyMask, KeySym), WNAction)] -&gt; XConfig l -&gt; IO (XConfig l)
+forall (l :: * -&gt; *).
+[((KeyMask, KeySym), WNAction)] -&gt; XConfig l -&gt; IO (XConfig l)
+</span><a href="XMonad.Actions.WindowNavigation.html#withWindowNavigationKeys"><span class="hs-identifier hs-var">withWindowNavigationKeys</span></a></span><span> </span><span class="hs-special">[</span><span> </span><span class="hs-special">(</span><span class="hs-special">(</span><span class="annot"><span class="annottext">KeyMask
+</span><a href="#local-6989586621679386024"><span class="hs-identifier hs-var">modm</span></a></span><span>              </span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">KeySym
+</span><a href="#local-6989586621679386031"><span class="hs-identifier hs-var">u</span></a></span><span class="hs-special">)</span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">Direction2D -&gt; WNAction
+</span><a href="XMonad.Actions.WindowNavigation.html#WNGo"><span class="hs-identifier hs-var">WNGo</span></a></span><span>   </span><span class="annot"><span class="annottext">Direction2D
+</span><a href="XMonad.Util.Types.html#U"><span class="hs-identifier hs-var">U</span></a></span><span class="hs-special">)</span><span class="hs-special">,</span><span>
+</span><span id="line-93"></span><span>                               </span><span class="hs-special">(</span><span class="hs-special">(</span><span class="annot"><span class="annottext">KeyMask
+</span><a href="#local-6989586621679386024"><span class="hs-identifier hs-var">modm</span></a></span><span>              </span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">KeySym
+</span><a href="#local-6989586621679386030"><span class="hs-identifier hs-var">l</span></a></span><span class="hs-special">)</span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">Direction2D -&gt; WNAction
+</span><a href="XMonad.Actions.WindowNavigation.html#WNGo"><span class="hs-identifier hs-var">WNGo</span></a></span><span>   </span><span class="annot"><span class="annottext">Direction2D
+</span><a href="XMonad.Util.Types.html#L"><span class="hs-identifier hs-var">L</span></a></span><span class="hs-special">)</span><span class="hs-special">,</span><span>
+</span><span id="line-94"></span><span>                               </span><span class="hs-special">(</span><span class="hs-special">(</span><span class="annot"><span class="annottext">KeyMask
+</span><a href="#local-6989586621679386024"><span class="hs-identifier hs-var">modm</span></a></span><span>              </span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">KeySym
+</span><a href="#local-6989586621679386029"><span class="hs-identifier hs-var">d</span></a></span><span class="hs-special">)</span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">Direction2D -&gt; WNAction
+</span><a href="XMonad.Actions.WindowNavigation.html#WNGo"><span class="hs-identifier hs-var">WNGo</span></a></span><span>   </span><span class="annot"><span class="annottext">Direction2D
+</span><a href="XMonad.Util.Types.html#D"><span class="hs-identifier hs-var">D</span></a></span><span class="hs-special">)</span><span class="hs-special">,</span><span>
+</span><span id="line-95"></span><span>                               </span><span class="hs-special">(</span><span class="hs-special">(</span><span class="annot"><span class="annottext">KeyMask
+</span><a href="#local-6989586621679386024"><span class="hs-identifier hs-var">modm</span></a></span><span>              </span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">KeySym
+</span><a href="#local-6989586621679386028"><span class="hs-identifier hs-var">r</span></a></span><span class="hs-special">)</span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">Direction2D -&gt; WNAction
+</span><a href="XMonad.Actions.WindowNavigation.html#WNGo"><span class="hs-identifier hs-var">WNGo</span></a></span><span>   </span><span class="annot"><span class="annottext">Direction2D
+</span><a href="XMonad.Util.Types.html#R"><span class="hs-identifier hs-var">R</span></a></span><span class="hs-special">)</span><span class="hs-special">,</span><span>
+</span><span id="line-96"></span><span>                               </span><span class="hs-special">(</span><span class="hs-special">(</span><span class="annot"><span class="annottext">KeyMask
+</span><a href="#local-6989586621679386024"><span class="hs-identifier hs-var">modm</span></a></span><span> </span><span class="annot"><span class="annottext">KeyMask -&gt; KeyMask -&gt; KeyMask
+forall a. Bits a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-operator hs-var">.|.</span></span><span> </span><span class="annot"><span class="annottext">KeyMask
+</span><span class="hs-identifier hs-var">shiftMask</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">KeySym
+</span><a href="#local-6989586621679386031"><span class="hs-identifier hs-var">u</span></a></span><span class="hs-special">)</span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">Direction2D -&gt; WNAction
+</span><a href="XMonad.Actions.WindowNavigation.html#WNSwap"><span class="hs-identifier hs-var">WNSwap</span></a></span><span> </span><span class="annot"><span class="annottext">Direction2D
+</span><a href="XMonad.Util.Types.html#U"><span class="hs-identifier hs-var">U</span></a></span><span class="hs-special">)</span><span class="hs-special">,</span><span>
+</span><span id="line-97"></span><span>                               </span><span class="hs-special">(</span><span class="hs-special">(</span><span class="annot"><span class="annottext">KeyMask
+</span><a href="#local-6989586621679386024"><span class="hs-identifier hs-var">modm</span></a></span><span> </span><span class="annot"><span class="annottext">KeyMask -&gt; KeyMask -&gt; KeyMask
+forall a. Bits a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-operator hs-var">.|.</span></span><span> </span><span class="annot"><span class="annottext">KeyMask
+</span><span class="hs-identifier hs-var">shiftMask</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">KeySym
+</span><a href="#local-6989586621679386030"><span class="hs-identifier hs-var">l</span></a></span><span class="hs-special">)</span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">Direction2D -&gt; WNAction
+</span><a href="XMonad.Actions.WindowNavigation.html#WNSwap"><span class="hs-identifier hs-var">WNSwap</span></a></span><span> </span><span class="annot"><span class="annottext">Direction2D
+</span><a href="XMonad.Util.Types.html#L"><span class="hs-identifier hs-var">L</span></a></span><span class="hs-special">)</span><span class="hs-special">,</span><span>
+</span><span id="line-98"></span><span>                               </span><span class="hs-special">(</span><span class="hs-special">(</span><span class="annot"><span class="annottext">KeyMask
+</span><a href="#local-6989586621679386024"><span class="hs-identifier hs-var">modm</span></a></span><span> </span><span class="annot"><span class="annottext">KeyMask -&gt; KeyMask -&gt; KeyMask
+forall a. Bits a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-operator hs-var">.|.</span></span><span> </span><span class="annot"><span class="annottext">KeyMask
+</span><span class="hs-identifier hs-var">shiftMask</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">KeySym
+</span><a href="#local-6989586621679386029"><span class="hs-identifier hs-var">d</span></a></span><span class="hs-special">)</span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">Direction2D -&gt; WNAction
+</span><a href="XMonad.Actions.WindowNavigation.html#WNSwap"><span class="hs-identifier hs-var">WNSwap</span></a></span><span> </span><span class="annot"><span class="annottext">Direction2D
+</span><a href="XMonad.Util.Types.html#D"><span class="hs-identifier hs-var">D</span></a></span><span class="hs-special">)</span><span class="hs-special">,</span><span>
+</span><span id="line-99"></span><span>                               </span><span class="hs-special">(</span><span class="hs-special">(</span><span class="annot"><span class="annottext">KeyMask
+</span><a href="#local-6989586621679386024"><span class="hs-identifier hs-var">modm</span></a></span><span> </span><span class="annot"><span class="annottext">KeyMask -&gt; KeyMask -&gt; KeyMask
+forall a. Bits a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-operator hs-var">.|.</span></span><span> </span><span class="annot"><span class="annottext">KeyMask
+</span><span class="hs-identifier hs-var">shiftMask</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">KeySym
+</span><a href="#local-6989586621679386028"><span class="hs-identifier hs-var">r</span></a></span><span class="hs-special">)</span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">Direction2D -&gt; WNAction
+</span><a href="XMonad.Actions.WindowNavigation.html#WNSwap"><span class="hs-identifier hs-var">WNSwap</span></a></span><span> </span><span class="annot"><span class="annottext">Direction2D
+</span><a href="XMonad.Util.Types.html#R"><span class="hs-identifier hs-var">R</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-special">]</span><span>
+</span><span id="line-100"></span><span>                             </span><span class="annot"><span class="annottext">XConfig l
+</span><a href="#local-6989586621679386027"><span class="hs-identifier hs-var">conf</span></a></span><span>
+</span><span id="line-101"></span><span>
+</span><span id="line-102"></span><span id="local-6989586621679386194"><span class="annot"><a href="XMonad.Actions.WindowNavigation.html#withWindowNavigationKeys"><span class="hs-identifier hs-type">withWindowNavigationKeys</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="hs-special">[</span><span class="hs-special">(</span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">KeyMask</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier hs-type">KeySym</span></span><span class="hs-special">)</span><span class="hs-special">,</span><span> </span><span class="annot"><a href="XMonad.Actions.WindowNavigation.html#WNAction"><span class="hs-identifier hs-type">WNAction</span></a></span><span class="hs-special">)</span><span class="hs-special">]</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">XConfig</span></span><span> </span><span class="annot"><a href="#local-6989586621679386194"><span class="hs-identifier hs-type">l</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">IO</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">XConfig</span></span><span> </span><span class="annot"><a href="#local-6989586621679386194"><span class="hs-identifier hs-type">l</span></a></span><span class="hs-special">)</span></span><span>
+</span><span id="line-103"></span><span id="withWindowNavigationKeys"><span class="annot"><span class="annottext">withWindowNavigationKeys :: [((KeyMask, KeySym), WNAction)] -&gt; XConfig l -&gt; IO (XConfig l)
+</span><a href="XMonad.Actions.WindowNavigation.html#withWindowNavigationKeys"><span class="hs-identifier hs-var hs-var">withWindowNavigationKeys</span></a></span></span><span> </span><span id="local-6989586621679386015"><span class="annot"><span class="annottext">[((KeyMask, KeySym), WNAction)]
+</span><a href="#local-6989586621679386015"><span class="hs-identifier hs-var">wnKeys</span></a></span></span><span> </span><span id="local-6989586621679386014"><span class="annot"><span class="annottext">XConfig l
+</span><a href="#local-6989586621679386014"><span class="hs-identifier hs-var">conf</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-104"></span><span>    </span><span id="local-6989586621679386013"><span class="annot"><span class="annottext">IORef (Map WorkspaceId Point)
+</span><a href="#local-6989586621679386013"><span class="hs-identifier hs-var">posRef</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">Map WorkspaceId Point -&gt; IO (IORef (Map WorkspaceId Point))
+forall a. a -&gt; IO (IORef a)
+</span><span class="hs-identifier hs-var">newIORef</span></span><span> </span><span class="annot"><span class="annottext">Map WorkspaceId Point
+forall k a. Map k a
+</span><span class="hs-identifier hs-var">M.empty</span></span><span>
+</span><span id="line-105"></span><span>    </span><span class="annot"><span class="annottext">XConfig l -&gt; IO (XConfig l)
+forall (m :: * -&gt; *) a. Monad m =&gt; a -&gt; m a
+</span><span class="hs-identifier hs-var">return</span></span><span> </span><span class="annot"><span class="annottext">XConfig l
+</span><a href="#local-6989586621679386014"><span class="hs-identifier hs-var">conf</span></a></span><span> </span><span class="hs-special">{</span><span> </span><span class="annot"><span class="annottext">keys :: XConfig Layout -&gt; Map (KeyMask, KeySym) (X ())
+</span><span class="hs-identifier hs-var">keys</span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-glyph">\</span><span id="local-6989586621679386009"><span class="annot"><span class="annottext">XConfig Layout
+</span><a href="#local-6989586621679386009"><span class="hs-identifier hs-var">cnf</span></a></span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">[((KeyMask, KeySym), X ())] -&gt; Map (KeyMask, KeySym) (X ())
+forall k a. Ord k =&gt; [(k, a)] -&gt; Map k a
+</span><span class="hs-identifier hs-var">M.fromList</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">(((KeyMask, KeySym), WNAction) -&gt; ((KeyMask, KeySym), X ()))
+-&gt; [((KeyMask, KeySym), WNAction)] -&gt; [((KeyMask, KeySym), X ())]
+forall a b. (a -&gt; b) -&gt; [a] -&gt; [b]
+</span><span class="hs-identifier hs-var">map</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">(WNAction -&gt; X ())
+-&gt; ((KeyMask, KeySym), WNAction) -&gt; ((KeyMask, KeySym), X ())
+forall (a :: * -&gt; * -&gt; *) b c d.
+Arrow a =&gt;
+a b c -&gt; a (d, b) (d, c)
+</span><span class="hs-identifier hs-var">second</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">IORef (Map WorkspaceId Point) -&gt; WNAction -&gt; X ()
+</span><a href="#local-6989586621679386007"><span class="hs-identifier hs-var">fromWNAction</span></a></span><span> </span><span class="annot"><span class="annottext">IORef (Map WorkspaceId Point)
+</span><a href="#local-6989586621679386013"><span class="hs-identifier hs-var">posRef</span></a></span><span class="hs-special">)</span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">[((KeyMask, KeySym), WNAction)]
+</span><a href="#local-6989586621679386015"><span class="hs-identifier hs-var">wnKeys</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-106"></span><span>                                 </span><span class="annot"><span class="annottext">Map (KeyMask, KeySym) (X ())
+-&gt; Map (KeyMask, KeySym) (X ()) -&gt; Map (KeyMask, KeySym) (X ())
+forall k a. Ord k =&gt; Map k a -&gt; Map k a -&gt; Map k a
+</span><span class="hs-operator hs-var">`M.union`</span></span><span> </span><span class="annot"><span class="annottext">XConfig l -&gt; XConfig Layout -&gt; Map (KeyMask, KeySym) (X ())
+forall (l :: * -&gt; *).
+XConfig l -&gt; XConfig Layout -&gt; Map (KeyMask, KeySym) (X ())
+</span><span class="hs-identifier hs-var hs-var">keys</span></span><span> </span><span class="annot"><span class="annottext">XConfig l
+</span><a href="#local-6989586621679386014"><span class="hs-identifier hs-var">conf</span></a></span><span> </span><span class="annot"><span class="annottext">XConfig Layout
+</span><a href="#local-6989586621679386009"><span class="hs-identifier hs-var">cnf</span></a></span><span class="hs-special">,</span><span>
+</span><span id="line-107"></span><span>                  </span><span class="annot"><span class="annottext">logHook :: X ()
+</span><span class="hs-identifier hs-var">logHook</span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">XConfig l -&gt; X ()
+forall (l :: * -&gt; *). XConfig l -&gt; X ()
+</span><span class="hs-identifier hs-var hs-var">logHook</span></span><span> </span><span class="annot"><span class="annottext">XConfig l
+</span><a href="#local-6989586621679386014"><span class="hs-identifier hs-var">conf</span></a></span><span> </span><span class="annot"><span class="annottext">X () -&gt; X () -&gt; X ()
+forall (m :: * -&gt; *) a b. Monad m =&gt; m a -&gt; m b -&gt; m b
+</span><span class="hs-operator hs-var">&gt;&gt;</span></span><span> </span><span class="annot"><span class="annottext">IORef (Map WorkspaceId Point) -&gt; X ()
+</span><a href="XMonad.Actions.WindowNavigation.html#trackMovement"><span class="hs-identifier hs-var">trackMovement</span></a></span><span> </span><span class="annot"><span class="annottext">IORef (Map WorkspaceId Point)
+</span><a href="#local-6989586621679386013"><span class="hs-identifier hs-var">posRef</span></a></span><span> </span><span class="hs-special">}</span><span>
+</span><span id="line-108"></span><span>  </span><span class="hs-keyword">where</span><span> </span><span id="local-6989586621679386007"><span class="annot"><span class="annottext">fromWNAction :: IORef (Map WorkspaceId Point) -&gt; WNAction -&gt; X ()
+</span><a href="#local-6989586621679386007"><span class="hs-identifier hs-var hs-var">fromWNAction</span></a></span></span><span> </span><span id="local-6989586621679386003"><span class="annot"><span class="annottext">IORef (Map WorkspaceId Point)
+</span><a href="#local-6989586621679386003"><span class="hs-identifier hs-var">posRef</span></a></span></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="XMonad.Actions.WindowNavigation.html#WNGo"><span class="hs-identifier hs-type">WNGo</span></a></span><span> </span><span id="local-6989586621679386002"><span class="annot"><span class="annottext">Direction2D
+</span><a href="#local-6989586621679386002"><span class="hs-identifier hs-var">dir</span></a></span></span><span class="hs-special">)</span><span>   </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">IORef (Map WorkspaceId Point) -&gt; Direction2D -&gt; X ()
+</span><a href="XMonad.Actions.WindowNavigation.html#go"><span class="hs-identifier hs-var">go</span></a></span><span>   </span><span class="annot"><span class="annottext">IORef (Map WorkspaceId Point)
+</span><a href="#local-6989586621679386003"><span class="hs-identifier hs-var">posRef</span></a></span><span> </span><span class="annot"><span class="annottext">Direction2D
+</span><a href="#local-6989586621679386002"><span class="hs-identifier hs-var">dir</span></a></span><span>
+</span><span id="line-109"></span><span>        </span><span class="annot"><a href="#local-6989586621679386007"><span class="hs-identifier hs-var">fromWNAction</span></a></span><span> </span><span id="local-6989586621679386001"><span class="annot"><span class="annottext">IORef (Map WorkspaceId Point)
+</span><a href="#local-6989586621679386001"><span class="hs-identifier hs-var">posRef</span></a></span></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="XMonad.Actions.WindowNavigation.html#WNSwap"><span class="hs-identifier hs-type">WNSwap</span></a></span><span> </span><span id="local-6989586621679386000"><span class="annot"><span class="annottext">Direction2D
+</span><a href="#local-6989586621679386000"><span class="hs-identifier hs-var">dir</span></a></span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">IORef (Map WorkspaceId Point) -&gt; Direction2D -&gt; X ()
+</span><a href="XMonad.Actions.WindowNavigation.html#swap"><span class="hs-identifier hs-var">swap</span></a></span><span> </span><span class="annot"><span class="annottext">IORef (Map WorkspaceId Point)
+</span><a href="#local-6989586621679386001"><span class="hs-identifier hs-var">posRef</span></a></span><span> </span><span class="annot"><span class="annottext">Direction2D
+</span><a href="#local-6989586621679386000"><span class="hs-identifier hs-var">dir</span></a></span><span>
+</span><span id="line-110"></span><span>
+</span><span id="line-111"></span><span class="hs-keyword">data</span><span> </span><span id="WNAction"><span class="annot"><a href="XMonad.Actions.WindowNavigation.html#WNAction"><span class="hs-identifier hs-var">WNAction</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span id="WNGo"><span class="annot"><a href="XMonad.Actions.WindowNavigation.html#WNGo"><span class="hs-identifier hs-var">WNGo</span></a></span></span><span> </span><span class="annot"><a href="XMonad.Util.Types.html#Direction2D"><span class="hs-identifier hs-type">Direction2D</span></a></span><span> </span><span class="hs-glyph">|</span><span> </span><span id="WNSwap"><span class="annot"><a href="XMonad.Actions.WindowNavigation.html#WNSwap"><span class="hs-identifier hs-var">WNSwap</span></a></span></span><span> </span><span class="annot"><a href="XMonad.Util.Types.html#Direction2D"><span class="hs-identifier hs-type">Direction2D</span></a></span><span>
+</span><span id="line-112"></span><span>
+</span><span id="line-113"></span><span class="hs-keyword">type</span><span> </span><span id="WNState"><span class="annot"><a href="XMonad.Actions.WindowNavigation.html#WNState"><span class="hs-identifier hs-var">WNState</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Map</span></span><span> </span><span class="annot"><span class="hs-identifier hs-type">WorkspaceId</span></span><span> </span><span class="annot"><span class="hs-identifier hs-type">Point</span></span><span>
+</span><span id="line-114"></span><span>
+</span><span id="line-115"></span><span class="hs-comment">-- go:</span><span>
+</span><span id="line-116"></span><span class="hs-comment">-- 1. get current position, verifying it matches the current window</span><span>
+</span><span id="line-117"></span><span class="hs-comment">-- 2. get target windowrect</span><span>
+</span><span id="line-118"></span><span class="hs-comment">-- 3. focus window</span><span>
+</span><span id="line-119"></span><span class="hs-comment">-- 4. set new position</span><span>
+</span><span id="line-120"></span><span class="annot"><a href="XMonad.Actions.WindowNavigation.html#go"><span class="hs-identifier hs-type">go</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">IORef</span></span><span> </span><span class="annot"><a href="XMonad.Actions.WindowNavigation.html#WNState"><span class="hs-identifier hs-type">WNState</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="XMonad.Util.Types.html#Direction2D"><span class="hs-identifier hs-type">Direction2D</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">X</span></span><span> </span><span class="hs-special">(</span><span class="hs-special">)</span><span>
+</span><span id="line-121"></span><span id="go"><span class="annot"><span class="annottext">go :: IORef (Map WorkspaceId Point) -&gt; Direction2D -&gt; X ()
+</span><a href="XMonad.Actions.WindowNavigation.html#go"><span class="hs-identifier hs-var hs-var">go</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">(KeySym -&gt; WindowSet -&gt; WindowSet)
+-&gt; IORef (Map WorkspaceId Point) -&gt; Direction2D -&gt; X ()
+</span><a href="XMonad.Actions.WindowNavigation.html#withTargetWindow"><span class="hs-identifier hs-var">withTargetWindow</span></a></span><span> </span><span class="annot"><span class="annottext">KeySym -&gt; WindowSet -&gt; WindowSet
+forall s a i l sd.
+(Eq s, Eq a, Eq i) =&gt;
+a -&gt; StackSet i l a s sd -&gt; StackSet i l a s sd
+</span><span class="hs-identifier hs-var">W.focusWindow</span></span><span>
+</span><span id="line-122"></span><span>
+</span><span id="line-123"></span><span class="annot"><a href="XMonad.Actions.WindowNavigation.html#swap"><span class="hs-identifier hs-type">swap</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">IORef</span></span><span> </span><span class="annot"><a href="XMonad.Actions.WindowNavigation.html#WNState"><span class="hs-identifier hs-type">WNState</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="XMonad.Util.Types.html#Direction2D"><span class="hs-identifier hs-type">Direction2D</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">X</span></span><span> </span><span class="hs-special">(</span><span class="hs-special">)</span><span>
+</span><span id="line-124"></span><span id="swap"><span class="annot"><span class="annottext">swap :: IORef (Map WorkspaceId Point) -&gt; Direction2D -&gt; X ()
+</span><a href="XMonad.Actions.WindowNavigation.html#swap"><span class="hs-identifier hs-var hs-var">swap</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">(KeySym -&gt; WindowSet -&gt; WindowSet)
+-&gt; IORef (Map WorkspaceId Point) -&gt; Direction2D -&gt; X ()
+</span><a href="XMonad.Actions.WindowNavigation.html#withTargetWindow"><span class="hs-identifier hs-var">withTargetWindow</span></a></span><span> </span><span class="annot"><span class="annottext">KeySym -&gt; WindowSet -&gt; WindowSet
+forall s a i l sd.
+(Eq s, Eq a, Eq i) =&gt;
+a -&gt; StackSet i l a s sd -&gt; StackSet i l a s sd
+</span><a href="#local-6989586621679385997"><span class="hs-identifier hs-var">swapWithFocused</span></a></span><span>
+</span><span id="line-125"></span><span>  </span><span class="hs-keyword">where</span><span> </span><span id="local-6989586621679385997"><span class="annot"><span class="annottext">swapWithFocused :: t -&gt; StackSet i l t s sd -&gt; StackSet i l t s sd
+</span><a href="#local-6989586621679385997"><span class="hs-identifier hs-var hs-var">swapWithFocused</span></a></span></span><span> </span><span id="local-6989586621679385996"><span class="annot"><span class="annottext">t
+</span><a href="#local-6989586621679385996"><span class="hs-identifier hs-var">targetWin</span></a></span></span><span> </span><span id="local-6989586621679385995"><span class="annot"><span class="annottext">StackSet i l t s sd
+</span><a href="#local-6989586621679385995"><span class="hs-identifier hs-var">winSet</span></a></span></span><span> </span><span class="hs-glyph">=</span><span>
+</span><span id="line-126"></span><span>            </span><span class="hs-keyword">case</span><span> </span><span class="annot"><span class="annottext">StackSet i l t s sd -&gt; Maybe t
+forall i l a s sd. StackSet i l a s sd -&gt; Maybe a
+</span><span class="hs-identifier hs-var">W.peek</span></span><span> </span><span class="annot"><span class="annottext">StackSet i l t s sd
+</span><a href="#local-6989586621679385995"><span class="hs-identifier hs-var">winSet</span></a></span><span> </span><span class="hs-keyword">of</span><span>
+</span><span id="line-127"></span><span>                </span><span class="annot"><span class="hs-identifier hs-type">Just</span></span><span> </span><span id="local-6989586621679385993"><span class="annot"><span class="annottext">t
+</span><a href="#local-6989586621679385993"><span class="hs-identifier hs-var">currentWin</span></a></span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">t -&gt; StackSet i l t s sd -&gt; StackSet i l t s sd
+forall s a i l sd.
+(Eq s, Eq a, Eq i) =&gt;
+a -&gt; StackSet i l a s sd -&gt; StackSet i l a s sd
+</span><span class="hs-identifier hs-var">W.focusWindow</span></span><span> </span><span class="annot"><span class="annottext">t
+</span><a href="#local-6989586621679385993"><span class="hs-identifier hs-var">currentWin</span></a></span><span> </span><span class="annot"><span class="annottext">(StackSet i l t s sd -&gt; StackSet i l t s sd)
+-&gt; StackSet i l t s sd -&gt; StackSet i l t s sd
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span>
+</span><span id="line-128"></span><span>                                   </span><span class="annot"><span class="annottext">(t -&gt; t) -&gt; StackSet i l t s sd -&gt; StackSet i l t s sd
+forall t i l s sd.
+(t -&gt; t) -&gt; StackSet i l t s sd -&gt; StackSet i l t s sd
+</span><a href="#local-6989586621679385992"><span class="hs-identifier hs-var">mapWindows</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">t -&gt; t -&gt; t -&gt; t
+forall a. Eq a =&gt; a -&gt; a -&gt; a -&gt; a
+</span><a href="#local-6989586621679385991"><span class="hs-identifier hs-var">swapWin</span></a></span><span> </span><span class="annot"><span class="annottext">t
+</span><a href="#local-6989586621679385993"><span class="hs-identifier hs-var">currentWin</span></a></span><span> </span><span class="annot"><span class="annottext">t
+</span><a href="#local-6989586621679385996"><span class="hs-identifier hs-var">targetWin</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">StackSet i l t s sd
+</span><a href="#local-6989586621679385995"><span class="hs-identifier hs-var">winSet</span></a></span><span>
+</span><span id="line-129"></span><span>                </span><span class="annot"><span class="annottext">Maybe t
+</span><span class="hs-identifier hs-var">Nothing</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">StackSet i l t s sd
+</span><a href="#local-6989586621679385995"><span class="hs-identifier hs-var">winSet</span></a></span><span>
+</span><span id="line-130"></span><span>        </span><span id="local-6989586621679385992"><span class="annot"><span class="annottext">mapWindows :: (t -&gt; t) -&gt; StackSet i l t s sd -&gt; StackSet i l t s sd
+</span><a href="#local-6989586621679385992"><span class="hs-identifier hs-var hs-var">mapWindows</span></a></span></span><span> </span><span id="local-6989586621679385990"><span class="annot"><span class="annottext">t -&gt; t
+</span><a href="#local-6989586621679385990"><span class="hs-identifier hs-var">f</span></a></span></span><span> </span><span id="local-6989586621679385989"><span class="annot"><span class="annottext">StackSet i l t s sd
+</span><a href="#local-6989586621679385989"><span class="hs-identifier hs-var">ss</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">(Workspace i l t -&gt; Workspace i l t)
+-&gt; StackSet i l t s sd -&gt; StackSet i l t s sd
+forall i l a s sd.
+(Workspace i l a -&gt; Workspace i l a)
+-&gt; StackSet i l a s sd -&gt; StackSet i l a s sd
+</span><span class="hs-identifier hs-var">W.mapWorkspace</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">(t -&gt; t) -&gt; Workspace i l t -&gt; Workspace i l t
+forall t a i l. (t -&gt; a) -&gt; Workspace i l t -&gt; Workspace i l a
+</span><a href="#local-6989586621679385987"><span class="hs-identifier hs-var">mapWindows'</span></a></span><span> </span><span class="annot"><span class="annottext">t -&gt; t
+</span><a href="#local-6989586621679385990"><span class="hs-identifier hs-var">f</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">StackSet i l t s sd
+</span><a href="#local-6989586621679385989"><span class="hs-identifier hs-var">ss</span></a></span><span>
+</span><span id="line-131"></span><span>        </span><span id="local-6989586621679385987"><span class="annot"><span class="annottext">mapWindows' :: (t -&gt; a) -&gt; Workspace i l t -&gt; Workspace i l a
+</span><a href="#local-6989586621679385987"><span class="hs-identifier hs-var hs-var">mapWindows'</span></a></span></span><span> </span><span id="local-6989586621679385986"><span class="annot"><span class="annottext">t -&gt; a
+</span><a href="#local-6989586621679385986"><span class="hs-identifier hs-var">f</span></a></span></span><span> </span><span id="local-6989586621679385985"><span class="annot"><span class="annottext">ws :: Workspace i l t
+</span><a href="#local-6989586621679385985"><span class="hs-identifier hs-var">ws</span></a></span></span><span class="hs-glyph">@</span><span class="annot"><span class="hs-identifier hs-type">W.Workspace</span></span><span class="hs-special">{</span><span> </span><span class="annot"><span class="annottext">stack :: forall i l a. Workspace i l a -&gt; Maybe (Stack a)
+</span><span class="hs-identifier hs-var">W.stack</span></span><span> </span><span class="hs-glyph">=</span><span> </span><span id="local-6989586621679385982"><span class="annot"><span class="annottext">Maybe (Stack t)
+</span><a href="#local-6989586621679385982"><span class="hs-identifier hs-var">s</span></a></span></span><span> </span><span class="hs-special">}</span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Workspace i l t
+</span><a href="#local-6989586621679385985"><span class="hs-identifier hs-var">ws</span></a></span><span> </span><span class="hs-special">{</span><span> </span><span class="annot"><span class="annottext">stack :: Maybe (Stack a)
+</span><span class="hs-identifier hs-var">W.stack</span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">(t -&gt; a) -&gt; Stack t -&gt; Stack a
+forall t b. (t -&gt; b) -&gt; Stack t -&gt; Stack b
+</span><a href="#local-6989586621679385981"><span class="hs-identifier hs-var">mapWindows''</span></a></span><span> </span><span class="annot"><span class="annottext">t -&gt; a
+</span><a href="#local-6989586621679385986"><span class="hs-identifier hs-var">f</span></a></span><span> </span><span class="annot"><span class="annottext">(Stack t -&gt; Stack a) -&gt; Maybe (Stack t) -&gt; Maybe (Stack a)
+forall (f :: * -&gt; *) a b. Functor f =&gt; (a -&gt; b) -&gt; f a -&gt; f b
+</span><span class="hs-operator hs-var">&lt;$&gt;</span></span><span> </span><span class="annot"><span class="annottext">Maybe (Stack t)
+</span><a href="#local-6989586621679385982"><span class="hs-identifier hs-var">s</span></a></span><span> </span><span class="hs-special">}</span><span>
+</span><span id="line-132"></span><span>        </span><span id="local-6989586621679385981"><span class="annot"><span class="annottext">mapWindows'' :: (t -&gt; b) -&gt; Stack t -&gt; Stack b
+</span><a href="#local-6989586621679385981"><span class="hs-identifier hs-var hs-var">mapWindows''</span></a></span></span><span> </span><span id="local-6989586621679385979"><span class="annot"><span class="annottext">t -&gt; b
+</span><a href="#local-6989586621679385979"><span class="hs-identifier hs-var">f</span></a></span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">W.Stack</span></span><span> </span><span id="local-6989586621679385977"><span class="annot"><span class="annottext">t
+</span><a href="#local-6989586621679385977"><span class="hs-identifier hs-var">focused</span></a></span></span><span> </span><span id="local-6989586621679385976"><span class="annot"><span class="annottext">[t]
+</span><a href="#local-6989586621679385976"><span class="hs-identifier hs-var">up</span></a></span></span><span> </span><span id="local-6989586621679385975"><span class="annot"><span class="annottext">[t]
+</span><a href="#local-6989586621679385975"><span class="hs-identifier hs-var">down</span></a></span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">b -&gt; [b] -&gt; [b] -&gt; Stack b
+forall a. a -&gt; [a] -&gt; [a] -&gt; Stack a
+</span><span class="hs-identifier hs-var">W.Stack</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">t -&gt; b
+</span><a href="#local-6989586621679385979"><span class="hs-identifier hs-var">f</span></a></span><span> </span><span class="annot"><span class="annottext">t
+</span><a href="#local-6989586621679385977"><span class="hs-identifier hs-var">focused</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">(t -&gt; b) -&gt; [t] -&gt; [b]
+forall a b. (a -&gt; b) -&gt; [a] -&gt; [b]
+</span><span class="hs-identifier hs-var">map</span></span><span> </span><span class="annot"><span class="annottext">t -&gt; b
+</span><a href="#local-6989586621679385979"><span class="hs-identifier hs-var">f</span></a></span><span> </span><span class="annot"><span class="annottext">[t]
+</span><a href="#local-6989586621679385976"><span class="hs-identifier hs-var">up</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">(t -&gt; b) -&gt; [t] -&gt; [b]
+forall a b. (a -&gt; b) -&gt; [a] -&gt; [b]
+</span><span class="hs-identifier hs-var">map</span></span><span> </span><span class="annot"><span class="annottext">t -&gt; b
+</span><a href="#local-6989586621679385979"><span class="hs-identifier hs-var">f</span></a></span><span> </span><span class="annot"><span class="annottext">[t]
+</span><a href="#local-6989586621679385975"><span class="hs-identifier hs-var">down</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-133"></span><span>        </span><span id="local-6989586621679385991"><span class="annot"><span class="annottext">swapWin :: a -&gt; a -&gt; a -&gt; a
+</span><a href="#local-6989586621679385991"><span class="hs-identifier hs-var hs-var">swapWin</span></a></span></span><span> </span><span id="local-6989586621679385974"><span class="annot"><span class="annottext">a
+</span><a href="#local-6989586621679385974"><span class="hs-identifier hs-var">win1</span></a></span></span><span> </span><span id="local-6989586621679385973"><span class="annot"><span class="annottext">a
+</span><a href="#local-6989586621679385973"><span class="hs-identifier hs-var">win2</span></a></span></span><span> </span><span id="local-6989586621679385972"><span class="annot"><span class="annottext">a
+</span><a href="#local-6989586621679385972"><span class="hs-identifier hs-var">win</span></a></span></span><span>
+</span><span id="line-134"></span><span>          </span><span class="hs-glyph">|</span><span> </span><span class="annot"><span class="annottext">a
+</span><a href="#local-6989586621679385972"><span class="hs-identifier hs-var">win</span></a></span><span> </span><span class="annot"><span class="annottext">a -&gt; a -&gt; Bool
+forall a. Eq a =&gt; a -&gt; a -&gt; Bool
+</span><span class="hs-operator hs-var">==</span></span><span> </span><span class="annot"><span class="annottext">a
+</span><a href="#local-6989586621679385974"><span class="hs-identifier hs-var">win1</span></a></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">a
+</span><a href="#local-6989586621679385973"><span class="hs-identifier hs-var">win2</span></a></span><span>
+</span><span id="line-135"></span><span>          </span><span class="hs-glyph">|</span><span> </span><span class="annot"><span class="annottext">a
+</span><a href="#local-6989586621679385972"><span class="hs-identifier hs-var">win</span></a></span><span> </span><span class="annot"><span class="annottext">a -&gt; a -&gt; Bool
+forall a. Eq a =&gt; a -&gt; a -&gt; Bool
+</span><span class="hs-operator hs-var">==</span></span><span> </span><span class="annot"><span class="annottext">a
+</span><a href="#local-6989586621679385973"><span class="hs-identifier hs-var">win2</span></a></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">a
+</span><a href="#local-6989586621679385974"><span class="hs-identifier hs-var">win1</span></a></span><span>
+</span><span id="line-136"></span><span>          </span><span class="hs-glyph">|</span><span> </span><span class="annot"><span class="annottext">Bool
+</span><span class="hs-identifier hs-var">otherwise</span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">a
+</span><a href="#local-6989586621679385972"><span class="hs-identifier hs-var">win</span></a></span><span>
+</span><span id="line-137"></span><span>
+</span><span id="line-138"></span><span class="annot"><a href="XMonad.Actions.WindowNavigation.html#withTargetWindow"><span class="hs-identifier hs-type">withTargetWindow</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">Window</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">WindowSet</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">WindowSet</span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">IORef</span></span><span> </span><span class="annot"><a href="XMonad.Actions.WindowNavigation.html#WNState"><span class="hs-identifier hs-type">WNState</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="XMonad.Util.Types.html#Direction2D"><span class="hs-identifier hs-type">Direction2D</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">X</span></span><span> </span><span class="hs-special">(</span><span class="hs-special">)</span><span>
+</span><span id="line-139"></span><span id="withTargetWindow"><span class="annot"><span class="annottext">withTargetWindow :: (KeySym -&gt; WindowSet -&gt; WindowSet)
+-&gt; IORef (Map WorkspaceId Point) -&gt; Direction2D -&gt; X ()
+</span><a href="XMonad.Actions.WindowNavigation.html#withTargetWindow"><span class="hs-identifier hs-var hs-var">withTargetWindow</span></a></span></span><span> </span><span id="local-6989586621679385970"><span class="annot"><span class="annottext">KeySym -&gt; WindowSet -&gt; WindowSet
+</span><a href="#local-6989586621679385970"><span class="hs-identifier hs-var">adj</span></a></span></span><span> </span><span id="local-6989586621679385969"><span class="annot"><span class="annottext">IORef (Map WorkspaceId Point)
+</span><a href="#local-6989586621679385969"><span class="hs-identifier hs-var">posRef</span></a></span></span><span> </span><span id="local-6989586621679385968"><span class="annot"><span class="annottext">Direction2D
+</span><a href="#local-6989586621679385968"><span class="hs-identifier hs-var">dir</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">IORef (Map WorkspaceId Point) -&gt; (KeySym -&gt; Point -&gt; X ()) -&gt; X ()
+</span><a href="XMonad.Actions.WindowNavigation.html#fromCurrentPoint"><span class="hs-identifier hs-var">fromCurrentPoint</span></a></span><span> </span><span class="annot"><span class="annottext">IORef (Map WorkspaceId Point)
+</span><a href="#local-6989586621679385969"><span class="hs-identifier hs-var">posRef</span></a></span><span> </span><span class="annot"><span class="annottext">((KeySym -&gt; Point -&gt; X ()) -&gt; X ())
+-&gt; (KeySym -&gt; Point -&gt; X ()) -&gt; X ()
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="hs-glyph">\</span><span id="local-6989586621679385966"><span class="annot"><span class="annottext">KeySym
+</span><a href="#local-6989586621679385966"><span class="hs-identifier hs-var">win</span></a></span></span><span> </span><span id="local-6989586621679385965"><span class="annot"><span class="annottext">Point
+</span><a href="#local-6989586621679385965"><span class="hs-identifier hs-var">pos</span></a></span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-140"></span><span>    </span><span id="local-6989586621679385964"><span class="annot"><span class="annottext">[(KeySym, Rectangle)]
+</span><a href="#local-6989586621679385964"><span class="hs-identifier hs-var">targets</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">((KeySym, Rectangle) -&gt; Bool)
+-&gt; [(KeySym, Rectangle)] -&gt; [(KeySym, Rectangle)]
+forall a. (a -&gt; Bool) -&gt; [a] -&gt; [a]
+</span><span class="hs-identifier hs-var">filter</span></span><span> </span><span class="hs-special">(</span><span class="hs-special">(</span><span class="annot"><span class="annottext">KeySym -&gt; KeySym -&gt; Bool
+forall a. Eq a =&gt; a -&gt; a -&gt; Bool
+</span><span class="hs-operator hs-var">/=</span></span><span> </span><span class="annot"><span class="annottext">KeySym
+</span><a href="#local-6989586621679385966"><span class="hs-identifier hs-var">win</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">(KeySym -&gt; Bool)
+-&gt; ((KeySym, Rectangle) -&gt; KeySym) -&gt; (KeySym, Rectangle) -&gt; Bool
+forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">(KeySym, Rectangle) -&gt; KeySym
+forall a b. (a, b) -&gt; a
+</span><span class="hs-identifier hs-var">fst</span></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">([(KeySym, Rectangle)] -&gt; [(KeySym, Rectangle)])
+-&gt; X [(KeySym, Rectangle)] -&gt; X [(KeySym, Rectangle)]
+forall (f :: * -&gt; *) a b. Functor f =&gt; (a -&gt; b) -&gt; f a -&gt; f b
+</span><span class="hs-operator hs-var">&lt;$&gt;</span></span><span> </span><span class="annot"><span class="annottext">Point -&gt; Direction2D -&gt; X [(KeySym, Rectangle)]
+</span><a href="XMonad.Actions.WindowNavigation.html#navigableTargets"><span class="hs-identifier hs-var">navigableTargets</span></a></span><span> </span><span class="annot"><span class="annottext">Point
+</span><a href="#local-6989586621679385965"><span class="hs-identifier hs-var">pos</span></a></span><span> </span><span class="annot"><span class="annottext">Direction2D
+</span><a href="#local-6989586621679385968"><span class="hs-identifier hs-var">dir</span></a></span><span>
+</span><span id="line-141"></span><span>    </span><span class="annot"><span class="annottext">Maybe (KeySym, Rectangle) -&gt; ((KeySym, Rectangle) -&gt; X ()) -&gt; X ()
+forall (m :: * -&gt; *) a. Monad m =&gt; Maybe a -&gt; (a -&gt; m ()) -&gt; m ()
+</span><span class="hs-identifier hs-var">whenJust</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">[(KeySym, Rectangle)] -&gt; Maybe (KeySym, Rectangle)
+forall a. [a] -&gt; Maybe a
+</span><span class="hs-identifier hs-var">listToMaybe</span></span><span> </span><span class="annot"><span class="annottext">[(KeySym, Rectangle)]
+</span><a href="#local-6989586621679385964"><span class="hs-identifier hs-var">targets</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">(((KeySym, Rectangle) -&gt; X ()) -&gt; X ())
+-&gt; ((KeySym, Rectangle) -&gt; X ()) -&gt; X ()
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="hs-glyph">\</span><span class="hs-special">(</span><span id="local-6989586621679385959"><span class="annot"><span class="annottext">KeySym
+</span><a href="#local-6989586621679385959"><span class="hs-identifier hs-var">targetWin</span></a></span></span><span class="hs-special">,</span><span> </span><span id="local-6989586621679385958"><span class="annot"><span class="annottext">Rectangle
+</span><a href="#local-6989586621679385958"><span class="hs-identifier hs-var">targetRect</span></a></span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-142"></span><span>      </span><span class="annot"><span class="annottext">(WindowSet -&gt; WindowSet) -&gt; X ()
+</span><span class="hs-identifier hs-var">windows</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">KeySym -&gt; WindowSet -&gt; WindowSet
+</span><a href="#local-6989586621679385970"><span class="hs-identifier hs-var">adj</span></a></span><span> </span><span class="annot"><span class="annottext">KeySym
+</span><a href="#local-6989586621679385959"><span class="hs-identifier hs-var">targetWin</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-143"></span><span>      </span><span class="annot"><span class="annottext">IORef (Map WorkspaceId Point) -&gt; Point -&gt; Rectangle -&gt; X ()
+</span><a href="XMonad.Actions.WindowNavigation.html#setPosition"><span class="hs-identifier hs-var">setPosition</span></a></span><span> </span><span class="annot"><span class="annottext">IORef (Map WorkspaceId Point)
+</span><a href="#local-6989586621679385969"><span class="hs-identifier hs-var">posRef</span></a></span><span> </span><span class="annot"><span class="annottext">Point
+</span><a href="#local-6989586621679385965"><span class="hs-identifier hs-var">pos</span></a></span><span> </span><span class="annot"><span class="annottext">Rectangle
+</span><a href="#local-6989586621679385958"><span class="hs-identifier hs-var">targetRect</span></a></span><span>
+</span><span id="line-144"></span><span>
+</span><span id="line-145"></span><span class="annot"><a href="XMonad.Actions.WindowNavigation.html#trackMovement"><span class="hs-identifier hs-type">trackMovement</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">IORef</span></span><span> </span><span class="annot"><a href="XMonad.Actions.WindowNavigation.html#WNState"><span class="hs-identifier hs-type">WNState</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">X</span></span><span> </span><span class="hs-special">(</span><span class="hs-special">)</span><span>
+</span><span id="line-146"></span><span id="trackMovement"><span class="annot"><span class="annottext">trackMovement :: IORef (Map WorkspaceId Point) -&gt; X ()
+</span><a href="XMonad.Actions.WindowNavigation.html#trackMovement"><span class="hs-identifier hs-var hs-var">trackMovement</span></a></span></span><span> </span><span id="local-6989586621679385955"><span class="annot"><span class="annottext">IORef (Map WorkspaceId Point)
+</span><a href="#local-6989586621679385955"><span class="hs-identifier hs-var">posRef</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">IORef (Map WorkspaceId Point) -&gt; (KeySym -&gt; Point -&gt; X ()) -&gt; X ()
+</span><a href="XMonad.Actions.WindowNavigation.html#fromCurrentPoint"><span class="hs-identifier hs-var">fromCurrentPoint</span></a></span><span> </span><span class="annot"><span class="annottext">IORef (Map WorkspaceId Point)
+</span><a href="#local-6989586621679385955"><span class="hs-identifier hs-var">posRef</span></a></span><span> </span><span class="annot"><span class="annottext">((KeySym -&gt; Point -&gt; X ()) -&gt; X ())
+-&gt; (KeySym -&gt; Point -&gt; X ()) -&gt; X ()
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="hs-glyph">\</span><span id="local-6989586621679385954"><span class="annot"><span class="annottext">KeySym
+</span><a href="#local-6989586621679385954"><span class="hs-identifier hs-var">win</span></a></span></span><span> </span><span id="local-6989586621679385953"><span class="annot"><span class="annottext">Point
+</span><a href="#local-6989586621679385953"><span class="hs-identifier hs-var">pos</span></a></span></span><span> </span><span class="hs-glyph">-&gt;</span><span>
+</span><span id="line-147"></span><span>                           </span><span class="annot"><span class="annottext">KeySym -&gt; X (Maybe (KeySym, Rectangle))
+</span><a href="XMonad.Actions.WindowNavigation.html#windowRect"><span class="hs-identifier hs-var">windowRect</span></a></span><span> </span><span class="annot"><span class="annottext">KeySym
+</span><a href="#local-6989586621679385954"><span class="hs-identifier hs-var">win</span></a></span><span> </span><span class="annot"><span class="annottext">X (Maybe (KeySym, Rectangle))
+-&gt; (Maybe (KeySym, Rectangle) -&gt; X ()) -&gt; X ()
+forall (m :: * -&gt; *) a b. Monad m =&gt; m a -&gt; (a -&gt; m b) -&gt; m b
+</span><span class="hs-operator hs-var">&gt;&gt;=</span></span><span> </span><span class="annot"><span class="annottext">(Maybe (KeySym, Rectangle)
+ -&gt; ((KeySym, Rectangle) -&gt; X ()) -&gt; X ())
+-&gt; ((KeySym, Rectangle) -&gt; X ())
+-&gt; Maybe (KeySym, Rectangle)
+-&gt; X ()
+forall a b c. (a -&gt; b -&gt; c) -&gt; b -&gt; a -&gt; c
+</span><span class="hs-identifier hs-var">flip</span></span><span> </span><span class="annot"><span class="annottext">Maybe (KeySym, Rectangle) -&gt; ((KeySym, Rectangle) -&gt; X ()) -&gt; X ()
+forall (m :: * -&gt; *) a. Monad m =&gt; Maybe a -&gt; (a -&gt; m ()) -&gt; m ()
+</span><span class="hs-identifier hs-var">whenJust</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">IORef (Map WorkspaceId Point) -&gt; Point -&gt; Rectangle -&gt; X ()
+</span><a href="XMonad.Actions.WindowNavigation.html#setPosition"><span class="hs-identifier hs-var">setPosition</span></a></span><span> </span><span class="annot"><span class="annottext">IORef (Map WorkspaceId Point)
+</span><a href="#local-6989586621679385955"><span class="hs-identifier hs-var">posRef</span></a></span><span> </span><span class="annot"><span class="annottext">Point
+</span><a href="#local-6989586621679385953"><span class="hs-identifier hs-var">pos</span></a></span><span> </span><span class="annot"><span class="annottext">(Rectangle -&gt; X ())
+-&gt; ((KeySym, Rectangle) -&gt; Rectangle)
+-&gt; (KeySym, Rectangle)
+-&gt; X ()
+forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">(KeySym, Rectangle) -&gt; Rectangle
+forall a b. (a, b) -&gt; b
+</span><span class="hs-identifier hs-var">snd</span></span><span class="hs-special">)</span><span>
+</span><span id="line-148"></span><span>
+</span><span id="line-149"></span><span class="annot"><a href="XMonad.Actions.WindowNavigation.html#fromCurrentPoint"><span class="hs-identifier hs-type">fromCurrentPoint</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">IORef</span></span><span> </span><span class="annot"><a href="XMonad.Actions.WindowNavigation.html#WNState"><span class="hs-identifier hs-type">WNState</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">Window</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Point</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">X</span></span><span> </span><span class="hs-special">(</span><span class="hs-special">)</span><span class="hs-special">)</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">X</span></span><span> </span><span class="hs-special">(</span><span class="hs-special">)</span><span>
+</span><span id="line-150"></span><span id="fromCurrentPoint"><span class="annot"><span class="annottext">fromCurrentPoint :: IORef (Map WorkspaceId Point) -&gt; (KeySym -&gt; Point -&gt; X ()) -&gt; X ()
+</span><a href="XMonad.Actions.WindowNavigation.html#fromCurrentPoint"><span class="hs-identifier hs-var hs-var">fromCurrentPoint</span></a></span></span><span> </span><span id="local-6989586621679385950"><span class="annot"><span class="annottext">IORef (Map WorkspaceId Point)
+</span><a href="#local-6989586621679385950"><span class="hs-identifier hs-var">posRef</span></a></span></span><span> </span><span id="local-6989586621679385949"><span class="annot"><span class="annottext">KeySym -&gt; Point -&gt; X ()
+</span><a href="#local-6989586621679385949"><span class="hs-identifier hs-var">f</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">(KeySym -&gt; X ()) -&gt; X ()
+</span><span class="hs-identifier hs-var">withFocused</span></span><span> </span><span class="annot"><span class="annottext">((KeySym -&gt; X ()) -&gt; X ()) -&gt; (KeySym -&gt; X ()) -&gt; X ()
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="hs-glyph">\</span><span id="local-6989586621679385947"><span class="annot"><span class="annottext">KeySym
+</span><a href="#local-6989586621679385947"><span class="hs-identifier hs-var">win</span></a></span></span><span> </span><span class="hs-glyph">-&gt;</span><span>
+</span><span id="line-151"></span><span>                                </span><span class="annot"><span class="annottext">IORef (Map WorkspaceId Point) -&gt; X Point
+</span><a href="XMonad.Actions.WindowNavigation.html#currentPosition"><span class="hs-identifier hs-var">currentPosition</span></a></span><span> </span><span class="annot"><span class="annottext">IORef (Map WorkspaceId Point)
+</span><a href="#local-6989586621679385950"><span class="hs-identifier hs-var">posRef</span></a></span><span> </span><span class="annot"><span class="annottext">X Point -&gt; (Point -&gt; X ()) -&gt; X ()
+forall (m :: * -&gt; *) a b. Monad m =&gt; m a -&gt; (a -&gt; m b) -&gt; m b
+</span><span class="hs-operator hs-var">&gt;&gt;=</span></span><span> </span><span class="annot"><span class="annottext">KeySym -&gt; Point -&gt; X ()
+</span><a href="#local-6989586621679385949"><span class="hs-identifier hs-var">f</span></a></span><span> </span><span class="annot"><span class="annottext">KeySym
+</span><a href="#local-6989586621679385947"><span class="hs-identifier hs-var">win</span></a></span><span>
+</span><span id="line-152"></span><span>
+</span><span id="line-153"></span><span class="hs-comment">-- Gets the current position from the IORef passed in, or if nothing (say, from</span><span>
+</span><span id="line-154"></span><span class="hs-comment">-- a restart), derives the current position from the current window. Also,</span><span>
+</span><span id="line-155"></span><span class="hs-comment">-- verifies that the position is congruent with the current window (say, if you</span><span>
+</span><span id="line-156"></span><span class="hs-comment">-- used mod-j/k or mouse or something).</span><span>
+</span><span id="line-157"></span><span class="annot"><a href="XMonad.Actions.WindowNavigation.html#currentPosition"><span class="hs-identifier hs-type">currentPosition</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">IORef</span></span><span> </span><span class="annot"><a href="XMonad.Actions.WindowNavigation.html#WNState"><span class="hs-identifier hs-type">WNState</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">X</span></span><span> </span><span class="annot"><span class="hs-identifier hs-type">Point</span></span><span>
+</span><span id="line-158"></span><span id="currentPosition"><span class="annot"><span class="annottext">currentPosition :: IORef (Map WorkspaceId Point) -&gt; X Point
+</span><a href="XMonad.Actions.WindowNavigation.html#currentPosition"><span class="hs-identifier hs-var hs-var">currentPosition</span></a></span></span><span> </span><span id="local-6989586621679385945"><span class="annot"><span class="annottext">IORef (Map WorkspaceId Point)
+</span><a href="#local-6989586621679385945"><span class="hs-identifier hs-var">posRef</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-159"></span><span>    </span><span id="local-6989586621679385944"><span class="annot"><span class="annottext">KeySym
+</span><a href="#local-6989586621679385944"><span class="hs-identifier hs-var">root</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">(XConf -&gt; KeySym) -&gt; X KeySym
+forall r (m :: * -&gt; *) a. MonadReader r m =&gt; (r -&gt; a) -&gt; m a
+</span><span class="hs-identifier hs-var">asks</span></span><span> </span><span class="annot"><span class="annottext">XConf -&gt; KeySym
+</span><span class="hs-identifier hs-var hs-var">theRoot</span></span><span>
+</span><span id="line-160"></span><span>    </span><span id="local-6989586621679385941"><span class="annot"><span class="annottext">Maybe KeySym
+</span><a href="#local-6989586621679385941"><span class="hs-identifier hs-var">currentWindow</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">(XState -&gt; Maybe KeySym) -&gt; X (Maybe KeySym)
+forall s (m :: * -&gt; *) a. MonadState s m =&gt; (s -&gt; a) -&gt; m a
+</span><span class="hs-identifier hs-var">gets</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">WindowSet -&gt; Maybe KeySym
+forall i l a s sd. StackSet i l a s sd -&gt; Maybe a
+</span><span class="hs-identifier hs-var">W.peek</span></span><span> </span><span class="annot"><span class="annottext">(WindowSet -&gt; Maybe KeySym)
+-&gt; (XState -&gt; WindowSet) -&gt; XState -&gt; Maybe KeySym
+forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">XState -&gt; WindowSet
+</span><span class="hs-identifier hs-var hs-var">windowset</span></span><span class="hs-special">)</span><span>
+</span><span id="line-161"></span><span>    </span><span id="local-6989586621679385938"><span class="annot"><span class="annottext">Rectangle
+</span><a href="#local-6989586621679385938"><span class="hs-identifier hs-var">currentRect</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">Rectangle
+-&gt; ((KeySym, Rectangle) -&gt; Rectangle)
+-&gt; Maybe (KeySym, Rectangle)
+-&gt; Rectangle
+forall b a. b -&gt; (a -&gt; b) -&gt; Maybe a -&gt; b
+</span><span class="hs-identifier hs-var">maybe</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Position -&gt; Position -&gt; Dimension -&gt; Dimension -&gt; Rectangle
+</span><span class="hs-identifier hs-var">Rectangle</span></span><span> </span><span class="annot"><span class="annottext">Position
+</span><span class="hs-number">0</span></span><span> </span><span class="annot"><span class="annottext">Position
+</span><span class="hs-number">0</span></span><span> </span><span class="annot"><span class="annottext">Dimension
+</span><span class="hs-number">0</span></span><span> </span><span class="annot"><span class="annottext">Dimension
+</span><span class="hs-number">0</span></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">(KeySym, Rectangle) -&gt; Rectangle
+forall a b. (a, b) -&gt; b
+</span><span class="hs-identifier hs-var">snd</span></span><span> </span><span class="annot"><span class="annottext">(Maybe (KeySym, Rectangle) -&gt; Rectangle)
+-&gt; X (Maybe (KeySym, Rectangle)) -&gt; X Rectangle
+forall (f :: * -&gt; *) a b. Functor f =&gt; (a -&gt; b) -&gt; f a -&gt; f b
+</span><span class="hs-operator hs-var">&lt;$&gt;</span></span><span> </span><span class="annot"><span class="annottext">KeySym -&gt; X (Maybe (KeySym, Rectangle))
+</span><a href="XMonad.Actions.WindowNavigation.html#windowRect"><span class="hs-identifier hs-var">windowRect</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">KeySym -&gt; Maybe KeySym -&gt; KeySym
+forall a. a -&gt; Maybe a -&gt; a
+</span><span class="hs-identifier hs-var">fromMaybe</span></span><span> </span><span class="annot"><span class="annottext">KeySym
+</span><a href="#local-6989586621679385944"><span class="hs-identifier hs-var">root</span></a></span><span> </span><span class="annot"><span class="annottext">Maybe KeySym
+</span><a href="#local-6989586621679385941"><span class="hs-identifier hs-var">currentWindow</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-162"></span><span>
+</span><span id="line-163"></span><span>    </span><span id="local-6989586621679385935"><span class="annot"><span class="annottext">WorkspaceId
+</span><a href="#local-6989586621679385935"><span class="hs-identifier hs-var">wsid</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">(XState -&gt; WorkspaceId) -&gt; X WorkspaceId
+forall s (m :: * -&gt; *) a. MonadState s m =&gt; (s -&gt; a) -&gt; m a
+</span><span class="hs-identifier hs-var">gets</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">WindowSet -&gt; WorkspaceId
+forall i l a s sd. StackSet i l a s sd -&gt; i
+</span><span class="hs-identifier hs-var">W.currentTag</span></span><span> </span><span class="annot"><span class="annottext">(WindowSet -&gt; WorkspaceId)
+-&gt; (XState -&gt; WindowSet) -&gt; XState -&gt; WorkspaceId
+forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">XState -&gt; WindowSet
+</span><span class="hs-identifier hs-var hs-var">windowset</span></span><span class="hs-special">)</span><span>
+</span><span id="line-164"></span><span>    </span><span id="local-6989586621679385933"><span class="annot"><span class="annottext">Maybe Point
+</span><a href="#local-6989586621679385933"><span class="hs-identifier hs-var">mp</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">WorkspaceId -&gt; Map WorkspaceId Point -&gt; Maybe Point
+forall k a. Ord k =&gt; k -&gt; Map k a -&gt; Maybe a
+</span><span class="hs-identifier hs-var">M.lookup</span></span><span> </span><span class="annot"><span class="annottext">WorkspaceId
+</span><a href="#local-6989586621679385935"><span class="hs-identifier hs-var">wsid</span></a></span><span> </span><span class="annot"><span class="annottext">(Map WorkspaceId Point -&gt; Maybe Point)
+-&gt; X (Map WorkspaceId Point) -&gt; X (Maybe Point)
+forall (f :: * -&gt; *) a b. Functor f =&gt; (a -&gt; b) -&gt; f a -&gt; f b
+</span><span class="hs-operator hs-var">&lt;$&gt;</span></span><span> </span><span class="annot"><span class="annottext">IO (Map WorkspaceId Point) -&gt; X (Map WorkspaceId Point)
+forall (m :: * -&gt; *) a. MonadIO m =&gt; IO a -&gt; m a
+</span><span class="hs-identifier hs-var">io</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">IORef (Map WorkspaceId Point) -&gt; IO (Map WorkspaceId Point)
+forall a. IORef a -&gt; IO a
+</span><span class="hs-identifier hs-var">readIORef</span></span><span> </span><span class="annot"><span class="annottext">IORef (Map WorkspaceId Point)
+</span><a href="#local-6989586621679385945"><span class="hs-identifier hs-var">posRef</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-165"></span><span>
+</span><span id="line-166"></span><span>    </span><span class="annot"><span class="annottext">Point -&gt; X Point
+forall (m :: * -&gt; *) a. Monad m =&gt; a -&gt; m a
+</span><span class="hs-identifier hs-var">return</span></span><span> </span><span class="annot"><span class="annottext">(Point -&gt; X Point) -&gt; Point -&gt; X Point
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">Point -&gt; (Point -&gt; Point) -&gt; Maybe Point -&gt; Point
+forall b a. b -&gt; (a -&gt; b) -&gt; Maybe a -&gt; b
+</span><span class="hs-identifier hs-var">maybe</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Rectangle -&gt; Point
+</span><a href="#local-6989586621679385929"><span class="hs-identifier hs-var">middleOf</span></a></span><span> </span><span class="annot"><span class="annottext">Rectangle
+</span><a href="#local-6989586621679385938"><span class="hs-identifier hs-var">currentRect</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Point -&gt; Rectangle -&gt; Point
+</span><a href="XMonad.Actions.WindowNavigation.html#inside"><span class="hs-operator hs-var">`inside`</span></a></span><span> </span><span class="annot"><span class="annottext">Rectangle
+</span><a href="#local-6989586621679385938"><span class="hs-identifier hs-var">currentRect</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">Maybe Point
+</span><a href="#local-6989586621679385933"><span class="hs-identifier hs-var">mp</span></a></span><span>
+</span><span id="line-167"></span><span>
+</span><span id="line-168"></span><span>  </span><span class="hs-keyword">where</span><span> </span><span id="local-6989586621679385929"><span class="annot"><span class="annottext">middleOf :: Rectangle -&gt; Point
+</span><a href="#local-6989586621679385929"><span class="hs-identifier hs-var hs-var">middleOf</span></a></span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">Rectangle</span></span><span> </span><span id="local-6989586621679385927"><span class="annot"><span class="annottext">Position
+</span><a href="#local-6989586621679385927"><span class="hs-identifier hs-var">x</span></a></span></span><span> </span><span id="local-6989586621679385926"><span class="annot"><span class="annottext">Position
+</span><a href="#local-6989586621679385926"><span class="hs-identifier hs-var">y</span></a></span></span><span> </span><span id="local-6989586621679385925"><span class="annot"><span class="annottext">Dimension
+</span><a href="#local-6989586621679385925"><span class="hs-identifier hs-var">w</span></a></span></span><span> </span><span id="local-6989586621679385924"><span class="annot"><span class="annottext">Dimension
+</span><a href="#local-6989586621679385924"><span class="hs-identifier hs-var">h</span></a></span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Position -&gt; Position -&gt; Point
+</span><span class="hs-identifier hs-var">Point</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Position -&gt; Dimension -&gt; Position
+</span><a href="XMonad.Actions.WindowNavigation.html#midPoint"><span class="hs-identifier hs-var">midPoint</span></a></span><span> </span><span class="annot"><span class="annottext">Position
+</span><a href="#local-6989586621679385927"><span class="hs-identifier hs-var">x</span></a></span><span> </span><span class="annot"><span class="annottext">Dimension
+</span><a href="#local-6989586621679385925"><span class="hs-identifier hs-var">w</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Position -&gt; Dimension -&gt; Position
+</span><a href="XMonad.Actions.WindowNavigation.html#midPoint"><span class="hs-identifier hs-var">midPoint</span></a></span><span> </span><span class="annot"><span class="annottext">Position
+</span><a href="#local-6989586621679385926"><span class="hs-identifier hs-var">y</span></a></span><span> </span><span class="annot"><span class="annottext">Dimension
+</span><a href="#local-6989586621679385924"><span class="hs-identifier hs-var">h</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-169"></span><span>
+</span><span id="line-170"></span><span class="annot"><a href="XMonad.Actions.WindowNavigation.html#setPosition"><span class="hs-identifier hs-type">setPosition</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">IORef</span></span><span> </span><span class="annot"><a href="XMonad.Actions.WindowNavigation.html#WNState"><span class="hs-identifier hs-type">WNState</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Point</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Rectangle</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">X</span></span><span> </span><span class="hs-special">(</span><span class="hs-special">)</span><span>
+</span><span id="line-171"></span><span id="setPosition"><span class="annot"><span class="annottext">setPosition :: IORef (Map WorkspaceId Point) -&gt; Point -&gt; Rectangle -&gt; X ()
+</span><a href="XMonad.Actions.WindowNavigation.html#setPosition"><span class="hs-identifier hs-var hs-var">setPosition</span></a></span></span><span> </span><span id="local-6989586621679385921"><span class="annot"><span class="annottext">IORef (Map WorkspaceId Point)
+</span><a href="#local-6989586621679385921"><span class="hs-identifier hs-var">posRef</span></a></span></span><span> </span><span id="local-6989586621679385920"><span class="annot"><span class="annottext">Point
+</span><a href="#local-6989586621679385920"><span class="hs-identifier hs-var">oldPos</span></a></span></span><span> </span><span id="local-6989586621679385919"><span class="annot"><span class="annottext">Rectangle
+</span><a href="#local-6989586621679385919"><span class="hs-identifier hs-var">newRect</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-172"></span><span>    </span><span id="local-6989586621679385918"><span class="annot"><span class="annottext">WorkspaceId
+</span><a href="#local-6989586621679385918"><span class="hs-identifier hs-var">wsid</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">(XState -&gt; WorkspaceId) -&gt; X WorkspaceId
+forall s (m :: * -&gt; *) a. MonadState s m =&gt; (s -&gt; a) -&gt; m a
+</span><span class="hs-identifier hs-var">gets</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">WindowSet -&gt; WorkspaceId
+forall i l a s sd. StackSet i l a s sd -&gt; i
+</span><span class="hs-identifier hs-var">W.currentTag</span></span><span> </span><span class="annot"><span class="annottext">(WindowSet -&gt; WorkspaceId)
+-&gt; (XState -&gt; WindowSet) -&gt; XState -&gt; WorkspaceId
+forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">XState -&gt; WindowSet
+</span><span class="hs-identifier hs-var hs-var">windowset</span></span><span class="hs-special">)</span><span>
+</span><span id="line-173"></span><span>    </span><span class="annot"><span class="annottext">IO () -&gt; X ()
+forall (m :: * -&gt; *) a. MonadIO m =&gt; IO a -&gt; m a
+</span><span class="hs-identifier hs-var">io</span></span><span> </span><span class="annot"><span class="annottext">(IO () -&gt; X ()) -&gt; IO () -&gt; X ()
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">IORef (Map WorkspaceId Point)
+-&gt; (Map WorkspaceId Point -&gt; Map WorkspaceId Point) -&gt; IO ()
+forall a. IORef a -&gt; (a -&gt; a) -&gt; IO ()
+</span><span class="hs-identifier hs-var">modifyIORef</span></span><span> </span><span class="annot"><span class="annottext">IORef (Map WorkspaceId Point)
+</span><a href="#local-6989586621679385921"><span class="hs-identifier hs-var">posRef</span></a></span><span> </span><span class="annot"><span class="annottext">((Map WorkspaceId Point -&gt; Map WorkspaceId Point) -&gt; IO ())
+-&gt; (Map WorkspaceId Point -&gt; Map WorkspaceId Point) -&gt; IO ()
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">WorkspaceId
+-&gt; Point -&gt; Map WorkspaceId Point -&gt; Map WorkspaceId Point
+forall k a. Ord k =&gt; k -&gt; a -&gt; Map k a -&gt; Map k a
+</span><span class="hs-identifier hs-var">M.insert</span></span><span> </span><span class="annot"><span class="annottext">WorkspaceId
+</span><a href="#local-6989586621679385918"><span class="hs-identifier hs-var">wsid</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Point
+</span><a href="#local-6989586621679385920"><span class="hs-identifier hs-var">oldPos</span></a></span><span> </span><span class="annot"><span class="annottext">Point -&gt; Rectangle -&gt; Point
+</span><a href="XMonad.Actions.WindowNavigation.html#inside"><span class="hs-operator hs-var">`inside`</span></a></span><span> </span><span class="annot"><span class="annottext">Rectangle
+</span><a href="#local-6989586621679385919"><span class="hs-identifier hs-var">newRect</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-174"></span><span>
+</span><span id="line-175"></span><span class="annot"><a href="XMonad.Actions.WindowNavigation.html#inside"><span class="hs-identifier hs-type">inside</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Point</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Rectangle</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Point</span></span><span>
+</span><span id="line-176"></span><span class="annot"><span class="hs-identifier hs-type">Point</span></span><span> </span><span id="local-6989586621679385915"><span class="annot"><span class="annottext">Position
+</span><a href="#local-6989586621679385915"><span class="hs-identifier hs-var">x</span></a></span></span><span> </span><span id="local-6989586621679385914"><span class="annot"><span class="annottext">Position
+</span><a href="#local-6989586621679385914"><span class="hs-identifier hs-var">y</span></a></span></span><span> </span><span id="inside"><span class="annot"><span class="annottext">inside :: Point -&gt; Rectangle -&gt; Point
+</span><a href="XMonad.Actions.WindowNavigation.html#inside"><span class="hs-operator hs-var hs-var">`inside`</span></a></span></span><span> </span><span class="annot"><span class="hs-identifier hs-type">Rectangle</span></span><span> </span><span id="local-6989586621679385913"><span class="annot"><span class="annottext">Position
+</span><a href="#local-6989586621679385913"><span class="hs-identifier hs-var">rx</span></a></span></span><span> </span><span id="local-6989586621679385912"><span class="annot"><span class="annottext">Position
+</span><a href="#local-6989586621679385912"><span class="hs-identifier hs-var">ry</span></a></span></span><span> </span><span id="local-6989586621679385911"><span class="annot"><span class="annottext">Dimension
+</span><a href="#local-6989586621679385911"><span class="hs-identifier hs-var">rw</span></a></span></span><span> </span><span id="local-6989586621679385910"><span class="annot"><span class="annottext">Dimension
+</span><a href="#local-6989586621679385910"><span class="hs-identifier hs-var">rh</span></a></span></span><span> </span><span class="hs-glyph">=</span><span>
+</span><span id="line-177"></span><span>    </span><span class="annot"><span class="annottext">Position -&gt; Position -&gt; Point
+</span><span class="hs-identifier hs-var">Point</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Position
+</span><a href="#local-6989586621679385915"><span class="hs-identifier hs-var">x</span></a></span><span> </span><span class="annot"><span class="annottext">Position -&gt; (Position, Dimension) -&gt; Position
+</span><a href="#local-6989586621679385909"><span class="hs-operator hs-var">`within`</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Position
+</span><a href="#local-6989586621679385913"><span class="hs-identifier hs-var">rx</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">Dimension
+</span><a href="#local-6989586621679385911"><span class="hs-identifier hs-var">rw</span></a></span><span class="hs-special">)</span><span class="hs-special">)</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Position
+</span><a href="#local-6989586621679385914"><span class="hs-identifier hs-var">y</span></a></span><span> </span><span class="annot"><span class="annottext">Position -&gt; (Position, Dimension) -&gt; Position
+</span><a href="#local-6989586621679385909"><span class="hs-operator hs-var">`within`</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Position
+</span><a href="#local-6989586621679385912"><span class="hs-identifier hs-var">ry</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">Dimension
+</span><a href="#local-6989586621679385910"><span class="hs-identifier hs-var">rh</span></a></span><span class="hs-special">)</span><span class="hs-special">)</span><span>
+</span><span id="line-178"></span><span>  </span><span class="hs-keyword">where</span><span> </span><span id="local-6989586621679385908"><span class="annot"><span class="annottext">Position
+</span><a href="#local-6989586621679385908"><span class="hs-identifier hs-var">pos</span></a></span></span><span> </span><span id="local-6989586621679385909"><span class="annot"><span class="annottext">within :: Position -&gt; (Position, Dimension) -&gt; Position
+</span><a href="#local-6989586621679385909"><span class="hs-operator hs-var hs-var">`within`</span></a></span></span><span> </span><span class="hs-special">(</span><span id="local-6989586621679385907"><span class="annot"><span class="annottext">Position
+</span><a href="#local-6989586621679385907"><span class="hs-identifier hs-var">lower</span></a></span></span><span class="hs-special">,</span><span> </span><span id="local-6989586621679385906"><span class="annot"><span class="annottext">Dimension
+</span><a href="#local-6989586621679385906"><span class="hs-identifier hs-var">dim</span></a></span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-keyword">if</span><span> </span><span class="annot"><span class="annottext">Position
+</span><a href="#local-6989586621679385908"><span class="hs-identifier hs-var">pos</span></a></span><span> </span><span class="annot"><span class="annottext">Position -&gt; Position -&gt; Bool
+forall a. Ord a =&gt; a -&gt; a -&gt; Bool
+</span><span class="hs-operator hs-var">&gt;=</span></span><span> </span><span class="annot"><span class="annottext">Position
+</span><a href="#local-6989586621679385907"><span class="hs-identifier hs-var">lower</span></a></span><span> </span><span class="annot"><span class="annottext">Bool -&gt; Bool -&gt; Bool
+</span><span class="hs-operator hs-var">&amp;&amp;</span></span><span> </span><span class="annot"><span class="annottext">Position
+</span><a href="#local-6989586621679385908"><span class="hs-identifier hs-var">pos</span></a></span><span> </span><span class="annot"><span class="annottext">Position -&gt; Position -&gt; Bool
+forall a. Ord a =&gt; a -&gt; a -&gt; Bool
+</span><span class="hs-operator hs-var">&lt;</span></span><span> </span><span class="annot"><span class="annottext">Position
+</span><a href="#local-6989586621679385907"><span class="hs-identifier hs-var">lower</span></a></span><span> </span><span class="annot"><span class="annottext">Position -&gt; Position -&gt; Position
+forall a. Num a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-operator hs-var">+</span></span><span> </span><span class="annot"><span class="annottext">Dimension -&gt; Position
+forall a b. (Integral a, Num b) =&gt; a -&gt; b
+</span><span class="hs-identifier hs-var">fromIntegral</span></span><span> </span><span class="annot"><span class="annottext">Dimension
+</span><a href="#local-6989586621679385906"><span class="hs-identifier hs-var">dim</span></a></span><span>
+</span><span id="line-179"></span><span>                                    </span><span class="hs-keyword">then</span><span> </span><span class="annot"><span class="annottext">Position
+</span><a href="#local-6989586621679385908"><span class="hs-identifier hs-var">pos</span></a></span><span>
+</span><span id="line-180"></span><span>                                    </span><span class="hs-keyword">else</span><span> </span><span class="annot"><span class="annottext">Position -&gt; Dimension -&gt; Position
+</span><a href="XMonad.Actions.WindowNavigation.html#midPoint"><span class="hs-identifier hs-var">midPoint</span></a></span><span> </span><span class="annot"><span class="annottext">Position
+</span><a href="#local-6989586621679385907"><span class="hs-identifier hs-var">lower</span></a></span><span> </span><span class="annot"><span class="annottext">Dimension
+</span><a href="#local-6989586621679385906"><span class="hs-identifier hs-var">dim</span></a></span><span>
+</span><span id="line-181"></span><span>
+</span><span id="line-182"></span><span class="annot"><a href="XMonad.Actions.WindowNavigation.html#midPoint"><span class="hs-identifier hs-type">midPoint</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Position</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Dimension</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Position</span></span><span>
+</span><span id="line-183"></span><span id="midPoint"><span class="annot"><span class="annottext">midPoint :: Position -&gt; Dimension -&gt; Position
+</span><a href="XMonad.Actions.WindowNavigation.html#midPoint"><span class="hs-identifier hs-var hs-var">midPoint</span></a></span></span><span> </span><span id="local-6989586621679385902"><span class="annot"><span class="annottext">Position
+</span><a href="#local-6989586621679385902"><span class="hs-identifier hs-var">pos</span></a></span></span><span> </span><span id="local-6989586621679385901"><span class="annot"><span class="annottext">Dimension
+</span><a href="#local-6989586621679385901"><span class="hs-identifier hs-var">dim</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Position
+</span><a href="#local-6989586621679385902"><span class="hs-identifier hs-var">pos</span></a></span><span> </span><span class="annot"><span class="annottext">Position -&gt; Position -&gt; Position
+forall a. Num a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-operator hs-var">+</span></span><span> </span><span class="annot"><span class="annottext">Dimension -&gt; Position
+forall a b. (Integral a, Num b) =&gt; a -&gt; b
+</span><span class="hs-identifier hs-var">fromIntegral</span></span><span> </span><span class="annot"><span class="annottext">Dimension
+</span><a href="#local-6989586621679385901"><span class="hs-identifier hs-var">dim</span></a></span><span> </span><span class="annot"><span class="annottext">Position -&gt; Position -&gt; Position
+forall a. Integral a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-operator hs-var">`div`</span></span><span> </span><span class="annot"><span class="annottext">Position
+</span><span class="hs-number">2</span></span><span>
+</span><span id="line-184"></span><span>
+</span><span id="line-185"></span><span class="annot"><a href="XMonad.Actions.WindowNavigation.html#navigableTargets"><span class="hs-identifier hs-type">navigableTargets</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Point</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="XMonad.Util.Types.html#Direction2D"><span class="hs-identifier hs-type">Direction2D</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">X</span></span><span> </span><span class="hs-special">[</span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">Window</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Rectangle</span></span><span class="hs-special">)</span><span class="hs-special">]</span><span>
+</span><span id="line-186"></span><span id="navigableTargets"><span class="annot"><span class="annottext">navigableTargets :: Point -&gt; Direction2D -&gt; X [(KeySym, Rectangle)]
+</span><a href="XMonad.Actions.WindowNavigation.html#navigableTargets"><span class="hs-identifier hs-var hs-var">navigableTargets</span></a></span></span><span> </span><span id="local-6989586621679385899"><span class="annot"><span class="annottext">Point
+</span><a href="#local-6989586621679385899"><span class="hs-identifier hs-var">point</span></a></span></span><span> </span><span id="local-6989586621679385898"><span class="annot"><span class="annottext">Direction2D
+</span><a href="#local-6989586621679385898"><span class="hs-identifier hs-var">dir</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Direction2D
+-&gt; Point -&gt; [(KeySym, Rectangle)] -&gt; [(KeySym, Rectangle)]
+</span><a href="XMonad.Actions.WindowNavigation.html#navigable"><span class="hs-identifier hs-var">navigable</span></a></span><span> </span><span class="annot"><span class="annottext">Direction2D
+</span><a href="#local-6989586621679385898"><span class="hs-identifier hs-var">dir</span></a></span><span> </span><span class="annot"><span class="annottext">Point
+</span><a href="#local-6989586621679385899"><span class="hs-identifier hs-var">point</span></a></span><span> </span><span class="annot"><span class="annottext">([(KeySym, Rectangle)] -&gt; [(KeySym, Rectangle)])
+-&gt; X [(KeySym, Rectangle)] -&gt; X [(KeySym, Rectangle)]
+forall (f :: * -&gt; *) a b. Functor f =&gt; (a -&gt; b) -&gt; f a -&gt; f b
+</span><span class="hs-operator hs-var">&lt;$&gt;</span></span><span> </span><span class="annot"><span class="annottext">X [(KeySym, Rectangle)]
+</span><a href="XMonad.Actions.WindowNavigation.html#windowRects"><span class="hs-identifier hs-var">windowRects</span></a></span><span>
+</span><span id="line-187"></span><span>
+</span><span id="line-188"></span><span class="hs-comment">-- Filters and sorts the windows in terms of what is closest from the Point in</span><span>
+</span><span id="line-189"></span><span class="hs-comment">-- the Direction2D.</span><span>
+</span><span id="line-190"></span><span class="annot"><a href="XMonad.Actions.WindowNavigation.html#navigable"><span class="hs-identifier hs-type">navigable</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><a href="XMonad.Util.Types.html#Direction2D"><span class="hs-identifier hs-type">Direction2D</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Point</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="hs-special">[</span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">Window</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Rectangle</span></span><span class="hs-special">)</span><span class="hs-special">]</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="hs-special">[</span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">Window</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Rectangle</span></span><span class="hs-special">)</span><span class="hs-special">]</span><span>
+</span><span id="line-191"></span><span id="navigable"><span class="annot"><span class="annottext">navigable :: Direction2D
+-&gt; Point -&gt; [(KeySym, Rectangle)] -&gt; [(KeySym, Rectangle)]
+</span><a href="XMonad.Actions.WindowNavigation.html#navigable"><span class="hs-identifier hs-var hs-var">navigable</span></a></span></span><span> </span><span id="local-6989586621679385895"><span class="annot"><span class="annottext">Direction2D
+</span><a href="#local-6989586621679385895"><span class="hs-identifier hs-var">d</span></a></span></span><span> </span><span id="local-6989586621679385894"><span class="annot"><span class="annottext">Point
+</span><a href="#local-6989586621679385894"><span class="hs-identifier hs-var">pt</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Direction2D -&gt; [(KeySym, Rectangle)] -&gt; [(KeySym, Rectangle)]
+forall a. Direction2D -&gt; [(a, Rectangle)] -&gt; [(a, Rectangle)]
+</span><a href="XMonad.Actions.WindowNavigation.html#sortby"><span class="hs-identifier hs-var">sortby</span></a></span><span> </span><span class="annot"><span class="annottext">Direction2D
+</span><a href="#local-6989586621679385895"><span class="hs-identifier hs-var">d</span></a></span><span> </span><span class="annot"><span class="annottext">([(KeySym, Rectangle)] -&gt; [(KeySym, Rectangle)])
+-&gt; ([(KeySym, Rectangle)] -&gt; [(KeySym, Rectangle)])
+-&gt; [(KeySym, Rectangle)]
+-&gt; [(KeySym, Rectangle)]
+forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">((KeySym, Rectangle) -&gt; Bool)
+-&gt; [(KeySym, Rectangle)] -&gt; [(KeySym, Rectangle)]
+forall a. (a -&gt; Bool) -&gt; [a] -&gt; [a]
+</span><span class="hs-identifier hs-var">filter</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Direction2D -&gt; Point -&gt; Rectangle -&gt; Bool
+</span><a href="XMonad.Actions.WindowNavigation.html#inr"><span class="hs-identifier hs-var">inr</span></a></span><span> </span><span class="annot"><span class="annottext">Direction2D
+</span><a href="#local-6989586621679385895"><span class="hs-identifier hs-var">d</span></a></span><span> </span><span class="annot"><span class="annottext">Point
+</span><a href="#local-6989586621679385894"><span class="hs-identifier hs-var">pt</span></a></span><span> </span><span class="annot"><span class="annottext">(Rectangle -&gt; Bool)
+-&gt; ((KeySym, Rectangle) -&gt; Rectangle)
+-&gt; (KeySym, Rectangle)
+-&gt; Bool
+forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">(KeySym, Rectangle) -&gt; Rectangle
+forall a b. (a, b) -&gt; b
+</span><span class="hs-identifier hs-var">snd</span></span><span class="hs-special">)</span><span>
+</span><span id="line-192"></span><span>
+</span><span id="line-193"></span><span class="hs-comment">-- Produces a list of normal-state windows, on any screen. Rectangles are</span><span>
+</span><span id="line-194"></span><span class="hs-comment">-- adjusted based on screen position relative to the current screen, because I'm</span><span>
+</span><span id="line-195"></span><span class="hs-comment">-- bad like that.</span><span>
+</span><span id="line-196"></span><span class="annot"><a href="XMonad.Actions.WindowNavigation.html#windowRects"><span class="hs-identifier hs-type">windowRects</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">X</span></span><span> </span><span class="hs-special">[</span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">Window</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Rectangle</span></span><span class="hs-special">)</span><span class="hs-special">]</span><span>
+</span><span id="line-197"></span><span id="windowRects"><span class="annot"><span class="annottext">windowRects :: X [(KeySym, Rectangle)]
+</span><a href="XMonad.Actions.WindowNavigation.html#windowRects"><span class="hs-identifier hs-var hs-var">windowRects</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">([Maybe (KeySym, Rectangle)] -&gt; [(KeySym, Rectangle)])
+-&gt; X [Maybe (KeySym, Rectangle)] -&gt; X [(KeySym, Rectangle)]
+forall (f :: * -&gt; *) a b. Functor f =&gt; (a -&gt; b) -&gt; f a -&gt; f b
+</span><span class="hs-identifier hs-var">fmap</span></span><span> </span><span class="annot"><span class="annottext">[Maybe (KeySym, Rectangle)] -&gt; [(KeySym, Rectangle)]
+forall a. [Maybe a] -&gt; [a]
+</span><span class="hs-identifier hs-var">catMaybes</span></span><span> </span><span class="annot"><span class="annottext">(X [Maybe (KeySym, Rectangle)] -&gt; X [(KeySym, Rectangle)])
+-&gt; (Set KeySym -&gt; X [Maybe (KeySym, Rectangle)])
+-&gt; Set KeySym
+-&gt; X [(KeySym, Rectangle)]
+forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">(KeySym -&gt; X (Maybe (KeySym, Rectangle)))
+-&gt; [KeySym] -&gt; X [Maybe (KeySym, Rectangle)]
+forall (t :: * -&gt; *) (m :: * -&gt; *) a b.
+(Traversable t, Monad m) =&gt;
+(a -&gt; m b) -&gt; t a -&gt; m (t b)
+</span><span class="hs-identifier hs-var">mapM</span></span><span> </span><span class="annot"><span class="annottext">KeySym -&gt; X (Maybe (KeySym, Rectangle))
+</span><a href="XMonad.Actions.WindowNavigation.html#windowRect"><span class="hs-identifier hs-var">windowRect</span></a></span><span> </span><span class="annot"><span class="annottext">([KeySym] -&gt; X [Maybe (KeySym, Rectangle)])
+-&gt; (Set KeySym -&gt; [KeySym])
+-&gt; Set KeySym
+-&gt; X [Maybe (KeySym, Rectangle)]
+forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">Set KeySym -&gt; [KeySym]
+forall a. Set a -&gt; [a]
+</span><span class="hs-identifier hs-var">S.toList</span></span><span> </span><span class="annot"><span class="annottext">(Set KeySym -&gt; X [(KeySym, Rectangle)])
+-&gt; X (Set KeySym) -&gt; X [(KeySym, Rectangle)]
+forall (m :: * -&gt; *) a b. Monad m =&gt; (a -&gt; m b) -&gt; m a -&gt; m b
+</span><span class="hs-operator hs-var">=&lt;&lt;</span></span><span> </span><span class="annot"><span class="annottext">(XState -&gt; Set KeySym) -&gt; X (Set KeySym)
+forall s (m :: * -&gt; *) a. MonadState s m =&gt; (s -&gt; a) -&gt; m a
+</span><span class="hs-identifier hs-var">gets</span></span><span> </span><span class="annot"><span class="annottext">XState -&gt; Set KeySym
+</span><span class="hs-identifier hs-var hs-var">mapped</span></span><span>
+</span><span id="line-198"></span><span>
+</span><span id="line-199"></span><span class="annot"><a href="XMonad.Actions.WindowNavigation.html#windowRect"><span class="hs-identifier hs-type">windowRect</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Window</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">X</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">Maybe</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">Window</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Rectangle</span></span><span class="hs-special">)</span><span class="hs-special">)</span><span>
+</span><span id="line-200"></span><span id="windowRect"><span class="annot"><span class="annottext">windowRect :: KeySym -&gt; X (Maybe (KeySym, Rectangle))
+</span><a href="XMonad.Actions.WindowNavigation.html#windowRect"><span class="hs-identifier hs-var hs-var">windowRect</span></a></span></span><span> </span><span id="local-6989586621679385887"><span class="annot"><span class="annottext">KeySym
+</span><a href="#local-6989586621679385887"><span class="hs-identifier hs-var">win</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">(Display -&gt; X (Maybe (KeySym, Rectangle)))
+-&gt; X (Maybe (KeySym, Rectangle))
+forall a. (Display -&gt; X a) -&gt; X a
+</span><span class="hs-identifier hs-var">withDisplay</span></span><span> </span><span class="annot"><span class="annottext">((Display -&gt; X (Maybe (KeySym, Rectangle)))
+ -&gt; X (Maybe (KeySym, Rectangle)))
+-&gt; (Display -&gt; X (Maybe (KeySym, Rectangle)))
+-&gt; X (Maybe (KeySym, Rectangle))
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="hs-glyph">\</span><span id="local-6989586621679385885"><span class="annot"><span class="annottext">Display
+</span><a href="#local-6989586621679385885"><span class="hs-identifier hs-var">dpy</span></a></span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-201"></span><span>    </span><span class="hs-special">(</span><span class="annot"><span class="annottext">KeySym
+</span><span class="hs-identifier">_</span></span><span class="hs-special">,</span><span> </span><span id="local-6989586621679385884"><span class="annot"><span class="annottext">Position
+</span><a href="#local-6989586621679385884"><span class="hs-identifier hs-var">x</span></a></span></span><span class="hs-special">,</span><span> </span><span id="local-6989586621679385883"><span class="annot"><span class="annottext">Position
+</span><a href="#local-6989586621679385883"><span class="hs-identifier hs-var">y</span></a></span></span><span class="hs-special">,</span><span> </span><span id="local-6989586621679385882"><span class="annot"><span class="annottext">Dimension
+</span><a href="#local-6989586621679385882"><span class="hs-identifier hs-var">w</span></a></span></span><span class="hs-special">,</span><span> </span><span id="local-6989586621679385881"><span class="annot"><span class="annottext">Dimension
+</span><a href="#local-6989586621679385881"><span class="hs-identifier hs-var">h</span></a></span></span><span class="hs-special">,</span><span> </span><span id="local-6989586621679385880"><span class="annot"><span class="annottext">Dimension
+</span><a href="#local-6989586621679385880"><span class="hs-identifier hs-var">bw</span></a></span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">CInt
+</span><span class="hs-identifier">_</span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">IO
+  (KeySym, Position, Position, Dimension, Dimension, Dimension, CInt)
+-&gt; X (KeySym, Position, Position, Dimension, Dimension, Dimension,
+      CInt)
+forall (m :: * -&gt; *) a. MonadIO m =&gt; IO a -&gt; m a
+</span><span class="hs-identifier hs-var">io</span></span><span> </span><span class="annot"><span class="annottext">(IO
+   (KeySym, Position, Position, Dimension, Dimension, Dimension, CInt)
+ -&gt; X (KeySym, Position, Position, Dimension, Dimension, Dimension,
+       CInt))
+-&gt; IO
+     (KeySym, Position, Position, Dimension, Dimension, Dimension, CInt)
+-&gt; X (KeySym, Position, Position, Dimension, Dimension, Dimension,
+      CInt)
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">Display
+-&gt; KeySym
+-&gt; IO
+     (KeySym, Position, Position, Dimension, Dimension, Dimension, CInt)
+</span><span class="hs-identifier hs-var">getGeometry</span></span><span> </span><span class="annot"><span class="annottext">Display
+</span><a href="#local-6989586621679385885"><span class="hs-identifier hs-var">dpy</span></a></span><span> </span><span class="annot"><span class="annottext">KeySym
+</span><a href="#local-6989586621679385887"><span class="hs-identifier hs-var">win</span></a></span><span>
+</span><span id="line-202"></span><span>    </span><span class="annot"><span class="annottext">Maybe (KeySym, Rectangle) -&gt; X (Maybe (KeySym, Rectangle))
+forall (m :: * -&gt; *) a. Monad m =&gt; a -&gt; m a
+</span><span class="hs-identifier hs-var">return</span></span><span> </span><span class="annot"><span class="annottext">(Maybe (KeySym, Rectangle) -&gt; X (Maybe (KeySym, Rectangle)))
+-&gt; Maybe (KeySym, Rectangle) -&gt; X (Maybe (KeySym, Rectangle))
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">(KeySym, Rectangle) -&gt; Maybe (KeySym, Rectangle)
+forall a. a -&gt; Maybe a
+</span><span class="hs-identifier hs-var">Just</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">KeySym
+</span><a href="#local-6989586621679385887"><span class="hs-identifier hs-var">win</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">Position -&gt; Position -&gt; Dimension -&gt; Dimension -&gt; Rectangle
+</span><span class="hs-identifier hs-var">Rectangle</span></span><span> </span><span class="annot"><span class="annottext">Position
+</span><a href="#local-6989586621679385884"><span class="hs-identifier hs-var">x</span></a></span><span> </span><span class="annot"><span class="annottext">Position
+</span><a href="#local-6989586621679385883"><span class="hs-identifier hs-var">y</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Dimension
+</span><a href="#local-6989586621679385882"><span class="hs-identifier hs-var">w</span></a></span><span> </span><span class="annot"><span class="annottext">Dimension -&gt; Dimension -&gt; Dimension
+forall a. Num a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-operator hs-var">+</span></span><span> </span><span class="annot"><span class="annottext">Dimension
+</span><span class="hs-number">2</span></span><span> </span><span class="annot"><span class="annottext">Dimension -&gt; Dimension -&gt; Dimension
+forall a. Num a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-operator hs-var">*</span></span><span> </span><span class="annot"><span class="annottext">Dimension
+</span><a href="#local-6989586621679385880"><span class="hs-identifier hs-var">bw</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Dimension
+</span><a href="#local-6989586621679385881"><span class="hs-identifier hs-var">h</span></a></span><span> </span><span class="annot"><span class="annottext">Dimension -&gt; Dimension -&gt; Dimension
+forall a. Num a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-operator hs-var">+</span></span><span> </span><span class="annot"><span class="annottext">Dimension
+</span><span class="hs-number">2</span></span><span> </span><span class="annot"><span class="annottext">Dimension -&gt; Dimension -&gt; Dimension
+forall a. Num a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-operator hs-var">*</span></span><span> </span><span class="annot"><span class="annottext">Dimension
+</span><a href="#local-6989586621679385880"><span class="hs-identifier hs-var">bw</span></a></span><span class="hs-special">)</span><span class="hs-special">)</span><span>
+</span><span id="line-203"></span><span>    </span><span class="annot"><span class="annottext">X (Maybe (KeySym, Rectangle))
+-&gt; X (Maybe (KeySym, Rectangle)) -&gt; X (Maybe (KeySym, Rectangle))
+forall a. X a -&gt; X a -&gt; X a
+</span><span class="hs-operator hs-var">`catchX`</span></span><span> </span><span class="annot"><span class="annottext">Maybe (KeySym, Rectangle) -&gt; X (Maybe (KeySym, Rectangle))
+forall (m :: * -&gt; *) a. Monad m =&gt; a -&gt; m a
+</span><span class="hs-identifier hs-var">return</span></span><span> </span><span class="annot"><span class="annottext">Maybe (KeySym, Rectangle)
+forall a. Maybe a
+</span><span class="hs-identifier hs-var">Nothing</span></span><span>
+</span><span id="line-204"></span><span>
+</span><span id="line-205"></span><span class="hs-comment">-- Modified from droundy's implementation of WindowNavigation:</span><span>
+</span><span id="line-206"></span><span>
+</span><span id="line-207"></span><span class="annot"><a href="XMonad.Actions.WindowNavigation.html#inr"><span class="hs-identifier hs-type">inr</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><a href="XMonad.Util.Types.html#Direction2D"><span class="hs-identifier hs-type">Direction2D</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Point</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Rectangle</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Bool</span></span><span>
+</span><span id="line-208"></span><span id="inr"><span class="annot"><span class="annottext">inr :: Direction2D -&gt; Point -&gt; Rectangle -&gt; Bool
+</span><a href="XMonad.Actions.WindowNavigation.html#inr"><span class="hs-identifier hs-var hs-var">inr</span></a></span></span><span> </span><span class="annot"><span class="annottext">Direction2D
+</span><a href="XMonad.Util.Types.html#D"><span class="hs-identifier hs-var">D</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">Point</span></span><span> </span><span id="local-6989586621679385876"><span class="annot"><span class="annottext">Position
+</span><a href="#local-6989586621679385876"><span class="hs-identifier hs-var">px</span></a></span></span><span> </span><span id="local-6989586621679385875"><span class="annot"><span class="annottext">Position
+</span><a href="#local-6989586621679385875"><span class="hs-identifier hs-var">py</span></a></span></span><span class="hs-special">)</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">Rectangle</span></span><span> </span><span id="local-6989586621679385874"><span class="annot"><span class="annottext">Position
+</span><a href="#local-6989586621679385874"><span class="hs-identifier hs-var">rx</span></a></span></span><span> </span><span id="local-6989586621679385873"><span class="annot"><span class="annottext">Position
+</span><a href="#local-6989586621679385873"><span class="hs-identifier hs-var">ry</span></a></span></span><span> </span><span id="local-6989586621679385872"><span class="annot"><span class="annottext">Dimension
+</span><a href="#local-6989586621679385872"><span class="hs-identifier hs-var">w</span></a></span></span><span> </span><span id="local-6989586621679385871"><span class="annot"><span class="annottext">Dimension
+</span><a href="#local-6989586621679385871"><span class="hs-identifier hs-var">h</span></a></span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Position
+</span><a href="#local-6989586621679385876"><span class="hs-identifier hs-var">px</span></a></span><span> </span><span class="annot"><span class="annottext">Position -&gt; Position -&gt; Bool
+forall a. Ord a =&gt; a -&gt; a -&gt; Bool
+</span><span class="hs-operator hs-var">&gt;=</span></span><span> </span><span class="annot"><span class="annottext">Position
+</span><a href="#local-6989586621679385874"><span class="hs-identifier hs-var">rx</span></a></span><span> </span><span class="annot"><span class="annottext">Bool -&gt; Bool -&gt; Bool
+</span><span class="hs-operator hs-var">&amp;&amp;</span></span><span> </span><span class="annot"><span class="annottext">Position
+</span><a href="#local-6989586621679385876"><span class="hs-identifier hs-var">px</span></a></span><span> </span><span class="annot"><span class="annottext">Position -&gt; Position -&gt; Bool
+forall a. Ord a =&gt; a -&gt; a -&gt; Bool
+</span><span class="hs-operator hs-var">&lt;</span></span><span> </span><span class="annot"><span class="annottext">Position
+</span><a href="#local-6989586621679385874"><span class="hs-identifier hs-var">rx</span></a></span><span> </span><span class="annot"><span class="annottext">Position -&gt; Position -&gt; Position
+forall a. Num a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-operator hs-var">+</span></span><span> </span><span class="annot"><span class="annottext">Dimension -&gt; Position
+forall a b. (Integral a, Num b) =&gt; a -&gt; b
+</span><span class="hs-identifier hs-var">fromIntegral</span></span><span> </span><span class="annot"><span class="annottext">Dimension
+</span><a href="#local-6989586621679385872"><span class="hs-identifier hs-var">w</span></a></span><span> </span><span class="annot"><span class="annottext">Bool -&gt; Bool -&gt; Bool
+</span><span class="hs-operator hs-var">&amp;&amp;</span></span><span>
+</span><span id="line-209"></span><span>                                                        </span><span class="annot"><span class="annottext">Position
+</span><a href="#local-6989586621679385875"><span class="hs-identifier hs-var">py</span></a></span><span> </span><span class="annot"><span class="annottext">Position -&gt; Position -&gt; Bool
+forall a. Ord a =&gt; a -&gt; a -&gt; Bool
+</span><span class="hs-operator hs-var">&lt;</span></span><span> </span><span class="annot"><span class="annottext">Position
+</span><a href="#local-6989586621679385873"><span class="hs-identifier hs-var">ry</span></a></span><span> </span><span class="annot"><span class="annottext">Position -&gt; Position -&gt; Position
+forall a. Num a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-operator hs-var">+</span></span><span> </span><span class="annot"><span class="annottext">Dimension -&gt; Position
+forall a b. (Integral a, Num b) =&gt; a -&gt; b
+</span><span class="hs-identifier hs-var">fromIntegral</span></span><span> </span><span class="annot"><span class="annottext">Dimension
+</span><a href="#local-6989586621679385871"><span class="hs-identifier hs-var">h</span></a></span><span>
+</span><span id="line-210"></span><span class="annot"><a href="XMonad.Actions.WindowNavigation.html#inr"><span class="hs-identifier hs-var">inr</span></a></span><span> </span><span class="annot"><span class="annottext">Direction2D
+</span><a href="XMonad.Util.Types.html#U"><span class="hs-identifier hs-var">U</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">Point</span></span><span> </span><span id="local-6989586621679385870"><span class="annot"><span class="annottext">Position
+</span><a href="#local-6989586621679385870"><span class="hs-identifier hs-var">px</span></a></span></span><span> </span><span id="local-6989586621679385869"><span class="annot"><span class="annottext">Position
+</span><a href="#local-6989586621679385869"><span class="hs-identifier hs-var">py</span></a></span></span><span class="hs-special">)</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">Rectangle</span></span><span> </span><span id="local-6989586621679385868"><span class="annot"><span class="annottext">Position
+</span><a href="#local-6989586621679385868"><span class="hs-identifier hs-var">rx</span></a></span></span><span> </span><span id="local-6989586621679385867"><span class="annot"><span class="annottext">Position
+</span><a href="#local-6989586621679385867"><span class="hs-identifier hs-var">ry</span></a></span></span><span> </span><span id="local-6989586621679385866"><span class="annot"><span class="annottext">Dimension
+</span><a href="#local-6989586621679385866"><span class="hs-identifier hs-var">w</span></a></span></span><span> </span><span class="annot"><span class="annottext">Dimension
+</span><span class="hs-identifier">_</span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Position
+</span><a href="#local-6989586621679385870"><span class="hs-identifier hs-var">px</span></a></span><span> </span><span class="annot"><span class="annottext">Position -&gt; Position -&gt; Bool
+forall a. Ord a =&gt; a -&gt; a -&gt; Bool
+</span><span class="hs-operator hs-var">&gt;=</span></span><span> </span><span class="annot"><span class="annottext">Position
+</span><a href="#local-6989586621679385868"><span class="hs-identifier hs-var">rx</span></a></span><span> </span><span class="annot"><span class="annottext">Bool -&gt; Bool -&gt; Bool
+</span><span class="hs-operator hs-var">&amp;&amp;</span></span><span> </span><span class="annot"><span class="annottext">Position
+</span><a href="#local-6989586621679385870"><span class="hs-identifier hs-var">px</span></a></span><span> </span><span class="annot"><span class="annottext">Position -&gt; Position -&gt; Bool
+forall a. Ord a =&gt; a -&gt; a -&gt; Bool
+</span><span class="hs-operator hs-var">&lt;</span></span><span> </span><span class="annot"><span class="annottext">Position
+</span><a href="#local-6989586621679385868"><span class="hs-identifier hs-var">rx</span></a></span><span> </span><span class="annot"><span class="annottext">Position -&gt; Position -&gt; Position
+forall a. Num a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-operator hs-var">+</span></span><span> </span><span class="annot"><span class="annottext">Dimension -&gt; Position
+forall a b. (Integral a, Num b) =&gt; a -&gt; b
+</span><span class="hs-identifier hs-var">fromIntegral</span></span><span> </span><span class="annot"><span class="annottext">Dimension
+</span><a href="#local-6989586621679385866"><span class="hs-identifier hs-var">w</span></a></span><span> </span><span class="annot"><span class="annottext">Bool -&gt; Bool -&gt; Bool
+</span><span class="hs-operator hs-var">&amp;&amp;</span></span><span>
+</span><span id="line-211"></span><span>                                            </span><span class="annot"><span class="annottext">Position
+</span><a href="#local-6989586621679385869"><span class="hs-identifier hs-var">py</span></a></span><span> </span><span class="annot"><span class="annottext">Position -&gt; Position -&gt; Bool
+forall a. Ord a =&gt; a -&gt; a -&gt; Bool
+</span><span class="hs-operator hs-var">&gt;</span></span><span>  </span><span class="annot"><span class="annottext">Position
+</span><a href="#local-6989586621679385867"><span class="hs-identifier hs-var">ry</span></a></span><span>
+</span><span id="line-212"></span><span class="annot"><a href="XMonad.Actions.WindowNavigation.html#inr"><span class="hs-identifier hs-var">inr</span></a></span><span> </span><span class="annot"><span class="annottext">Direction2D
+</span><a href="XMonad.Util.Types.html#R"><span class="hs-identifier hs-var">R</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">Point</span></span><span> </span><span id="local-6989586621679385864"><span class="annot"><span class="annottext">Position
+</span><a href="#local-6989586621679385864"><span class="hs-identifier hs-var">px</span></a></span></span><span> </span><span id="local-6989586621679385863"><span class="annot"><span class="annottext">Position
+</span><a href="#local-6989586621679385863"><span class="hs-identifier hs-var">py</span></a></span></span><span class="hs-special">)</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">Rectangle</span></span><span> </span><span id="local-6989586621679385862"><span class="annot"><span class="annottext">Position
+</span><a href="#local-6989586621679385862"><span class="hs-identifier hs-var">rx</span></a></span></span><span> </span><span id="local-6989586621679385861"><span class="annot"><span class="annottext">Position
+</span><a href="#local-6989586621679385861"><span class="hs-identifier hs-var">ry</span></a></span></span><span> </span><span class="annot"><span class="annottext">Dimension
+</span><span class="hs-identifier">_</span></span><span> </span><span id="local-6989586621679385860"><span class="annot"><span class="annottext">Dimension
+</span><a href="#local-6989586621679385860"><span class="hs-identifier hs-var">h</span></a></span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Position
+</span><a href="#local-6989586621679385864"><span class="hs-identifier hs-var">px</span></a></span><span> </span><span class="annot"><span class="annottext">Position -&gt; Position -&gt; Bool
+forall a. Ord a =&gt; a -&gt; a -&gt; Bool
+</span><span class="hs-operator hs-var">&lt;</span></span><span>  </span><span class="annot"><span class="annottext">Position
+</span><a href="#local-6989586621679385862"><span class="hs-identifier hs-var">rx</span></a></span><span> </span><span class="annot"><span class="annottext">Bool -&gt; Bool -&gt; Bool
+</span><span class="hs-operator hs-var">&amp;&amp;</span></span><span>
+</span><span id="line-213"></span><span>                                            </span><span class="annot"><span class="annottext">Position
+</span><a href="#local-6989586621679385863"><span class="hs-identifier hs-var">py</span></a></span><span> </span><span class="annot"><span class="annottext">Position -&gt; Position -&gt; Bool
+forall a. Ord a =&gt; a -&gt; a -&gt; Bool
+</span><span class="hs-operator hs-var">&gt;=</span></span><span> </span><span class="annot"><span class="annottext">Position
+</span><a href="#local-6989586621679385861"><span class="hs-identifier hs-var">ry</span></a></span><span> </span><span class="annot"><span class="annottext">Bool -&gt; Bool -&gt; Bool
+</span><span class="hs-operator hs-var">&amp;&amp;</span></span><span> </span><span class="annot"><span class="annottext">Position
+</span><a href="#local-6989586621679385863"><span class="hs-identifier hs-var">py</span></a></span><span> </span><span class="annot"><span class="annottext">Position -&gt; Position -&gt; Bool
+forall a. Ord a =&gt; a -&gt; a -&gt; Bool
+</span><span class="hs-operator hs-var">&lt;</span></span><span> </span><span class="annot"><span class="annottext">Position
+</span><a href="#local-6989586621679385861"><span class="hs-identifier hs-var">ry</span></a></span><span> </span><span class="annot"><span class="annottext">Position -&gt; Position -&gt; Position
+forall a. Num a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-operator hs-var">+</span></span><span> </span><span class="annot"><span class="annottext">Dimension -&gt; Position
+forall a b. (Integral a, Num b) =&gt; a -&gt; b
+</span><span class="hs-identifier hs-var">fromIntegral</span></span><span> </span><span class="annot"><span class="annottext">Dimension
+</span><a href="#local-6989586621679385860"><span class="hs-identifier hs-var">h</span></a></span><span>
+</span><span id="line-214"></span><span class="annot"><a href="XMonad.Actions.WindowNavigation.html#inr"><span class="hs-identifier hs-var">inr</span></a></span><span> </span><span class="annot"><span class="annottext">Direction2D
+</span><a href="XMonad.Util.Types.html#L"><span class="hs-identifier hs-var">L</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">Point</span></span><span> </span><span id="local-6989586621679385859"><span class="annot"><span class="annottext">Position
+</span><a href="#local-6989586621679385859"><span class="hs-identifier hs-var">px</span></a></span></span><span> </span><span id="local-6989586621679385858"><span class="annot"><span class="annottext">Position
+</span><a href="#local-6989586621679385858"><span class="hs-identifier hs-var">py</span></a></span></span><span class="hs-special">)</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">Rectangle</span></span><span> </span><span id="local-6989586621679385857"><span class="annot"><span class="annottext">Position
+</span><a href="#local-6989586621679385857"><span class="hs-identifier hs-var">rx</span></a></span></span><span> </span><span id="local-6989586621679385856"><span class="annot"><span class="annottext">Position
+</span><a href="#local-6989586621679385856"><span class="hs-identifier hs-var">ry</span></a></span></span><span> </span><span id="local-6989586621679385855"><span class="annot"><span class="annottext">Dimension
+</span><a href="#local-6989586621679385855"><span class="hs-identifier hs-var">w</span></a></span></span><span> </span><span id="local-6989586621679385854"><span class="annot"><span class="annottext">Dimension
+</span><a href="#local-6989586621679385854"><span class="hs-identifier hs-var">h</span></a></span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=</span><span>             </span><span class="annot"><span class="annottext">Position
+</span><a href="#local-6989586621679385859"><span class="hs-identifier hs-var">px</span></a></span><span> </span><span class="annot"><span class="annottext">Position -&gt; Position -&gt; Bool
+forall a. Ord a =&gt; a -&gt; a -&gt; Bool
+</span><span class="hs-operator hs-var">&gt;</span></span><span> </span><span class="annot"><span class="annottext">Position
+</span><a href="#local-6989586621679385857"><span class="hs-identifier hs-var">rx</span></a></span><span> </span><span class="annot"><span class="annottext">Position -&gt; Position -&gt; Position
+forall a. Num a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-operator hs-var">+</span></span><span> </span><span class="annot"><span class="annottext">Dimension -&gt; Position
+forall a b. (Integral a, Num b) =&gt; a -&gt; b
+</span><span class="hs-identifier hs-var">fromIntegral</span></span><span> </span><span class="annot"><span class="annottext">Dimension
+</span><a href="#local-6989586621679385855"><span class="hs-identifier hs-var">w</span></a></span><span> </span><span class="annot"><span class="annottext">Bool -&gt; Bool -&gt; Bool
+</span><span class="hs-operator hs-var">&amp;&amp;</span></span><span>
+</span><span id="line-215"></span><span>                                            </span><span class="annot"><span class="annottext">Position
+</span><a href="#local-6989586621679385858"><span class="hs-identifier hs-var">py</span></a></span><span> </span><span class="annot"><span class="annottext">Position -&gt; Position -&gt; Bool
+forall a. Ord a =&gt; a -&gt; a -&gt; Bool
+</span><span class="hs-operator hs-var">&gt;=</span></span><span> </span><span class="annot"><span class="annottext">Position
+</span><a href="#local-6989586621679385856"><span class="hs-identifier hs-var">ry</span></a></span><span> </span><span class="annot"><span class="annottext">Bool -&gt; Bool -&gt; Bool
+</span><span class="hs-operator hs-var">&amp;&amp;</span></span><span> </span><span class="annot"><span class="annottext">Position
+</span><a href="#local-6989586621679385858"><span class="hs-identifier hs-var">py</span></a></span><span> </span><span class="annot"><span class="annottext">Position -&gt; Position -&gt; Bool
+forall a. Ord a =&gt; a -&gt; a -&gt; Bool
+</span><span class="hs-operator hs-var">&lt;</span></span><span> </span><span class="annot"><span class="annottext">Position
+</span><a href="#local-6989586621679385856"><span class="hs-identifier hs-var">ry</span></a></span><span> </span><span class="annot"><span class="annottext">Position -&gt; Position -&gt; Position
+forall a. Num a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-operator hs-var">+</span></span><span> </span><span class="annot"><span class="annottext">Dimension -&gt; Position
+forall a b. (Integral a, Num b) =&gt; a -&gt; b
+</span><span class="hs-identifier hs-var">fromIntegral</span></span><span> </span><span class="annot"><span class="annottext">Dimension
+</span><a href="#local-6989586621679385854"><span class="hs-identifier hs-var">h</span></a></span><span>
+</span><span id="line-216"></span><span>
+</span><span id="line-217"></span><span id="local-6989586621679386065"><span class="annot"><a href="XMonad.Actions.WindowNavigation.html#sortby"><span class="hs-identifier hs-type">sortby</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><a href="XMonad.Util.Types.html#Direction2D"><span class="hs-identifier hs-type">Direction2D</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="hs-special">[</span><span class="hs-special">(</span><span class="annot"><a href="#local-6989586621679386065"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">,</span><span class="annot"><span class="hs-identifier hs-type">Rectangle</span></span><span class="hs-special">)</span><span class="hs-special">]</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="hs-special">[</span><span class="hs-special">(</span><span class="annot"><a href="#local-6989586621679386065"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">,</span><span class="annot"><span class="hs-identifier hs-type">Rectangle</span></span><span class="hs-special">)</span><span class="hs-special">]</span></span><span>
+</span><span id="line-218"></span><span id="sortby"><span class="annot"><span class="annottext">sortby :: Direction2D -&gt; [(a, Rectangle)] -&gt; [(a, Rectangle)]
+</span><a href="XMonad.Actions.WindowNavigation.html#sortby"><span class="hs-identifier hs-var hs-var">sortby</span></a></span></span><span> </span><span class="annot"><span class="annottext">Direction2D
+</span><a href="XMonad.Util.Types.html#D"><span class="hs-identifier hs-var">D</span></a></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">((a, Rectangle) -&gt; Position)
+-&gt; [(a, Rectangle)] -&gt; [(a, Rectangle)]
+forall b a. Ord b =&gt; (a -&gt; b) -&gt; [a] -&gt; [a]
+</span><span class="hs-identifier hs-var">sortOn</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Rectangle -&gt; Position
+</span><span class="hs-identifier hs-var hs-var">rect_y</span></span><span> </span><span class="annot"><span class="annottext">(Rectangle -&gt; Position)
+-&gt; ((a, Rectangle) -&gt; Rectangle) -&gt; (a, Rectangle) -&gt; Position
+forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">(a, Rectangle) -&gt; Rectangle
+forall a b. (a, b) -&gt; b
+</span><span class="hs-identifier hs-var">snd</span></span><span class="hs-special">)</span><span>
+</span><span id="line-219"></span><span class="annot"><a href="XMonad.Actions.WindowNavigation.html#sortby"><span class="hs-identifier hs-var">sortby</span></a></span><span> </span><span class="annot"><span class="annottext">Direction2D
+</span><a href="XMonad.Util.Types.html#R"><span class="hs-identifier hs-var">R</span></a></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">((a, Rectangle) -&gt; Position)
+-&gt; [(a, Rectangle)] -&gt; [(a, Rectangle)]
+forall b a. Ord b =&gt; (a -&gt; b) -&gt; [a] -&gt; [a]
+</span><span class="hs-identifier hs-var">sortOn</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Rectangle -&gt; Position
+</span><span class="hs-identifier hs-var hs-var">rect_x</span></span><span> </span><span class="annot"><span class="annottext">(Rectangle -&gt; Position)
+-&gt; ((a, Rectangle) -&gt; Rectangle) -&gt; (a, Rectangle) -&gt; Position
+forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">(a, Rectangle) -&gt; Rectangle
+forall a b. (a, b) -&gt; b
+</span><span class="hs-identifier hs-var">snd</span></span><span class="hs-special">)</span><span>
+</span><span id="line-220"></span><span class="annot"><a href="XMonad.Actions.WindowNavigation.html#sortby"><span class="hs-identifier hs-var">sortby</span></a></span><span> </span><span class="annot"><span class="annottext">Direction2D
+</span><a href="XMonad.Util.Types.html#U"><span class="hs-identifier hs-var">U</span></a></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">[(a, Rectangle)] -&gt; [(a, Rectangle)]
+forall a. [a] -&gt; [a]
+</span><span class="hs-identifier hs-var">reverse</span></span><span> </span><span class="annot"><span class="annottext">([(a, Rectangle)] -&gt; [(a, Rectangle)])
+-&gt; ([(a, Rectangle)] -&gt; [(a, Rectangle)])
+-&gt; [(a, Rectangle)]
+-&gt; [(a, Rectangle)]
+forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">Direction2D -&gt; [(a, Rectangle)] -&gt; [(a, Rectangle)]
+forall a. Direction2D -&gt; [(a, Rectangle)] -&gt; [(a, Rectangle)]
+</span><a href="XMonad.Actions.WindowNavigation.html#sortby"><span class="hs-identifier hs-var">sortby</span></a></span><span> </span><span class="annot"><span class="annottext">Direction2D
+</span><a href="XMonad.Util.Types.html#D"><span class="hs-identifier hs-var">D</span></a></span><span>
+</span><span id="line-221"></span><span class="annot"><a href="XMonad.Actions.WindowNavigation.html#sortby"><span class="hs-identifier hs-var">sortby</span></a></span><span> </span><span class="annot"><span class="annottext">Direction2D
+</span><a href="XMonad.Util.Types.html#L"><span class="hs-identifier hs-var">L</span></a></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">[(a, Rectangle)] -&gt; [(a, Rectangle)]
+forall a. [a] -&gt; [a]
+</span><span class="hs-identifier hs-var">reverse</span></span><span> </span><span class="annot"><span class="annottext">([(a, Rectangle)] -&gt; [(a, Rectangle)])
+-&gt; ([(a, Rectangle)] -&gt; [(a, Rectangle)])
+-&gt; [(a, Rectangle)]
+-&gt; [(a, Rectangle)]
+forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">Direction2D -&gt; [(a, Rectangle)] -&gt; [(a, Rectangle)]
+forall a. Direction2D -&gt; [(a, Rectangle)] -&gt; [(a, Rectangle)]
+</span><a href="XMonad.Actions.WindowNavigation.html#sortby"><span class="hs-identifier hs-var">sortby</span></a></span><span> </span><span class="annot"><span class="annottext">Direction2D
+</span><a href="XMonad.Util.Types.html#R"><span class="hs-identifier hs-var">R</span></a></span><span>
+</span><span id="line-222"></span></pre></body></html>

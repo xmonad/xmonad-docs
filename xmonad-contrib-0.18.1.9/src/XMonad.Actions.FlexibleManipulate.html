@@ -1,0 +1,348 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd"><html xmlns="http://www.w3.org/1999/xhtml"><head><link rel="stylesheet" type="text/css" href="style.css" /><script type="text/javascript" src="highlight.js"></script></head><body><pre><span class="hs-pragma">{-# LANGUAGE FlexibleInstances #-}</span><span>
+</span><span id="line-2"></span><span>
+</span><span id="line-3"></span><span class="hs-comment">-----------------------------------------------------------------------------</span><span>
+</span><span id="line-4"></span><span class="hs-comment">-- |</span><span>
+</span><span id="line-5"></span><span class="hs-comment">-- Module      :  XMonad.Actions.FlexibleManipulate</span><span>
+</span><span id="line-6"></span><span class="hs-comment">-- Description :  Move and resize floating windows without warping the mouse.</span><span>
+</span><span id="line-7"></span><span class="hs-comment">-- Copyright   :  (c) Michael Sloan</span><span>
+</span><span id="line-8"></span><span class="hs-comment">-- License     :  BSD3-style (see LICENSE)</span><span>
+</span><span id="line-9"></span><span class="hs-comment">--</span><span>
+</span><span id="line-10"></span><span class="hs-comment">-- Maintainer  :  &lt;mgsloan@gmail.com&gt;</span><span>
+</span><span id="line-11"></span><span class="hs-comment">-- Stability   :  stable</span><span>
+</span><span id="line-12"></span><span class="hs-comment">-- Portability :  unportable</span><span>
+</span><span id="line-13"></span><span class="hs-comment">--</span><span>
+</span><span id="line-14"></span><span class="hs-comment">-- Move and resize floating windows without warping the mouse.</span><span>
+</span><span id="line-15"></span><span class="hs-comment">--</span><span>
+</span><span id="line-16"></span><span class="hs-comment">-----------------------------------------------------------------------------</span><span>
+</span><span id="line-17"></span><span>
+</span><span id="line-18"></span><span class="hs-comment">-- Based on the FlexibleResize code by Lukas Mai (mauke).</span><span>
+</span><span id="line-19"></span><span>
+</span><span id="line-20"></span><span class="hs-keyword">module</span><span> </span><span class="hs-identifier">XMonad.Actions.FlexibleManipulate</span><span> </span><span class="hs-special">(</span><span>
+</span><span id="line-21"></span><span>        </span><span class="annot"><span class="hs-comment">-- * Usage</span></span><span>
+</span><span id="line-22"></span><span>        </span><span class="annot"><span class="hs-comment">-- $usage</span></span><span>
+</span><span id="line-23"></span><span>        </span><span class="annot"><a href="XMonad.Actions.FlexibleManipulate.html#mouseWindow"><span class="hs-identifier">mouseWindow</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><a href="XMonad.Actions.FlexibleManipulate.html#discrete"><span class="hs-identifier">discrete</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><a href="XMonad.Actions.FlexibleManipulate.html#linear"><span class="hs-identifier">linear</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><a href="XMonad.Actions.FlexibleManipulate.html#resize"><span class="hs-identifier">resize</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><a href="XMonad.Actions.FlexibleManipulate.html#position"><span class="hs-identifier">position</span></a></span><span>
+</span><span id="line-24"></span><span class="hs-special">)</span><span> </span><span class="hs-keyword">where</span><span>
+</span><span id="line-25"></span><span>
+</span><span id="line-26"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><span class="hs-identifier">XMonad</span></span><span>
+</span><span id="line-27"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><a href="XMonad.Prelude.html"><span class="hs-identifier">XMonad.Prelude</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-operator">(&lt;&amp;&gt;)</span></span><span class="hs-special">,</span><span> </span><span class="annot"><a href="XMonad.Prelude.html#fi"><span class="hs-identifier">fi</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-28"></span><span class="hs-keyword">import</span><span> </span><span class="hs-keyword">qualified</span><span> </span><span class="annot"><span class="hs-identifier">Prelude</span></span><span> </span><span class="hs-keyword">as</span><span> </span><span class="annot"><span class="hs-identifier">P</span></span><span>
+</span><span id="line-29"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><span class="hs-identifier">Prelude</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier">Double</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier">Integer</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier">Ord</span></span><span> </span><span class="hs-special">(</span><span class="hs-glyph">..</span><span class="hs-special">)</span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier">const</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier">fromIntegral</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier">fst</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier">id</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier">otherwise</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier">round</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier">snd</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier">uncurry</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-operator">($)</span></span><span class="hs-special">)</span><span>
+</span><span id="line-30"></span><span>
+</span><span id="line-31"></span><span class="hs-comment">-- $usage</span><span>
+</span><span id="line-32"></span><span class="hs-comment">-- First, add this import to your @xmonad.hs@:</span><span>
+</span><span id="line-33"></span><span class="hs-comment">--</span><span>
+</span><span id="line-34"></span><span class="hs-comment">-- &gt; import qualified XMonad.Actions.FlexibleManipulate as Flex</span><span>
+</span><span id="line-35"></span><span class="hs-comment">--</span><span>
+</span><span id="line-36"></span><span class="hs-comment">-- Now set up the desired mouse binding, for example:</span><span>
+</span><span id="line-37"></span><span class="hs-comment">--</span><span>
+</span><span id="line-38"></span><span class="hs-comment">-- &gt;     , ((modm, button1), (\w -&gt; focus w &gt;&gt; Flex.mouseWindow Flex.linear w))</span><span>
+</span><span id="line-39"></span><span class="hs-comment">--</span><span>
+</span><span id="line-40"></span><span class="hs-comment">-- * Flex.'linear' indicates that positions between the edges and the</span><span>
+</span><span id="line-41"></span><span class="hs-comment">--   middle indicate a combination scale\/position.</span><span>
+</span><span id="line-42"></span><span class="hs-comment">--</span><span>
+</span><span id="line-43"></span><span class="hs-comment">-- * Flex.'discrete' indicates that there are discrete pick</span><span>
+</span><span id="line-44"></span><span class="hs-comment">--   regions. (The window is divided by thirds for each axis.)</span><span>
+</span><span id="line-45"></span><span class="hs-comment">--</span><span>
+</span><span id="line-46"></span><span class="hs-comment">-- * Flex.'resize' performs only a resize of the window, based on which</span><span>
+</span><span id="line-47"></span><span class="hs-comment">--   quadrant the mouse is in.</span><span>
+</span><span id="line-48"></span><span class="hs-comment">--</span><span>
+</span><span id="line-49"></span><span class="hs-comment">-- * Flex.'position' is similar to the built-in</span><span>
+</span><span id="line-50"></span><span class="hs-comment">--   'XMonad.Operations.mouseMoveWindow'.</span><span>
+</span><span id="line-51"></span><span class="hs-comment">--</span><span>
+</span><span id="line-52"></span><span class="hs-comment">-- You can also write your own function for this parameter. It should take</span><span>
+</span><span id="line-53"></span><span class="hs-comment">-- a value between 0 and 1 indicating position, and return a value indicating</span><span>
+</span><span id="line-54"></span><span class="hs-comment">-- the corresponding position if plain Flex.'linear' was used.</span><span>
+</span><span id="line-55"></span><span class="hs-comment">--</span><span>
+</span><span id="line-56"></span><span class="hs-comment">-- For detailed instructions on editing your mouse bindings, see</span><span>
+</span><span id="line-57"></span><span class="hs-comment">-- &quot;XMonad.Doc.Extending#Editing_mouse_bindings&quot;.</span><span>
+</span><span id="line-58"></span><span>
+</span><span id="line-59"></span><span class="annot"><a href="XMonad.Actions.FlexibleManipulate.html#discrete"><span class="hs-identifier hs-type">discrete</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><a href="XMonad.Actions.FlexibleManipulate.html#linear"><span class="hs-identifier hs-type">linear</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><a href="XMonad.Actions.FlexibleManipulate.html#resize"><span class="hs-identifier hs-type">resize</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><a href="XMonad.Actions.FlexibleManipulate.html#position"><span class="hs-identifier hs-type">position</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Double</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Double</span></span><span>
+</span><span id="line-60"></span><span>
+</span><span id="line-61"></span><span class="hs-comment">-- | Manipulate the window based on discrete pick regions; the window</span><span>
+</span><span id="line-62"></span><span class="hs-comment">--   is divided into regions by thirds along each axis.</span><span>
+</span><span id="line-63"></span><span id="discrete"><span class="annot"><span class="annottext">discrete :: Double -&gt; Double
+</span><a href="XMonad.Actions.FlexibleManipulate.html#discrete"><span class="hs-identifier hs-var hs-var">discrete</span></a></span></span><span> </span><span id="local-6989586621679427820"><span class="annot"><span class="annottext">Double
+</span><a href="#local-6989586621679427820"><span class="hs-identifier hs-var">x</span></a></span></span><span> </span><span class="hs-glyph">|</span><span> </span><span class="annot"><span class="annottext">Double
+</span><a href="#local-6989586621679427820"><span class="hs-identifier hs-var">x</span></a></span><span> </span><span class="annot"><span class="annottext">forall a. Ord a =&gt; a -&gt; a -&gt; Bool
+</span><span class="hs-operator hs-var">&lt;</span></span><span> </span><span class="annot"><span class="annottext">Double
+</span><span class="hs-number">0.33</span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Double
+</span><span class="hs-number">0</span></span><span>
+</span><span id="line-64"></span><span>           </span><span class="hs-glyph">|</span><span> </span><span class="annot"><span class="annottext">Double
+</span><a href="#local-6989586621679427820"><span class="hs-identifier hs-var">x</span></a></span><span> </span><span class="annot"><span class="annottext">forall a. Ord a =&gt; a -&gt; a -&gt; Bool
+</span><span class="hs-operator hs-var">&gt;</span></span><span> </span><span class="annot"><span class="annottext">Double
+</span><span class="hs-number">0.66</span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Double
+</span><span class="hs-number">1</span></span><span>
+</span><span id="line-65"></span><span>           </span><span class="hs-glyph">|</span><span> </span><span class="annot"><span class="annottext">Bool
+</span><span class="hs-identifier hs-var">otherwise</span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Double
+</span><span class="hs-number">0.5</span></span><span>
+</span><span id="line-66"></span><span>
+</span><span id="line-67"></span><span class="hs-comment">-- | Scale\/reposition the window by factors obtained from the mouse</span><span>
+</span><span id="line-68"></span><span class="hs-comment">--   position by linear interpolation. Dragging precisely on a corner</span><span>
+</span><span id="line-69"></span><span class="hs-comment">--   resizes that corner; dragging precisely in the middle moves the</span><span>
+</span><span id="line-70"></span><span class="hs-comment">--   window without resizing; anything else is an interpolation</span><span>
+</span><span id="line-71"></span><span class="hs-comment">--   between the two.</span><span>
+</span><span id="line-72"></span><span id="linear"><span class="annot"><span class="annottext">linear :: Double -&gt; Double
+</span><a href="XMonad.Actions.FlexibleManipulate.html#linear"><span class="hs-identifier hs-var hs-var">linear</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">forall a. a -&gt; a
+</span><span class="hs-identifier hs-var">id</span></span><span>
+</span><span id="line-73"></span><span>
+</span><span id="line-74"></span><span class="hs-comment">-- | Only resize the window, based on the window quadrant the mouse is in.</span><span>
+</span><span id="line-75"></span><span id="resize"><span class="annot"><span class="annottext">resize :: Double -&gt; Double
+</span><a href="XMonad.Actions.FlexibleManipulate.html#resize"><span class="hs-identifier hs-var hs-var">resize</span></a></span></span><span> </span><span id="local-6989586621679427817"><span class="annot"><span class="annottext">Double
+</span><a href="#local-6989586621679427817"><span class="hs-identifier hs-var">x</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-keyword">if</span><span> </span><span class="annot"><span class="annottext">Double
+</span><a href="#local-6989586621679427817"><span class="hs-identifier hs-var">x</span></a></span><span> </span><span class="annot"><span class="annottext">forall a. Ord a =&gt; a -&gt; a -&gt; Bool
+</span><span class="hs-operator hs-var">&lt;</span></span><span> </span><span class="annot"><span class="annottext">Double
+</span><span class="hs-number">0.5</span></span><span> </span><span class="hs-keyword">then</span><span> </span><span class="annot"><span class="annottext">Double
+</span><span class="hs-number">0</span></span><span> </span><span class="hs-keyword">else</span><span> </span><span class="annot"><span class="annottext">Double
+</span><span class="hs-number">1</span></span><span>
+</span><span id="line-76"></span><span>
+</span><span id="line-77"></span><span class="hs-comment">-- | Only reposition the window.</span><span>
+</span><span id="line-78"></span><span id="position"><span class="annot"><span class="annottext">position :: Double -&gt; Double
+</span><a href="XMonad.Actions.FlexibleManipulate.html#position"><span class="hs-identifier hs-var hs-var">position</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">forall a b. a -&gt; b -&gt; a
+</span><span class="hs-identifier hs-var">const</span></span><span> </span><span class="annot"><span class="annottext">Double
+</span><span class="hs-number">0.5</span></span><span>
+</span><span id="line-79"></span><span>
+</span><span id="line-80"></span><span class="hs-comment">-- | Given an interpolation function, implement an appropriate window</span><span>
+</span><span id="line-81"></span><span class="hs-comment">--   manipulation action.</span><span>
+</span><span id="line-82"></span><span class="annot"><a href="XMonad.Actions.FlexibleManipulate.html#mouseWindow"><span class="hs-identifier hs-type">mouseWindow</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">Double</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Double</span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Window</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">X</span></span><span> </span><span class="hs-special">(</span><span class="hs-special">)</span><span>
+</span><span id="line-83"></span><span id="mouseWindow"><span class="annot"><span class="annottext">mouseWindow :: (Double -&gt; Double) -&gt; Window -&gt; X ()
+</span><a href="XMonad.Actions.FlexibleManipulate.html#mouseWindow"><span class="hs-identifier hs-var hs-var">mouseWindow</span></a></span></span><span> </span><span id="local-6989586621679427816"><span class="annot"><span class="annottext">Double -&gt; Double
+</span><a href="#local-6989586621679427816"><span class="hs-identifier hs-var">f</span></a></span></span><span> </span><span id="local-6989586621679427815"><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679427815"><span class="hs-identifier hs-var">w</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">X Bool -&gt; X () -&gt; X ()
+</span><span class="hs-identifier hs-var">whenX</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Window -&gt; X Bool
+</span><span class="hs-identifier hs-var">isClient</span></span><span> </span><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679427815"><span class="hs-identifier hs-var">w</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">forall a. (Display -&gt; X a) -&gt; X a
+</span><span class="hs-identifier hs-var">withDisplay</span></span><span> </span><span class="annot"><span class="annottext">forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="hs-glyph">\</span><span id="local-6989586621679427811"><span class="annot"><span class="annottext">Display
+</span><a href="#local-6989586621679427811"><span class="hs-identifier hs-var">d</span></a></span></span><span> </span><span class="hs-glyph">-&gt;</span><span>
+</span><span id="line-84"></span><span>  </span><span class="annot"><span class="annottext">Display -&gt; Window -&gt; (WindowAttributes -&gt; X ()) -&gt; X ()
+</span><span class="hs-identifier hs-var">withWindowAttributes</span></span><span> </span><span class="annot"><span class="annottext">Display
+</span><a href="#local-6989586621679427811"><span class="hs-identifier hs-var">d</span></a></span><span> </span><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679427815"><span class="hs-identifier hs-var">w</span></a></span><span> </span><span class="annot"><span class="annottext">forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="hs-glyph">\</span><span id="local-6989586621679427809"><span class="annot"><span class="annottext">WindowAttributes
+</span><a href="#local-6989586621679427809"><span class="hs-identifier hs-var">wa</span></a></span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-85"></span><span>    </span><span class="hs-keyword">let</span><span> </span><span id="local-6989586621679427803"><span class="annot"><span class="annottext">wpos :: (Double, Double)
+</span><a href="#local-6989586621679427803"><span class="hs-identifier hs-var hs-var">wpos</span></a></span></span><span>  </span><span class="hs-glyph">=</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">forall a b. (Integral a, Num b) =&gt; a -&gt; b
+</span><a href="XMonad.Prelude.html#fi"><span class="hs-identifier hs-var">fi</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">WindowAttributes -&gt; CInt
+</span><span class="hs-identifier hs-var">wa_x</span></span><span> </span><span class="annot"><span class="annottext">WindowAttributes
+</span><a href="#local-6989586621679427809"><span class="hs-identifier hs-var">wa</span></a></span><span class="hs-special">)</span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">forall a b. (Integral a, Num b) =&gt; a -&gt; b
+</span><a href="XMonad.Prelude.html#fi"><span class="hs-identifier hs-var">fi</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">WindowAttributes -&gt; CInt
+</span><span class="hs-identifier hs-var">wa_y</span></span><span> </span><span class="annot"><span class="annottext">WindowAttributes
+</span><a href="#local-6989586621679427809"><span class="hs-identifier hs-var">wa</span></a></span><span class="hs-special">)</span><span class="hs-special">)</span><span>
+</span><span id="line-86"></span><span>        </span><span id="local-6989586621679427796"><span class="annot"><span class="annottext">wsize :: (Double, Double)
+</span><a href="#local-6989586621679427796"><span class="hs-identifier hs-var hs-var">wsize</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">forall a b. (Integral a, Num b) =&gt; a -&gt; b
+</span><a href="XMonad.Prelude.html#fi"><span class="hs-identifier hs-var">fi</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">WindowAttributes -&gt; CInt
+</span><span class="hs-identifier hs-var">wa_width</span></span><span> </span><span class="annot"><span class="annottext">WindowAttributes
+</span><a href="#local-6989586621679427809"><span class="hs-identifier hs-var">wa</span></a></span><span class="hs-special">)</span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">forall a b. (Integral a, Num b) =&gt; a -&gt; b
+</span><a href="XMonad.Prelude.html#fi"><span class="hs-identifier hs-var">fi</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">WindowAttributes -&gt; CInt
+</span><span class="hs-identifier hs-var">wa_height</span></span><span> </span><span class="annot"><span class="annottext">WindowAttributes
+</span><a href="#local-6989586621679427809"><span class="hs-identifier hs-var">wa</span></a></span><span class="hs-special">)</span><span class="hs-special">)</span><span>
+</span><span id="line-87"></span><span>    </span><span id="local-6989586621679427793"><span class="annot"><span class="annottext">SizeHints
+</span><a href="#local-6989586621679427793"><span class="hs-identifier hs-var">sh</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">forall (m :: * -&gt; *) a. MonadIO m =&gt; IO a -&gt; m a
+</span><span class="hs-identifier hs-var">io</span></span><span> </span><span class="annot"><span class="annottext">forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">Display -&gt; Window -&gt; IO SizeHints
+</span><span class="hs-identifier hs-var">getWMNormalHints</span></span><span> </span><span class="annot"><span class="annottext">Display
+</span><a href="#local-6989586621679427811"><span class="hs-identifier hs-var">d</span></a></span><span> </span><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679427815"><span class="hs-identifier hs-var">w</span></a></span><span>
+</span><span id="line-88"></span><span>    </span><span id="local-6989586621679427790"><span class="annot"><span class="annottext">(Double, Double)
+</span><a href="#local-6989586621679427790"><span class="hs-identifier hs-var">pointer</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">forall (m :: * -&gt; *) a. MonadIO m =&gt; IO a -&gt; m a
+</span><span class="hs-identifier hs-var">io</span></span><span> </span><span class="annot"><span class="annottext">forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">Display
+-&gt; Window
+-&gt; IO (Bool, Window, Window, CInt, CInt, CInt, CInt, Modifier)
+</span><span class="hs-identifier hs-var">queryPointer</span></span><span> </span><span class="annot"><span class="annottext">Display
+</span><a href="#local-6989586621679427811"><span class="hs-identifier hs-var">d</span></a></span><span> </span><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679427815"><span class="hs-identifier hs-var">w</span></a></span><span> </span><span class="annot"><span class="annottext">forall (f :: * -&gt; *) a b. Functor f =&gt; f a -&gt; (a -&gt; b) -&gt; f b
+</span><span class="hs-operator hs-var">&lt;&amp;&gt;</span></span><span> </span><span class="annot"><span class="annottext">forall {a} {a} {a} {b} {c} {f} {g} {h}.
+(Integral a, Integral a) =&gt;
+(a, b, c, a, a, f, g, h) -&gt; (Double, Double)
+</span><a href="#local-6989586621679427788"><span class="hs-identifier hs-var">pointerPos</span></a></span><span>
+</span><span id="line-89"></span><span>
+</span><span id="line-90"></span><span>    </span><span class="hs-keyword">let</span><span> </span><span id="local-6989586621679427785"><span class="annot"><span class="annottext">uv :: (Double, Double)
+</span><a href="#local-6989586621679427785"><span class="hs-identifier hs-var hs-var">uv</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">(Double, Double)
+</span><a href="#local-6989586621679427790"><span class="hs-identifier hs-var">pointer</span></a></span><span> </span><span class="annot"><span class="annottext">forall a. Num a =&gt; (a, a) -&gt; (a, a) -&gt; (a, a)
+</span><a href="XMonad.Actions.FlexibleManipulate.html#-"><span class="hs-glyph hs-var">-</span></a></span><span> </span><span class="annot"><span class="annottext">(Double, Double)
+</span><a href="#local-6989586621679427803"><span class="hs-identifier hs-var">wpos</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">forall a. Fractional a =&gt; (a, a) -&gt; (a, a) -&gt; (a, a)
+</span><a href="XMonad.Actions.FlexibleManipulate.html#%2F"><span class="hs-operator hs-var">/</span></a></span><span> </span><span class="annot"><span class="annottext">(Double, Double)
+</span><a href="#local-6989586621679427796"><span class="hs-identifier hs-var">wsize</span></a></span><span>
+</span><span id="line-91"></span><span>        </span><span id="local-6989586621679427782"><span class="annot"><span class="annottext">fc :: (Double, Double)
+</span><a href="#local-6989586621679427782"><span class="hs-identifier hs-var hs-var">fc</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">forall a b. (a -&gt; b) -&gt; (a, a) -&gt; (b, b)
+</span><a href="XMonad.Actions.FlexibleManipulate.html#mapP"><span class="hs-identifier hs-var">mapP</span></a></span><span> </span><span class="annot"><span class="annottext">Double -&gt; Double
+</span><a href="#local-6989586621679427816"><span class="hs-identifier hs-var">f</span></a></span><span> </span><span class="annot"><span class="annottext">(Double, Double)
+</span><a href="#local-6989586621679427785"><span class="hs-identifier hs-var">uv</span></a></span><span>
+</span><span id="line-92"></span><span>        </span><span id="local-6989586621679427773"><span class="annot"><span class="annottext">mul :: (Double, Double)
+</span><a href="#local-6989586621679427773"><span class="hs-identifier hs-var hs-var">mul</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">forall a b. (a -&gt; b) -&gt; (a, a) -&gt; (b, b)
+</span><a href="XMonad.Actions.FlexibleManipulate.html#mapP"><span class="hs-identifier hs-var">mapP</span></a></span><span> </span><span class="hs-special">(</span><span class="hs-glyph">\</span><span id="local-6989586621679427772"><span class="annot"><span class="annottext">Double
+</span><a href="#local-6989586621679427772"><span class="hs-identifier hs-var">x</span></a></span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">Double
+</span><span class="hs-number">2</span></span><span> </span><span class="annot"><span class="annottext">forall a. Num a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-operator hs-var">P.-</span></span><span> </span><span class="annot"><span class="annottext">Double
+</span><span class="hs-number">2</span></span><span> </span><span class="annot"><span class="annottext">forall a. Num a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-operator hs-var">P.*</span></span><span> </span><span class="annot"><span class="annottext">forall a. Num a =&gt; a -&gt; a
+</span><span class="hs-identifier hs-var">P.abs</span></span><span class="hs-special">(</span><span class="annot"><span class="annottext">Double
+</span><a href="#local-6989586621679427772"><span class="hs-identifier hs-var">x</span></a></span><span> </span><span class="annot"><span class="annottext">forall a. Num a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-operator hs-var">P.-</span></span><span> </span><span class="annot"><span class="annottext">Double
+</span><span class="hs-number">0.5</span></span><span class="hs-special">)</span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">(Double, Double)
+</span><a href="#local-6989586621679427782"><span class="hs-identifier hs-var">fc</span></a></span><span> </span><span class="hs-comment">--Fudge factors: interpolation between 1 when on edge, 2 in middle</span><span>
+</span><span id="line-93"></span><span>        </span><span id="local-6989586621679427765"><span class="annot"><span class="annottext">atl :: (Double, Double)
+</span><a href="#local-6989586621679427765"><span class="hs-identifier hs-var hs-var">atl</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-special">(</span><span class="hs-special">(</span><span class="annot"><span class="annottext">Double
+</span><span class="hs-number">1</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">Double
+</span><span class="hs-number">1</span></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">forall a. Num a =&gt; (a, a) -&gt; (a, a) -&gt; (a, a)
+</span><a href="XMonad.Actions.FlexibleManipulate.html#-"><span class="hs-glyph hs-var">-</span></a></span><span> </span><span class="annot"><span class="annottext">(Double, Double)
+</span><a href="#local-6989586621679427782"><span class="hs-identifier hs-var">fc</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">forall a. Num a =&gt; (a, a) -&gt; (a, a) -&gt; (a, a)
+</span><a href="XMonad.Actions.FlexibleManipulate.html#%2A"><span class="hs-operator hs-var">*</span></a></span><span> </span><span class="annot"><span class="annottext">(Double, Double)
+</span><a href="#local-6989586621679427773"><span class="hs-identifier hs-var">mul</span></a></span><span>
+</span><span id="line-94"></span><span>        </span><span id="local-6989586621679427762"><span class="annot"><span class="annottext">abr :: (Double, Double)
+</span><a href="#local-6989586621679427762"><span class="hs-identifier hs-var hs-var">abr</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">(Double, Double)
+</span><a href="#local-6989586621679427782"><span class="hs-identifier hs-var">fc</span></a></span><span> </span><span class="annot"><span class="annottext">forall a. Num a =&gt; (a, a) -&gt; (a, a) -&gt; (a, a)
+</span><a href="XMonad.Actions.FlexibleManipulate.html#%2A"><span class="hs-operator hs-var">*</span></a></span><span> </span><span class="annot"><span class="annottext">(Double, Double)
+</span><a href="#local-6989586621679427773"><span class="hs-identifier hs-var">mul</span></a></span><span>
+</span><span id="line-95"></span><span>    </span><span class="annot"><span class="annottext">(Position -&gt; Position -&gt; X ()) -&gt; X () -&gt; X ()
+</span><span class="hs-identifier hs-var">mouseDrag</span></span><span> </span><span class="hs-special">(</span><span class="hs-glyph">\</span><span id="local-6989586621679427760"><span class="annot"><span class="annottext">Position
+</span><a href="#local-6989586621679427760"><span class="hs-identifier hs-var">ex</span></a></span></span><span> </span><span id="local-6989586621679427759"><span class="annot"><span class="annottext">Position
+</span><a href="#local-6989586621679427759"><span class="hs-identifier hs-var">ey</span></a></span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-96"></span><span>        </span><span class="hs-keyword">let</span><span> </span><span id="local-6989586621679427753"><span class="annot"><span class="annottext">offset :: (Double, Double)
+</span><a href="#local-6989586621679427753"><span class="hs-identifier hs-var hs-var">offset</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">forall a b. (Integral a, Num b) =&gt; a -&gt; b
+</span><span class="hs-identifier hs-var">fromIntegral</span></span><span> </span><span class="annot"><span class="annottext">Position
+</span><a href="#local-6989586621679427760"><span class="hs-identifier hs-var">ex</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">forall a b. (Integral a, Num b) =&gt; a -&gt; b
+</span><span class="hs-identifier hs-var">fromIntegral</span></span><span> </span><span class="annot"><span class="annottext">Position
+</span><a href="#local-6989586621679427759"><span class="hs-identifier hs-var">ey</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">forall a. Num a =&gt; (a, a) -&gt; (a, a) -&gt; (a, a)
+</span><a href="XMonad.Actions.FlexibleManipulate.html#-"><span class="hs-glyph hs-var">-</span></a></span><span> </span><span class="annot"><span class="annottext">(Double, Double)
+</span><a href="#local-6989586621679427790"><span class="hs-identifier hs-var">pointer</span></a></span><span>
+</span><span id="line-97"></span><span>            </span><span id="local-6989586621679427750"><span class="annot"><span class="annottext">npos :: (Double, Double)
+</span><a href="#local-6989586621679427750"><span class="hs-identifier hs-var hs-var">npos</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">(Double, Double)
+</span><a href="#local-6989586621679427803"><span class="hs-identifier hs-var">wpos</span></a></span><span> </span><span class="annot"><span class="annottext">forall a. Num a =&gt; (a, a) -&gt; (a, a) -&gt; (a, a)
+</span><a href="XMonad.Actions.FlexibleManipulate.html#%2B"><span class="hs-operator hs-var">+</span></a></span><span> </span><span class="annot"><span class="annottext">(Double, Double)
+</span><a href="#local-6989586621679427753"><span class="hs-identifier hs-var">offset</span></a></span><span> </span><span class="annot"><span class="annottext">forall a. Num a =&gt; (a, a) -&gt; (a, a) -&gt; (a, a)
+</span><a href="XMonad.Actions.FlexibleManipulate.html#%2A"><span class="hs-operator hs-var">*</span></a></span><span> </span><span class="annot"><span class="annottext">(Double, Double)
+</span><a href="#local-6989586621679427765"><span class="hs-identifier hs-var">atl</span></a></span><span>
+</span><span id="line-98"></span><span>            </span><span id="local-6989586621679427745"><span class="annot"><span class="annottext">nbr :: (Double, Double)
+</span><a href="#local-6989586621679427745"><span class="hs-identifier hs-var hs-var">nbr</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">(Double, Double)
+</span><a href="#local-6989586621679427803"><span class="hs-identifier hs-var">wpos</span></a></span><span> </span><span class="annot"><span class="annottext">forall a. Num a =&gt; (a, a) -&gt; (a, a) -&gt; (a, a)
+</span><a href="XMonad.Actions.FlexibleManipulate.html#%2B"><span class="hs-operator hs-var">+</span></a></span><span> </span><span class="annot"><span class="annottext">(Double, Double)
+</span><a href="#local-6989586621679427796"><span class="hs-identifier hs-var">wsize</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">forall a. Num a =&gt; (a, a) -&gt; (a, a) -&gt; (a, a)
+</span><a href="XMonad.Actions.FlexibleManipulate.html#%2B"><span class="hs-operator hs-var">+</span></a></span><span> </span><span class="annot"><span class="annottext">(Double, Double)
+</span><a href="#local-6989586621679427753"><span class="hs-identifier hs-var">offset</span></a></span><span> </span><span class="annot"><span class="annottext">forall a. Num a =&gt; (a, a) -&gt; (a, a) -&gt; (a, a)
+</span><a href="XMonad.Actions.FlexibleManipulate.html#%2A"><span class="hs-operator hs-var">*</span></a></span><span> </span><span class="annot"><span class="annottext">(Double, Double)
+</span><a href="#local-6989586621679427762"><span class="hs-identifier hs-var">abr</span></a></span><span>
+</span><span id="line-99"></span><span>            </span><span id="local-6989586621679427740"><span class="annot"><span class="annottext">ntl :: (Double, Double)
+</span><a href="#local-6989586621679427740"><span class="hs-identifier hs-var hs-var">ntl</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">forall a. Ord a =&gt; (a, a) -&gt; (a, a) -&gt; (a, a)
+</span><a href="XMonad.Actions.FlexibleManipulate.html#minP"><span class="hs-identifier hs-var">minP</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">(Double, Double)
+</span><a href="#local-6989586621679427745"><span class="hs-identifier hs-var">nbr</span></a></span><span> </span><span class="annot"><span class="annottext">forall a. Num a =&gt; (a, a) -&gt; (a, a) -&gt; (a, a)
+</span><a href="XMonad.Actions.FlexibleManipulate.html#-"><span class="hs-glyph hs-var">-</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Double
+</span><span class="hs-number">32</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">Double
+</span><span class="hs-number">32</span></span><span class="hs-special">)</span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">(Double, Double)
+</span><a href="#local-6989586621679427750"><span class="hs-identifier hs-var">npos</span></a></span><span>    </span><span class="hs-comment">--minimum size</span><span>
+</span><span id="line-100"></span><span>            </span><span id="local-6989586621679427733"><span class="annot"><span class="annottext">nwidth :: D
+</span><a href="#local-6989586621679427733"><span class="hs-identifier hs-var hs-var">nwidth</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">forall a. Integral a =&gt; SizeHints -&gt; (a, a) -&gt; D
+</span><span class="hs-identifier hs-var">applySizeHintsContents</span></span><span> </span><span class="annot"><span class="annottext">SizeHints
+</span><a href="#local-6989586621679427793"><span class="hs-identifier hs-var">sh</span></a></span><span> </span><span class="annot"><span class="annottext">forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">forall a b. (a -&gt; b) -&gt; (a, a) -&gt; (b, b)
+</span><a href="XMonad.Actions.FlexibleManipulate.html#mapP"><span class="hs-identifier hs-var">mapP</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">forall a b. (RealFrac a, Integral b) =&gt; a -&gt; b
+</span><span class="hs-identifier hs-var">round</span></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Double</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Integer</span></span><span class="hs-special">)</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">(Double, Double)
+</span><a href="#local-6989586621679427745"><span class="hs-identifier hs-var">nbr</span></a></span><span> </span><span class="annot"><span class="annottext">forall a. Num a =&gt; (a, a) -&gt; (a, a) -&gt; (a, a)
+</span><a href="XMonad.Actions.FlexibleManipulate.html#-"><span class="hs-glyph hs-var">-</span></a></span><span> </span><span class="annot"><span class="annottext">(Double, Double)
+</span><a href="#local-6989586621679427740"><span class="hs-identifier hs-var">ntl</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-101"></span><span>        </span><span class="annot"><span class="annottext">forall (m :: * -&gt; *) a. MonadIO m =&gt; IO a -&gt; m a
+</span><span class="hs-identifier hs-var">io</span></span><span> </span><span class="annot"><span class="annottext">forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">Display
+-&gt; Window
+-&gt; Position
+-&gt; Position
+-&gt; Dimension
+-&gt; Dimension
+-&gt; IO ()
+</span><span class="hs-identifier hs-var">moveResizeWindow</span></span><span> </span><span class="annot"><span class="annottext">Display
+</span><a href="#local-6989586621679427811"><span class="hs-identifier hs-var">d</span></a></span><span> </span><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679427815"><span class="hs-identifier hs-var">w</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">forall a b. (RealFrac a, Integral b) =&gt; a -&gt; b
+</span><span class="hs-identifier hs-var">round</span></span><span> </span><span class="annot"><span class="annottext">forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">forall a b. (a, b) -&gt; a
+</span><span class="hs-identifier hs-var">fst</span></span><span> </span><span class="annot"><span class="annottext">(Double, Double)
+</span><a href="#local-6989586621679427740"><span class="hs-identifier hs-var">ntl</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">forall a b. (RealFrac a, Integral b) =&gt; a -&gt; b
+</span><span class="hs-identifier hs-var">round</span></span><span> </span><span class="annot"><span class="annottext">forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">forall a b. (a, b) -&gt; b
+</span><span class="hs-identifier hs-var">snd</span></span><span> </span><span class="annot"><span class="annottext">(Double, Double)
+</span><a href="#local-6989586621679427740"><span class="hs-identifier hs-var">ntl</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">forall a b c. (a -&gt; b -&gt; c) -&gt; (a, b) -&gt; c
+</span><span class="hs-operator hs-var">`uncurry`</span></span><span> </span><span class="annot"><span class="annottext">D
+</span><a href="#local-6989586621679427733"><span class="hs-identifier hs-var">nwidth</span></a></span><span>
+</span><span id="line-102"></span><span>        </span><span class="annot"><span class="annottext">Window -&gt; X ()
+</span><span class="hs-identifier hs-var">float</span></span><span> </span><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679427815"><span class="hs-identifier hs-var">w</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-103"></span><span>        </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Window -&gt; X ()
+</span><span class="hs-identifier hs-var">float</span></span><span> </span><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679427815"><span class="hs-identifier hs-var">w</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-104"></span><span>
+</span><span id="line-105"></span><span>    </span><span class="annot"><span class="annottext">Window -&gt; X ()
+</span><span class="hs-identifier hs-var">float</span></span><span> </span><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679427815"><span class="hs-identifier hs-var">w</span></a></span><span>
+</span><span id="line-106"></span><span>
+</span><span id="line-107"></span><span>  </span><span class="hs-keyword">where</span><span>
+</span><span id="line-108"></span><span>    </span><span id="local-6989586621679427788"><span class="annot"><span class="annottext">pointerPos :: (a, b, c, a, a, f, g, h) -&gt; (Double, Double)
+</span><a href="#local-6989586621679427788"><span class="hs-identifier hs-var hs-var">pointerPos</span></a></span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">a
+</span><span class="hs-identifier">_</span></span><span class="hs-special">,</span><span class="annot"><span class="annottext">b
+</span><span class="hs-identifier">_</span></span><span class="hs-special">,</span><span class="annot"><span class="annottext">c
+</span><span class="hs-identifier">_</span></span><span class="hs-special">,</span><span id="local-6989586621679427723"><span class="annot"><span class="annottext">a
+</span><a href="#local-6989586621679427723"><span class="hs-identifier hs-var">px</span></a></span></span><span class="hs-special">,</span><span id="local-6989586621679427722"><span class="annot"><span class="annottext">a
+</span><a href="#local-6989586621679427722"><span class="hs-identifier hs-var">py</span></a></span></span><span class="hs-special">,</span><span class="annot"><span class="annottext">f
+</span><span class="hs-identifier">_</span></span><span class="hs-special">,</span><span class="annot"><span class="annottext">g
+</span><span class="hs-identifier">_</span></span><span class="hs-special">,</span><span class="annot"><span class="annottext">h
+</span><span class="hs-identifier">_</span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">forall a b. (Integral a, Num b) =&gt; a -&gt; b
+</span><span class="hs-identifier hs-var">fromIntegral</span></span><span> </span><span class="annot"><span class="annottext">a
+</span><a href="#local-6989586621679427723"><span class="hs-identifier hs-var">px</span></a></span><span class="hs-special">,</span><span class="annot"><span class="annottext">forall a b. (Integral a, Num b) =&gt; a -&gt; b
+</span><span class="hs-identifier hs-var">fromIntegral</span></span><span> </span><span class="annot"><span class="annottext">a
+</span><a href="#local-6989586621679427722"><span class="hs-identifier hs-var">py</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><a href="XMonad.Actions.FlexibleManipulate.html#Pnt"><span class="hs-identifier hs-type">Pnt</span></a></span><span>
+</span><span id="line-109"></span><span>
+</span><span id="line-110"></span><span class="hs-comment">-- I'd rather I didn't have to do this, but I hate writing component 2d math</span><span>
+</span><span id="line-111"></span><span class="hs-keyword">type</span><span> </span><span id="Pnt"><span class="annot"><a href="XMonad.Actions.FlexibleManipulate.html#Pnt"><span class="hs-identifier hs-var">Pnt</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">Double</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Double</span></span><span class="hs-special">)</span><span>
+</span><span id="line-112"></span><span>
+</span><span id="line-113"></span><span id="local-6989586621679427889"><span id="local-6989586621679427890"><span class="annot"><a href="XMonad.Actions.FlexibleManipulate.html#mapP"><span class="hs-identifier hs-type">mapP</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="hs-special">(</span><span class="annot"><a href="#local-6989586621679427890"><span class="hs-identifier hs-type">a</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="#local-6989586621679427889"><span class="hs-identifier hs-type">b</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="hs-special">(</span><span class="annot"><a href="#local-6989586621679427890"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><a href="#local-6989586621679427890"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="hs-special">(</span><span class="annot"><a href="#local-6989586621679427889"><span class="hs-identifier hs-type">b</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><a href="#local-6989586621679427889"><span class="hs-identifier hs-type">b</span></a></span><span class="hs-special">)</span></span></span><span>
+</span><span id="line-114"></span><span id="mapP"><span class="annot"><span class="annottext">mapP :: forall a b. (a -&gt; b) -&gt; (a, a) -&gt; (b, b)
+</span><a href="XMonad.Actions.FlexibleManipulate.html#mapP"><span class="hs-identifier hs-var hs-var">mapP</span></a></span></span><span> </span><span id="local-6989586621679427720"><span class="annot"><span class="annottext">a -&gt; b
+</span><a href="#local-6989586621679427720"><span class="hs-identifier hs-var">f</span></a></span></span><span> </span><span class="hs-special">(</span><span id="local-6989586621679427719"><span class="annot"><span class="annottext">a
+</span><a href="#local-6989586621679427719"><span class="hs-identifier hs-var">x</span></a></span></span><span class="hs-special">,</span><span> </span><span id="local-6989586621679427718"><span class="annot"><span class="annottext">a
+</span><a href="#local-6989586621679427718"><span class="hs-identifier hs-var">y</span></a></span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">a -&gt; b
+</span><a href="#local-6989586621679427720"><span class="hs-identifier hs-var">f</span></a></span><span> </span><span class="annot"><span class="annottext">a
+</span><a href="#local-6989586621679427719"><span class="hs-identifier hs-var">x</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">a -&gt; b
+</span><a href="#local-6989586621679427720"><span class="hs-identifier hs-var">f</span></a></span><span> </span><span class="annot"><span class="annottext">a
+</span><a href="#local-6989586621679427718"><span class="hs-identifier hs-var">y</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-115"></span><span id="local-6989586621679427870"><span id="local-6989586621679427871"><span id="local-6989586621679427872"><span class="annot"><a href="XMonad.Actions.FlexibleManipulate.html#zipP"><span class="hs-identifier hs-type">zipP</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="hs-special">(</span><span class="annot"><a href="#local-6989586621679427872"><span class="hs-identifier hs-type">a</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="#local-6989586621679427871"><span class="hs-identifier hs-type">b</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="#local-6989586621679427870"><span class="hs-identifier hs-type">c</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="hs-special">(</span><span class="annot"><a href="#local-6989586621679427872"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">,</span><span class="annot"><a href="#local-6989586621679427872"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="hs-special">(</span><span class="annot"><a href="#local-6989586621679427871"><span class="hs-identifier hs-type">b</span></a></span><span class="hs-special">,</span><span class="annot"><a href="#local-6989586621679427871"><span class="hs-identifier hs-type">b</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="hs-special">(</span><span class="annot"><a href="#local-6989586621679427870"><span class="hs-identifier hs-type">c</span></a></span><span class="hs-special">,</span><span class="annot"><a href="#local-6989586621679427870"><span class="hs-identifier hs-type">c</span></a></span><span class="hs-special">)</span></span></span></span><span>
+</span><span id="line-116"></span><span id="zipP"><span class="annot"><span class="annottext">zipP :: forall a b c. (a -&gt; b -&gt; c) -&gt; (a, a) -&gt; (b, b) -&gt; (c, c)
+</span><a href="XMonad.Actions.FlexibleManipulate.html#zipP"><span class="hs-identifier hs-var hs-var">zipP</span></a></span></span><span> </span><span id="local-6989586621679427716"><span class="annot"><span class="annottext">a -&gt; b -&gt; c
+</span><a href="#local-6989586621679427716"><span class="hs-identifier hs-var">f</span></a></span></span><span> </span><span class="hs-special">(</span><span id="local-6989586621679427715"><span class="annot"><span class="annottext">a
+</span><a href="#local-6989586621679427715"><span class="hs-identifier hs-var">ax</span></a></span></span><span class="hs-special">,</span><span id="local-6989586621679427714"><span class="annot"><span class="annottext">a
+</span><a href="#local-6989586621679427714"><span class="hs-identifier hs-var">ay</span></a></span></span><span class="hs-special">)</span><span> </span><span class="hs-special">(</span><span id="local-6989586621679427713"><span class="annot"><span class="annottext">b
+</span><a href="#local-6989586621679427713"><span class="hs-identifier hs-var">bx</span></a></span></span><span class="hs-special">,</span><span id="local-6989586621679427712"><span class="annot"><span class="annottext">b
+</span><a href="#local-6989586621679427712"><span class="hs-identifier hs-var">by</span></a></span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">a -&gt; b -&gt; c
+</span><a href="#local-6989586621679427716"><span class="hs-identifier hs-var">f</span></a></span><span> </span><span class="annot"><span class="annottext">a
+</span><a href="#local-6989586621679427715"><span class="hs-identifier hs-var">ax</span></a></span><span> </span><span class="annot"><span class="annottext">b
+</span><a href="#local-6989586621679427713"><span class="hs-identifier hs-var">bx</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">a -&gt; b -&gt; c
+</span><a href="#local-6989586621679427716"><span class="hs-identifier hs-var">f</span></a></span><span> </span><span class="annot"><span class="annottext">a
+</span><a href="#local-6989586621679427714"><span class="hs-identifier hs-var">ay</span></a></span><span> </span><span class="annot"><span class="annottext">b
+</span><a href="#local-6989586621679427712"><span class="hs-identifier hs-var">by</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-117"></span><span>
+</span><span id="line-118"></span><span id="local-6989586621679427887"><span class="annot"><a href="XMonad.Actions.FlexibleManipulate.html#minP"><span class="hs-identifier hs-type">minP</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Ord</span></span><span> </span><span class="annot"><a href="#local-6989586621679427887"><span class="hs-identifier hs-type">a</span></a></span><span> </span><span class="hs-glyph">=&gt;</span><span> </span><span class="hs-special">(</span><span class="annot"><a href="#local-6989586621679427887"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">,</span><span class="annot"><a href="#local-6989586621679427887"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="hs-special">(</span><span class="annot"><a href="#local-6989586621679427887"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">,</span><span class="annot"><a href="#local-6989586621679427887"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="hs-special">(</span><span class="annot"><a href="#local-6989586621679427887"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">,</span><span class="annot"><a href="#local-6989586621679427887"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">)</span></span><span>
+</span><span id="line-119"></span><span id="minP"><span class="annot"><span class="annottext">minP :: forall a. Ord a =&gt; (a, a) -&gt; (a, a) -&gt; (a, a)
+</span><a href="XMonad.Actions.FlexibleManipulate.html#minP"><span class="hs-identifier hs-var hs-var">minP</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">forall a b c. (a -&gt; b -&gt; c) -&gt; (a, a) -&gt; (b, b) -&gt; (c, c)
+</span><a href="XMonad.Actions.FlexibleManipulate.html#zipP"><span class="hs-identifier hs-var">zipP</span></a></span><span> </span><span class="annot"><span class="annottext">forall a. Ord a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-identifier hs-var">min</span></span><span>
+</span><span id="line-120"></span><span>
+</span><span id="line-121"></span><span class="hs-keyword">infixl</span><span> </span><span class="hs-number">6</span><span>  </span><span class="annot"><a href="XMonad.Actions.FlexibleManipulate.html#%2B"><span class="hs-operator hs-type">+</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><a href="XMonad.Actions.FlexibleManipulate.html#-"><span class="hs-glyph hs-type">-</span></a></span><span>
+</span><span id="line-122"></span><span class="hs-keyword">infixl</span><span> </span><span class="hs-number">7</span><span>  </span><span class="annot"><a href="XMonad.Actions.FlexibleManipulate.html#%2A"><span class="hs-operator hs-type">*</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><a href="XMonad.Actions.FlexibleManipulate.html#%2F"><span class="hs-operator hs-type">/</span></a></span><span>
+</span><span id="line-123"></span><span>
+</span><span id="line-124"></span><span id="local-6989586621679427892"><span class="annot"><a href="XMonad.Actions.FlexibleManipulate.html#%2B"><span class="hs-operator hs-type">(+)</span></a></span><span class="hs-special">,</span><span> </span><span class="hs-special">(</span><span class="hs-glyph">-</span><span class="hs-special">)</span><span class="hs-special">,</span><span> </span><span class="annot"><a href="XMonad.Actions.FlexibleManipulate.html#%2A"><span class="hs-operator hs-type">(*)</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">P.Num</span></span><span> </span><span class="annot"><a href="#local-6989586621679427892"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=&gt;</span><span> </span><span class="hs-special">(</span><span class="annot"><a href="#local-6989586621679427892"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">,</span><span class="annot"><a href="#local-6989586621679427892"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="hs-special">(</span><span class="annot"><a href="#local-6989586621679427892"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">,</span><span class="annot"><a href="#local-6989586621679427892"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="hs-special">(</span><span class="annot"><a href="#local-6989586621679427892"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">,</span><span class="annot"><a href="#local-6989586621679427892"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">)</span></span><span>
+</span><span id="line-125"></span><span id="%2B"><span class="annot"><span class="annottext">+ :: forall a. Num a =&gt; (a, a) -&gt; (a, a) -&gt; (a, a)
+</span><a href="XMonad.Actions.FlexibleManipulate.html#%2B"><span class="hs-operator hs-var hs-var">(+)</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">forall a b c. (a -&gt; b -&gt; c) -&gt; (a, a) -&gt; (b, b) -&gt; (c, c)
+</span><a href="XMonad.Actions.FlexibleManipulate.html#zipP"><span class="hs-identifier hs-var">zipP</span></a></span><span> </span><span class="annot"><span class="annottext">forall a. Num a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-operator hs-var">(P.+)</span></span><span>
+</span><span id="line-126"></span><span id="-"><span class="hs-special">(</span><span class="hs-glyph">-</span><span class="hs-special">)</span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">forall a b c. (a -&gt; b -&gt; c) -&gt; (a, a) -&gt; (b, b) -&gt; (c, c)
+</span><a href="XMonad.Actions.FlexibleManipulate.html#zipP"><span class="hs-identifier hs-var">zipP</span></a></span><span> </span><span class="annot"><span class="annottext">forall a. Num a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-operator hs-var">(P.-)</span></span><span>
+</span><span id="line-127"></span><span id="%2A"><span class="annot"><span class="annottext">* :: forall a. Num a =&gt; (a, a) -&gt; (a, a) -&gt; (a, a)
+</span><a href="XMonad.Actions.FlexibleManipulate.html#%2A"><span class="hs-operator hs-var hs-var">(*)</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">forall a b c. (a -&gt; b -&gt; c) -&gt; (a, a) -&gt; (b, b) -&gt; (c, c)
+</span><a href="XMonad.Actions.FlexibleManipulate.html#zipP"><span class="hs-identifier hs-var">zipP</span></a></span><span> </span><span class="annot"><span class="annottext">forall a. Num a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-operator hs-var">(P.*)</span></span><span>
+</span><span id="line-128"></span><span id="local-6989586621679427891"><span class="annot"><a href="XMonad.Actions.FlexibleManipulate.html#%2F"><span class="hs-operator hs-type">(/)</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">P.Fractional</span></span><span> </span><span class="annot"><a href="#local-6989586621679427891"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=&gt;</span><span> </span><span class="hs-special">(</span><span class="annot"><a href="#local-6989586621679427891"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">,</span><span class="annot"><a href="#local-6989586621679427891"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="hs-special">(</span><span class="annot"><a href="#local-6989586621679427891"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">,</span><span class="annot"><a href="#local-6989586621679427891"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="hs-special">(</span><span class="annot"><a href="#local-6989586621679427891"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">,</span><span class="annot"><a href="#local-6989586621679427891"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">)</span></span><span>
+</span><span id="line-129"></span><span id="%2F"><span class="annot"><span class="annottext">/ :: forall a. Fractional a =&gt; (a, a) -&gt; (a, a) -&gt; (a, a)
+</span><a href="XMonad.Actions.FlexibleManipulate.html#%2F"><span class="hs-operator hs-var hs-var">(/)</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">forall a b c. (a -&gt; b -&gt; c) -&gt; (a, a) -&gt; (b, b) -&gt; (c, c)
+</span><a href="XMonad.Actions.FlexibleManipulate.html#zipP"><span class="hs-identifier hs-var">zipP</span></a></span><span> </span><span class="annot"><span class="annottext">forall a. Fractional a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-operator hs-var">(P./)</span></span><span>
+</span><span id="line-130"></span></pre></body></html>

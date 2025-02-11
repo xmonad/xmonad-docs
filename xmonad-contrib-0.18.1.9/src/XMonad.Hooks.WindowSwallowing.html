@@ -1,0 +1,650 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd"><html xmlns="http://www.w3.org/1999/xhtml"><head><link rel="stylesheet" type="text/css" href="style.css" /><script type="text/javascript" src="highlight.js"></script></head><body><pre><span class="hs-pragma">{-# LANGUAGE NamedFieldPuns #-}</span><span>
+</span><span id="line-2"></span><span class="hs-comment">-----------------------------------------------------------------------------</span><span>
+</span><span id="line-3"></span><span class="hs-comment">-- |</span><span>
+</span><span id="line-4"></span><span class="hs-comment">-- Module      :  XMonad.Hooks.WindowSwallowing</span><span>
+</span><span id="line-5"></span><span class="hs-comment">-- Description :  Temporarily hide parent windows when opening other programs.</span><span>
+</span><span id="line-6"></span><span class="hs-comment">-- Copyright   :  (c) 2020 Leon Kowarschick</span><span>
+</span><span id="line-7"></span><span class="hs-comment">-- License     :  BSD3-style (see LICENSE)</span><span>
+</span><span id="line-8"></span><span class="hs-comment">--</span><span>
+</span><span id="line-9"></span><span class="hs-comment">-- Maintainer  :  Leon Kowarschick. &lt;thereal.elkowar@gmail.com&gt;</span><span>
+</span><span id="line-10"></span><span class="hs-comment">-- Stability   :  unstable</span><span>
+</span><span id="line-11"></span><span class="hs-comment">-- Portability :  unportable</span><span>
+</span><span id="line-12"></span><span class="hs-comment">--</span><span>
+</span><span id="line-13"></span><span class="hs-comment">-- Provides a handleEventHook that implements window swallowing.</span><span>
+</span><span id="line-14"></span><span class="hs-comment">--</span><span>
+</span><span id="line-15"></span><span class="hs-comment">-- If you open a GUI-window (i.e. feh) from the terminal,</span><span>
+</span><span id="line-16"></span><span class="hs-comment">-- the terminal will normally still be shown on screen, unnecessarily</span><span>
+</span><span id="line-17"></span><span class="hs-comment">-- taking up space on the screen.</span><span>
+</span><span id="line-18"></span><span class="hs-comment">-- With window swallowing, can detect that you opened a window from within another</span><span>
+</span><span id="line-19"></span><span class="hs-comment">-- window, and allows you &quot;swallow&quot; that parent window for the time the new</span><span>
+</span><span id="line-20"></span><span class="hs-comment">-- window is running.</span><span>
+</span><span id="line-21"></span><span class="hs-comment">--</span><span>
+</span><span id="line-22"></span><span class="hs-comment">-- __NOTE__ that this does not always work perfectly:</span><span>
+</span><span id="line-23"></span><span class="hs-comment">--</span><span>
+</span><span id="line-24"></span><span class="hs-comment">-- - Because window swallowing needs to check the process hierarchy, it requires</span><span>
+</span><span id="line-25"></span><span class="hs-comment">--   both the child and the parent to be distinct processes. This means that</span><span>
+</span><span id="line-26"></span><span class="hs-comment">--   applications which implement instance sharing cannot be supported by window swallowing.</span><span>
+</span><span id="line-27"></span><span class="hs-comment">--   Most notably, this excludes some terminal emulators as well as tmux</span><span>
+</span><span id="line-28"></span><span class="hs-comment">--   from functioning as the parent process. It also excludes a good amount of</span><span>
+</span><span id="line-29"></span><span class="hs-comment">--   child programs, because many graphical applications do implement instance sharing.</span><span>
+</span><span id="line-30"></span><span class="hs-comment">--   For example, window swallowing will probably not work with your browser.</span><span>
+</span><span id="line-31"></span><span class="hs-comment">--</span><span>
+</span><span id="line-32"></span><span class="hs-comment">-- - To check the process hierarchy, we need to be able to get the process ID</span><span>
+</span><span id="line-33"></span><span class="hs-comment">--   by looking at the window. This requires the @_NET_WM_PID@ X-property to be set.</span><span>
+</span><span id="line-34"></span><span class="hs-comment">--   If any application you want to use this with does not provide the @_NET_WM_PID@,</span><span>
+</span><span id="line-35"></span><span class="hs-comment">--   there is not much you can do except for reaching out to the author of that</span><span>
+</span><span id="line-36"></span><span class="hs-comment">--   application and asking them to set that property. Additionally,</span><span>
+</span><span id="line-37"></span><span class="hs-comment">--   applications running in their own PID namespace, such as those in</span><span>
+</span><span id="line-38"></span><span class="hs-comment">--   Flatpak, can't set a correct @_NET_WM_PID@ even if they wanted to.</span><span>
+</span><span id="line-39"></span><span class="hs-comment">-----------------------------------------------------------------------------</span><span>
+</span><span id="line-40"></span><span class="hs-keyword">module</span><span> </span><span class="hs-identifier">XMonad.Hooks.WindowSwallowing</span><span>
+</span><span id="line-41"></span><span>  </span><span class="hs-special">(</span><span> </span><span class="annot"><span class="hs-comment">-- * Usage</span></span><span>
+</span><span id="line-42"></span><span>    </span><span class="annot"><span class="hs-comment">-- $usage</span></span><span>
+</span><span id="line-43"></span><span>    </span><span class="annot"><a href="XMonad.Hooks.WindowSwallowing.html#swallowEventHook"><span class="hs-identifier">swallowEventHook</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><a href="XMonad.Hooks.WindowSwallowing.html#swallowEventHookSub"><span class="hs-identifier">swallowEventHookSub</span></a></span><span>
+</span><span id="line-44"></span><span>  </span><span class="hs-special">)</span><span>
+</span><span id="line-45"></span><span class="hs-keyword">where</span><span>
+</span><span id="line-46"></span><span class="hs-keyword">import</span><span>           </span><span class="annot"><span class="hs-identifier">XMonad</span></span><span>
+</span><span id="line-47"></span><span class="hs-keyword">import</span><span>           </span><span class="annot"><a href="XMonad.Prelude.html"><span class="hs-identifier">XMonad.Prelude</span></a></span><span>
+</span><span id="line-48"></span><span class="hs-keyword">import</span><span> </span><span class="hs-keyword">qualified</span><span> </span><span class="annot"><span class="hs-identifier">XMonad.StackSet</span></span><span>               </span><span class="hs-keyword">as</span><span> </span><span class="annot"><span class="hs-identifier">W</span></span><span>
+</span><span id="line-49"></span><span class="hs-keyword">import</span><span>           </span><span class="annot"><a href="XMonad.Layout.SubLayouts.html"><span class="hs-identifier">XMonad.Layout.SubLayouts</span></a></span><span>
+</span><span id="line-50"></span><span class="hs-keyword">import</span><span> </span><span class="hs-keyword">qualified</span><span> </span><span class="annot"><a href="XMonad.Util.ExtensibleState.html"><span class="hs-identifier">XMonad.Util.ExtensibleState</span></a></span><span>   </span><span class="hs-keyword">as</span><span> </span><span class="annot"><span class="hs-identifier">XS</span></span><span>
+</span><span id="line-51"></span><span class="hs-keyword">import</span><span>           </span><span class="annot"><a href="XMonad.Util.WindowProperties.html"><span class="hs-identifier">XMonad.Util.WindowProperties</span></a></span><span>
+</span><span id="line-52"></span><span class="hs-keyword">import</span><span>           </span><span class="annot"><a href="XMonad.Util.Process.html"><span class="hs-identifier">XMonad.Util.Process</span></a></span><span>            </span><span class="hs-special">(</span><span> </span><span class="annot"><a href="XMonad.Util.Process.html#getPPIDChain"><span class="hs-identifier">getPPIDChain</span></a></span><span> </span><span class="hs-special">)</span><span>
+</span><span id="line-53"></span><span class="hs-keyword">import</span><span> </span><span class="hs-keyword">qualified</span><span> </span><span class="annot"><span class="hs-identifier">Data.Map.Strict</span></span><span>               </span><span class="hs-keyword">as</span><span> </span><span class="annot"><span class="hs-identifier">M</span></span><span>
+</span><span id="line-54"></span><span class="hs-keyword">import</span><span>           </span><span class="annot"><span class="hs-identifier">System.Posix.Types</span></span><span>             </span><span class="hs-special">(</span><span> </span><span class="annot"><span class="hs-identifier">ProcessID</span></span><span> </span><span class="hs-special">)</span><span>
+</span><span id="line-55"></span><span>
+</span><span id="line-56"></span><span class="hs-comment">-- $usage</span><span>
+</span><span id="line-57"></span><span class="hs-comment">-- You can use this module by including  the following in your @xmonad.hs@:</span><span>
+</span><span id="line-58"></span><span class="hs-comment">--</span><span>
+</span><span id="line-59"></span><span class="hs-comment">-- &gt; import XMonad.Hooks.WindowSwallowing</span><span>
+</span><span id="line-60"></span><span class="hs-comment">--</span><span>
+</span><span id="line-61"></span><span class="hs-comment">-- and using 'swallowEventHook' somewhere in your 'handleEventHook', for example:</span><span>
+</span><span id="line-62"></span><span class="hs-comment">--</span><span>
+</span><span id="line-63"></span><span class="hs-comment">-- &gt; myHandleEventHook = swallowEventHook (className =? &quot;Alacritty&quot; &lt;||&gt; className =? &quot;Termite&quot;) (return True)</span><span>
+</span><span id="line-64"></span><span class="hs-comment">--</span><span>
+</span><span id="line-65"></span><span class="hs-comment">-- The variant 'swallowEventHookSub' can be used if a layout from &quot;XMonad.Layout.SubLayouts&quot; is used;</span><span>
+</span><span id="line-66"></span><span class="hs-comment">-- instead of swallowing the window it will merge the child window with the parent. (this does not work with floating windows)</span><span>
+</span><span id="line-67"></span><span class="hs-comment">--</span><span>
+</span><span id="line-68"></span><span class="hs-comment">-- For more information on editing your handleEventHook and key bindings,</span><span>
+</span><span id="line-69"></span><span class="hs-comment">-- see &lt;https://xmonad.org/TUTORIAL.html the tutorial&gt; and &quot;XMonad.Doc.Extending&quot;.</span><span>
+</span><span id="line-70"></span><span>
+</span><span id="line-71"></span><span class="hs-comment">-- | Run @action@ iff both parent- and child queries match and the child</span><span>
+</span><span id="line-72"></span><span class="hs-comment">-- is a child by PID.</span><span>
+</span><span id="line-73"></span><span class="hs-comment">--</span><span>
+</span><span id="line-74"></span><span class="hs-comment">-- A 'MapRequestEvent' is called right before a window gets opened. We</span><span>
+</span><span id="line-75"></span><span class="hs-comment">-- intercept that call to possibly open the window ourselves, swapping</span><span>
+</span><span id="line-76"></span><span class="hs-comment">-- out it's parent processes window for the new window in the stack.</span><span>
+</span><span id="line-77"></span><span class="annot"><a href="XMonad.Hooks.WindowSwallowing.html#handleMapRequestEvent"><span class="hs-identifier hs-type">handleMapRequestEvent</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Query</span></span><span> </span><span class="annot"><span class="hs-identifier hs-type">Bool</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Query</span></span><span> </span><span class="annot"><span class="hs-identifier hs-type">Bool</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Window</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">Window</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">X</span></span><span> </span><span class="hs-special">(</span><span class="hs-special">)</span><span class="hs-special">)</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">X</span></span><span> </span><span class="hs-special">(</span><span class="hs-special">)</span><span>
+</span><span id="line-78"></span><span id="handleMapRequestEvent"><span class="annot"><span class="annottext">handleMapRequestEvent :: Query Bool -&gt; Query Bool -&gt; Window -&gt; (Window -&gt; X ()) -&gt; X ()
+</span><a href="XMonad.Hooks.WindowSwallowing.html#handleMapRequestEvent"><span class="hs-identifier hs-var hs-var">handleMapRequestEvent</span></a></span></span><span> </span><span id="local-6989586621679494767"><span class="annot"><span class="annottext">Query Bool
+</span><a href="#local-6989586621679494767"><span class="hs-identifier hs-var">parentQ</span></a></span></span><span> </span><span id="local-6989586621679494766"><span class="annot"><span class="annottext">Query Bool
+</span><a href="#local-6989586621679494766"><span class="hs-identifier hs-var">childQ</span></a></span></span><span> </span><span id="local-6989586621679494765"><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679494765"><span class="hs-identifier hs-var">childWindow</span></a></span></span><span> </span><span id="local-6989586621679494764"><span class="annot"><span class="annottext">Window -&gt; X ()
+</span><a href="#local-6989586621679494764"><span class="hs-identifier hs-var">action</span></a></span></span><span> </span><span class="hs-glyph">=</span><span>
+</span><span id="line-79"></span><span>  </span><span class="hs-comment">-- For a window to be opened from within another window, that other window</span><span>
+</span><span id="line-80"></span><span>  </span><span class="hs-comment">-- must be focused. Thus the parent window that would be swallowed has to be</span><span>
+</span><span id="line-81"></span><span>  </span><span class="hs-comment">-- the currently focused window.</span><span>
+</span><span id="line-82"></span><span>  </span><span class="annot"><span class="annottext">(Window -&gt; X ()) -&gt; X ()
+</span><span class="hs-identifier hs-var">withFocused</span></span><span> </span><span class="annot"><span class="annottext">forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="hs-glyph">\</span><span id="local-6989586621679494762"><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679494762"><span class="hs-identifier hs-var">parentWindow</span></a></span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-83"></span><span>    </span><span class="hs-comment">-- First verify that both windows match the given queries</span><span>
+</span><span id="line-84"></span><span>    </span><span id="local-6989586621679494761"><span class="annot"><span class="annottext">Bool
+</span><a href="#local-6989586621679494761"><span class="hs-identifier hs-var">parentMatches</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">forall a. Query a -&gt; Window -&gt; X a
+</span><span class="hs-identifier hs-var">runQuery</span></span><span> </span><span class="annot"><span class="annottext">Query Bool
+</span><a href="#local-6989586621679494767"><span class="hs-identifier hs-var">parentQ</span></a></span><span> </span><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679494762"><span class="hs-identifier hs-var">parentWindow</span></a></span><span>
+</span><span id="line-85"></span><span>    </span><span id="local-6989586621679494759"><span class="annot"><span class="annottext">Bool
+</span><a href="#local-6989586621679494759"><span class="hs-identifier hs-var">childMatches</span></a></span></span><span>  </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">forall a. Query a -&gt; Window -&gt; X a
+</span><span class="hs-identifier hs-var">runQuery</span></span><span> </span><span class="annot"><span class="annottext">Query Bool
+</span><a href="#local-6989586621679494766"><span class="hs-identifier hs-var">childQ</span></a></span><span> </span><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679494765"><span class="hs-identifier hs-var">childWindow</span></a></span><span>
+</span><span id="line-86"></span><span>    </span><span class="annot"><span class="annottext">forall (f :: * -&gt; *). Applicative f =&gt; Bool -&gt; f () -&gt; f ()
+</span><span class="hs-identifier hs-var">when</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Bool
+</span><a href="#local-6989586621679494761"><span class="hs-identifier hs-var">parentMatches</span></a></span><span> </span><span class="annot"><span class="annottext">Bool -&gt; Bool -&gt; Bool
+</span><span class="hs-operator hs-var">&amp;&amp;</span></span><span> </span><span class="annot"><span class="annottext">Bool
+</span><a href="#local-6989586621679494759"><span class="hs-identifier hs-var">childMatches</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-87"></span><span>      </span><span class="hs-comment">-- read the windows _NET_WM_PID properties</span><span>
+</span><span id="line-88"></span><span>      </span><span id="local-6989586621679494756"><span class="annot"><span class="annottext">Maybe [CLong]
+</span><a href="#local-6989586621679494756"><span class="hs-identifier hs-var">childWindowPid</span></a></span></span><span>  </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">String -&gt; Window -&gt; X (Maybe [CLong])
+</span><a href="XMonad.Util.WindowProperties.html#getProp32s"><span class="hs-identifier hs-var">getProp32s</span></a></span><span> </span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot;_NET_WM_PID&quot;</span></span><span> </span><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679494765"><span class="hs-identifier hs-var">childWindow</span></a></span><span>
+</span><span id="line-89"></span><span>      </span><span id="local-6989586621679494754"><span class="annot"><span class="annottext">Maybe [CLong]
+</span><a href="#local-6989586621679494754"><span class="hs-identifier hs-var">parentWindowPid</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">String -&gt; Window -&gt; X (Maybe [CLong])
+</span><a href="XMonad.Util.WindowProperties.html#getProp32s"><span class="hs-identifier hs-var">getProp32s</span></a></span><span> </span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot;_NET_WM_PID&quot;</span></span><span> </span><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679494762"><span class="hs-identifier hs-var">parentWindow</span></a></span><span>
+</span><span id="line-90"></span><span>      </span><span class="hs-keyword">case</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Maybe [CLong]
+</span><a href="#local-6989586621679494754"><span class="hs-identifier hs-var">parentWindowPid</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">Maybe [CLong]
+</span><a href="#local-6989586621679494756"><span class="hs-identifier hs-var">childWindowPid</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-keyword">of</span><span>
+</span><span id="line-91"></span><span>        </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">Just</span></span><span> </span><span class="hs-special">(</span><span id="local-6989586621679494753"><span class="annot"><span class="annottext">CLong
+</span><a href="#local-6989586621679494753"><span class="hs-identifier hs-var">parentPid</span></a></span></span><span> </span><span class="annot"><span class="hs-glyph hs-type">:</span></span><span> </span><span class="annot"><span class="annottext">[CLong]
+</span><span class="hs-identifier">_</span></span><span class="hs-special">)</span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Just</span></span><span> </span><span class="hs-special">(</span><span id="local-6989586621679494752"><span class="annot"><span class="annottext">CLong
+</span><a href="#local-6989586621679494752"><span class="hs-identifier hs-var">childPid</span></a></span></span><span> </span><span class="annot"><span class="hs-glyph hs-type">:</span></span><span> </span><span class="annot"><span class="annottext">[CLong]
+</span><span class="hs-identifier">_</span></span><span class="hs-special">)</span><span class="hs-special">)</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-92"></span><span>          </span><span class="hs-comment">-- check if the new window is a child process of the last focused window</span><span>
+</span><span id="line-93"></span><span>          </span><span class="hs-comment">-- using the process ids.</span><span>
+</span><span id="line-94"></span><span>          </span><span id="local-6989586621679494751"><span class="annot"><span class="annottext">Bool
+</span><a href="#local-6989586621679494751"><span class="hs-identifier hs-var">isChild</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">forall (m :: * -&gt; *) a. MonadIO m =&gt; IO a -&gt; m a
+</span><span class="hs-identifier hs-var">liftIO</span></span><span> </span><span class="annot"><span class="annottext">forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">forall a b. (Integral a, Num b) =&gt; a -&gt; b
+</span><a href="XMonad.Prelude.html#fi"><span class="hs-identifier hs-var">fi</span></a></span><span> </span><span class="annot"><span class="annottext">CLong
+</span><a href="#local-6989586621679494752"><span class="hs-identifier hs-var">childPid</span></a></span><span> </span><span class="annot"><span class="annottext">ProcessID -&gt; ProcessID -&gt; IO Bool
+</span><a href="XMonad.Hooks.WindowSwallowing.html#isChildOf"><span class="hs-operator hs-var">`isChildOf`</span></a></span><span> </span><span class="annot"><span class="annottext">forall a b. (Integral a, Num b) =&gt; a -&gt; b
+</span><a href="XMonad.Prelude.html#fi"><span class="hs-identifier hs-var">fi</span></a></span><span> </span><span class="annot"><span class="annottext">CLong
+</span><a href="#local-6989586621679494753"><span class="hs-identifier hs-var">parentPid</span></a></span><span>
+</span><span id="line-95"></span><span>          </span><span class="annot"><span class="annottext">forall (f :: * -&gt; *). Applicative f =&gt; Bool -&gt; f () -&gt; f ()
+</span><span class="hs-identifier hs-var">when</span></span><span> </span><span class="annot"><span class="annottext">Bool
+</span><a href="#local-6989586621679494751"><span class="hs-identifier hs-var">isChild</span></a></span><span> </span><span class="annot"><span class="annottext">forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-96"></span><span>            </span><span class="annot"><span class="annottext">Window -&gt; X ()
+</span><a href="#local-6989586621679494764"><span class="hs-identifier hs-var">action</span></a></span><span> </span><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679494762"><span class="hs-identifier hs-var">parentWindow</span></a></span><span>
+</span><span id="line-97"></span><span>        </span><span class="annot"><span class="annottext">(Maybe [CLong], Maybe [CLong])
+</span><span class="hs-identifier">_</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">forall (m :: * -&gt; *) a. Monad m =&gt; a -&gt; m a
+</span><span class="hs-identifier hs-var">return</span></span><span> </span><span class="hs-special">(</span><span class="hs-special">)</span><span>
+</span><span id="line-98"></span><span>      </span><span class="annot"><span class="annottext">forall (m :: * -&gt; *) a. Monad m =&gt; a -&gt; m a
+</span><span class="hs-identifier hs-var">return</span></span><span> </span><span class="hs-special">(</span><span class="hs-special">)</span><span>
+</span><span id="line-99"></span><span>
+</span><span id="line-100"></span><span class="hs-comment">-- | handleEventHook that will merge child windows via</span><span>
+</span><span id="line-101"></span><span class="hs-comment">-- &quot;XMonad.Layout.SubLayouts&quot; when they are opened from another window.</span><span>
+</span><span id="line-102"></span><span class="annot"><a href="XMonad.Hooks.WindowSwallowing.html#swallowEventHookSub"><span class="hs-identifier hs-type">swallowEventHookSub</span></a></span><span>
+</span><span id="line-103"></span><span>  </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Query</span></span><span> </span><span class="annot"><span class="hs-identifier hs-type">Bool</span></span><span> </span><span class="hs-comment">-- ^ query the parent window has to match for window swallowing to occur.</span><span>
+</span><span id="line-104"></span><span>                </span><span class="hs-comment">--   Set this to @return True@ to run swallowing for every parent.</span><span>
+</span><span id="line-105"></span><span>  </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Query</span></span><span> </span><span class="annot"><span class="hs-identifier hs-type">Bool</span></span><span> </span><span class="hs-comment">-- ^ query the child window has to match for window swallowing to occur.</span><span>
+</span><span id="line-106"></span><span>                </span><span class="hs-comment">--   Set this to @return True@ to run swallowing for every child</span><span>
+</span><span id="line-107"></span><span>  </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Event</span></span><span>      </span><span class="hs-comment">-- ^ The event to handle.</span><span>
+</span><span id="line-108"></span><span>  </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">X</span></span><span> </span><span class="annot"><span class="hs-identifier hs-type">All</span></span><span>
+</span><span id="line-109"></span><span id="swallowEventHookSub"><span class="annot"><span class="annottext">swallowEventHookSub :: Query Bool -&gt; Query Bool -&gt; Event -&gt; X All
+</span><a href="XMonad.Hooks.WindowSwallowing.html#swallowEventHookSub"><span class="hs-identifier hs-var hs-var">swallowEventHookSub</span></a></span></span><span> </span><span id="local-6989586621679494747"><span class="annot"><span class="annottext">Query Bool
+</span><a href="#local-6989586621679494747"><span class="hs-identifier hs-var">parentQ</span></a></span></span><span> </span><span id="local-6989586621679494746"><span class="annot"><span class="annottext">Query Bool
+</span><a href="#local-6989586621679494746"><span class="hs-identifier hs-var">childQ</span></a></span></span><span> </span><span id="local-6989586621679494745"><span class="annot"><span class="annottext">Event
+</span><a href="#local-6989586621679494745"><span class="hs-identifier hs-var">event</span></a></span></span><span> </span><span class="hs-glyph">=</span><span>
+</span><span id="line-110"></span><span>  </span><span class="annot"><span class="annottext">Bool -&gt; All
+</span><span class="hs-identifier hs-var">All</span></span><span> </span><span class="annot"><span class="annottext">Bool
+</span><span class="hs-identifier hs-var">True</span></span><span> </span><span class="annot"><span class="annottext">forall (f :: * -&gt; *) a b. Functor f =&gt; a -&gt; f b -&gt; f a
+</span><span class="hs-operator hs-var">&lt;$</span></span><span> </span><span class="hs-keyword">case</span><span> </span><span class="annot"><span class="annottext">Event
+</span><a href="#local-6989586621679494745"><span class="hs-identifier hs-var">event</span></a></span><span> </span><span class="hs-keyword">of</span><span>
+</span><span id="line-111"></span><span>    </span><span class="annot"><span class="hs-identifier hs-type">MapRequestEvent</span></span><span class="hs-special">{</span><span class="annot"><span class="annottext">ev_window :: Event -&gt; Window
+</span><span class="hs-identifier hs-var">ev_window</span></span><span class="hs-glyph">=</span><span id="local-6989586621679494740"><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679494740"><span class="hs-identifier hs-var">childWindow</span></a></span></span><span class="hs-special">}</span><span> </span><span class="hs-glyph">-&gt;</span><span>
+</span><span id="line-112"></span><span>      </span><span class="annot"><span class="annottext">Query Bool -&gt; Query Bool -&gt; Window -&gt; (Window -&gt; X ()) -&gt; X ()
+</span><a href="XMonad.Hooks.WindowSwallowing.html#handleMapRequestEvent"><span class="hs-identifier hs-var">handleMapRequestEvent</span></a></span><span> </span><span class="annot"><span class="annottext">Query Bool
+</span><a href="#local-6989586621679494747"><span class="hs-identifier hs-var">parentQ</span></a></span><span> </span><span class="annot"><span class="annottext">Query Bool
+</span><a href="#local-6989586621679494746"><span class="hs-identifier hs-var">childQ</span></a></span><span> </span><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679494740"><span class="hs-identifier hs-var">childWindow</span></a></span><span> </span><span class="annot"><span class="annottext">forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="hs-glyph">\</span><span id="local-6989586621679494739"><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679494739"><span class="hs-identifier hs-var">parentWindow</span></a></span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-113"></span><span>        </span><span class="annot"><span class="annottext">Window -&gt; X ()
+</span><span class="hs-identifier hs-var">manage</span></span><span> </span><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679494740"><span class="hs-identifier hs-var">childWindow</span></a></span><span>
+</span><span id="line-114"></span><span>        </span><span class="annot"><span class="annottext">forall a. Message a =&gt; a -&gt; X ()
+</span><span class="hs-identifier hs-var">sendMessage</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">forall a. a -&gt; a -&gt; GroupMsg a
+</span><a href="XMonad.Layout.SubLayouts.html#Merge"><span class="hs-identifier hs-var">Merge</span></a></span><span> </span><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679494739"><span class="hs-identifier hs-var">parentWindow</span></a></span><span> </span><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679494740"><span class="hs-identifier hs-var">childWindow</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-115"></span><span>    </span><span class="annot"><span class="annottext">Event
+</span><span class="hs-identifier">_</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">forall (f :: * -&gt; *) a. Applicative f =&gt; a -&gt; f a
+</span><span class="hs-identifier hs-var">pure</span></span><span> </span><span class="hs-special">(</span><span class="hs-special">)</span><span>
+</span><span id="line-116"></span><span>
+</span><span id="line-117"></span><span class="hs-comment">-- | handleEventHook that will swallow child windows when they are</span><span>
+</span><span id="line-118"></span><span class="hs-comment">-- opened from another window.</span><span>
+</span><span id="line-119"></span><span class="annot"><a href="XMonad.Hooks.WindowSwallowing.html#swallowEventHook"><span class="hs-identifier hs-type">swallowEventHook</span></a></span><span>
+</span><span id="line-120"></span><span>  </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Query</span></span><span> </span><span class="annot"><span class="hs-identifier hs-type">Bool</span></span><span> </span><span class="hs-comment">-- ^ query the parent window has to match for window swallowing to occur.</span><span>
+</span><span id="line-121"></span><span>                </span><span class="hs-comment">--   Set this to @return True@ to run swallowing for every parent.</span><span>
+</span><span id="line-122"></span><span>  </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Query</span></span><span> </span><span class="annot"><span class="hs-identifier hs-type">Bool</span></span><span> </span><span class="hs-comment">-- ^ query the child window has to match for window swallowing to occur.</span><span>
+</span><span id="line-123"></span><span>                </span><span class="hs-comment">--   Set this to @return True@ to run swallowing for every child</span><span>
+</span><span id="line-124"></span><span>  </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Event</span></span><span>      </span><span class="hs-comment">-- ^ The event to handle.</span><span>
+</span><span id="line-125"></span><span>  </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">X</span></span><span> </span><span class="annot"><span class="hs-identifier hs-type">All</span></span><span>
+</span><span id="line-126"></span><span id="swallowEventHook"><span class="annot"><span class="annottext">swallowEventHook :: Query Bool -&gt; Query Bool -&gt; Event -&gt; X All
+</span><a href="XMonad.Hooks.WindowSwallowing.html#swallowEventHook"><span class="hs-identifier hs-var hs-var">swallowEventHook</span></a></span></span><span> </span><span id="local-6989586621679494735"><span class="annot"><span class="annottext">Query Bool
+</span><a href="#local-6989586621679494735"><span class="hs-identifier hs-var">parentQ</span></a></span></span><span> </span><span id="local-6989586621679494734"><span class="annot"><span class="annottext">Query Bool
+</span><a href="#local-6989586621679494734"><span class="hs-identifier hs-var">childQ</span></a></span></span><span> </span><span id="local-6989586621679494733"><span class="annot"><span class="annottext">Event
+</span><a href="#local-6989586621679494733"><span class="hs-identifier hs-var">event</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-127"></span><span>  </span><span class="hs-keyword">case</span><span> </span><span class="annot"><span class="annottext">Event
+</span><a href="#local-6989586621679494733"><span class="hs-identifier hs-var">event</span></a></span><span> </span><span class="hs-keyword">of</span><span>
+</span><span id="line-128"></span><span>    </span><span class="annot"><span class="hs-identifier hs-type">MapRequestEvent</span></span><span class="hs-special">{</span><span class="annot"><span class="annottext">ev_window :: Event -&gt; Window
+</span><span class="hs-identifier hs-var">ev_window</span></span><span class="hs-glyph">=</span><span id="local-6989586621679494732"><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679494732"><span class="hs-identifier hs-var">childWindow</span></a></span></span><span class="hs-special">}</span><span> </span><span class="hs-glyph">-&gt;</span><span>
+</span><span id="line-129"></span><span>      </span><span class="annot"><span class="annottext">Query Bool -&gt; Query Bool -&gt; Window -&gt; (Window -&gt; X ()) -&gt; X ()
+</span><a href="XMonad.Hooks.WindowSwallowing.html#handleMapRequestEvent"><span class="hs-identifier hs-var">handleMapRequestEvent</span></a></span><span> </span><span class="annot"><span class="annottext">Query Bool
+</span><a href="#local-6989586621679494735"><span class="hs-identifier hs-var">parentQ</span></a></span><span> </span><span class="annot"><span class="annottext">Query Bool
+</span><a href="#local-6989586621679494734"><span class="hs-identifier hs-var">childQ</span></a></span><span> </span><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679494732"><span class="hs-identifier hs-var">childWindow</span></a></span><span> </span><span class="annot"><span class="annottext">forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="hs-glyph">\</span><span id="local-6989586621679494731"><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679494731"><span class="hs-identifier hs-var">parentWindow</span></a></span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-130"></span><span>        </span><span class="hs-comment">-- We set the newly opened window as the focused window, replacing the parent window.</span><span>
+</span><span id="line-131"></span><span>        </span><span class="hs-comment">-- If the parent window was floating, we transfer that data to the child,</span><span>
+</span><span id="line-132"></span><span>        </span><span class="hs-comment">-- such that it shows up at the same position, with the same dimensions.</span><span>
+</span><span id="line-133"></span><span>        </span><span class="annot"><span class="annottext">(WindowSet -&gt; WindowSet) -&gt; X ()
+</span><span class="hs-identifier hs-var">windows</span></span><span>
+</span><span id="line-134"></span><span>          </span><span class="hs-special">(</span><span> </span><span class="annot"><span class="annottext">forall a i l s sd.
+(Stack a -&gt; Stack a) -&gt; StackSet i l a s sd -&gt; StackSet i l a s sd
+</span><span class="hs-identifier hs-var">W.modify'</span></span><span> </span><span class="hs-special">(</span><span class="hs-glyph">\</span><span id="local-6989586621679494728"><span class="annot"><span class="annottext">Stack Window
+</span><a href="#local-6989586621679494728"><span class="hs-identifier hs-var">x</span></a></span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">Stack Window
+</span><a href="#local-6989586621679494728"><span class="hs-identifier hs-var">x</span></a></span><span> </span><span class="hs-special">{</span><span> </span><span class="annot"><span class="annottext">focus :: Window
+</span><span class="hs-identifier hs-var">W.focus</span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679494732"><span class="hs-identifier hs-var">childWindow</span></a></span><span> </span><span class="hs-special">}</span><span class="hs-special">)</span><span>
+</span><span id="line-135"></span><span>          </span><span class="annot"><span class="annottext">forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">forall a i l s sd.
+Ord a =&gt;
+a -&gt; a -&gt; StackSet i l a s sd -&gt; StackSet i l a s sd
+</span><a href="XMonad.Hooks.WindowSwallowing.html#moveFloatingState"><span class="hs-identifier hs-var">moveFloatingState</span></a></span><span> </span><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679494731"><span class="hs-identifier hs-var">parentWindow</span></a></span><span> </span><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679494732"><span class="hs-identifier hs-var">childWindow</span></a></span><span>
+</span><span id="line-136"></span><span>          </span><span class="hs-special">)</span><span>
+</span><span id="line-137"></span><span>        </span><span class="annot"><span class="annottext">forall a (m :: * -&gt; *).
+(ExtensionClass a, XLike m) =&gt;
+(a -&gt; a) -&gt; m ()
+</span><a href="XMonad.Util.ExtensibleState.html#modify"><span class="hs-identifier hs-var">XS.modify</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Window -&gt; Window -&gt; SwallowingState -&gt; SwallowingState
+</span><a href="XMonad.Hooks.WindowSwallowing.html#addSwallowedParent"><span class="hs-identifier hs-var">addSwallowedParent</span></a></span><span> </span><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679494731"><span class="hs-identifier hs-var">parentWindow</span></a></span><span> </span><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679494732"><span class="hs-identifier hs-var">childWindow</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-138"></span><span>
+</span><span id="line-139"></span><span>    </span><span class="hs-comment">-- This is called in many circumstances, most notably for us:</span><span>
+</span><span id="line-140"></span><span>    </span><span class="hs-comment">-- right before a window gets closed. We store the current</span><span>
+</span><span id="line-141"></span><span>    </span><span class="hs-comment">-- state of the window stack here, such that we know where the</span><span>
+</span><span id="line-142"></span><span>    </span><span class="hs-comment">-- child window was on the screen when restoring the swallowed parent process.</span><span>
+</span><span id="line-143"></span><span>    </span><span class="annot"><span class="hs-identifier hs-type">ConfigureEvent</span></span><span class="hs-special">{</span><span class="hs-special">}</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">forall a. (WindowSet -&gt; X a) -&gt; X a
+</span><span class="hs-identifier hs-var">withWindowSet</span></span><span> </span><span class="annot"><span class="annottext">forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="hs-glyph">\</span><span id="local-6989586621679494720"><span class="annot"><span class="annottext">WindowSet
+</span><a href="#local-6989586621679494720"><span class="hs-identifier hs-var">ws</span></a></span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-144"></span><span>      </span><span class="annot"><span class="annottext">forall a (m :: * -&gt; *).
+(ExtensionClass a, XLike m) =&gt;
+(a -&gt; a) -&gt; m ()
+</span><a href="XMonad.Util.ExtensibleState.html#modify"><span class="hs-identifier hs-var">XS.modify</span></a></span><span> </span><span class="annot"><span class="annottext">forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">Maybe (Stack Window) -&gt; SwallowingState -&gt; SwallowingState
+</span><a href="XMonad.Hooks.WindowSwallowing.html#setStackBeforeWindowClosing"><span class="hs-identifier hs-var">setStackBeforeWindowClosing</span></a></span><span> </span><span class="annot"><span class="annottext">forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">forall i l a sid sd. StackSet i l a sid sd -&gt; Maybe (Stack a)
+</span><a href="XMonad.Hooks.WindowSwallowing.html#currentStack"><span class="hs-identifier hs-var">currentStack</span></a></span><span> </span><span class="annot"><span class="annottext">forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">WindowSet
+</span><a href="#local-6989586621679494720"><span class="hs-identifier hs-var">ws</span></a></span><span>
+</span><span id="line-145"></span><span>      </span><span class="annot"><span class="annottext">forall a (m :: * -&gt; *).
+(ExtensionClass a, XLike m) =&gt;
+(a -&gt; a) -&gt; m ()
+</span><a href="XMonad.Util.ExtensibleState.html#modify"><span class="hs-identifier hs-var">XS.modify</span></a></span><span> </span><span class="annot"><span class="annottext">forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">Map Window RationalRect -&gt; SwallowingState -&gt; SwallowingState
+</span><a href="XMonad.Hooks.WindowSwallowing.html#setFloatingBeforeWindowClosing"><span class="hs-identifier hs-var">setFloatingBeforeWindowClosing</span></a></span><span> </span><span class="annot"><span class="annottext">forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">forall i l a sid sd. StackSet i l a sid sd -&gt; Map a RationalRect
+</span><span class="hs-identifier hs-var">W.floating</span></span><span> </span><span class="annot"><span class="annottext">forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">WindowSet
+</span><a href="#local-6989586621679494720"><span class="hs-identifier hs-var">ws</span></a></span><span>
+</span><span id="line-146"></span><span>
+</span><span id="line-147"></span><span>    </span><span class="hs-comment">-- This is called right after any window closes.</span><span>
+</span><span id="line-148"></span><span>    </span><span class="annot"><span class="hs-identifier hs-type">DestroyWindowEvent</span></span><span> </span><span class="hs-special">{</span><span> </span><span class="annot"><span class="annottext">ev_event :: Event -&gt; Window
+</span><span class="hs-identifier hs-var">ev_event</span></span><span> </span><span class="hs-glyph">=</span><span> </span><span id="local-6989586621679494713"><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679494713"><span class="hs-identifier hs-var">eventId</span></a></span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">ev_window :: Event -&gt; Window
+</span><span class="hs-identifier hs-var">ev_window</span></span><span> </span><span class="hs-glyph">=</span><span> </span><span id="local-6989586621679494712"><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679494712"><span class="hs-identifier hs-var">childWindow</span></a></span></span><span> </span><span class="hs-special">}</span><span> </span><span class="hs-glyph">-&gt;</span><span>
+</span><span id="line-149"></span><span>      </span><span class="hs-comment">-- Because DestroyWindowEvent is emitted a lot more often then you think,</span><span>
+</span><span id="line-150"></span><span>      </span><span class="hs-comment">-- this check verifies that the event is /actually/ about closing a window.</span><span>
+</span><span id="line-151"></span><span>      </span><span class="annot"><span class="annottext">forall (f :: * -&gt; *). Applicative f =&gt; Bool -&gt; f () -&gt; f ()
+</span><span class="hs-identifier hs-var">when</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679494713"><span class="hs-identifier hs-var">eventId</span></a></span><span> </span><span class="annot"><span class="annottext">forall a. Eq a =&gt; a -&gt; a -&gt; Bool
+</span><span class="hs-operator hs-var">==</span></span><span> </span><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679494712"><span class="hs-identifier hs-var">childWindow</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-152"></span><span>        </span><span class="hs-comment">-- we get some data from the extensible state, most notably we ask for</span><span>
+</span><span id="line-153"></span><span>        </span><span class="hs-comment">-- the \&quot;parent\&quot; window of the now closed window.</span><span>
+</span><span id="line-154"></span><span>        </span><span id="local-6989586621679494711"><span class="annot"><span class="annottext">Maybe Window
+</span><a href="#local-6989586621679494711"><span class="hs-identifier hs-var">maybeSwallowedParent</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">forall a (m :: * -&gt; *) b.
+(ExtensionClass a, XLike m) =&gt;
+(a -&gt; b) -&gt; m b
+</span><a href="XMonad.Util.ExtensibleState.html#gets"><span class="hs-identifier hs-var">XS.gets</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Window -&gt; SwallowingState -&gt; Maybe Window
+</span><a href="XMonad.Hooks.WindowSwallowing.html#getSwallowedParent"><span class="hs-identifier hs-var">getSwallowedParent</span></a></span><span> </span><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679494712"><span class="hs-identifier hs-var">childWindow</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-155"></span><span>        </span><span id="local-6989586621679494708"><span class="annot"><span class="annottext">Maybe (Stack Window)
+</span><a href="#local-6989586621679494708"><span class="hs-identifier hs-var">maybeOldStack</span></a></span></span><span>        </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">forall a (m :: * -&gt; *) b.
+(ExtensionClass a, XLike m) =&gt;
+(a -&gt; b) -&gt; m b
+</span><a href="XMonad.Util.ExtensibleState.html#gets"><span class="hs-identifier hs-var">XS.gets</span></a></span><span> </span><span class="annot"><span class="annottext">SwallowingState -&gt; Maybe (Stack Window)
+</span><a href="XMonad.Hooks.WindowSwallowing.html#stackBeforeWindowClosing"><span class="hs-identifier hs-var">stackBeforeWindowClosing</span></a></span><span>
+</span><span id="line-156"></span><span>        </span><span id="local-6989586621679494706"><span class="annot"><span class="annottext">Map Window RationalRect
+</span><a href="#local-6989586621679494706"><span class="hs-identifier hs-var">oldFloating</span></a></span></span><span>          </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">forall a (m :: * -&gt; *) b.
+(ExtensionClass a, XLike m) =&gt;
+(a -&gt; b) -&gt; m b
+</span><a href="XMonad.Util.ExtensibleState.html#gets"><span class="hs-identifier hs-var">XS.gets</span></a></span><span> </span><span class="annot"><span class="annottext">SwallowingState -&gt; Map Window RationalRect
+</span><a href="XMonad.Hooks.WindowSwallowing.html#floatingBeforeClosing"><span class="hs-identifier hs-var">floatingBeforeClosing</span></a></span><span>
+</span><span id="line-157"></span><span>        </span><span class="hs-keyword">case</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Maybe Window
+</span><a href="#local-6989586621679494711"><span class="hs-identifier hs-var">maybeSwallowedParent</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">Maybe (Stack Window)
+</span><a href="#local-6989586621679494708"><span class="hs-identifier hs-var">maybeOldStack</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-keyword">of</span><span>
+</span><span id="line-158"></span><span>          </span><span class="hs-comment">-- If there actually is a corresponding swallowed parent window for this window,</span><span>
+</span><span id="line-159"></span><span>          </span><span class="hs-comment">-- we will try to restore it.</span><span>
+</span><span id="line-160"></span><span>          </span><span class="hs-comment">-- Because there are some cases where the stack-state is not stored correctly in the ConfigureEvent hook,</span><span>
+</span><span id="line-161"></span><span>          </span><span class="hs-comment">-- we have to first check if the stack-state is valid.</span><span>
+</span><span id="line-162"></span><span>          </span><span class="hs-comment">-- If it is, we can restore the parent exactly where the child window was before being closed.</span><span>
+</span><span id="line-163"></span><span>          </span><span class="hs-comment">-- If the stored stack-state is invalid however, we still restore the window</span><span>
+</span><span id="line-164"></span><span>          </span><span class="hs-comment">-- by just inserting it as the focused window in the stack.</span><span>
+</span><span id="line-165"></span><span>          </span><span class="hs-comment">--</span><span>
+</span><span id="line-166"></span><span>          </span><span class="hs-comment">-- After restoring, we remove the information about the swallowing from the state.</span><span>
+</span><span id="line-167"></span><span>          </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">Just</span></span><span> </span><span id="local-6989586621679494704"><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679494704"><span class="hs-identifier hs-var">parent</span></a></span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">Maybe (Stack Window)
+</span><span class="hs-identifier hs-var">Nothing</span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-168"></span><span>            </span><span class="annot"><span class="annottext">(WindowSet -&gt; WindowSet) -&gt; X ()
+</span><span class="hs-identifier hs-var">windows</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">forall a i l sid sd.
+a -&gt; StackSet i l a sid sd -&gt; StackSet i l a sid sd
+</span><a href="XMonad.Hooks.WindowSwallowing.html#insertIntoStack"><span class="hs-identifier hs-var">insertIntoStack</span></a></span><span> </span><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679494704"><span class="hs-identifier hs-var">parent</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-169"></span><span>            </span><span class="annot"><span class="annottext">Window -&gt; X ()
+</span><a href="#local-6989586621679494702"><span class="hs-identifier hs-var">deleteState</span></a></span><span> </span><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679494712"><span class="hs-identifier hs-var">childWindow</span></a></span><span>
+</span><span id="line-170"></span><span>          </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">Just</span></span><span> </span><span id="local-6989586621679494701"><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679494701"><span class="hs-identifier hs-var">parent</span></a></span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Just</span></span><span> </span><span id="local-6989586621679494700"><span class="annot"><span class="annottext">Stack Window
+</span><a href="#local-6989586621679494700"><span class="hs-identifier hs-var">oldStack</span></a></span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-171"></span><span>            </span><span id="local-6989586621679494699"><span class="annot"><span class="annottext">Bool
+</span><a href="#local-6989586621679494699"><span class="hs-identifier hs-var">stackStoredCorrectly</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-172"></span><span>              </span><span id="local-6989586621679494698"><span class="annot"><span class="annottext">Maybe (Stack Window)
+</span><a href="#local-6989586621679494698"><span class="hs-identifier hs-var">curStack</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">forall a. (WindowSet -&gt; X a) -&gt; X a
+</span><span class="hs-identifier hs-var">withWindowSet</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">forall (m :: * -&gt; *) a. Monad m =&gt; a -&gt; m a
+</span><span class="hs-identifier hs-var">return</span></span><span> </span><span class="annot"><span class="annottext">forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">forall i l a sid sd. StackSet i l a sid sd -&gt; Maybe (Stack a)
+</span><a href="XMonad.Hooks.WindowSwallowing.html#currentStack"><span class="hs-identifier hs-var">currentStack</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-173"></span><span>              </span><span class="hs-keyword">let</span><span> </span><span id="local-6989586621679494696"><span class="annot"><span class="annottext">oldLen :: Int
+</span><a href="#local-6989586621679494696"><span class="hs-identifier hs-var hs-var">oldLen</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">forall (t :: * -&gt; *) a. Foldable t =&gt; t a -&gt; Int
+</span><span class="hs-identifier hs-var">length</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">forall a. Stack a -&gt; [a]
+</span><span class="hs-identifier hs-var">W.integrate</span></span><span> </span><span class="annot"><span class="annottext">Stack Window
+</span><a href="#local-6989586621679494700"><span class="hs-identifier hs-var">oldStack</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-174"></span><span>              </span><span class="hs-keyword">let</span><span> </span><span id="local-6989586621679494692"><span class="annot"><span class="annottext">curLen :: Int
+</span><a href="#local-6989586621679494692"><span class="hs-identifier hs-var hs-var">curLen</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">forall (t :: * -&gt; *) a. Foldable t =&gt; t a -&gt; Int
+</span><span class="hs-identifier hs-var">length</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">forall a. Maybe (Stack a) -&gt; [a]
+</span><span class="hs-identifier hs-var">W.integrate'</span></span><span> </span><span class="annot"><span class="annottext">Maybe (Stack Window)
+</span><a href="#local-6989586621679494698"><span class="hs-identifier hs-var">curStack</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-175"></span><span>              </span><span class="annot"><span class="annottext">forall (m :: * -&gt; *) a. Monad m =&gt; a -&gt; m a
+</span><span class="hs-identifier hs-var">return</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Int
+</span><a href="#local-6989586621679494696"><span class="hs-identifier hs-var">oldLen</span></a></span><span> </span><span class="annot"><span class="annottext">forall a. Num a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-glyph hs-var">-</span></span><span> </span><span class="annot"><span class="annottext">Int
+</span><span class="hs-number">1</span></span><span> </span><span class="annot"><span class="annottext">forall a. Eq a =&gt; a -&gt; a -&gt; Bool
+</span><span class="hs-operator hs-var">==</span></span><span> </span><span class="annot"><span class="annottext">Int
+</span><a href="#local-6989586621679494692"><span class="hs-identifier hs-var">curLen</span></a></span><span> </span><span class="annot"><span class="annottext">Bool -&gt; Bool -&gt; Bool
+</span><span class="hs-operator hs-var">&amp;&amp;</span></span><span> </span><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679494712"><span class="hs-identifier hs-var">childWindow</span></a></span><span> </span><span class="annot"><span class="annottext">forall a. Eq a =&gt; a -&gt; a -&gt; Bool
+</span><span class="hs-operator hs-var">==</span></span><span> </span><span class="annot"><span class="annottext">forall a. Stack a -&gt; a
+</span><span class="hs-identifier hs-var">W.focus</span></span><span> </span><span class="annot"><span class="annottext">Stack Window
+</span><a href="#local-6989586621679494700"><span class="hs-identifier hs-var">oldStack</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-176"></span><span>
+</span><span id="line-177"></span><span>            </span><span class="hs-keyword">if</span><span> </span><span class="annot"><span class="annottext">Bool
+</span><a href="#local-6989586621679494699"><span class="hs-identifier hs-var">stackStoredCorrectly</span></a></span><span>
+</span><span id="line-178"></span><span>              </span><span class="hs-keyword">then</span><span> </span><span class="annot"><span class="annottext">(WindowSet -&gt; WindowSet) -&gt; X ()
+</span><span class="hs-identifier hs-var">windows</span></span><span>
+</span><span id="line-179"></span><span>                </span><span class="hs-special">(</span><span class="hs-glyph">\</span><span id="local-6989586621679494690"><span class="annot"><span class="annottext">WindowSet
+</span><a href="#local-6989586621679494690"><span class="hs-identifier hs-var">ws</span></a></span></span><span> </span><span class="hs-glyph">-&gt;</span><span>
+</span><span id="line-180"></span><span>                  </span><span class="annot"><span class="annottext">forall a i l sid sd.
+(Maybe (Stack a) -&gt; Maybe (Stack a))
+-&gt; StackSet i l a sid sd -&gt; StackSet i l a sid sd
+</span><a href="XMonad.Hooks.WindowSwallowing.html#updateCurrentStack"><span class="hs-identifier hs-var">updateCurrentStack</span></a></span><span>
+</span><span id="line-181"></span><span>                      </span><span class="hs-special">(</span><span class="annot"><span class="annottext">forall a b. a -&gt; b -&gt; a
+</span><span class="hs-identifier hs-var">const</span></span><span> </span><span class="annot"><span class="annottext">forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">forall a. a -&gt; Maybe a
+</span><span class="hs-identifier hs-var">Just</span></span><span> </span><span class="annot"><span class="annottext">forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">Stack Window
+</span><a href="#local-6989586621679494700"><span class="hs-identifier hs-var">oldStack</span></a></span><span> </span><span class="hs-special">{</span><span> </span><span class="annot"><span class="annottext">focus :: Window
+</span><span class="hs-identifier hs-var">W.focus</span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679494701"><span class="hs-identifier hs-var">parent</span></a></span><span> </span><span class="hs-special">}</span><span class="hs-special">)</span><span>
+</span><span id="line-182"></span><span>                    </span><span class="annot"><span class="annottext">forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">forall a i l s sd.
+Ord a =&gt;
+a -&gt; a -&gt; StackSet i l a s sd -&gt; StackSet i l a s sd
+</span><a href="XMonad.Hooks.WindowSwallowing.html#moveFloatingState"><span class="hs-identifier hs-var">moveFloatingState</span></a></span><span> </span><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679494712"><span class="hs-identifier hs-var">childWindow</span></a></span><span> </span><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679494701"><span class="hs-identifier hs-var">parent</span></a></span><span>
+</span><span id="line-183"></span><span>                    </span><span class="annot"><span class="annottext">forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">WindowSet
+</span><a href="#local-6989586621679494690"><span class="hs-identifier hs-var">ws</span></a></span><span> </span><span class="hs-special">{</span><span> </span><span class="annot"><span class="annottext">floating :: Map Window RationalRect
+</span><span class="hs-identifier hs-var">W.floating</span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Map Window RationalRect
+</span><a href="#local-6989586621679494706"><span class="hs-identifier hs-var">oldFloating</span></a></span><span> </span><span class="hs-special">}</span><span>
+</span><span id="line-184"></span><span>                </span><span class="hs-special">)</span><span>
+</span><span id="line-185"></span><span>              </span><span class="hs-keyword">else</span><span> </span><span class="annot"><span class="annottext">(WindowSet -&gt; WindowSet) -&gt; X ()
+</span><span class="hs-identifier hs-var">windows</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">forall a i l sid sd.
+a -&gt; StackSet i l a sid sd -&gt; StackSet i l a sid sd
+</span><a href="XMonad.Hooks.WindowSwallowing.html#insertIntoStack"><span class="hs-identifier hs-var">insertIntoStack</span></a></span><span> </span><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679494701"><span class="hs-identifier hs-var">parent</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-186"></span><span>            </span><span class="annot"><span class="annottext">Window -&gt; X ()
+</span><a href="#local-6989586621679494702"><span class="hs-identifier hs-var">deleteState</span></a></span><span> </span><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679494712"><span class="hs-identifier hs-var">childWindow</span></a></span><span>
+</span><span id="line-187"></span><span>          </span><span class="annot"><span class="annottext">(Maybe Window, Maybe (Stack Window))
+</span><span class="hs-identifier">_</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">forall (m :: * -&gt; *) a. Monad m =&gt; a -&gt; m a
+</span><span class="hs-identifier hs-var">return</span></span><span> </span><span class="hs-special">(</span><span class="hs-special">)</span><span>
+</span><span id="line-188"></span><span>    </span><span class="annot"><span class="annottext">Event
+</span><span class="hs-identifier">_</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">forall (m :: * -&gt; *) a. Monad m =&gt; a -&gt; m a
+</span><span class="hs-identifier hs-var">return</span></span><span> </span><span class="hs-special">(</span><span class="hs-special">)</span><span>
+</span><span id="line-189"></span><span>  </span><span class="annot"><span class="annottext">forall (m :: * -&gt; *) a. Monad m =&gt; a -&gt; m a
+</span><span class="hs-identifier hs-var">return</span></span><span> </span><span class="annot"><span class="annottext">forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">Bool -&gt; All
+</span><span class="hs-identifier hs-var">All</span></span><span> </span><span class="annot"><span class="annottext">Bool
+</span><span class="hs-identifier hs-var">True</span></span><span>
+</span><span id="line-190"></span><span> </span><span class="hs-keyword">where</span><span>
+</span><span id="line-191"></span><span>  </span><span class="annot"><a href="#local-6989586621679494702"><span class="hs-identifier hs-type">deleteState</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Window</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">X</span></span><span> </span><span class="hs-special">(</span><span class="hs-special">)</span><span>
+</span><span id="line-192"></span><span>  </span><span id="local-6989586621679494702"><span class="annot"><span class="annottext">deleteState :: Window -&gt; X ()
+</span><a href="#local-6989586621679494702"><span class="hs-identifier hs-var hs-var">deleteState</span></a></span></span><span> </span><span id="local-6989586621679494687"><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679494687"><span class="hs-identifier hs-var">childWindow</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-193"></span><span>    </span><span class="annot"><span class="annottext">forall a (m :: * -&gt; *).
+(ExtensionClass a, XLike m) =&gt;
+(a -&gt; a) -&gt; m ()
+</span><a href="XMonad.Util.ExtensibleState.html#modify"><span class="hs-identifier hs-var">XS.modify</span></a></span><span> </span><span class="annot"><span class="annottext">forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">Window -&gt; SwallowingState -&gt; SwallowingState
+</span><a href="XMonad.Hooks.WindowSwallowing.html#removeSwallowed"><span class="hs-identifier hs-var">removeSwallowed</span></a></span><span> </span><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679494687"><span class="hs-identifier hs-var">childWindow</span></a></span><span>
+</span><span id="line-194"></span><span>    </span><span class="annot"><span class="annottext">forall a (m :: * -&gt; *).
+(ExtensionClass a, XLike m) =&gt;
+(a -&gt; a) -&gt; m ()
+</span><a href="XMonad.Util.ExtensibleState.html#modify"><span class="hs-identifier hs-var">XS.modify</span></a></span><span> </span><span class="annot"><span class="annottext">forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">Maybe (Stack Window) -&gt; SwallowingState -&gt; SwallowingState
+</span><a href="XMonad.Hooks.WindowSwallowing.html#setStackBeforeWindowClosing"><span class="hs-identifier hs-var">setStackBeforeWindowClosing</span></a></span><span> </span><span class="annot"><span class="annottext">forall a. Maybe a
+</span><span class="hs-identifier hs-var">Nothing</span></span><span>
+</span><span id="line-195"></span><span>
+</span><span id="line-196"></span><span class="hs-comment">-- | insert a window as focused into the current stack, moving the previously focused window down the stack</span><span>
+</span><span id="line-197"></span><span id="local-6989586621679494928"><span id="local-6989586621679494929"><span id="local-6989586621679494930"><span id="local-6989586621679494931"><span id="local-6989586621679494932"><span class="annot"><a href="XMonad.Hooks.WindowSwallowing.html#insertIntoStack"><span class="hs-identifier hs-type">insertIntoStack</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><a href="#local-6989586621679494932"><span class="hs-identifier hs-type">a</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">W.StackSet</span></span><span> </span><span class="annot"><a href="#local-6989586621679494931"><span class="hs-identifier hs-type">i</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679494930"><span class="hs-identifier hs-type">l</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679494932"><span class="hs-identifier hs-type">a</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679494929"><span class="hs-identifier hs-type">sid</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679494928"><span class="hs-identifier hs-type">sd</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">W.StackSet</span></span><span> </span><span class="annot"><a href="#local-6989586621679494931"><span class="hs-identifier hs-type">i</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679494930"><span class="hs-identifier hs-type">l</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679494932"><span class="hs-identifier hs-type">a</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679494929"><span class="hs-identifier hs-type">sid</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679494928"><span class="hs-identifier hs-type">sd</span></a></span></span></span></span></span></span><span>
+</span><span id="line-198"></span><span id="insertIntoStack"><span class="annot"><span class="annottext">insertIntoStack :: forall a i l sid sd.
+a -&gt; StackSet i l a sid sd -&gt; StackSet i l a sid sd
+</span><a href="XMonad.Hooks.WindowSwallowing.html#insertIntoStack"><span class="hs-identifier hs-var hs-var">insertIntoStack</span></a></span></span><span> </span><span id="local-6989586621679494685"><span class="annot"><span class="annottext">a
+</span><a href="#local-6989586621679494685"><span class="hs-identifier hs-var">win</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">forall a i l s sd.
+Maybe (Stack a)
+-&gt; (Stack a -&gt; Maybe (Stack a))
+-&gt; StackSet i l a s sd
+-&gt; StackSet i l a s sd
+</span><span class="hs-identifier hs-var">W.modify</span></span><span>
+</span><span id="line-199"></span><span>  </span><span class="hs-special">(</span><span class="annot"><span class="annottext">forall a. a -&gt; Maybe a
+</span><span class="hs-identifier hs-var">Just</span></span><span> </span><span class="annot"><span class="annottext">forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">forall a. a -&gt; [a] -&gt; [a] -&gt; Stack a
+</span><span class="hs-identifier hs-var">W.Stack</span></span><span> </span><span class="annot"><span class="annottext">a
+</span><a href="#local-6989586621679494685"><span class="hs-identifier hs-var">win</span></a></span><span> </span><span class="hs-special">[</span><span class="hs-special">]</span><span> </span><span class="hs-special">[</span><span class="hs-special">]</span><span class="hs-special">)</span><span>
+</span><span id="line-200"></span><span>  </span><span class="hs-special">(</span><span class="hs-glyph">\</span><span id="local-6989586621679494682"><span class="annot"><span class="annottext">Stack a
+</span><a href="#local-6989586621679494682"><span class="hs-identifier hs-var">s</span></a></span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">forall a. a -&gt; Maybe a
+</span><span class="hs-identifier hs-var">Just</span></span><span> </span><span class="annot"><span class="annottext">forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">Stack a
+</span><a href="#local-6989586621679494682"><span class="hs-identifier hs-var">s</span></a></span><span> </span><span class="hs-special">{</span><span> </span><span class="annot"><span class="annottext">focus :: a
+</span><span class="hs-identifier hs-var">W.focus</span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">a
+</span><a href="#local-6989586621679494685"><span class="hs-identifier hs-var">win</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">down :: [a]
+</span><span class="hs-identifier hs-var">W.down</span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">forall a. Stack a -&gt; a
+</span><span class="hs-identifier hs-var">W.focus</span></span><span> </span><span class="annot"><span class="annottext">Stack a
+</span><a href="#local-6989586621679494682"><span class="hs-identifier hs-var">s</span></a></span><span> </span><span class="annot"><span class="annottext">forall a. a -&gt; [a] -&gt; [a]
+</span><span class="hs-glyph hs-var">:</span></span><span> </span><span class="annot"><span class="annottext">forall a. Stack a -&gt; [a]
+</span><span class="hs-identifier hs-var">W.down</span></span><span> </span><span class="annot"><span class="annottext">Stack a
+</span><a href="#local-6989586621679494682"><span class="hs-identifier hs-var">s</span></a></span><span> </span><span class="hs-special">}</span><span class="hs-special">)</span><span>
+</span><span id="line-201"></span><span>
+</span><span id="line-202"></span><span class="hs-comment">-- | run a pure transformation on the Stack of the currently focused workspace.</span><span>
+</span><span id="line-203"></span><span id="local-6989586621679494917"><span id="local-6989586621679494918"><span id="local-6989586621679494919"><span id="local-6989586621679494920"><span id="local-6989586621679494921"><span class="annot"><a href="XMonad.Hooks.WindowSwallowing.html#updateCurrentStack"><span class="hs-identifier hs-type">updateCurrentStack</span></a></span><span>
+</span><span id="line-204"></span><span>  </span><span class="hs-glyph">::</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">Maybe</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">W.Stack</span></span><span> </span><span class="annot"><a href="#local-6989586621679494921"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Maybe</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">W.Stack</span></span><span> </span><span class="annot"><a href="#local-6989586621679494921"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">)</span><span class="hs-special">)</span><span>
+</span><span id="line-205"></span><span>  </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">W.StackSet</span></span><span> </span><span class="annot"><a href="#local-6989586621679494920"><span class="hs-identifier hs-type">i</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679494919"><span class="hs-identifier hs-type">l</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679494921"><span class="hs-identifier hs-type">a</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679494918"><span class="hs-identifier hs-type">sid</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679494917"><span class="hs-identifier hs-type">sd</span></a></span><span>
+</span><span id="line-206"></span><span>  </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">W.StackSet</span></span><span> </span><span class="annot"><a href="#local-6989586621679494920"><span class="hs-identifier hs-type">i</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679494919"><span class="hs-identifier hs-type">l</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679494921"><span class="hs-identifier hs-type">a</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679494918"><span class="hs-identifier hs-type">sid</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679494917"><span class="hs-identifier hs-type">sd</span></a></span></span></span></span></span></span><span>
+</span><span id="line-207"></span><span id="updateCurrentStack"><span class="annot"><span class="annottext">updateCurrentStack :: forall a i l sid sd.
+(Maybe (Stack a) -&gt; Maybe (Stack a))
+-&gt; StackSet i l a sid sd -&gt; StackSet i l a sid sd
+</span><a href="XMonad.Hooks.WindowSwallowing.html#updateCurrentStack"><span class="hs-identifier hs-var hs-var">updateCurrentStack</span></a></span></span><span> </span><span id="local-6989586621679494680"><span class="annot"><span class="annottext">Maybe (Stack a) -&gt; Maybe (Stack a)
+</span><a href="#local-6989586621679494680"><span class="hs-identifier hs-var">f</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">forall a i l s sd.
+Maybe (Stack a)
+-&gt; (Stack a -&gt; Maybe (Stack a))
+-&gt; StackSet i l a s sd
+-&gt; StackSet i l a s sd
+</span><span class="hs-identifier hs-var">W.modify</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Maybe (Stack a) -&gt; Maybe (Stack a)
+</span><a href="#local-6989586621679494680"><span class="hs-identifier hs-var">f</span></a></span><span> </span><span class="annot"><span class="annottext">forall a. Maybe a
+</span><span class="hs-identifier hs-var">Nothing</span></span><span class="hs-special">)</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Maybe (Stack a) -&gt; Maybe (Stack a)
+</span><a href="#local-6989586621679494680"><span class="hs-identifier hs-var">f</span></a></span><span> </span><span class="annot"><span class="annottext">forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">forall a. a -&gt; Maybe a
+</span><span class="hs-identifier hs-var">Just</span></span><span class="hs-special">)</span><span>
+</span><span id="line-208"></span><span>
+</span><span id="line-209"></span><span id="local-6989586621679494944"><span id="local-6989586621679494945"><span id="local-6989586621679494946"><span id="local-6989586621679494947"><span id="local-6989586621679494948"><span class="annot"><a href="XMonad.Hooks.WindowSwallowing.html#currentStack"><span class="hs-identifier hs-type">currentStack</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">W.StackSet</span></span><span> </span><span class="annot"><a href="#local-6989586621679494948"><span class="hs-identifier hs-type">i</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679494947"><span class="hs-identifier hs-type">l</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679494946"><span class="hs-identifier hs-type">a</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679494945"><span class="hs-identifier hs-type">sid</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679494944"><span class="hs-identifier hs-type">sd</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Maybe</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">W.Stack</span></span><span> </span><span class="annot"><a href="#local-6989586621679494946"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">)</span></span></span></span></span></span><span>
+</span><span id="line-210"></span><span id="currentStack"><span class="annot"><span class="annottext">currentStack :: forall i l a sid sd. StackSet i l a sid sd -&gt; Maybe (Stack a)
+</span><a href="XMonad.Hooks.WindowSwallowing.html#currentStack"><span class="hs-identifier hs-var hs-var">currentStack</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">forall i l a. Workspace i l a -&gt; Maybe (Stack a)
+</span><span class="hs-identifier hs-var">W.stack</span></span><span> </span><span class="annot"><span class="annottext">forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">forall i l a sid sd. Screen i l a sid sd -&gt; Workspace i l a
+</span><span class="hs-identifier hs-var">W.workspace</span></span><span> </span><span class="annot"><span class="annottext">forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">forall i l a sid sd. StackSet i l a sid sd -&gt; Screen i l a sid sd
+</span><span class="hs-identifier hs-var">W.current</span></span><span>
+</span><span id="line-211"></span><span>
+</span><span id="line-212"></span><span>
+</span><span id="line-213"></span><span class="hs-comment">-- | move the floating state from one window to another, sinking the original window</span><span>
+</span><span id="line-214"></span><span id="local-6989586621679494952"><span id="local-6989586621679494953"><span id="local-6989586621679494954"><span id="local-6989586621679494955"><span id="local-6989586621679494956"><span class="annot"><a href="XMonad.Hooks.WindowSwallowing.html#moveFloatingState"><span class="hs-identifier hs-type">moveFloatingState</span></a></span><span>
+</span><span id="line-215"></span><span>  </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Ord</span></span><span> </span><span class="annot"><a href="#local-6989586621679494956"><span class="hs-identifier hs-type">a</span></a></span><span>
+</span><span id="line-216"></span><span>  </span><span class="hs-glyph">=&gt;</span><span> </span><span class="annot"><a href="#local-6989586621679494956"><span class="hs-identifier hs-type">a</span></a></span><span> </span><span class="hs-comment">-- ^ window to move from</span><span>
+</span><span id="line-217"></span><span>  </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="#local-6989586621679494956"><span class="hs-identifier hs-type">a</span></a></span><span> </span><span class="hs-comment">-- ^ window to move to</span><span>
+</span><span id="line-218"></span><span>  </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">W.StackSet</span></span><span> </span><span class="annot"><a href="#local-6989586621679494955"><span class="hs-identifier hs-type">i</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679494954"><span class="hs-identifier hs-type">l</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679494956"><span class="hs-identifier hs-type">a</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679494953"><span class="hs-identifier hs-type">s</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679494952"><span class="hs-identifier hs-type">sd</span></a></span><span>
+</span><span id="line-219"></span><span>  </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">W.StackSet</span></span><span> </span><span class="annot"><a href="#local-6989586621679494955"><span class="hs-identifier hs-type">i</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679494954"><span class="hs-identifier hs-type">l</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679494956"><span class="hs-identifier hs-type">a</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679494953"><span class="hs-identifier hs-type">s</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679494952"><span class="hs-identifier hs-type">sd</span></a></span></span></span></span></span></span><span>
+</span><span id="line-220"></span><span id="moveFloatingState"><span class="annot"><span class="annottext">moveFloatingState :: forall a i l s sd.
+Ord a =&gt;
+a -&gt; a -&gt; StackSet i l a s sd -&gt; StackSet i l a s sd
+</span><a href="XMonad.Hooks.WindowSwallowing.html#moveFloatingState"><span class="hs-identifier hs-var hs-var">moveFloatingState</span></a></span></span><span> </span><span id="local-6989586621679494671"><span class="annot"><span class="annottext">a
+</span><a href="#local-6989586621679494671"><span class="hs-identifier hs-var">from</span></a></span></span><span> </span><span id="local-6989586621679494670"><span class="annot"><span class="annottext">a
+</span><a href="#local-6989586621679494670"><span class="hs-identifier hs-var">to</span></a></span></span><span> </span><span id="local-6989586621679494669"><span class="annot"><span class="annottext">StackSet i l a s sd
+</span><a href="#local-6989586621679494669"><span class="hs-identifier hs-var">ws</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">StackSet i l a s sd
+</span><a href="#local-6989586621679494669"><span class="hs-identifier hs-var">ws</span></a></span><span>
+</span><span id="line-221"></span><span>  </span><span class="hs-special">{</span><span> </span><span class="annot"><span class="annottext">floating :: Map a RationalRect
+</span><span class="hs-identifier hs-var">W.floating</span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">forall k a. Ord k =&gt; k -&gt; Map k a -&gt; Map k a
+</span><span class="hs-identifier hs-var">M.delete</span></span><span> </span><span class="annot"><span class="annottext">a
+</span><a href="#local-6989586621679494671"><span class="hs-identifier hs-var">from</span></a></span><span> </span><span class="annot"><span class="annottext">forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">forall b a. b -&gt; (a -&gt; b) -&gt; Maybe a -&gt; b
+</span><span class="hs-identifier hs-var">maybe</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">forall k a. Ord k =&gt; k -&gt; Map k a -&gt; Map k a
+</span><span class="hs-identifier hs-var">M.delete</span></span><span> </span><span class="annot"><span class="annottext">a
+</span><a href="#local-6989586621679494670"><span class="hs-identifier hs-var">to</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">forall i l a sid sd. StackSet i l a sid sd -&gt; Map a RationalRect
+</span><span class="hs-identifier hs-var">W.floating</span></span><span> </span><span class="annot"><span class="annottext">StackSet i l a s sd
+</span><a href="#local-6989586621679494669"><span class="hs-identifier hs-var">ws</span></a></span><span class="hs-special">)</span><span class="hs-special">)</span><span>
+</span><span id="line-222"></span><span>                                       </span><span class="hs-special">(</span><span class="hs-glyph">\</span><span id="local-6989586621679494666"><span class="annot"><span class="annottext">RationalRect
+</span><a href="#local-6989586621679494666"><span class="hs-identifier hs-var">r</span></a></span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">forall k a. Ord k =&gt; k -&gt; a -&gt; Map k a -&gt; Map k a
+</span><span class="hs-identifier hs-var">M.insert</span></span><span> </span><span class="annot"><span class="annottext">a
+</span><a href="#local-6989586621679494670"><span class="hs-identifier hs-var">to</span></a></span><span> </span><span class="annot"><span class="annottext">RationalRect
+</span><a href="#local-6989586621679494666"><span class="hs-identifier hs-var">r</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">forall i l a sid sd. StackSet i l a sid sd -&gt; Map a RationalRect
+</span><span class="hs-identifier hs-var">W.floating</span></span><span> </span><span class="annot"><span class="annottext">StackSet i l a s sd
+</span><a href="#local-6989586621679494669"><span class="hs-identifier hs-var">ws</span></a></span><span class="hs-special">)</span><span class="hs-special">)</span><span>
+</span><span id="line-223"></span><span>                                       </span><span class="hs-special">(</span><span class="annot"><span class="annottext">forall k a. Ord k =&gt; k -&gt; Map k a -&gt; Maybe a
+</span><span class="hs-identifier hs-var">M.lookup</span></span><span> </span><span class="annot"><span class="annottext">a
+</span><a href="#local-6989586621679494671"><span class="hs-identifier hs-var">from</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">forall i l a sid sd. StackSet i l a sid sd -&gt; Map a RationalRect
+</span><span class="hs-identifier hs-var">W.floating</span></span><span> </span><span class="annot"><span class="annottext">StackSet i l a s sd
+</span><a href="#local-6989586621679494669"><span class="hs-identifier hs-var">ws</span></a></span><span class="hs-special">)</span><span class="hs-special">)</span><span>
+</span><span id="line-224"></span><span>  </span><span class="hs-special">}</span><span>
+</span><span id="line-225"></span><span>
+</span><span id="line-226"></span><span class="hs-comment">-- | check if a given process is a child of another process. This depends on &quot;pstree&quot; being in the PATH</span><span>
+</span><span id="line-227"></span><span class="hs-comment">-- NOTE: this does not work if the child process does any kind of process-sharing.</span><span>
+</span><span id="line-228"></span><span class="annot"><a href="XMonad.Hooks.WindowSwallowing.html#isChildOf"><span class="hs-identifier hs-type">isChildOf</span></a></span><span>
+</span><span id="line-229"></span><span>  </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">ProcessID</span></span><span> </span><span class="hs-comment">-- ^ child PID</span><span>
+</span><span id="line-230"></span><span>  </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">ProcessID</span></span><span> </span><span class="hs-comment">-- ^ parent PID</span><span>
+</span><span id="line-231"></span><span>  </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">IO</span></span><span> </span><span class="annot"><span class="hs-identifier hs-type">Bool</span></span><span>
+</span><span id="line-232"></span><span id="isChildOf"><span class="annot"><span class="annottext">isChildOf :: ProcessID -&gt; ProcessID -&gt; IO Bool
+</span><a href="XMonad.Hooks.WindowSwallowing.html#isChildOf"><span class="hs-identifier hs-var hs-var">isChildOf</span></a></span></span><span> </span><span id="local-6989586621679494663"><span class="annot"><span class="annottext">ProcessID
+</span><a href="#local-6989586621679494663"><span class="hs-identifier hs-var">child</span></a></span></span><span> </span><span id="local-6989586621679494662"><span class="annot"><span class="annottext">ProcessID
+</span><a href="#local-6989586621679494662"><span class="hs-identifier hs-var">parent</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">ProcessID
+</span><a href="#local-6989586621679494662"><span class="hs-identifier hs-var">parent</span></a></span><span> </span><span class="annot"><span class="annottext">forall (t :: * -&gt; *) a. (Foldable t, Eq a) =&gt; a -&gt; t a -&gt; Bool
+</span><span class="hs-operator hs-var">`elem`</span></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">forall (f :: * -&gt; *) a b. Functor f =&gt; (a -&gt; b) -&gt; f a -&gt; f b
+</span><span class="hs-operator hs-var">&lt;$&gt;</span></span><span> </span><span class="annot"><span class="annottext">ProcessID -&gt; IO [ProcessID]
+</span><a href="XMonad.Util.Process.html#getPPIDChain"><span class="hs-identifier hs-var">getPPIDChain</span></a></span><span> </span><span class="annot"><span class="annottext">ProcessID
+</span><a href="#local-6989586621679494663"><span class="hs-identifier hs-var">child</span></a></span><span>
+</span><span id="line-233"></span><span>
+</span><span id="line-234"></span><span class="hs-keyword">data</span><span> </span><span id="SwallowingState"><span class="annot"><a href="XMonad.Hooks.WindowSwallowing.html#SwallowingState"><span class="hs-identifier hs-var">SwallowingState</span></a></span></span><span> </span><span class="hs-glyph">=</span><span>
+</span><span id="line-235"></span><span>  </span><span id="SwallowingState"><span class="annot"><a href="XMonad.Hooks.WindowSwallowing.html#SwallowingState"><span class="hs-identifier hs-var">SwallowingState</span></a></span></span><span>
+</span><span id="line-236"></span><span>    </span><span class="hs-special">{</span><span> </span><span id="currentlySwallowed"><span class="annot"><span class="annottext">SwallowingState -&gt; Map Window Window
+</span><a href="XMonad.Hooks.WindowSwallowing.html#currentlySwallowed"><span class="hs-identifier hs-var hs-var">currentlySwallowed</span></a></span></span><span>       </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">M.Map</span></span><span> </span><span class="annot"><span class="hs-identifier hs-type">Window</span></span><span> </span><span class="annot"><span class="hs-identifier hs-type">Window</span></span><span>         </span><span class="hs-comment">-- ^ mapping from child window window to the currently swallowed parent window</span><span>
+</span><span id="line-237"></span><span>    </span><span class="hs-special">,</span><span> </span><span id="stackBeforeWindowClosing"><span class="annot"><span class="annottext">SwallowingState -&gt; Maybe (Stack Window)
+</span><a href="XMonad.Hooks.WindowSwallowing.html#stackBeforeWindowClosing"><span class="hs-identifier hs-var hs-var">stackBeforeWindowClosing</span></a></span></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Maybe</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">W.Stack</span></span><span> </span><span class="annot"><span class="hs-identifier hs-type">Window</span></span><span class="hs-special">)</span><span>      </span><span class="hs-comment">-- ^ current stack state right before DestroyWindowEvent is sent</span><span>
+</span><span id="line-238"></span><span>    </span><span class="hs-special">,</span><span> </span><span id="floatingBeforeClosing"><span class="annot"><span class="annottext">SwallowingState -&gt; Map Window RationalRect
+</span><a href="XMonad.Hooks.WindowSwallowing.html#floatingBeforeClosing"><span class="hs-identifier hs-var hs-var">floatingBeforeClosing</span></a></span></span><span>    </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">M.Map</span></span><span> </span><span class="annot"><span class="hs-identifier hs-type">Window</span></span><span> </span><span class="annot"><span class="hs-identifier hs-type">W.RationalRect</span></span><span> </span><span class="hs-comment">-- ^ floating map of the stackset right before DestroyWindowEvent is sent</span><span>
+</span><span id="line-239"></span><span>    </span><span class="hs-special">}</span><span> </span><span class="hs-keyword">deriving</span><span> </span><span class="hs-special">(</span><span id="local-6989586621679494641"><span id="local-6989586621679494643"><span id="local-6989586621679494656"><span class="annot"><span class="annottext">Int -&gt; SwallowingState -&gt; ShowS
+[SwallowingState] -&gt; ShowS
+SwallowingState -&gt; String
+forall a.
+(Int -&gt; a -&gt; ShowS) -&gt; (a -&gt; String) -&gt; ([a] -&gt; ShowS) -&gt; Show a
+showList :: [SwallowingState] -&gt; ShowS
+$cshowList :: [SwallowingState] -&gt; ShowS
+show :: SwallowingState -&gt; String
+$cshow :: SwallowingState -&gt; String
+showsPrec :: Int -&gt; SwallowingState -&gt; ShowS
+$cshowsPrec :: Int -&gt; SwallowingState -&gt; ShowS
+</span><span class="hs-identifier hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var">Show</span></span></span></span></span><span class="hs-special">)</span><span>
+</span><span id="line-240"></span><span>
+</span><span id="line-241"></span><span class="annot"><a href="XMonad.Hooks.WindowSwallowing.html#getSwallowedParent"><span class="hs-identifier hs-type">getSwallowedParent</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Window</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="XMonad.Hooks.WindowSwallowing.html#SwallowingState"><span class="hs-identifier hs-type">SwallowingState</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Maybe</span></span><span> </span><span class="annot"><span class="hs-identifier hs-type">Window</span></span><span>
+</span><span id="line-242"></span><span id="getSwallowedParent"><span class="annot"><span class="annottext">getSwallowedParent :: Window -&gt; SwallowingState -&gt; Maybe Window
+</span><a href="XMonad.Hooks.WindowSwallowing.html#getSwallowedParent"><span class="hs-identifier hs-var hs-var">getSwallowedParent</span></a></span></span><span> </span><span id="local-6989586621679494636"><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679494636"><span class="hs-identifier hs-var">win</span></a></span></span><span> </span><span class="annot"><a href="XMonad.Hooks.WindowSwallowing.html#SwallowingState"><span class="hs-identifier hs-type">SwallowingState</span></a></span><span> </span><span class="hs-special">{</span><span> </span><span id="local-6989586621679494635"><span class="annot"><span class="annottext">Map Window Window
+currentlySwallowed :: Map Window Window
+currentlySwallowed :: SwallowingState -&gt; Map Window Window
+</span><a href="#local-6989586621679494635"><span class="hs-identifier hs-var hs-var">currentlySwallowed</span></a></span></span><span> </span><span class="hs-special">}</span><span> </span><span class="hs-glyph">=</span><span>
+</span><span id="line-243"></span><span>  </span><span class="annot"><span class="annottext">forall k a. Ord k =&gt; k -&gt; Map k a -&gt; Maybe a
+</span><span class="hs-identifier hs-var">M.lookup</span></span><span> </span><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679494636"><span class="hs-identifier hs-var">win</span></a></span><span> </span><span class="annot"><span class="annottext">Map Window Window
+</span><a href="#local-6989586621679494635"><span class="hs-identifier hs-var">currentlySwallowed</span></a></span><span>
+</span><span id="line-244"></span><span>
+</span><span id="line-245"></span><span class="annot"><a href="XMonad.Hooks.WindowSwallowing.html#addSwallowedParent"><span class="hs-identifier hs-type">addSwallowedParent</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Window</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Window</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="XMonad.Hooks.WindowSwallowing.html#SwallowingState"><span class="hs-identifier hs-type">SwallowingState</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="XMonad.Hooks.WindowSwallowing.html#SwallowingState"><span class="hs-identifier hs-type">SwallowingState</span></a></span><span>
+</span><span id="line-246"></span><span id="addSwallowedParent"><span class="annot"><span class="annottext">addSwallowedParent :: Window -&gt; Window -&gt; SwallowingState -&gt; SwallowingState
+</span><a href="XMonad.Hooks.WindowSwallowing.html#addSwallowedParent"><span class="hs-identifier hs-var hs-var">addSwallowedParent</span></a></span></span><span> </span><span id="local-6989586621679494634"><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679494634"><span class="hs-identifier hs-var">parent</span></a></span></span><span> </span><span id="local-6989586621679494633"><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679494633"><span class="hs-identifier hs-var">child</span></a></span></span><span> </span><span id="local-6989586621679494632"><span class="annot"><span class="annottext">s :: SwallowingState
+</span><a href="#local-6989586621679494632"><span class="hs-identifier hs-var">s</span></a></span></span><span class="hs-glyph">@</span><span class="annot"><a href="XMonad.Hooks.WindowSwallowing.html#SwallowingState"><span class="hs-identifier hs-type">SwallowingState</span></a></span><span> </span><span class="hs-special">{</span><span> </span><span id="local-6989586621679494631"><span class="annot"><span class="annottext">Map Window Window
+currentlySwallowed :: Map Window Window
+currentlySwallowed :: SwallowingState -&gt; Map Window Window
+</span><a href="#local-6989586621679494631"><span class="hs-identifier hs-var hs-var">currentlySwallowed</span></a></span></span><span> </span><span class="hs-special">}</span><span> </span><span class="hs-glyph">=</span><span>
+</span><span id="line-247"></span><span>  </span><span class="annot"><span class="annottext">SwallowingState
+</span><a href="#local-6989586621679494632"><span class="hs-identifier hs-var">s</span></a></span><span> </span><span class="hs-special">{</span><span> </span><span class="annot"><span class="annottext">currentlySwallowed :: Map Window Window
+</span><a href="XMonad.Hooks.WindowSwallowing.html#currentlySwallowed"><span class="hs-identifier hs-var">currentlySwallowed</span></a></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">forall k a. Ord k =&gt; k -&gt; a -&gt; Map k a -&gt; Map k a
+</span><span class="hs-identifier hs-var">M.insert</span></span><span> </span><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679494633"><span class="hs-identifier hs-var">child</span></a></span><span> </span><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679494634"><span class="hs-identifier hs-var">parent</span></a></span><span> </span><span class="annot"><span class="annottext">Map Window Window
+</span><a href="#local-6989586621679494631"><span class="hs-identifier hs-var">currentlySwallowed</span></a></span><span> </span><span class="hs-special">}</span><span>
+</span><span id="line-248"></span><span>
+</span><span id="line-249"></span><span class="annot"><a href="XMonad.Hooks.WindowSwallowing.html#removeSwallowed"><span class="hs-identifier hs-type">removeSwallowed</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Window</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="XMonad.Hooks.WindowSwallowing.html#SwallowingState"><span class="hs-identifier hs-type">SwallowingState</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="XMonad.Hooks.WindowSwallowing.html#SwallowingState"><span class="hs-identifier hs-type">SwallowingState</span></a></span><span>
+</span><span id="line-250"></span><span id="removeSwallowed"><span class="annot"><span class="annottext">removeSwallowed :: Window -&gt; SwallowingState -&gt; SwallowingState
+</span><a href="XMonad.Hooks.WindowSwallowing.html#removeSwallowed"><span class="hs-identifier hs-var hs-var">removeSwallowed</span></a></span></span><span> </span><span id="local-6989586621679494630"><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679494630"><span class="hs-identifier hs-var">child</span></a></span></span><span> </span><span id="local-6989586621679494629"><span class="annot"><span class="annottext">s :: SwallowingState
+</span><a href="#local-6989586621679494629"><span class="hs-identifier hs-var">s</span></a></span></span><span class="hs-glyph">@</span><span class="annot"><a href="XMonad.Hooks.WindowSwallowing.html#SwallowingState"><span class="hs-identifier hs-type">SwallowingState</span></a></span><span> </span><span class="hs-special">{</span><span> </span><span id="local-6989586621679494628"><span class="annot"><span class="annottext">Map Window Window
+currentlySwallowed :: Map Window Window
+currentlySwallowed :: SwallowingState -&gt; Map Window Window
+</span><a href="#local-6989586621679494628"><span class="hs-identifier hs-var hs-var">currentlySwallowed</span></a></span></span><span> </span><span class="hs-special">}</span><span> </span><span class="hs-glyph">=</span><span>
+</span><span id="line-251"></span><span>  </span><span class="annot"><span class="annottext">SwallowingState
+</span><a href="#local-6989586621679494629"><span class="hs-identifier hs-var">s</span></a></span><span> </span><span class="hs-special">{</span><span> </span><span class="annot"><span class="annottext">currentlySwallowed :: Map Window Window
+</span><a href="XMonad.Hooks.WindowSwallowing.html#currentlySwallowed"><span class="hs-identifier hs-var">currentlySwallowed</span></a></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">forall k a. Ord k =&gt; k -&gt; Map k a -&gt; Map k a
+</span><span class="hs-identifier hs-var">M.delete</span></span><span> </span><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679494630"><span class="hs-identifier hs-var">child</span></a></span><span> </span><span class="annot"><span class="annottext">Map Window Window
+</span><a href="#local-6989586621679494628"><span class="hs-identifier hs-var">currentlySwallowed</span></a></span><span> </span><span class="hs-special">}</span><span>
+</span><span id="line-252"></span><span>
+</span><span id="line-253"></span><span class="annot"><a href="XMonad.Hooks.WindowSwallowing.html#setStackBeforeWindowClosing"><span class="hs-identifier hs-type">setStackBeforeWindowClosing</span></a></span><span>
+</span><span id="line-254"></span><span>  </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Maybe</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">W.Stack</span></span><span> </span><span class="annot"><span class="hs-identifier hs-type">Window</span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="XMonad.Hooks.WindowSwallowing.html#SwallowingState"><span class="hs-identifier hs-type">SwallowingState</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="XMonad.Hooks.WindowSwallowing.html#SwallowingState"><span class="hs-identifier hs-type">SwallowingState</span></a></span><span>
+</span><span id="line-255"></span><span id="setStackBeforeWindowClosing"><span class="annot"><span class="annottext">setStackBeforeWindowClosing :: Maybe (Stack Window) -&gt; SwallowingState -&gt; SwallowingState
+</span><a href="XMonad.Hooks.WindowSwallowing.html#setStackBeforeWindowClosing"><span class="hs-identifier hs-var hs-var">setStackBeforeWindowClosing</span></a></span></span><span> </span><span id="local-6989586621679494627"><span class="annot"><span class="annottext">Maybe (Stack Window)
+</span><a href="#local-6989586621679494627"><span class="hs-identifier hs-var">stack</span></a></span></span><span> </span><span id="local-6989586621679494626"><span class="annot"><span class="annottext">SwallowingState
+</span><a href="#local-6989586621679494626"><span class="hs-identifier hs-var">s</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">SwallowingState
+</span><a href="#local-6989586621679494626"><span class="hs-identifier hs-var">s</span></a></span><span> </span><span class="hs-special">{</span><span> </span><span class="annot"><span class="annottext">stackBeforeWindowClosing :: Maybe (Stack Window)
+</span><a href="XMonad.Hooks.WindowSwallowing.html#stackBeforeWindowClosing"><span class="hs-identifier hs-var">stackBeforeWindowClosing</span></a></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Maybe (Stack Window)
+</span><a href="#local-6989586621679494627"><span class="hs-identifier hs-var">stack</span></a></span><span> </span><span class="hs-special">}</span><span>
+</span><span id="line-256"></span><span>
+</span><span id="line-257"></span><span class="annot"><a href="XMonad.Hooks.WindowSwallowing.html#setFloatingBeforeWindowClosing"><span class="hs-identifier hs-type">setFloatingBeforeWindowClosing</span></a></span><span>
+</span><span id="line-258"></span><span>  </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">M.Map</span></span><span> </span><span class="annot"><span class="hs-identifier hs-type">Window</span></span><span> </span><span class="annot"><span class="hs-identifier hs-type">W.RationalRect</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="XMonad.Hooks.WindowSwallowing.html#SwallowingState"><span class="hs-identifier hs-type">SwallowingState</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="XMonad.Hooks.WindowSwallowing.html#SwallowingState"><span class="hs-identifier hs-type">SwallowingState</span></a></span><span>
+</span><span id="line-259"></span><span id="setFloatingBeforeWindowClosing"><span class="annot"><span class="annottext">setFloatingBeforeWindowClosing :: Map Window RationalRect -&gt; SwallowingState -&gt; SwallowingState
+</span><a href="XMonad.Hooks.WindowSwallowing.html#setFloatingBeforeWindowClosing"><span class="hs-identifier hs-var hs-var">setFloatingBeforeWindowClosing</span></a></span></span><span> </span><span id="local-6989586621679494625"><span class="annot"><span class="annottext">Map Window RationalRect
+</span><a href="#local-6989586621679494625"><span class="hs-identifier hs-var">x</span></a></span></span><span> </span><span id="local-6989586621679494624"><span class="annot"><span class="annottext">SwallowingState
+</span><a href="#local-6989586621679494624"><span class="hs-identifier hs-var">s</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">SwallowingState
+</span><a href="#local-6989586621679494624"><span class="hs-identifier hs-var">s</span></a></span><span> </span><span class="hs-special">{</span><span> </span><span class="annot"><span class="annottext">floatingBeforeClosing :: Map Window RationalRect
+</span><a href="XMonad.Hooks.WindowSwallowing.html#floatingBeforeClosing"><span class="hs-identifier hs-var">floatingBeforeClosing</span></a></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Map Window RationalRect
+</span><a href="#local-6989586621679494625"><span class="hs-identifier hs-var">x</span></a></span><span> </span><span class="hs-special">}</span><span>
+</span><span id="line-260"></span><span>
+</span><span id="line-261"></span><span class="hs-keyword">instance</span><span> </span><span id="local-6989586621679494619"><span class="annot"><span class="hs-identifier hs-type">ExtensionClass</span></span><span> </span><span class="annot"><a href="XMonad.Hooks.WindowSwallowing.html#SwallowingState"><span class="hs-identifier hs-type">SwallowingState</span></a></span></span><span> </span><span class="hs-keyword">where</span><span>
+</span><span id="line-262"></span><span>  </span><span id="local-6989586621679494614"><span class="annot"><span class="annottext">initialValue :: SwallowingState
+</span><span class="hs-identifier hs-var hs-var hs-var hs-var">initialValue</span></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><a href="XMonad.Hooks.WindowSwallowing.html#SwallowingState"><span class="hs-identifier hs-type">SwallowingState</span></a></span><span> </span><span class="hs-special">{</span><span> </span><span class="annot"><span class="annottext">currentlySwallowed :: Map Window Window
+</span><a href="XMonad.Hooks.WindowSwallowing.html#currentlySwallowed"><span class="hs-identifier hs-var">currentlySwallowed</span></a></span><span>       </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">forall a. Monoid a =&gt; a
+</span><span class="hs-identifier hs-var">mempty</span></span><span>
+</span><span id="line-263"></span><span>                                 </span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">stackBeforeWindowClosing :: Maybe (Stack Window)
+</span><a href="XMonad.Hooks.WindowSwallowing.html#stackBeforeWindowClosing"><span class="hs-identifier hs-var">stackBeforeWindowClosing</span></a></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">forall a. Maybe a
+</span><span class="hs-identifier hs-var">Nothing</span></span><span>
+</span><span id="line-264"></span><span>                                 </span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">floatingBeforeClosing :: Map Window RationalRect
+</span><a href="XMonad.Hooks.WindowSwallowing.html#floatingBeforeClosing"><span class="hs-identifier hs-var">floatingBeforeClosing</span></a></span><span>    </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">forall a. Monoid a =&gt; a
+</span><span class="hs-identifier hs-var">mempty</span></span><span>
+</span><span id="line-265"></span><span>                                 </span><span class="hs-special">}</span><span>
+</span><span id="line-266"></span></pre></body></html>

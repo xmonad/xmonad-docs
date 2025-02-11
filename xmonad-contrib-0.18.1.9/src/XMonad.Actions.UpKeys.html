@@ -1,0 +1,299 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd"><html xmlns="http://www.w3.org/1999/xhtml"><head><link rel="stylesheet" type="text/css" href="style.css" /><script type="text/javascript" src="highlight.js"></script></head><body><pre><span class="hs-pragma">{-# LANGUAGE BlockArguments #-}</span><span>
+</span><span id="line-2"></span><span class="hs-pragma">{-# LANGUAGE InstanceSigs #-}</span><span>
+</span><span id="line-3"></span><span class="hs-pragma">{-# LANGUAGE NamedFieldPuns #-}</span><span>
+</span><span id="line-4"></span><span class="hs-pragma">{-# LANGUAGE TypeApplications #-}</span><span>
+</span><span id="line-5"></span><span class="hs-comment">{- |
+   Module      : XMonad.Actions.UpKeys
+   Description : Bind an action to the release of a key
+   Copyright   : (c) Tony Zorman, 2024
+   License     : BSD-3
+   Maintainer  : Tony Zorman &lt;soliditsallgood@mailbox.org&gt;
+
+A combinator for binding an action to the release of a key. This can be
+useful for hold-type buttons, where the press of a key engages some
+functionality, and its release&#8230; releases it again.
+-}</span><span>
+</span><span id="line-16"></span><span class="hs-keyword">module</span><span> </span><span class="hs-identifier">XMonad.Actions.UpKeys</span><span>
+</span><span id="line-17"></span><span>  </span><span class="hs-special">(</span><span> </span><span class="annot"><span class="hs-comment">-- * Usage</span></span><span>
+</span><span id="line-18"></span><span>    </span><span class="annot"><span class="hs-comment">-- $usage</span></span><span>
+</span><span id="line-19"></span><span>    </span><span class="annot"><a href="XMonad.Actions.UpKeys.html#useUpKeys"><span class="hs-identifier">useUpKeys</span></a></span><span class="hs-special">,</span><span>
+</span><span id="line-20"></span><span>    </span><span class="annot"><a href="XMonad.Actions.UpKeys.html#UpKeysConfig"><span class="hs-identifier">UpKeysConfig</span></a></span><span> </span><span class="hs-special">(</span><span class="hs-glyph">..</span><span class="hs-special">)</span><span class="hs-special">,</span><span>
+</span><span id="line-21"></span><span>    </span><span class="annot"><a href="XMonad.Actions.UpKeys.html#ezUpKeys"><span class="hs-identifier">ezUpKeys</span></a></span><span class="hs-special">,</span><span>
+</span><span id="line-22"></span><span>  </span><span class="hs-special">)</span><span>
+</span><span id="line-23"></span><span class="hs-keyword">where</span><span>
+</span><span id="line-24"></span><span>
+</span><span id="line-25"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><span class="hs-identifier">Data.Map.Strict</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier">Map</span></span><span class="hs-special">)</span><span>
+</span><span id="line-26"></span><span class="hs-keyword">import</span><span> </span><span class="hs-keyword">qualified</span><span> </span><span class="annot"><span class="hs-identifier">Data.Map.Strict</span></span><span> </span><span class="hs-keyword">as</span><span> </span><span class="annot"><span class="hs-identifier">Map</span></span><span>
+</span><span id="line-27"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><span class="hs-identifier">XMonad</span></span><span>
+</span><span id="line-28"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><a href="XMonad.Prelude.html"><span class="hs-identifier">XMonad.Prelude</span></a></span><span>
+</span><span id="line-29"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><a href="XMonad.Util.EZConfig.html"><span class="hs-identifier">XMonad.Util.EZConfig</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="XMonad.Util.EZConfig.html#mkKeymap"><span class="hs-identifier">mkKeymap</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-30"></span><span class="hs-keyword">import</span><span> </span><span class="hs-keyword">qualified</span><span> </span><span class="annot"><a href="XMonad.Util.ExtensibleConf.html"><span class="hs-identifier">XMonad.Util.ExtensibleConf</span></a></span><span> </span><span class="hs-keyword">as</span><span> </span><span class="annot"><span class="hs-identifier">XC</span></span><span>
+</span><span id="line-31"></span><span>
+</span><span id="line-32"></span><span class="hs-comment">{- $usage
+You can use this module with the following in your @xmonad.hs@:
+
+&gt; import XMonad.Actions.UpKeys
+
+Next, define the keys and actions you want to have happen on the release
+of a key:
+
+&gt; myUpKeys = ezUpKeys $
+&gt;   [ (&quot;M-z&quot;, myAction)
+&gt;   , (&quot;M-a&quot;, myAction2)
+&gt;   ]
+
+All that's left is to plug this definition into the 'useUpKeys'
+combinator that this module provides:
+
+&gt; main :: IO ()
+&gt; main = xmonad
+&gt;      . useUpKeys (def{ grabKeys = True, upKeys = myUpKeys })
+&gt;      $ myConfig
+
+Note the presence of @'grabKeys' = True@; this is for situations where
+you don't have any of these keys bound to do something upon pressing
+them; i.e., you use them solely for their release actions. If you want
+something to happen in both cases, remove that part (@'grabKeys' =
+False@ is the default) and bind the keys to actions as you normally
+would.
+
+==== __Examples__
+
+As an extended example, consider the case where you want all of your
+docks (e.g., status bar) to &quot;pop up&quot; when you press the super key, and
+then vanish again once that keys is released.
+
+Since docks are not generally part of XMonad's window-set&#8212;otherwise, we
+would have to manage them&#8212;we first need a way to access and manipulate
+all docks.
+
+&gt; onAllDocks :: (Display -&gt; Window -&gt; IO ()) -&gt; X ()
+&gt; onAllDocks act = withDisplay \dpy -&gt; do
+&gt;   rootw &lt;- asks theRoot
+&gt;   (_, _, wins) &lt;- io $ queryTree dpy rootw
+&gt;   traverse_ (io . act dpy) =&lt;&lt; filterM (runQuery checkDock) wins
+
+This is also the place where one could filter for just status bar,
+trayer, and so on.
+
+Now we have to decide what kinds of keys we want to watch out for. Since
+you most likely use left super as your modifier key, this is a little
+bit more complicated than for other keys, as you will most likely see
+the key both as a @KeyMask@, as well as a @KeySym@. One could think a
+bit and probably come up with an elegant solution for this&#8212;or one could
+grab all possible key combinations by brute-force!
+
+&gt; dockKeys :: X () -&gt; [((KeyMask, KeySym), X ())]
+&gt; dockKeys act = map (actKey . foldr1 (.|.)) . combinations $ keyMasks
+&gt;  where
+&gt;   actKey :: KeyMask -&gt; ((KeyMask, KeySym), X ())
+&gt;   actKey mask = ((mask, xK_Super_L), act)
+&gt;
+&gt;   keyMasks :: [KeyMask]
+&gt;   keyMasks = [ noModMask, shiftMask, lockMask, controlMask, mod1Mask, mod2Mask, mod3Mask, mod4Mask, mod5Mask ]
+&gt;
+&gt;   -- Return all combinations of a sequence of values.
+&gt;   combinations :: [a] -&gt; [[a]]
+&gt;   combinations xs = concat [combs i xs | i &lt;- [1 .. length xs]]
+&gt;    where
+&gt;     combs 0 _      = [[]]
+&gt;     combs _ []     = []
+&gt;     combs n (x:xs) = map (x:) (combs (n-1) xs) &lt;&gt; combs n xs
+
+Given some action, like lowering or raising the window, we generate all
+possible combinations of modifiers that may be pressed with the super
+key. This is a good time to say that this is just for demonstrative
+purposes, btw&#8212;please don't actually do this.
+
+All that's left is to plug everything into the machinery of this module,
+and we're done!
+
+&gt; import qualified Data.Map.Strict as Map
+&gt;
+&gt; main :: IO ()
+&gt; main = xmonad
+&gt;      . &#8230; -- other combinators
+&gt;      . useUpKeys (def { upKeys = Map.fromList $ dockKeys (onAllDocks lowerWindow) })
+&gt;      $ myConfig `additionalKeys` dockKeys (onAllDocks raiseWindow)
+&gt;
+&gt; myConfig = &#8230;
+-}</span><span>
+</span><span id="line-121"></span><span>
+</span><span id="line-122"></span><span class="hs-keyword">data</span><span> </span><span id="UpKeysConfig"><span class="annot"><a href="XMonad.Actions.UpKeys.html#UpKeysConfig"><span class="hs-identifier hs-var">UpKeysConfig</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span id="UpKeysConfig"><span class="annot"><a href="XMonad.Actions.UpKeys.html#UpKeysConfig"><span class="hs-identifier hs-var">UpKeysConfig</span></a></span></span><span>
+</span><span id="line-123"></span><span>  </span><span class="hs-special">{</span><span> </span><span class="hs-comment">-- | Whether to grab all keys that are not already grabbed.</span><span>
+</span><span id="line-124"></span><span>    </span><span id="grabKeys"><span class="annot"><span class="annottext">UpKeysConfig -&gt; Bool
+</span><a href="XMonad.Actions.UpKeys.html#grabKeys"><span class="hs-identifier hs-var hs-var">grabKeys</span></a></span></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="hs-glyph">!</span><span class="annot"><span class="hs-identifier hs-type">Bool</span></span><span>
+</span><span id="line-125"></span><span>    </span><span class="hs-comment">-- | The keys themselves.</span><span>
+</span><span id="line-126"></span><span>  </span><span class="hs-special">,</span><span> </span><span id="upKeys"><span class="annot"><span class="annottext">UpKeysConfig -&gt; Map (KeyMask, KeySym) (X ())
+</span><a href="XMonad.Actions.UpKeys.html#upKeys"><span class="hs-identifier hs-var hs-var">upKeys</span></a></span></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="hs-glyph">!</span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">Map</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">KeyMask</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier hs-type">KeySym</span></span><span class="hs-special">)</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">X</span></span><span> </span><span class="hs-special">(</span><span class="hs-special">)</span><span class="hs-special">)</span><span class="hs-special">)</span><span>
+</span><span id="line-127"></span><span>  </span><span class="hs-special">}</span><span>
+</span><span id="line-128"></span><span>
+</span><span id="line-129"></span><span class="hs-comment">-- | The default 'UpKeysConfig'; keys are not grabbed, and no upkeys are</span><span>
+</span><span id="line-130"></span><span class="hs-comment">-- specified.</span><span>
+</span><span id="line-131"></span><span class="hs-keyword">instance</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Default</span></span><span> </span><span class="annot"><a href="XMonad.Actions.UpKeys.html#UpKeysConfig"><span class="hs-identifier hs-type">UpKeysConfig</span></a></span><span> </span><span class="hs-keyword">where</span><span>
+</span><span id="line-132"></span><span>  </span><span class="annot"><span class="hs-identifier hs-type">def</span></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><a href="XMonad.Actions.UpKeys.html#UpKeysConfig"><span class="hs-identifier hs-type">UpKeysConfig</span></a></span><span>
+</span><span id="line-133"></span><span>  </span><span id="local-6989586621679513311"><span class="annot"><span class="annottext">def :: UpKeysConfig
+</span><a href="#local-6989586621679513311"><span class="hs-identifier hs-var hs-var hs-var hs-var">def</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><a href="XMonad.Actions.UpKeys.html#UpKeysConfig"><span class="hs-identifier hs-type">UpKeysConfig</span></a></span><span> </span><span class="hs-special">{</span><span> </span><span class="annot"><span class="annottext">grabKeys :: Bool
+</span><a href="XMonad.Actions.UpKeys.html#grabKeys"><span class="hs-identifier hs-var">grabKeys</span></a></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Bool
+</span><span class="hs-identifier hs-var">False</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">upKeys :: Map (KeyMask, KeySym) (X ())
+</span><a href="XMonad.Actions.UpKeys.html#upKeys"><span class="hs-identifier hs-var">upKeys</span></a></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">forall a. Monoid a =&gt; a
+</span><span class="hs-identifier hs-var">mempty</span></span><span> </span><span class="hs-special">}</span><span>
+</span><span id="line-134"></span><span>
+</span><span id="line-135"></span><span class="hs-keyword">instance</span><span> </span><span id="local-6989586621679513306"><span id="local-6989586621679513308"><span class="annot"><span class="hs-identifier hs-type">Semigroup</span></span><span> </span><span class="annot"><a href="XMonad.Actions.UpKeys.html#UpKeysConfig"><span class="hs-identifier hs-type">UpKeysConfig</span></a></span></span></span><span> </span><span class="hs-keyword">where</span><span>
+</span><span id="line-136"></span><span>  </span><span class="annot"><span class="hs-operator hs-type">(&lt;&gt;)</span></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><a href="XMonad.Actions.UpKeys.html#UpKeysConfig"><span class="hs-identifier hs-type">UpKeysConfig</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="XMonad.Actions.UpKeys.html#UpKeysConfig"><span class="hs-identifier hs-type">UpKeysConfig</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="XMonad.Actions.UpKeys.html#UpKeysConfig"><span class="hs-identifier hs-type">UpKeysConfig</span></a></span><span>
+</span><span id="line-137"></span><span>  </span><span class="annot"><a href="XMonad.Actions.UpKeys.html#UpKeysConfig"><span class="hs-identifier hs-type">UpKeysConfig</span></a></span><span> </span><span id="local-6989586621679513302"><span class="annot"><span class="annottext">Bool
+</span><a href="#local-6989586621679513302"><span class="hs-identifier hs-var">g</span></a></span></span><span> </span><span id="local-6989586621679513301"><span class="annot"><span class="annottext">Map (KeyMask, KeySym) (X ())
+</span><a href="#local-6989586621679513301"><span class="hs-identifier hs-var">u</span></a></span></span><span> </span><span id="local-6989586621679513300"><span class="annot"><span class="annottext">&lt;&gt; :: UpKeysConfig -&gt; UpKeysConfig -&gt; UpKeysConfig
+</span><span class="hs-operator hs-var hs-var hs-var hs-var">&lt;&gt;</span></span></span><span> </span><span class="annot"><a href="XMonad.Actions.UpKeys.html#UpKeysConfig"><span class="hs-identifier hs-type">UpKeysConfig</span></a></span><span> </span><span id="local-6989586621679513299"><span class="annot"><span class="annottext">Bool
+</span><a href="#local-6989586621679513299"><span class="hs-identifier hs-var">g'</span></a></span></span><span> </span><span id="local-6989586621679513298"><span class="annot"><span class="annottext">Map (KeyMask, KeySym) (X ())
+</span><a href="#local-6989586621679513298"><span class="hs-identifier hs-var">u'</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Bool -&gt; Map (KeyMask, KeySym) (X ()) -&gt; UpKeysConfig
+</span><a href="XMonad.Actions.UpKeys.html#UpKeysConfig"><span class="hs-identifier hs-var">UpKeysConfig</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Bool
+</span><a href="#local-6989586621679513302"><span class="hs-identifier hs-var">g</span></a></span><span> </span><span class="annot"><span class="annottext">Bool -&gt; Bool -&gt; Bool
+</span><span class="hs-operator hs-var">&amp;&amp;</span></span><span> </span><span class="annot"><span class="annottext">Bool
+</span><a href="#local-6989586621679513299"><span class="hs-identifier hs-var">g'</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Map (KeyMask, KeySym) (X ())
+</span><a href="#local-6989586621679513301"><span class="hs-identifier hs-var">u</span></a></span><span> </span><span class="annot"><span class="annottext">forall a. Semigroup a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-operator hs-var">&lt;&gt;</span></span><span> </span><span class="annot"><span class="annottext">Map (KeyMask, KeySym) (X ())
+</span><a href="#local-6989586621679513298"><span class="hs-identifier hs-var">u'</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-138"></span><span>
+</span><span id="line-139"></span><span class="hs-comment">-- | Bind actions to keys upon their release.</span><span>
+</span><span id="line-140"></span><span id="local-6989586621679513409"><span class="annot"><a href="XMonad.Actions.UpKeys.html#useUpKeys"><span class="hs-identifier hs-type">useUpKeys</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><a href="XMonad.Actions.UpKeys.html#UpKeysConfig"><span class="hs-identifier hs-type">UpKeysConfig</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">XConfig</span></span><span> </span><span class="annot"><a href="#local-6989586621679513409"><span class="hs-identifier hs-type">l</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">XConfig</span></span><span> </span><span class="annot"><a href="#local-6989586621679513409"><span class="hs-identifier hs-type">l</span></a></span><span class="hs-special">)</span></span><span>
+</span><span id="line-141"></span><span id="useUpKeys"><span class="annot"><span class="annottext">useUpKeys :: forall (l :: * -&gt; *). UpKeysConfig -&gt; XConfig l -&gt; XConfig l
+</span><a href="XMonad.Actions.UpKeys.html#useUpKeys"><span class="hs-identifier hs-var hs-var">useUpKeys</span></a></span></span><span> </span><span id="local-6989586621679513271"><span class="annot"><span class="annottext">UpKeysConfig
+</span><a href="#local-6989586621679513271"><span class="hs-identifier hs-var">upKeysConf</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">forall a b c. (a -&gt; b -&gt; c) -&gt; b -&gt; a -&gt; c
+</span><span class="hs-identifier hs-var">flip</span></span><span> </span><span class="annot"><span class="annottext">forall a (l :: * -&gt; *).
+(Semigroup a, Typeable a) =&gt;
+(XConfig l -&gt; XConfig l) -&gt; a -&gt; XConfig l -&gt; XConfig l
+</span><a href="XMonad.Util.ExtensibleConf.html#once"><span class="hs-identifier hs-var">XC.once</span></a></span><span> </span><span class="annot"><span class="annottext">UpKeysConfig
+</span><a href="#local-6989586621679513271"><span class="hs-identifier hs-var">upKeysConf</span></a></span><span> </span><span class="hs-glyph">\</span><span id="local-6989586621679513268"><span class="annot"><span class="annottext">XConfig l
+</span><a href="#local-6989586621679513268"><span class="hs-identifier hs-var">conf</span></a></span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">XConfig l
+</span><a href="#local-6989586621679513268"><span class="hs-identifier hs-var">conf</span></a></span><span>
+</span><span id="line-142"></span><span>  </span><span class="hs-special">{</span><span> </span><span class="annot"><span class="annottext">handleEventHook :: Event -&gt; X All
+</span><span class="hs-identifier hs-var">handleEventHook</span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">forall (l :: * -&gt; *). XConfig l -&gt; Event -&gt; X All
+</span><span class="hs-identifier hs-var">handleEventHook</span></span><span> </span><span class="annot"><span class="annottext">XConfig l
+</span><a href="#local-6989586621679513268"><span class="hs-identifier hs-var">conf</span></a></span><span> </span><span class="annot"><span class="annottext">forall a. Semigroup a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-operator hs-var">&lt;&gt;</span></span><span> </span><span class="hs-special">(</span><span class="hs-glyph">\</span><span id="local-6989586621679513266"><span class="annot"><span class="annottext">Event
+</span><a href="#local-6989586621679513266"><span class="hs-identifier hs-var">e</span></a></span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">Event -&gt; X ()
+</span><a href="XMonad.Actions.UpKeys.html#handleKeyUp"><span class="hs-identifier hs-var">handleKeyUp</span></a></span><span> </span><span class="annot"><span class="annottext">Event
+</span><a href="#local-6989586621679513266"><span class="hs-identifier hs-var">e</span></a></span><span> </span><span class="annot"><span class="annottext">forall (f :: * -&gt; *) a b. Functor f =&gt; f a -&gt; b -&gt; f b
+</span><span class="hs-operator hs-var">$&gt;</span></span><span> </span><span class="annot"><span class="annottext">Bool -&gt; All
+</span><span class="hs-identifier hs-var">All</span></span><span> </span><span class="annot"><span class="annottext">Bool
+</span><span class="hs-identifier hs-var">True</span></span><span class="hs-special">)</span><span>
+</span><span id="line-143"></span><span>  </span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">startupHook :: X ()
+</span><span class="hs-identifier hs-var">startupHook</span></span><span>     </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">forall (l :: * -&gt; *). XConfig l -&gt; X ()
+</span><span class="hs-identifier hs-var">startupHook</span></span><span>     </span><span class="annot"><span class="annottext">XConfig l
+</span><a href="#local-6989586621679513268"><span class="hs-identifier hs-var">conf</span></a></span><span> </span><span class="annot"><span class="annottext">forall a. Semigroup a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-operator hs-var">&lt;&gt;</span></span><span> </span><span class="annot"><span class="annottext">forall (f :: * -&gt; *). Applicative f =&gt; Bool -&gt; f () -&gt; f ()
+</span><span class="hs-identifier hs-var">when</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">UpKeysConfig -&gt; Bool
+</span><a href="XMonad.Actions.UpKeys.html#grabKeys"><span class="hs-identifier hs-var">grabKeys</span></a></span><span> </span><span class="annot"><span class="annottext">UpKeysConfig
+</span><a href="#local-6989586621679513271"><span class="hs-identifier hs-var">upKeysConf</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">X ()
+</span><a href="#local-6989586621679513260"><span class="hs-identifier hs-var">grabUpKeys</span></a></span><span>
+</span><span id="line-144"></span><span>  </span><span class="hs-special">}</span><span>
+</span><span id="line-145"></span><span> </span><span class="hs-keyword">where</span><span>
+</span><span id="line-146"></span><span>  </span><span class="annot"><a href="#local-6989586621679513260"><span class="hs-identifier hs-type">grabUpKeys</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">X</span></span><span> </span><span class="hs-special">(</span><span class="hs-special">)</span><span>
+</span><span id="line-147"></span><span>  </span><span id="local-6989586621679513260"><span class="annot"><span class="annottext">grabUpKeys :: X ()
+</span><a href="#local-6989586621679513260"><span class="hs-identifier hs-var hs-var">grabUpKeys</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-148"></span><span>    </span><span class="annot"><span class="hs-identifier hs-type">XConf</span></span><span class="hs-special">{</span><span> </span><span class="annot"><span class="annottext">display :: XConf -&gt; Display
+</span><span class="hs-identifier hs-var">display</span></span><span> </span><span class="hs-glyph">=</span><span> </span><span id="local-6989586621679513257"><span class="annot"><span class="annottext">Display
+</span><a href="#local-6989586621679513257"><span class="hs-identifier hs-var">dpy</span></a></span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">theRoot :: XConf -&gt; KeySym
+</span><span class="hs-identifier hs-var">theRoot</span></span><span> </span><span class="hs-glyph">=</span><span> </span><span id="local-6989586621679513255"><span class="annot"><span class="annottext">KeySym
+</span><a href="#local-6989586621679513255"><span class="hs-identifier hs-var">rootw</span></a></span></span><span> </span><span class="hs-special">}</span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">forall r (m :: * -&gt; *). MonadReader r m =&gt; m r
+</span><span class="hs-identifier hs-var">ask</span></span><span>
+</span><span id="line-149"></span><span>    </span><span id="local-6989586621679513253"><span class="annot"><span class="annottext">Map (KeyMask, KeySym) (X ())
+</span><a href="#local-6989586621679513253"><span class="hs-identifier hs-var">realKeys</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">forall b a. b -&gt; (a -&gt; b) -&gt; Maybe a -&gt; b
+</span><span class="hs-identifier hs-var">maybe</span></span><span> </span><span class="annot"><span class="annottext">forall a. Monoid a =&gt; a
+</span><span class="hs-identifier hs-var">mempty</span></span><span> </span><span class="annot"><span class="annottext">UpKeysConfig -&gt; Map (KeyMask, KeySym) (X ())
+</span><a href="XMonad.Actions.UpKeys.html#upKeys"><span class="hs-identifier hs-var">upKeys</span></a></span><span> </span><span class="annot"><span class="annottext">forall (f :: * -&gt; *) a b. Functor f =&gt; (a -&gt; b) -&gt; f a -&gt; f b
+</span><span class="hs-operator hs-var">&lt;$&gt;</span></span><span> </span><span class="annot"><span class="annottext">forall (m :: * -&gt; *) a.
+(MonadReader XConf m, Typeable a) =&gt;
+m (Maybe a)
+</span><a href="XMonad.Util.ExtensibleConf.html#ask"><span class="hs-identifier hs-var">XC.ask</span></a></span><span> </span><span class="hs-glyph">@</span><span class="annot"><span class="hs-identifier hs-type">X</span></span><span> </span><span class="hs-glyph">@</span><span class="annot"><a href="XMonad.Actions.UpKeys.html#UpKeysConfig"><span class="hs-identifier hs-type">UpKeysConfig</span></a></span><span>
+</span><span id="line-150"></span><span>    </span><span class="hs-keyword">let</span><span> </span><span class="annot"><a href="#local-6989586621679513249"><span class="hs-identifier hs-type">grab</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">KeyMask</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier hs-type">KeyCode</span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">X</span></span><span> </span><span class="hs-special">(</span><span class="hs-special">)</span><span>
+</span><span id="line-151"></span><span>        </span><span id="local-6989586621679513249"><span class="annot"><span class="annottext">grab :: (KeyMask, KeyCode) -&gt; X ()
+</span><a href="#local-6989586621679513249"><span class="hs-identifier hs-var hs-var">grab</span></a></span></span><span> </span><span class="hs-special">(</span><span id="local-6989586621679513248"><span class="annot"><span class="annottext">KeyMask
+</span><a href="#local-6989586621679513248"><span class="hs-identifier hs-var">km</span></a></span></span><span class="hs-special">,</span><span> </span><span id="local-6989586621679513247"><span class="annot"><span class="annottext">KeyCode
+</span><a href="#local-6989586621679513247"><span class="hs-identifier hs-var">kc</span></a></span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">forall (m :: * -&gt; *) a. MonadIO m =&gt; IO a -&gt; m a
+</span><span class="hs-identifier hs-var">io</span></span><span> </span><span class="annot"><span class="annottext">forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">Display
+-&gt; KeyCode -&gt; KeyMask -&gt; KeySym -&gt; Bool -&gt; CInt -&gt; CInt -&gt; IO ()
+</span><span class="hs-identifier hs-var">grabKey</span></span><span> </span><span class="annot"><span class="annottext">Display
+</span><a href="#local-6989586621679513257"><span class="hs-identifier hs-var">dpy</span></a></span><span> </span><span class="annot"><span class="annottext">KeyCode
+</span><a href="#local-6989586621679513247"><span class="hs-identifier hs-var">kc</span></a></span><span> </span><span class="annot"><span class="annottext">KeyMask
+</span><a href="#local-6989586621679513248"><span class="hs-identifier hs-var">km</span></a></span><span> </span><span class="annot"><span class="annottext">KeySym
+</span><a href="#local-6989586621679513255"><span class="hs-identifier hs-var">rootw</span></a></span><span> </span><span class="annot"><span class="annottext">Bool
+</span><span class="hs-identifier hs-var">True</span></span><span> </span><span class="annot"><span class="annottext">CInt
+</span><span class="hs-identifier hs-var">grabModeAsync</span></span><span> </span><span class="annot"><span class="annottext">CInt
+</span><span class="hs-identifier hs-var">grabModeAsync</span></span><span>
+</span><span id="line-152"></span><span>    </span><span class="annot"><span class="annottext">forall (t :: * -&gt; *) (f :: * -&gt; *) a b.
+(Foldable t, Applicative f) =&gt;
+(a -&gt; f b) -&gt; t a -&gt; f ()
+</span><span class="hs-identifier hs-var">traverse_</span></span><span> </span><span class="annot"><span class="annottext">(KeyMask, KeyCode) -&gt; X ()
+</span><a href="#local-6989586621679513249"><span class="hs-identifier hs-var">grab</span></a></span><span> </span><span class="annot"><span class="annottext">forall (m :: * -&gt; *) a b. Monad m =&gt; (a -&gt; m b) -&gt; m a -&gt; m b
+</span><span class="hs-operator hs-var">=&lt;&lt;</span></span><span> </span><span class="annot"><span class="annottext">[(KeyMask, KeySym)] -&gt; X [(KeyMask, KeyCode)]
+</span><span class="hs-identifier hs-var">mkGrabs</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">forall k a. Map k a -&gt; [k]
+</span><span class="hs-identifier hs-var">Map.keys</span></span><span> </span><span class="annot"><span class="annottext">Map (KeyMask, KeySym) (X ())
+</span><a href="#local-6989586621679513253"><span class="hs-identifier hs-var">realKeys</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-153"></span><span>
+</span><span id="line-154"></span><span class="hs-comment">-- | Parse the given EZConfig-style keys into the internal keymap</span><span>
+</span><span id="line-155"></span><span class="hs-comment">-- representation.</span><span>
+</span><span id="line-156"></span><span class="hs-comment">--</span><span>
+</span><span id="line-157"></span><span class="hs-comment">-- This is just 'mkKeymap' with a better name.</span><span>
+</span><span id="line-158"></span><span id="local-6989586621679513365"><span class="annot"><a href="XMonad.Actions.UpKeys.html#ezUpKeys"><span class="hs-identifier hs-type">ezUpKeys</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">XConfig</span></span><span> </span><span class="annot"><a href="#local-6989586621679513365"><span class="hs-identifier hs-type">l</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="hs-special">[</span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">String</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier hs-type">X</span></span><span> </span><span class="hs-special">(</span><span class="hs-special">)</span><span class="hs-special">)</span><span class="hs-special">]</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Map</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">KeyMask</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier hs-type">KeySym</span></span><span class="hs-special">)</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">X</span></span><span> </span><span class="hs-special">(</span><span class="hs-special">)</span><span class="hs-special">)</span></span><span>
+</span><span id="line-159"></span><span id="ezUpKeys"><span class="annot"><span class="annottext">ezUpKeys :: forall (l :: * -&gt; *).
+XConfig l -&gt; [(String, X ())] -&gt; Map (KeyMask, KeySym) (X ())
+</span><a href="XMonad.Actions.UpKeys.html#ezUpKeys"><span class="hs-identifier hs-var hs-var">ezUpKeys</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">forall (l :: * -&gt; *).
+XConfig l -&gt; [(String, X ())] -&gt; Map (KeyMask, KeySym) (X ())
+</span><a href="XMonad.Util.EZConfig.html#mkKeymap"><span class="hs-identifier hs-var">mkKeymap</span></a></span><span>
+</span><span id="line-160"></span><span>
+</span><span id="line-161"></span><span class="hs-comment">-- | A handler for key-up events.</span><span>
+</span><span id="line-162"></span><span class="annot"><a href="XMonad.Actions.UpKeys.html#handleKeyUp"><span class="hs-identifier hs-type">handleKeyUp</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Event</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">X</span></span><span> </span><span class="hs-special">(</span><span class="hs-special">)</span><span>
+</span><span id="line-163"></span><span id="handleKeyUp"><span class="annot"><span class="annottext">handleKeyUp :: Event -&gt; X ()
+</span><a href="XMonad.Actions.UpKeys.html#handleKeyUp"><span class="hs-identifier hs-var hs-var">handleKeyUp</span></a></span></span><span> </span><span class="annot"><span class="hs-identifier hs-type">KeyEvent</span></span><span class="hs-special">{</span><span> </span><span id="local-6989586621679513238"><span class="annot"><span class="annottext">EventType
+ev_event_type :: Event -&gt; EventType
+ev_event_type :: EventType
+</span><span class="hs-identifier hs-var hs-var">ev_event_type</span></span></span><span class="hs-special">,</span><span> </span><span id="local-6989586621679513236"><span class="annot"><span class="annottext">KeyMask
+ev_state :: Event -&gt; KeyMask
+ev_state :: KeyMask
+</span><span class="hs-identifier hs-var hs-var">ev_state</span></span></span><span class="hs-special">,</span><span> </span><span id="local-6989586621679513234"><span class="annot"><span class="annottext">KeyCode
+ev_keycode :: Event -&gt; KeyCode
+ev_keycode :: KeyCode
+</span><span class="hs-identifier hs-var hs-var">ev_keycode</span></span></span><span> </span><span class="hs-special">}</span><span>
+</span><span id="line-164"></span><span>  </span><span class="hs-glyph">|</span><span> </span><span class="annot"><span class="annottext">EventType
+</span><a href="#local-6989586621679513238"><span class="hs-identifier hs-var">ev_event_type</span></a></span><span> </span><span class="annot"><span class="annottext">forall a. Eq a =&gt; a -&gt; a -&gt; Bool
+</span><span class="hs-operator hs-var">==</span></span><span> </span><span class="annot"><span class="annottext">EventType
+</span><span class="hs-identifier hs-var">keyRelease</span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">forall a. (Display -&gt; X a) -&gt; X a
+</span><span class="hs-identifier hs-var">withDisplay</span></span><span> </span><span class="hs-glyph">\</span><span id="local-6989586621679513230"><span class="annot"><span class="annottext">Display
+</span><a href="#local-6989586621679513230"><span class="hs-identifier hs-var">dpy</span></a></span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-165"></span><span>      </span><span id="local-6989586621679513229"><span class="annot"><span class="annottext">KeySym
+</span><a href="#local-6989586621679513229"><span class="hs-identifier hs-var">s</span></a></span></span><span>   </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">forall (m :: * -&gt; *) a. MonadIO m =&gt; IO a -&gt; m a
+</span><span class="hs-identifier hs-var">io</span></span><span> </span><span class="annot"><span class="annottext">forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">Display -&gt; KeyCode -&gt; CInt -&gt; IO KeySym
+</span><span class="hs-identifier hs-var">keycodeToKeysym</span></span><span> </span><span class="annot"><span class="annottext">Display
+</span><a href="#local-6989586621679513230"><span class="hs-identifier hs-var">dpy</span></a></span><span> </span><span class="annot"><span class="annottext">KeyCode
+</span><a href="#local-6989586621679513234"><span class="hs-identifier hs-var">ev_keycode</span></a></span><span> </span><span class="annot"><span class="annottext">CInt
+</span><span class="hs-number">0</span></span><span>
+</span><span id="line-166"></span><span>      </span><span id="local-6989586621679513227"><span class="annot"><span class="annottext">KeyMask
+</span><a href="#local-6989586621679513227"><span class="hs-identifier hs-var">cln</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">KeyMask -&gt; X KeyMask
+</span><span class="hs-identifier hs-var">cleanMask</span></span><span> </span><span class="annot"><span class="annottext">KeyMask
+</span><a href="#local-6989586621679513236"><span class="hs-identifier hs-var">ev_state</span></a></span><span>
+</span><span id="line-167"></span><span>      </span><span id="local-6989586621679513225"><span class="annot"><span class="annottext">Map (KeyMask, KeySym) (X ())
+</span><a href="#local-6989586621679513225"><span class="hs-identifier hs-var">ks</span></a></span></span><span>  </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">forall b a. b -&gt; (a -&gt; b) -&gt; Maybe a -&gt; b
+</span><span class="hs-identifier hs-var">maybe</span></span><span> </span><span class="annot"><span class="annottext">forall a. Monoid a =&gt; a
+</span><span class="hs-identifier hs-var">mempty</span></span><span> </span><span class="annot"><span class="annottext">UpKeysConfig -&gt; Map (KeyMask, KeySym) (X ())
+</span><a href="XMonad.Actions.UpKeys.html#upKeys"><span class="hs-identifier hs-var">upKeys</span></a></span><span> </span><span class="annot"><span class="annottext">forall (f :: * -&gt; *) a b. Functor f =&gt; (a -&gt; b) -&gt; f a -&gt; f b
+</span><span class="hs-operator hs-var">&lt;$&gt;</span></span><span> </span><span class="annot"><span class="annottext">forall (m :: * -&gt; *) a.
+(MonadReader XConf m, Typeable a) =&gt;
+m (Maybe a)
+</span><a href="XMonad.Util.ExtensibleConf.html#ask"><span class="hs-identifier hs-var">XC.ask</span></a></span><span> </span><span class="hs-glyph">@</span><span class="annot"><span class="hs-identifier hs-type">X</span></span><span> </span><span class="hs-glyph">@</span><span class="annot"><a href="XMonad.Actions.UpKeys.html#UpKeysConfig"><span class="hs-identifier hs-type">UpKeysConfig</span></a></span><span>
+</span><span id="line-168"></span><span>      </span><span class="annot"><span class="annottext">forall a. a -&gt; X a -&gt; X a
+</span><span class="hs-identifier hs-var">userCodeDef</span></span><span> </span><span class="hs-special">(</span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">forall (m :: * -&gt; *) a. Monad m =&gt; Maybe a -&gt; (a -&gt; m ()) -&gt; m ()
+</span><span class="hs-identifier hs-var">whenJust</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Map (KeyMask, KeySym) (X ())
+</span><a href="#local-6989586621679513225"><span class="hs-identifier hs-var">ks</span></a></span><span> </span><span class="annot"><span class="annottext">forall k a. Ord k =&gt; Map k a -&gt; k -&gt; Maybe a
+</span><span class="hs-operator hs-var">Map.!?</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">KeyMask
+</span><a href="#local-6989586621679513227"><span class="hs-identifier hs-var">cln</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">KeySym
+</span><a href="#local-6989586621679513229"><span class="hs-identifier hs-var">s</span></a></span><span class="hs-special">)</span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">forall a. a -&gt; a
+</span><span class="hs-identifier hs-var">id</span></span><span>
+</span><span id="line-169"></span><span class="annot"><a href="XMonad.Actions.UpKeys.html#handleKeyUp"><span class="hs-identifier hs-var">handleKeyUp</span></a></span><span> </span><span class="annot"><span class="annottext">Event
+</span><span class="hs-identifier">_</span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">forall (f :: * -&gt; *) a. Applicative f =&gt; a -&gt; f a
+</span><span class="hs-identifier hs-var">pure</span></span><span> </span><span class="hs-special">(</span><span class="hs-special">)</span><span>
+</span><span id="line-170"></span></pre></body></html>

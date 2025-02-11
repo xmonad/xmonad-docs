@@ -1,0 +1,232 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd"><html xmlns="http://www.w3.org/1999/xhtml"><head><link rel="stylesheet" type="text/css" href="style.css" /><script type="text/javascript" src="highlight.js"></script></head><body><pre><span class="hs-comment">----------------------------------------------------------------------------</span><span>
+</span><span id="line-2"></span><span class="hs-comment">-- |</span><span>
+</span><span id="line-3"></span><span class="hs-comment">-- Module      :  XMonad.Hooks.WorkspaceByPos</span><span>
+</span><span id="line-4"></span><span class="hs-comment">-- Description :  Move new window to non-focused screen based on its requested geometry.</span><span>
+</span><span id="line-5"></span><span class="hs-comment">-- Copyright   :  (c) Jan Vornberger 2009</span><span>
+</span><span id="line-6"></span><span class="hs-comment">-- License     :  BSD3-style (see LICENSE)</span><span>
+</span><span id="line-7"></span><span class="hs-comment">--</span><span>
+</span><span id="line-8"></span><span class="hs-comment">-- Maintainer  :  jan.vornberger@informatik.uni-oldenburg.de</span><span>
+</span><span id="line-9"></span><span class="hs-comment">-- Stability   :  unstable</span><span>
+</span><span id="line-10"></span><span class="hs-comment">-- Portability :  not portable</span><span>
+</span><span id="line-11"></span><span class="hs-comment">--</span><span>
+</span><span id="line-12"></span><span class="hs-comment">-- Useful in a dual-head setup: Looks at the requested geometry of</span><span>
+</span><span id="line-13"></span><span class="hs-comment">-- new windows and moves them to the workspace of the non-focused</span><span>
+</span><span id="line-14"></span><span class="hs-comment">-- screen if necessary.</span><span>
+</span><span id="line-15"></span><span class="hs-comment">--</span><span>
+</span><span id="line-16"></span><span class="hs-comment">-----------------------------------------------------------------------------</span><span>
+</span><span id="line-17"></span><span>
+</span><span id="line-18"></span><span class="hs-keyword">module</span><span> </span><span class="hs-identifier">XMonad.Hooks.WorkspaceByPos</span><span> </span><span class="hs-special">(</span><span>
+</span><span id="line-19"></span><span>    </span><span class="annot"><span class="hs-comment">-- * Usage</span></span><span>
+</span><span id="line-20"></span><span>    </span><span class="annot"><span class="hs-comment">-- $usage</span></span><span>
+</span><span id="line-21"></span><span>    </span><span class="annot"><a href="XMonad.Hooks.WorkspaceByPos.html#workspaceByPos"><span class="hs-identifier">workspaceByPos</span></a></span><span>
+</span><span id="line-22"></span><span>    </span><span class="hs-special">)</span><span> </span><span class="hs-keyword">where</span><span>
+</span><span id="line-23"></span><span>
+</span><span id="line-24"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><span class="hs-identifier">XMonad</span></span><span>
+</span><span id="line-25"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><a href="XMonad.Prelude.html"><span class="hs-identifier">XMonad.Prelude</span></a></span><span>
+</span><span id="line-26"></span><span class="hs-keyword">import</span><span> </span><span class="hs-keyword">qualified</span><span> </span><span class="annot"><span class="hs-identifier">XMonad.StackSet</span></span><span> </span><span class="hs-keyword">as</span><span> </span><span class="annot"><span class="hs-identifier">W</span></span><span>
+</span><span id="line-27"></span><span>
+</span><span id="line-28"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><span class="hs-identifier">Control.Monad.Except</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier">lift</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier">runExceptT</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier">throwError</span></span><span class="hs-special">)</span><span>
+</span><span id="line-29"></span><span>
+</span><span id="line-30"></span><span class="hs-comment">-- $usage</span><span>
+</span><span id="line-31"></span><span class="hs-comment">-- You can use this module with the following in your @~\/.xmonad\/xmonad.hs@:</span><span>
+</span><span id="line-32"></span><span class="hs-comment">--</span><span>
+</span><span id="line-33"></span><span class="hs-comment">-- &gt; import XMonad.Hooks.WorkspaceByPos</span><span>
+</span><span id="line-34"></span><span class="hs-comment">-- &gt;</span><span>
+</span><span id="line-35"></span><span class="hs-comment">-- &gt; myManageHook = workspaceByPos &lt;+&gt; manageHook def</span><span>
+</span><span id="line-36"></span><span class="hs-comment">-- &gt;</span><span>
+</span><span id="line-37"></span><span class="hs-comment">-- &gt; main = xmonad def { manageHook = myManageHook }</span><span>
+</span><span id="line-38"></span><span>
+</span><span id="line-39"></span><span class="annot"><a href="XMonad.Hooks.WorkspaceByPos.html#workspaceByPos"><span class="hs-identifier hs-type">workspaceByPos</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">ManageHook</span></span><span>
+</span><span id="line-40"></span><span id="workspaceByPos"><span class="annot"><span class="annottext">workspaceByPos :: ManageHook
+</span><a href="XMonad.Hooks.WorkspaceByPos.html#workspaceByPos"><span class="hs-identifier hs-var hs-var">workspaceByPos</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">ManageHook
+-&gt; (WorkspaceId -&gt; ManageHook) -&gt; Maybe WorkspaceId -&gt; ManageHook
+forall b a. b -&gt; (a -&gt; b) -&gt; Maybe a -&gt; b
+</span><span class="hs-identifier hs-var">maybe</span></span><span> </span><span class="annot"><span class="annottext">ManageHook
+forall m. Monoid m =&gt; m
+</span><span class="hs-identifier hs-var">idHook</span></span><span> </span><span class="annot"><span class="annottext">WorkspaceId -&gt; ManageHook
+</span><span class="hs-identifier hs-var">doShift</span></span><span> </span><span class="annot"><span class="annottext">(Maybe WorkspaceId -&gt; ManageHook)
+-&gt; (Window -&gt; Query (Maybe WorkspaceId)) -&gt; Window -&gt; ManageHook
+forall (m :: * -&gt; *) b c a.
+Monad m =&gt;
+(b -&gt; m c) -&gt; (a -&gt; m b) -&gt; a -&gt; m c
+</span><span class="hs-operator hs-var">&lt;=&lt;</span></span><span> </span><span class="annot"><span class="annottext">X (Maybe WorkspaceId) -&gt; Query (Maybe WorkspaceId)
+forall a. X a -&gt; Query a
+</span><span class="hs-identifier hs-var">liftX</span></span><span> </span><span class="annot"><span class="annottext">(X (Maybe WorkspaceId) -&gt; Query (Maybe WorkspaceId))
+-&gt; (Window -&gt; X (Maybe WorkspaceId))
+-&gt; Window
+-&gt; Query (Maybe WorkspaceId)
+forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">Window -&gt; X (Maybe WorkspaceId)
+</span><a href="XMonad.Hooks.WorkspaceByPos.html#needsMoving"><span class="hs-identifier hs-var">needsMoving</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">(Window -&gt; ManageHook) -&gt; Query Window -&gt; ManageHook
+forall (m :: * -&gt; *) a b. Monad m =&gt; (a -&gt; m b) -&gt; m a -&gt; m b
+</span><span class="hs-operator hs-var">=&lt;&lt;</span></span><span> </span><span class="annot"><span class="annottext">Query Window
+forall r (m :: * -&gt; *). MonadReader r m =&gt; m r
+</span><span class="hs-identifier hs-var">ask</span></span><span>
+</span><span id="line-41"></span><span>
+</span><span id="line-42"></span><span class="annot"><a href="XMonad.Hooks.WorkspaceByPos.html#needsMoving"><span class="hs-identifier hs-type">needsMoving</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Window</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">X</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">Maybe</span></span><span> </span><span class="annot"><span class="hs-identifier hs-type">WorkspaceId</span></span><span class="hs-special">)</span><span>
+</span><span id="line-43"></span><span id="needsMoving"><span class="annot"><span class="annottext">needsMoving :: Window -&gt; X (Maybe WorkspaceId)
+</span><a href="XMonad.Hooks.WorkspaceByPos.html#needsMoving"><span class="hs-identifier hs-var hs-var">needsMoving</span></a></span></span><span> </span><span id="local-6989586621679365778"><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679365778"><span class="hs-identifier hs-var">w</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">(Display -&gt; X (Maybe WorkspaceId)) -&gt; X (Maybe WorkspaceId)
+forall a. (Display -&gt; X a) -&gt; X a
+</span><span class="hs-identifier hs-var">withDisplay</span></span><span> </span><span class="annot"><span class="annottext">((Display -&gt; X (Maybe WorkspaceId)) -&gt; X (Maybe WorkspaceId))
+-&gt; (Display -&gt; X (Maybe WorkspaceId)) -&gt; X (Maybe WorkspaceId)
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="hs-glyph">\</span><span id="local-6989586621679365776"><span class="annot"><span class="annottext">Display
+</span><a href="#local-6989586621679365776"><span class="hs-identifier hs-var">d</span></a></span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-44"></span><span>    </span><span class="hs-comment">-- only relocate windows with non-zero position</span><span>
+</span><span id="line-45"></span><span>    </span><span id="local-6989586621679365775"><span class="annot"><span class="annottext">WindowAttributes
+</span><a href="#local-6989586621679365775"><span class="hs-identifier hs-var">wa</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">IO WindowAttributes -&gt; X WindowAttributes
+forall (m :: * -&gt; *) a. MonadIO m =&gt; IO a -&gt; m a
+</span><span class="hs-identifier hs-var">io</span></span><span> </span><span class="annot"><span class="annottext">(IO WindowAttributes -&gt; X WindowAttributes)
+-&gt; IO WindowAttributes -&gt; X WindowAttributes
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">Display -&gt; Window -&gt; IO WindowAttributes
+</span><span class="hs-identifier hs-var">getWindowAttributes</span></span><span> </span><span class="annot"><span class="annottext">Display
+</span><a href="#local-6989586621679365776"><span class="hs-identifier hs-var">d</span></a></span><span> </span><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679365778"><span class="hs-identifier hs-var">w</span></a></span><span>
+</span><span id="line-46"></span><span>    </span><span class="annot"><span class="annottext">(Either WorkspaceId WorkspaceId -&gt; Maybe WorkspaceId)
+-&gt; X (Either WorkspaceId WorkspaceId) -&gt; X (Maybe WorkspaceId)
+forall (f :: * -&gt; *) a b. Functor f =&gt; (a -&gt; b) -&gt; f a -&gt; f b
+</span><span class="hs-identifier hs-var">fmap</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Maybe WorkspaceId -&gt; WorkspaceId -&gt; Maybe WorkspaceId
+forall a b. a -&gt; b -&gt; a
+</span><span class="hs-identifier hs-var">const</span></span><span> </span><span class="annot"><span class="annottext">Maybe WorkspaceId
+forall a. Maybe a
+</span><span class="hs-identifier hs-var">Nothing</span></span><span> </span><span class="annot"><span class="annottext">(WorkspaceId -&gt; Maybe WorkspaceId)
+-&gt; (WorkspaceId -&gt; Maybe WorkspaceId)
+-&gt; Either WorkspaceId WorkspaceId
+-&gt; Maybe WorkspaceId
+forall a c b. (a -&gt; c) -&gt; (b -&gt; c) -&gt; Either a b -&gt; c
+</span><span class="hs-operator hs-var">`either`</span></span><span> </span><span class="annot"><span class="annottext">WorkspaceId -&gt; Maybe WorkspaceId
+forall a. a -&gt; Maybe a
+</span><span class="hs-identifier hs-var">Just</span></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">(X (Either WorkspaceId WorkspaceId) -&gt; X (Maybe WorkspaceId))
+-&gt; (ExceptT WorkspaceId X WorkspaceId
+    -&gt; X (Either WorkspaceId WorkspaceId))
+-&gt; ExceptT WorkspaceId X WorkspaceId
+-&gt; X (Maybe WorkspaceId)
+forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">ExceptT WorkspaceId X WorkspaceId
+-&gt; X (Either WorkspaceId WorkspaceId)
+forall e (m :: * -&gt; *) a. ExceptT e m a -&gt; m (Either e a)
+</span><span class="hs-identifier hs-var">runExceptT</span></span><span> </span><span class="annot"><span class="annottext">(ExceptT WorkspaceId X WorkspaceId -&gt; X (Maybe WorkspaceId))
+-&gt; ExceptT WorkspaceId X WorkspaceId -&gt; X (Maybe WorkspaceId)
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-47"></span><span>        </span><span class="annot"><span class="annottext">Bool -&gt; ExceptT WorkspaceId X ()
+forall (f :: * -&gt; *). Alternative f =&gt; Bool -&gt; f ()
+</span><span class="hs-identifier hs-var">guard</span></span><span> </span><span class="annot"><span class="annottext">(Bool -&gt; ExceptT WorkspaceId X ())
+-&gt; Bool -&gt; ExceptT WorkspaceId X ()
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">WindowAttributes -&gt; CInt
+</span><span class="hs-identifier hs-var hs-var">wa_x</span></span><span> </span><span class="annot"><span class="annottext">WindowAttributes
+</span><a href="#local-6989586621679365775"><span class="hs-identifier hs-var">wa</span></a></span><span> </span><span class="annot"><span class="annottext">CInt -&gt; CInt -&gt; Bool
+forall a. Eq a =&gt; a -&gt; a -&gt; Bool
+</span><span class="hs-operator hs-var">/=</span></span><span> </span><span class="annot"><span class="annottext">CInt
+</span><span class="hs-number">0</span></span><span> </span><span class="annot"><span class="annottext">Bool -&gt; Bool -&gt; Bool
+</span><span class="hs-operator hs-var">||</span></span><span> </span><span class="annot"><span class="annottext">WindowAttributes -&gt; CInt
+</span><span class="hs-identifier hs-var hs-var">wa_y</span></span><span> </span><span class="annot"><span class="annottext">WindowAttributes
+</span><a href="#local-6989586621679365775"><span class="hs-identifier hs-var">wa</span></a></span><span> </span><span class="annot"><span class="annottext">CInt -&gt; CInt -&gt; Bool
+forall a. Eq a =&gt; a -&gt; a -&gt; Bool
+</span><span class="hs-operator hs-var">/=</span></span><span> </span><span class="annot"><span class="annottext">CInt
+</span><span class="hs-number">0</span></span><span>
+</span><span id="line-48"></span><span>        </span><span id="local-6989586621679365766"><span class="annot"><span class="annottext">WindowSet
+</span><a href="#local-6989586621679365766"><span class="hs-identifier hs-var">ws</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">(XState -&gt; WindowSet) -&gt; ExceptT WorkspaceId X WindowSet
+forall s (m :: * -&gt; *) a. MonadState s m =&gt; (s -&gt; a) -&gt; m a
+</span><span class="hs-identifier hs-var">gets</span></span><span> </span><span class="annot"><span class="annottext">XState -&gt; WindowSet
+</span><span class="hs-identifier hs-var hs-var">windowset</span></span><span>
+</span><span id="line-49"></span><span>        </span><span id="local-6989586621679365763"><span class="annot"><span class="annottext">Screen WorkspaceId (Layout Window) Window ScreenId ScreenDetail
+</span><a href="#local-6989586621679365763"><span class="hs-identifier hs-var">sc</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">X (Screen WorkspaceId (Layout Window) Window ScreenId ScreenDetail)
+-&gt; ExceptT
+     WorkspaceId
+     X
+     (Screen WorkspaceId (Layout Window) Window ScreenId ScreenDetail)
+forall (t :: (* -&gt; *) -&gt; * -&gt; *) (m :: * -&gt; *) a.
+(MonadTrans t, Monad m) =&gt;
+m a -&gt; t m a
+</span><span class="hs-identifier hs-var">lift</span></span><span> </span><span class="annot"><span class="annottext">(X (Screen
+      WorkspaceId (Layout Window) Window ScreenId ScreenDetail)
+ -&gt; ExceptT
+      WorkspaceId
+      X
+      (Screen WorkspaceId (Layout Window) Window ScreenId ScreenDetail))
+-&gt; X (Screen
+        WorkspaceId (Layout Window) Window ScreenId ScreenDetail)
+-&gt; ExceptT
+     WorkspaceId
+     X
+     (Screen WorkspaceId (Layout Window) Window ScreenId ScreenDetail)
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">Screen WorkspaceId (Layout Window) Window ScreenId ScreenDetail
+-&gt; Maybe
+     (Screen WorkspaceId (Layout Window) Window ScreenId ScreenDetail)
+-&gt; Screen WorkspaceId (Layout Window) Window ScreenId ScreenDetail
+forall a. a -&gt; Maybe a -&gt; a
+</span><span class="hs-identifier hs-var">fromMaybe</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">WindowSet
+-&gt; Screen WorkspaceId (Layout Window) Window ScreenId ScreenDetail
+forall i l a sid sd. StackSet i l a sid sd -&gt; Screen i l a sid sd
+</span><span class="hs-identifier hs-var hs-var">W.current</span></span><span> </span><span class="annot"><span class="annottext">WindowSet
+</span><a href="#local-6989586621679365766"><span class="hs-identifier hs-var">ws</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-50"></span><span>                </span><span class="annot"><span class="annottext">(Maybe
+   (Screen WorkspaceId (Layout Window) Window ScreenId ScreenDetail)
+ -&gt; Screen WorkspaceId (Layout Window) Window ScreenId ScreenDetail)
+-&gt; X (Maybe
+        (Screen WorkspaceId (Layout Window) Window ScreenId ScreenDetail))
+-&gt; X (Screen
+        WorkspaceId (Layout Window) Window ScreenId ScreenDetail)
+forall (f :: * -&gt; *) a b. Functor f =&gt; (a -&gt; b) -&gt; f a -&gt; f b
+</span><span class="hs-operator hs-var">&lt;$&gt;</span></span><span> </span><span class="annot"><span class="annottext">Position
+-&gt; Position
+-&gt; X (Maybe
+        (Screen WorkspaceId (Layout Window) Window ScreenId ScreenDetail))
+</span><span class="hs-identifier hs-var">pointScreen</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">CInt -&gt; Position
+forall a b. (Integral a, Num b) =&gt; a -&gt; b
+</span><a href="XMonad.Prelude.html#fi"><span class="hs-identifier hs-var">fi</span></a></span><span> </span><span class="annot"><span class="annottext">(CInt -&gt; Position) -&gt; CInt -&gt; Position
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">WindowAttributes -&gt; CInt
+</span><span class="hs-identifier hs-var hs-var">wa_x</span></span><span> </span><span class="annot"><span class="annottext">WindowAttributes
+</span><a href="#local-6989586621679365775"><span class="hs-identifier hs-var">wa</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">CInt -&gt; Position
+forall a b. (Integral a, Num b) =&gt; a -&gt; b
+</span><a href="XMonad.Prelude.html#fi"><span class="hs-identifier hs-var">fi</span></a></span><span> </span><span class="annot"><span class="annottext">(CInt -&gt; Position) -&gt; CInt -&gt; Position
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">WindowAttributes -&gt; CInt
+</span><span class="hs-identifier hs-var hs-var">wa_y</span></span><span> </span><span class="annot"><span class="annottext">WindowAttributes
+</span><a href="#local-6989586621679365775"><span class="hs-identifier hs-var">wa</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-51"></span><span>        </span><span class="annot"><span class="hs-identifier hs-type">Just</span></span><span> </span><span id="local-6989586621679365757"><span class="annot"><span class="annottext">WorkspaceId
+</span><a href="#local-6989586621679365757"><span class="hs-identifier hs-var">wkspc</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">X (Maybe WorkspaceId) -&gt; ExceptT WorkspaceId X (Maybe WorkspaceId)
+forall (t :: (* -&gt; *) -&gt; * -&gt; *) (m :: * -&gt; *) a.
+(MonadTrans t, Monad m) =&gt;
+m a -&gt; t m a
+</span><span class="hs-identifier hs-var">lift</span></span><span> </span><span class="annot"><span class="annottext">(X (Maybe WorkspaceId)
+ -&gt; ExceptT WorkspaceId X (Maybe WorkspaceId))
+-&gt; X (Maybe WorkspaceId)
+-&gt; ExceptT WorkspaceId X (Maybe WorkspaceId)
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">ScreenId -&gt; X (Maybe WorkspaceId)
+</span><span class="hs-identifier hs-var">screenWorkspace</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Screen WorkspaceId (Layout Window) Window ScreenId ScreenDetail
+-&gt; ScreenId
+forall i l a sid sd. Screen i l a sid sd -&gt; sid
+</span><span class="hs-identifier hs-var hs-var">W.screen</span></span><span> </span><span class="annot"><span class="annottext">Screen WorkspaceId (Layout Window) Window ScreenId ScreenDetail
+</span><a href="#local-6989586621679365763"><span class="hs-identifier hs-var">sc</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-52"></span><span>        </span><span class="annot"><span class="annottext">Bool -&gt; ExceptT WorkspaceId X ()
+forall (f :: * -&gt; *). Alternative f =&gt; Bool -&gt; f ()
+</span><span class="hs-identifier hs-var">guard</span></span><span> </span><span class="annot"><span class="annottext">(Bool -&gt; ExceptT WorkspaceId X ())
+-&gt; Bool -&gt; ExceptT WorkspaceId X ()
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">WindowSet -&gt; WorkspaceId
+forall i l a s sd. StackSet i l a s sd -&gt; i
+</span><span class="hs-identifier hs-var">W.currentTag</span></span><span> </span><span class="annot"><span class="annottext">WindowSet
+</span><a href="#local-6989586621679365766"><span class="hs-identifier hs-var">ws</span></a></span><span> </span><span class="annot"><span class="annottext">WorkspaceId -&gt; WorkspaceId -&gt; Bool
+forall a. Eq a =&gt; a -&gt; a -&gt; Bool
+</span><span class="hs-operator hs-var">/=</span></span><span> </span><span class="annot"><span class="annottext">WorkspaceId
+</span><a href="#local-6989586621679365757"><span class="hs-identifier hs-var">wkspc</span></a></span><span>
+</span><span id="line-53"></span><span>        </span><span class="annot"><span class="annottext">WorkspaceId -&gt; ExceptT WorkspaceId X WorkspaceId
+forall (m :: * -&gt; *) a. Monad m =&gt; a -&gt; m a
+</span><span class="hs-identifier hs-var">return</span></span><span> </span><span class="annot"><span class="annottext">WorkspaceId
+</span><a href="#local-6989586621679365757"><span class="hs-identifier hs-var">wkspc</span></a></span><span> </span><span class="annot"><span class="annottext">ExceptT WorkspaceId X WorkspaceId
+-&gt; ExceptT WorkspaceId X WorkspaceId
+-&gt; ExceptT WorkspaceId X WorkspaceId
+forall a. a -&gt; a -&gt; a
+</span><span class="hs-operator hs-var">`asTypeOf`</span></span><span> </span><span class="annot"><span class="annottext">WorkspaceId -&gt; ExceptT WorkspaceId X WorkspaceId
+forall e (m :: * -&gt; *) a. MonadError e m =&gt; e -&gt; m a
+</span><span class="hs-identifier hs-var">throwError</span></span><span> </span><span class="annot"><span class="annottext">WorkspaceId
+</span><span class="hs-string">&quot;&quot;</span></span><span>
+</span><span id="line-54"></span></pre></body></html>

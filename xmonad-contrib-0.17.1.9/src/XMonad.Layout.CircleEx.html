@@ -1,0 +1,593 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd"><html xmlns="http://www.w3.org/1999/xhtml"><head><link rel="stylesheet" type="text/css" href="style.css" /><script type="text/javascript" src="highlight.js"></script></head><body><pre><span class="hs-pragma">{-# LANGUAGE FlexibleInstances #-}</span><span>
+</span><span id="line-2"></span><span class="hs-pragma">{-# LANGUAGE InstanceSigs #-}</span><span>
+</span><span id="line-3"></span><span class="hs-pragma">{-# LANGUAGE MultiParamTypeClasses #-}</span><span>
+</span><span id="line-4"></span><span class="hs-pragma">{-# LANGUAGE RecordWildCards #-}</span><span>
+</span><span id="line-5"></span><span class="hs-comment">-----------------------------------------------------------------------------</span><span>
+</span><span id="line-6"></span><span class="hs-comment">-- |</span><span>
+</span><span id="line-7"></span><span class="hs-comment">-- Module      :  XMonad.Layout.CircleEx</span><span>
+</span><span id="line-8"></span><span class="hs-comment">-- Description :  An elliptical, overlapping layout&#8212;extended version.</span><span>
+</span><span id="line-9"></span><span class="hs-comment">-- Copyright   :  (c) Peter De Wachter, Ilya V. Portnov</span><span>
+</span><span id="line-10"></span><span class="hs-comment">-- License     :  BSD-style (see LICENSE)</span><span>
+</span><span id="line-11"></span><span class="hs-comment">--</span><span>
+</span><span id="line-12"></span><span class="hs-comment">-- Maintainer  :  Ilya V. Portnov &lt;portnov84@rambler.ru&gt;</span><span>
+</span><span id="line-13"></span><span class="hs-comment">-- Stability   :  unstable</span><span>
+</span><span id="line-14"></span><span class="hs-comment">-- Portability :  unportable</span><span>
+</span><span id="line-15"></span><span class="hs-comment">--</span><span>
+</span><span id="line-16"></span><span class="hs-comment">-- Circle is an elliptical, overlapping layout. Original code by Peter De Wachter,</span><span>
+</span><span id="line-17"></span><span class="hs-comment">-- extended by Ilya Porntov.</span><span>
+</span><span id="line-18"></span><span class="hs-comment">-----------------------------------------------------------------------------</span><span>
+</span><span id="line-19"></span><span>
+</span><span id="line-20"></span><span class="hs-keyword">module</span><span> </span><span class="hs-identifier">XMonad.Layout.CircleEx</span><span> </span><span class="hs-special">(</span><span>
+</span><span id="line-21"></span><span>    </span><span class="annot"><span class="hs-comment">-- * Usage</span></span><span>
+</span><span id="line-22"></span><span>    </span><span class="annot"><span class="hs-comment">-- $usage</span></span><span>
+</span><span id="line-23"></span><span>    </span><span class="annot"><a href="XMonad.Layout.CircleEx.html#CircleEx"><span class="hs-identifier">CircleEx</span></a></span><span> </span><span class="hs-special">(</span><span class="hs-glyph">..</span><span class="hs-special">)</span><span class="hs-special">,</span><span> </span><span class="annot"><a href="XMonad.Layout.CircleEx.html#circle"><span class="hs-identifier">circle</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><a href="XMonad.Layout.CircleEx.html#circleEx"><span class="hs-identifier">circleEx</span></a></span><span class="hs-special">,</span><span>
+</span><span id="line-24"></span><span>    </span><span class="annot"><a href="XMonad.Layout.CircleEx.html#CircleExMsg"><span class="hs-identifier">CircleExMsg</span></a></span><span> </span><span class="hs-special">(</span><span class="hs-glyph">..</span><span class="hs-special">)</span><span>
+</span><span id="line-25"></span><span>  </span><span class="hs-special">)</span><span>
+</span><span id="line-26"></span><span>  </span><span class="hs-keyword">where</span><span>
+</span><span id="line-27"></span><span>
+</span><span id="line-28"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><span class="hs-identifier">Data.Ratio</span></span><span>
+</span><span id="line-29"></span><span>
+</span><span id="line-30"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><span class="hs-identifier">XMonad</span></span><span>
+</span><span id="line-31"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><span class="hs-identifier">XMonad.StackSet</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier">Stack</span></span><span class="hs-special">)</span><span>
+</span><span id="line-32"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><a href="XMonad.Prelude.html"><span class="hs-identifier">XMonad.Prelude</span></a></span><span>
+</span><span id="line-33"></span><span class="hs-keyword">import</span><span> </span><span class="hs-keyword">qualified</span><span> </span><span class="annot"><span class="hs-identifier">XMonad.StackSet</span></span><span> </span><span class="hs-keyword">as</span><span> </span><span class="annot"><span class="hs-identifier">W</span></span><span>
+</span><span id="line-34"></span><span>
+</span><span id="line-35"></span><span class="hs-comment">-- $usage</span><span>
+</span><span id="line-36"></span><span class="hs-comment">--</span><span>
+</span><span id="line-37"></span><span class="hs-comment">-- The layout puts the first N windows (called master) into the center of</span><span>
+</span><span id="line-38"></span><span class="hs-comment">-- screen. All others (called secondary, or stack) are organized in a circle</span><span>
+</span><span id="line-39"></span><span class="hs-comment">-- (well, ellipse). When opening a new secondary window, its size will be</span><span>
+</span><span id="line-40"></span><span class="hs-comment">-- slightly smaller than that of its predecessor (this is configurable). If</span><span>
+</span><span id="line-41"></span><span class="hs-comment">-- the number of master windows is set to zero, all windows will be arranged</span><span>
+</span><span id="line-42"></span><span class="hs-comment">-- in a circle. If there is more than one master window, they will be stacked</span><span>
+</span><span id="line-43"></span><span class="hs-comment">-- in the center on top of each other. The size of each additional master</span><span>
+</span><span id="line-44"></span><span class="hs-comment">-- window will again be slightly smaller than that of the former.</span><span>
+</span><span id="line-45"></span><span class="hs-comment">--</span><span>
+</span><span id="line-46"></span><span class="hs-comment">-- Since a picture says more than a thousand words, you see one</span><span>
+</span><span id="line-47"></span><span class="hs-comment">-- &lt;https://github.com/xmonad/xmonad-contrib/assets/50166980/90ef1273-5201-4380-8b94-9e62d3c98e1c here&gt;.</span><span>
+</span><span id="line-48"></span><span class="hs-comment">--</span><span>
+</span><span id="line-49"></span><span class="hs-comment">-- You can use this module with the following in your @xmonad.hs@:</span><span>
+</span><span id="line-50"></span><span class="hs-comment">--</span><span>
+</span><span id="line-51"></span><span class="hs-comment">-- &gt; import XMonad.Layout.CircleEx</span><span>
+</span><span id="line-52"></span><span class="hs-comment">--</span><span>
+</span><span id="line-53"></span><span class="hs-comment">-- Then edit your @layoutHook@ by adding the 'CircleEx' layout:</span><span>
+</span><span id="line-54"></span><span class="hs-comment">--</span><span>
+</span><span id="line-55"></span><span class="hs-comment">-- &gt; myCircle = circleEx {cDelta = -3*pi/4}</span><span>
+</span><span id="line-56"></span><span class="hs-comment">-- &gt; myLayout = myCircle ||| Full ||| etc..</span><span>
+</span><span id="line-57"></span><span class="hs-comment">-- &gt; main = xmonad def { layoutHook = myLayout }</span><span>
+</span><span id="line-58"></span><span class="hs-comment">--</span><span>
+</span><span id="line-59"></span><span class="hs-comment">-- This layout understands standard messages:</span><span>
+</span><span id="line-60"></span><span class="hs-comment">--</span><span>
+</span><span id="line-61"></span><span class="hs-comment">-- * 'IncMasterN': increase or decrease the number of master windows.</span><span>
+</span><span id="line-62"></span><span class="hs-comment">-- * 'Shrink' and 'Expand': change the size of master windows.</span><span>
+</span><span id="line-63"></span><span class="hs-comment">--</span><span>
+</span><span id="line-64"></span><span class="hs-comment">-- More layout-specific messages are also supported, see 'CircleExMsg' below.</span><span>
+</span><span id="line-65"></span><span class="hs-comment">--</span><span>
+</span><span id="line-66"></span><span class="hs-comment">-- For more detailed instructions on editing the layoutHook see:</span><span>
+</span><span id="line-67"></span><span class="hs-comment">-- &quot;XMonad.Doc.Extending#Editing_the_layout_hook&quot;</span><span>
+</span><span id="line-68"></span><span>
+</span><span id="line-69"></span><span class="hs-comment">-- | The layout data type. It is recommended to not use the 'CircleEx' data</span><span>
+</span><span id="line-70"></span><span class="hs-comment">-- constructor directly, and instead rely on record update syntax; for</span><span>
+</span><span id="line-71"></span><span class="hs-comment">-- example: @circleEx {cMasterRatio = 4%5}@. In this way you can avoid nasty</span><span>
+</span><span id="line-72"></span><span class="hs-comment">-- surprises if one day additional fields are added to @CircleEx@.</span><span>
+</span><span id="line-73"></span><span class="hs-keyword">data</span><span> </span><span id="CircleEx"><span class="annot"><a href="XMonad.Layout.CircleEx.html#CircleEx"><span class="hs-identifier hs-var">CircleEx</span></a></span></span><span> </span><span id="local-6989586621679411513"><span class="annot"><a href="#local-6989586621679411513"><span class="hs-identifier hs-type">a</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span id="CircleEx"><span class="annot"><a href="XMonad.Layout.CircleEx.html#CircleEx"><span class="hs-identifier hs-var">CircleEx</span></a></span></span><span>
+</span><span id="line-74"></span><span>    </span><span class="hs-special">{</span><span> </span><span id="cNMaster"><span class="annot"><span class="annottext">forall a. CircleEx a -&gt; Int
+</span><a href="XMonad.Layout.CircleEx.html#cNMaster"><span class="hs-identifier hs-var hs-var">cNMaster</span></a></span></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="hs-glyph">!</span><span class="annot"><span class="hs-identifier hs-type">Int</span></span><span>          </span><span class="hs-comment">-- ^ Number of master windows. Default value is 1.</span><span>
+</span><span id="line-75"></span><span>    </span><span class="hs-special">,</span><span> </span><span id="cMasterRatio"><span class="annot"><span class="annottext">forall a. CircleEx a -&gt; Rational
+</span><a href="XMonad.Layout.CircleEx.html#cMasterRatio"><span class="hs-identifier hs-var hs-var">cMasterRatio</span></a></span></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="hs-glyph">!</span><span class="annot"><span class="hs-identifier hs-type">Rational</span></span><span> </span><span class="hs-comment">-- ^ Size of master window in relation to screen size.</span><span>
+</span><span id="line-76"></span><span>                                </span><span class="hs-comment">--   Default value is @4%5@.</span><span>
+</span><span id="line-77"></span><span>    </span><span class="hs-special">,</span><span> </span><span id="cStackRatio"><span class="annot"><span class="annottext">forall a. CircleEx a -&gt; Rational
+</span><a href="XMonad.Layout.CircleEx.html#cStackRatio"><span class="hs-identifier hs-var hs-var">cStackRatio</span></a></span></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="hs-glyph">!</span><span class="annot"><span class="hs-identifier hs-type">Rational</span></span><span>  </span><span class="hs-comment">-- ^ Size of first secondary window in relation to screen size.</span><span>
+</span><span id="line-78"></span><span>                                </span><span class="hs-comment">--   Default value is @3%5@.</span><span>
+</span><span id="line-79"></span><span>    </span><span class="hs-special">,</span><span> </span><span id="cMultiplier"><span class="annot"><span class="annottext">forall a. CircleEx a -&gt; Rational
+</span><a href="XMonad.Layout.CircleEx.html#cMultiplier"><span class="hs-identifier hs-var hs-var">cMultiplier</span></a></span></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="hs-glyph">!</span><span class="annot"><span class="hs-identifier hs-type">Rational</span></span><span>  </span><span class="hs-comment">-- ^ Coefficient used to calculate the sizes of subsequent secondary</span><span>
+</span><span id="line-80"></span><span>                                </span><span class="hs-comment">--   windows. The size of the next window is calculated as the</span><span>
+</span><span id="line-81"></span><span>                                </span><span class="hs-comment">--   size of the previous one multiplied by this value.</span><span>
+</span><span id="line-82"></span><span>                                </span><span class="hs-comment">--   This value is also used to scale master windows, in case</span><span>
+</span><span id="line-83"></span><span>                                </span><span class="hs-comment">--   there is more than one.</span><span>
+</span><span id="line-84"></span><span>                                </span><span class="hs-comment">--   Default value is @5%6@. Set this to 1 if you want all secondary</span><span>
+</span><span id="line-85"></span><span>                                </span><span class="hs-comment">--   windows to have the same size.</span><span>
+</span><span id="line-86"></span><span>    </span><span class="hs-special">,</span><span> </span><span id="cDelta"><span class="annot"><span class="annottext">forall a. CircleEx a -&gt; Double
+</span><a href="XMonad.Layout.CircleEx.html#cDelta"><span class="hs-identifier hs-var hs-var">cDelta</span></a></span></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="hs-glyph">!</span><span class="annot"><span class="hs-identifier hs-type">Double</span></span><span>         </span><span class="hs-comment">-- ^ Angle of rotation of the whole circle layout. Usual values</span><span>
+</span><span id="line-87"></span><span>                                </span><span class="hs-comment">--   are from 0 to 2&#960;, although it will work outside</span><span>
+</span><span id="line-88"></span><span>                                </span><span class="hs-comment">--   this range as well. Default value of 0 means that the first</span><span>
+</span><span id="line-89"></span><span>                                </span><span class="hs-comment">--   secondary window will be placed at the right side of screen.</span><span>
+</span><span id="line-90"></span><span>    </span><span class="hs-special">}</span><span> </span><span class="hs-keyword">deriving</span><span> </span><span class="hs-special">(</span><span id="local-6989586621679411368"><span id="local-6989586621679411379"><span class="annot"><span class="annottext">CircleEx a -&gt; CircleEx a -&gt; Bool
+forall a. CircleEx a -&gt; CircleEx a -&gt; Bool
+forall a. (a -&gt; a -&gt; Bool) -&gt; (a -&gt; a -&gt; Bool) -&gt; Eq a
+/= :: CircleEx a -&gt; CircleEx a -&gt; Bool
+$c/= :: forall a. CircleEx a -&gt; CircleEx a -&gt; Bool
+== :: CircleEx a -&gt; CircleEx a -&gt; Bool
+$c== :: forall a. CircleEx a -&gt; CircleEx a -&gt; Bool
+</span><span class="hs-identifier hs-var hs-var hs-var hs-var hs-var hs-var">Eq</span></span></span></span><span class="hs-special">,</span><span> </span><span id="local-6989586621679411349"><span id="local-6989586621679411351"><span id="local-6989586621679411364"><span class="annot"><span class="annottext">Int -&gt; CircleEx a -&gt; ShowS
+forall a. Int -&gt; CircleEx a -&gt; ShowS
+forall a. [CircleEx a] -&gt; ShowS
+forall a. CircleEx a -&gt; String
+forall a.
+(Int -&gt; a -&gt; ShowS) -&gt; (a -&gt; String) -&gt; ([a] -&gt; ShowS) -&gt; Show a
+showList :: [CircleEx a] -&gt; ShowS
+$cshowList :: forall a. [CircleEx a] -&gt; ShowS
+show :: CircleEx a -&gt; String
+$cshow :: forall a. CircleEx a -&gt; String
+showsPrec :: Int -&gt; CircleEx a -&gt; ShowS
+$cshowsPrec :: forall a. Int -&gt; CircleEx a -&gt; ShowS
+</span><span class="hs-identifier hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var">Show</span></span></span></span></span><span class="hs-special">,</span><span> </span><span id="local-6989586621679411314"><span id="local-6989586621679411340"><span id="local-6989586621679411343"><span id="local-6989586621679411345"><span class="annot"><span class="annottext">ReadPrec [CircleEx a]
+ReadPrec (CircleEx a)
+ReadS [CircleEx a]
+forall a. ReadPrec [CircleEx a]
+forall a. ReadPrec (CircleEx a)
+forall a. Int -&gt; ReadS (CircleEx a)
+forall a. ReadS [CircleEx a]
+forall a.
+(Int -&gt; ReadS a)
+-&gt; ReadS [a] -&gt; ReadPrec a -&gt; ReadPrec [a] -&gt; Read a
+readListPrec :: ReadPrec [CircleEx a]
+$creadListPrec :: forall a. ReadPrec [CircleEx a]
+readPrec :: ReadPrec (CircleEx a)
+$creadPrec :: forall a. ReadPrec (CircleEx a)
+readList :: ReadS [CircleEx a]
+$creadList :: forall a. ReadS [CircleEx a]
+readsPrec :: Int -&gt; ReadS (CircleEx a)
+$creadsPrec :: forall a. Int -&gt; ReadS (CircleEx a)
+</span><span class="hs-identifier hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var">Read</span></span></span></span></span></span><span class="hs-special">)</span><span>
+</span><span id="line-91"></span><span>
+</span><span id="line-92"></span><span class="hs-comment">-- | Circle layout with default settings:</span><span>
+</span><span id="line-93"></span><span class="hs-comment">--</span><span>
+</span><span id="line-94"></span><span class="hs-comment">-- * Number of master windows is set to 1</span><span>
+</span><span id="line-95"></span><span class="hs-comment">-- * @cMasterRatio@ is set to @70/99@, which is nearly @1/sqrt(2)@</span><span>
+</span><span id="line-96"></span><span class="hs-comment">-- * @cStackRatio@ is set to @2/5@</span><span>
+</span><span id="line-97"></span><span class="hs-comment">-- * @cMultiplier@ is set to 1, which means all secondary windows</span><span>
+</span><span id="line-98"></span><span class="hs-comment">--   will have the same size</span><span>
+</span><span id="line-99"></span><span class="hs-comment">--</span><span>
+</span><span id="line-100"></span><span class="hs-comment">-- This can be used as a drop-in replacement for &quot;XMonad.Layout.Circle&quot;.</span><span>
+</span><span id="line-101"></span><span id="local-6989586621679411498"><span class="annot"><a href="XMonad.Layout.CircleEx.html#circle"><span class="hs-identifier hs-type">circle</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><a href="XMonad.Layout.CircleEx.html#CircleEx"><span class="hs-identifier hs-type">CircleEx</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679411498"><span class="hs-identifier hs-type">a</span></a></span></span><span>
+</span><span id="line-102"></span><span id="circle"><span class="annot"><span class="annottext">circle :: forall a. CircleEx a
+</span><a href="XMonad.Layout.CircleEx.html#circle"><span class="hs-identifier hs-var hs-var">circle</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">forall a.
+Int -&gt; Rational -&gt; Rational -&gt; Rational -&gt; Double -&gt; CircleEx a
+</span><a href="XMonad.Layout.CircleEx.html#CircleEx"><span class="hs-identifier hs-var">CircleEx</span></a></span><span> </span><span class="annot"><span class="annottext">Int
+</span><span class="hs-number">1</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Integer
+</span><span class="hs-number">70</span></span><span class="annot"><span class="annottext">forall a. Integral a =&gt; a -&gt; a -&gt; Ratio a
+</span><span class="hs-operator hs-var">%</span></span><span class="annot"><span class="annottext">Integer
+</span><span class="hs-number">99</span></span><span class="hs-special">)</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Integer
+</span><span class="hs-number">2</span></span><span class="annot"><span class="annottext">forall a. Integral a =&gt; a -&gt; a -&gt; Ratio a
+</span><span class="hs-operator hs-var">%</span></span><span class="annot"><span class="annottext">Integer
+</span><span class="hs-number">5</span></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">Rational
+</span><span class="hs-number">1</span></span><span> </span><span class="annot"><span class="annottext">Double
+</span><span class="hs-number">0</span></span><span>
+</span><span id="line-103"></span><span>
+</span><span id="line-104"></span><span class="hs-comment">-- | Another variant of default settings for circle layout:</span><span>
+</span><span id="line-105"></span><span class="hs-comment">--</span><span>
+</span><span id="line-106"></span><span class="hs-comment">-- * Number of master windows is set to 1</span><span>
+</span><span id="line-107"></span><span class="hs-comment">-- * @cMasterRatio@ is set to @4/5@</span><span>
+</span><span id="line-108"></span><span class="hs-comment">-- * @cStackRatio@ is set to @3/5@</span><span>
+</span><span id="line-109"></span><span class="hs-comment">-- * @cMultiplier@ is set to @5/6@</span><span>
+</span><span id="line-110"></span><span class="hs-comment">--</span><span>
+</span><span id="line-111"></span><span id="local-6989586621679411299"><span class="annot"><a href="XMonad.Layout.CircleEx.html#circleEx"><span class="hs-identifier hs-type">circleEx</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><a href="XMonad.Layout.CircleEx.html#CircleEx"><span class="hs-identifier hs-type">CircleEx</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679411299"><span class="hs-identifier hs-type">a</span></a></span></span><span>
+</span><span id="line-112"></span><span id="circleEx"><span class="annot"><span class="annottext">circleEx :: forall a. CircleEx a
+</span><a href="XMonad.Layout.CircleEx.html#circleEx"><span class="hs-identifier hs-var hs-var">circleEx</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">forall a.
+Int -&gt; Rational -&gt; Rational -&gt; Rational -&gt; Double -&gt; CircleEx a
+</span><a href="XMonad.Layout.CircleEx.html#CircleEx"><span class="hs-identifier hs-var">CircleEx</span></a></span><span> </span><span class="annot"><span class="annottext">Int
+</span><span class="hs-number">1</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Integer
+</span><span class="hs-number">4</span></span><span class="annot"><span class="annottext">forall a. Integral a =&gt; a -&gt; a -&gt; Ratio a
+</span><span class="hs-operator hs-var">%</span></span><span class="annot"><span class="annottext">Integer
+</span><span class="hs-number">5</span></span><span class="hs-special">)</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Integer
+</span><span class="hs-number">3</span></span><span class="annot"><span class="annottext">forall a. Integral a =&gt; a -&gt; a -&gt; Ratio a
+</span><span class="hs-operator hs-var">%</span></span><span class="annot"><span class="annottext">Integer
+</span><span class="hs-number">5</span></span><span class="hs-special">)</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Integer
+</span><span class="hs-number">5</span></span><span class="annot"><span class="annottext">forall a. Integral a =&gt; a -&gt; a -&gt; Ratio a
+</span><span class="hs-operator hs-var">%</span></span><span class="annot"><span class="annottext">Integer
+</span><span class="hs-number">6</span></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">Double
+</span><span class="hs-number">0</span></span><span>
+</span><span id="line-113"></span><span>
+</span><span id="line-114"></span><span class="hs-comment">-- | Specific messages understood by CircleEx layout.</span><span>
+</span><span id="line-115"></span><span class="hs-keyword">data</span><span> </span><span id="CircleExMsg"><span class="annot"><a href="XMonad.Layout.CircleEx.html#CircleExMsg"><span class="hs-identifier hs-var">CircleExMsg</span></a></span></span><span>
+</span><span id="line-116"></span><span>  </span><span class="hs-glyph">=</span><span> </span><span id="Rotate"><span class="annot"><a href="XMonad.Layout.CircleEx.html#Rotate"><span class="hs-identifier hs-var">Rotate</span></a></span></span><span> </span><span class="hs-glyph">!</span><span class="annot"><span class="hs-identifier hs-type">Double</span></span><span>            </span><span class="hs-comment">-- ^ Rotate secondary windows by specific angle</span><span>
+</span><span id="line-117"></span><span>  </span><span class="hs-glyph">|</span><span> </span><span id="IncStackRatio"><span class="annot"><a href="XMonad.Layout.CircleEx.html#IncStackRatio"><span class="hs-identifier hs-var">IncStackRatio</span></a></span></span><span> </span><span class="hs-glyph">!</span><span class="annot"><span class="hs-identifier hs-type">Rational</span></span><span>   </span><span class="hs-comment">-- ^ Increase (or decrease, with negative value) sizes of secondary windows</span><span>
+</span><span id="line-118"></span><span>  </span><span class="hs-glyph">|</span><span> </span><span id="IncMultiplier"><span class="annot"><a href="XMonad.Layout.CircleEx.html#IncMultiplier"><span class="hs-identifier hs-var">IncMultiplier</span></a></span></span><span> </span><span class="hs-glyph">!</span><span class="annot"><span class="hs-identifier hs-type">Rational</span></span><span>   </span><span class="hs-comment">-- ^ Increase 'cMultiplier'.</span><span>
+</span><span id="line-119"></span><span>  </span><span class="hs-keyword">deriving</span><span> </span><span class="hs-special">(</span><span id="local-6989586621679411279"><span id="local-6989586621679411285"><span class="annot"><span class="annottext">CircleExMsg -&gt; CircleExMsg -&gt; Bool
+forall a. (a -&gt; a -&gt; Bool) -&gt; (a -&gt; a -&gt; Bool) -&gt; Eq a
+/= :: CircleExMsg -&gt; CircleExMsg -&gt; Bool
+$c/= :: CircleExMsg -&gt; CircleExMsg -&gt; Bool
+== :: CircleExMsg -&gt; CircleExMsg -&gt; Bool
+$c== :: CircleExMsg -&gt; CircleExMsg -&gt; Bool
+</span><span class="hs-identifier hs-var hs-var hs-var hs-var hs-var hs-var">Eq</span></span></span></span><span class="hs-special">,</span><span> </span><span id="local-6989586621679411266"><span id="local-6989586621679411268"><span id="local-6989586621679411277"><span class="annot"><span class="annottext">Int -&gt; CircleExMsg -&gt; ShowS
+[CircleExMsg] -&gt; ShowS
+CircleExMsg -&gt; String
+forall a.
+(Int -&gt; a -&gt; ShowS) -&gt; (a -&gt; String) -&gt; ([a] -&gt; ShowS) -&gt; Show a
+showList :: [CircleExMsg] -&gt; ShowS
+$cshowList :: [CircleExMsg] -&gt; ShowS
+show :: CircleExMsg -&gt; String
+$cshow :: CircleExMsg -&gt; String
+showsPrec :: Int -&gt; CircleExMsg -&gt; ShowS
+$cshowsPrec :: Int -&gt; CircleExMsg -&gt; ShowS
+</span><span class="hs-identifier hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var">Show</span></span></span></span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Typeable</span></span><span class="hs-special">)</span><span>
+</span><span id="line-120"></span><span>
+</span><span id="line-121"></span><span class="hs-keyword">instance</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Message</span></span><span> </span><span class="annot"><a href="XMonad.Layout.CircleEx.html#CircleExMsg"><span class="hs-identifier hs-type">CircleExMsg</span></a></span><span>
+</span><span id="line-122"></span><span>
+</span><span id="line-123"></span><span class="hs-keyword">instance</span><span> </span><span id="local-6989586621679411246"><span id="local-6989586621679411249"><span id="local-6989586621679411251"><span id="local-6989586621679411253"><span id="local-6989586621679411256"><span class="annot"><span class="hs-identifier hs-type">LayoutClass</span></span><span> </span><span class="annot"><a href="XMonad.Layout.CircleEx.html#CircleEx"><span class="hs-identifier hs-type">CircleEx</span></a></span><span> </span><span class="annot"><span class="hs-identifier hs-type">Window</span></span></span></span></span></span></span><span> </span><span class="hs-keyword">where</span><span>
+</span><span id="line-124"></span><span>  </span><span class="annot"><span class="hs-identifier hs-type">doLayout</span></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><a href="XMonad.Layout.CircleEx.html#CircleEx"><span class="hs-identifier hs-type">CircleEx</span></a></span><span> </span><span class="annot"><span class="hs-identifier hs-type">Window</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Rectangle</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Stack</span></span><span> </span><span class="annot"><span class="hs-identifier hs-type">Window</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">X</span></span><span> </span><span class="hs-special">(</span><span class="hs-special">[</span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">Window</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Rectangle</span></span><span class="hs-special">)</span><span class="hs-special">]</span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Maybe</span></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="XMonad.Layout.CircleEx.html#CircleEx"><span class="hs-identifier hs-type">CircleEx</span></a></span><span> </span><span class="annot"><span class="hs-identifier hs-type">Window</span></span><span class="hs-special">)</span><span class="hs-special">)</span><span>
+</span><span id="line-125"></span><span>  </span><span id="local-6989586621679411241"><span class="annot"><span class="annottext">doLayout :: CircleEx Window
+-&gt; Rectangle
+-&gt; Stack Window
+-&gt; X ([(Window, Rectangle)], Maybe (CircleEx Window))
+</span><a href="#local-6989586621679411241"><span class="hs-identifier hs-var hs-var hs-var hs-var">doLayout</span></a></span></span><span> </span><span id="local-6989586621679411240"><span class="annot"><span class="annottext">CircleEx Window
+</span><a href="#local-6989586621679411240"><span class="hs-identifier hs-var">layout</span></a></span></span><span> </span><span id="local-6989586621679411239"><span class="annot"><span class="annottext">Rectangle
+</span><a href="#local-6989586621679411239"><span class="hs-identifier hs-var">rect</span></a></span></span><span> </span><span id="local-6989586621679411238"><span class="annot"><span class="annottext">Stack Window
+</span><a href="#local-6989586621679411238"><span class="hs-identifier hs-var">stack</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-126"></span><span>    </span><span id="local-6989586621679411237"><span class="annot"><span class="annottext">[(Window, Rectangle)]
+</span><a href="#local-6989586621679411237"><span class="hs-identifier hs-var">result</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">[(Window, Rectangle)] -&gt; X [(Window, Rectangle)]
+</span><a href="XMonad.Layout.CircleEx.html#raiseFocus"><span class="hs-identifier hs-var">raiseFocus</span></a></span><span> </span><span class="annot"><span class="annottext">forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">forall a. CircleEx a -&gt; Rectangle -&gt; [a] -&gt; [(a, Rectangle)]
+</span><a href="XMonad.Layout.CircleEx.html#circleLayout"><span class="hs-identifier hs-var">circleLayout</span></a></span><span> </span><span class="annot"><span class="annottext">CircleEx Window
+</span><a href="#local-6989586621679411240"><span class="hs-identifier hs-var">layout</span></a></span><span> </span><span class="annot"><span class="annottext">Rectangle
+</span><a href="#local-6989586621679411239"><span class="hs-identifier hs-var">rect</span></a></span><span> </span><span class="annot"><span class="annottext">forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">forall a. Stack a -&gt; [a]
+</span><span class="hs-identifier hs-var">W.integrate</span></span><span> </span><span class="annot"><span class="annottext">Stack Window
+</span><a href="#local-6989586621679411238"><span class="hs-identifier hs-var">stack</span></a></span><span>
+</span><span id="line-127"></span><span>    </span><span class="annot"><span class="annottext">forall (m :: * -&gt; *) a. Monad m =&gt; a -&gt; m a
+</span><span class="hs-identifier hs-var">return</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">[(Window, Rectangle)]
+</span><a href="#local-6989586621679411237"><span class="hs-identifier hs-var">result</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">forall a. Maybe a
+</span><span class="hs-identifier hs-var">Nothing</span></span><span class="hs-special">)</span><span>
+</span><span id="line-128"></span><span>
+</span><span id="line-129"></span><span>  </span><span class="annot"><span class="hs-identifier hs-type">pureMessage</span></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><a href="XMonad.Layout.CircleEx.html#CircleEx"><span class="hs-identifier hs-type">CircleEx</span></a></span><span> </span><span class="annot"><span class="hs-identifier hs-type">Window</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">SomeMessage</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Maybe</span></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="XMonad.Layout.CircleEx.html#CircleEx"><span class="hs-identifier hs-type">CircleEx</span></a></span><span> </span><span class="annot"><span class="hs-identifier hs-type">Window</span></span><span class="hs-special">)</span><span>
+</span><span id="line-130"></span><span>  </span><span id="local-6989586621679411220"><span class="annot"><span class="annottext">pureMessage :: CircleEx Window -&gt; SomeMessage -&gt; Maybe (CircleEx Window)
+</span><a href="#local-6989586621679411220"><span class="hs-identifier hs-var hs-var hs-var hs-var">pureMessage</span></a></span></span><span> </span><span id="local-6989586621679411219"><span class="annot"><span class="annottext">CircleEx Window
+</span><a href="#local-6989586621679411219"><span class="hs-identifier hs-var">layout</span></a></span></span><span> </span><span id="local-6989586621679411218"><span class="annot"><span class="annottext">SomeMessage
+</span><a href="#local-6989586621679411218"><span class="hs-identifier hs-var">m</span></a></span></span><span> </span><span class="hs-glyph">=</span><span>
+</span><span id="line-131"></span><span>      </span><span class="annot"><span class="annottext">forall (t :: * -&gt; *) (m :: * -&gt; *) a.
+(Foldable t, MonadPlus m) =&gt;
+t (m a) -&gt; m a
+</span><span class="hs-identifier hs-var">msum</span></span><span> </span><span class="hs-special">[</span><span class="annot"><span class="annottext">forall a. IncMasterN -&gt; CircleEx a
+</span><a href="#local-6989586621679411216"><span class="hs-identifier hs-var">changeMasterN</span></a></span><span> </span><span class="annot"><span class="annottext">forall (f :: * -&gt; *) a b. Functor f =&gt; (a -&gt; b) -&gt; f a -&gt; f b
+</span><span class="hs-operator hs-var">&lt;$&gt;</span></span><span> </span><span class="annot"><span class="annottext">forall m. Message m =&gt; SomeMessage -&gt; Maybe m
+</span><span class="hs-identifier hs-var">fromMessage</span></span><span> </span><span class="annot"><span class="annottext">SomeMessage
+</span><a href="#local-6989586621679411218"><span class="hs-identifier hs-var">m</span></a></span><span class="hs-special">,</span><span>
+</span><span id="line-132"></span><span>            </span><span class="annot"><span class="annottext">forall a. Resize -&gt; CircleEx a
+</span><a href="#local-6989586621679411213"><span class="hs-identifier hs-var">resize</span></a></span><span> </span><span class="annot"><span class="annottext">forall (f :: * -&gt; *) a b. Functor f =&gt; (a -&gt; b) -&gt; f a -&gt; f b
+</span><span class="hs-operator hs-var">&lt;$&gt;</span></span><span> </span><span class="annot"><span class="annottext">forall m. Message m =&gt; SomeMessage -&gt; Maybe m
+</span><span class="hs-identifier hs-var">fromMessage</span></span><span> </span><span class="annot"><span class="annottext">SomeMessage
+</span><a href="#local-6989586621679411218"><span class="hs-identifier hs-var">m</span></a></span><span class="hs-special">,</span><span>
+</span><span id="line-133"></span><span>            </span><span class="annot"><span class="annottext">forall a. CircleExMsg -&gt; CircleEx a
+</span><a href="#local-6989586621679411212"><span class="hs-identifier hs-var">specific</span></a></span><span> </span><span class="annot"><span class="annottext">forall (f :: * -&gt; *) a b. Functor f =&gt; (a -&gt; b) -&gt; f a -&gt; f b
+</span><span class="hs-operator hs-var">&lt;$&gt;</span></span><span> </span><span class="annot"><span class="annottext">forall m. Message m =&gt; SomeMessage -&gt; Maybe m
+</span><span class="hs-identifier hs-var">fromMessage</span></span><span> </span><span class="annot"><span class="annottext">SomeMessage
+</span><a href="#local-6989586621679411218"><span class="hs-identifier hs-var">m</span></a></span><span class="hs-special">]</span><span>
+</span><span id="line-134"></span><span>    </span><span class="hs-keyword">where</span><span>
+</span><span id="line-135"></span><span>      </span><span id="local-6989586621679411208"><span class="annot"><span class="annottext">deltaSize :: Rational
+</span><a href="#local-6989586621679411208"><span class="hs-identifier hs-var hs-var">deltaSize</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Integer
+</span><span class="hs-number">11</span></span><span> </span><span class="annot"><span class="annottext">forall a. Integral a =&gt; a -&gt; a -&gt; Ratio a
+</span><span class="hs-operator hs-var">%</span></span><span> </span><span class="annot"><span class="annottext">Integer
+</span><span class="hs-number">10</span></span><span>
+</span><span id="line-136"></span><span>
+</span><span id="line-137"></span><span>      </span><span id="local-6989586621679411469"><span class="annot"><a href="#local-6989586621679411213"><span class="hs-identifier hs-type">resize</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Resize</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="XMonad.Layout.CircleEx.html#CircleEx"><span class="hs-identifier hs-type">CircleEx</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679411469"><span class="hs-identifier hs-type">a</span></a></span></span><span>
+</span><span id="line-138"></span><span>      </span><span id="local-6989586621679411213"><span class="annot"><span class="annottext">resize :: forall a. Resize -&gt; CircleEx a
+</span><a href="#local-6989586621679411213"><span class="hs-identifier hs-var hs-var">resize</span></a></span></span><span> </span><span class="annot"><span class="annottext">Resize
+</span><span class="hs-identifier hs-var">Shrink</span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">CircleEx Window
+</span><a href="#local-6989586621679411219"><span class="hs-identifier hs-var">layout</span></a></span><span> </span><span class="hs-special">{</span><span class="annot"><span class="annottext">cMasterRatio :: Rational
+</span><a href="XMonad.Layout.CircleEx.html#cMasterRatio"><span class="hs-identifier hs-var">cMasterRatio</span></a></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">forall a. Ord a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-identifier hs-var">max</span></span><span> </span><span class="annot"><span class="annottext">Rational
+</span><span class="hs-number">0.1</span></span><span> </span><span class="annot"><span class="annottext">forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">forall a. Ord a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-identifier hs-var">min</span></span><span> </span><span class="annot"><span class="annottext">Rational
+</span><span class="hs-number">1.0</span></span><span> </span><span class="annot"><span class="annottext">forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">forall a. CircleEx a -&gt; Rational
+</span><a href="XMonad.Layout.CircleEx.html#cMasterRatio"><span class="hs-identifier hs-var">cMasterRatio</span></a></span><span> </span><span class="annot"><span class="annottext">CircleEx Window
+</span><a href="#local-6989586621679411219"><span class="hs-identifier hs-var">layout</span></a></span><span> </span><span class="annot"><span class="annottext">forall a. Fractional a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-operator hs-var">/</span></span><span> </span><span class="annot"><span class="annottext">Rational
+</span><a href="#local-6989586621679411208"><span class="hs-identifier hs-var">deltaSize</span></a></span><span class="hs-special">}</span><span>
+</span><span id="line-139"></span><span>      </span><span class="annot"><a href="#local-6989586621679411213"><span class="hs-identifier hs-var">resize</span></a></span><span> </span><span class="annot"><span class="annottext">Resize
+</span><span class="hs-identifier hs-var">Expand</span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">CircleEx Window
+</span><a href="#local-6989586621679411219"><span class="hs-identifier hs-var">layout</span></a></span><span> </span><span class="hs-special">{</span><span class="annot"><span class="annottext">cMasterRatio :: Rational
+</span><a href="XMonad.Layout.CircleEx.html#cMasterRatio"><span class="hs-identifier hs-var">cMasterRatio</span></a></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">forall a. Ord a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-identifier hs-var">max</span></span><span> </span><span class="annot"><span class="annottext">Rational
+</span><span class="hs-number">0.1</span></span><span> </span><span class="annot"><span class="annottext">forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">forall a. Ord a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-identifier hs-var">min</span></span><span> </span><span class="annot"><span class="annottext">Rational
+</span><span class="hs-number">1.0</span></span><span> </span><span class="annot"><span class="annottext">forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">forall a. CircleEx a -&gt; Rational
+</span><a href="XMonad.Layout.CircleEx.html#cMasterRatio"><span class="hs-identifier hs-var">cMasterRatio</span></a></span><span> </span><span class="annot"><span class="annottext">CircleEx Window
+</span><a href="#local-6989586621679411219"><span class="hs-identifier hs-var">layout</span></a></span><span> </span><span class="annot"><span class="annottext">forall a. Num a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-operator hs-var">*</span></span><span> </span><span class="annot"><span class="annottext">Rational
+</span><a href="#local-6989586621679411208"><span class="hs-identifier hs-var">deltaSize</span></a></span><span class="hs-special">}</span><span>
+</span><span id="line-140"></span><span>
+</span><span id="line-141"></span><span>      </span><span id="local-6989586621679411474"><span class="annot"><a href="#local-6989586621679411216"><span class="hs-identifier hs-type">changeMasterN</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">IncMasterN</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="XMonad.Layout.CircleEx.html#CircleEx"><span class="hs-identifier hs-type">CircleEx</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679411474"><span class="hs-identifier hs-type">a</span></a></span></span><span>
+</span><span id="line-142"></span><span>      </span><span id="local-6989586621679411216"><span class="annot"><span class="annottext">changeMasterN :: forall a. IncMasterN -&gt; CircleEx a
+</span><a href="#local-6989586621679411216"><span class="hs-identifier hs-var hs-var">changeMasterN</span></a></span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">IncMasterN</span></span><span> </span><span id="local-6989586621679411183"><span class="annot"><span class="annottext">Int
+</span><a href="#local-6989586621679411183"><span class="hs-identifier hs-var">d</span></a></span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">CircleEx Window
+</span><a href="#local-6989586621679411219"><span class="hs-identifier hs-var">layout</span></a></span><span> </span><span class="hs-special">{</span><span class="annot"><span class="annottext">cNMaster :: Int
+</span><a href="XMonad.Layout.CircleEx.html#cNMaster"><span class="hs-identifier hs-var">cNMaster</span></a></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">forall a. Ord a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-identifier hs-var">max</span></span><span> </span><span class="annot"><span class="annottext">Int
+</span><span class="hs-number">0</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">forall a. CircleEx a -&gt; Int
+</span><a href="XMonad.Layout.CircleEx.html#cNMaster"><span class="hs-identifier hs-var">cNMaster</span></a></span><span> </span><span class="annot"><span class="annottext">CircleEx Window
+</span><a href="#local-6989586621679411219"><span class="hs-identifier hs-var">layout</span></a></span><span> </span><span class="annot"><span class="annottext">forall a. Num a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-operator hs-var">+</span></span><span> </span><span class="annot"><span class="annottext">Int
+</span><a href="#local-6989586621679411183"><span class="hs-identifier hs-var">d</span></a></span><span class="hs-special">)</span><span class="hs-special">}</span><span>
+</span><span id="line-143"></span><span>
+</span><span id="line-144"></span><span>      </span><span id="local-6989586621679411468"><span class="annot"><a href="#local-6989586621679411212"><span class="hs-identifier hs-type">specific</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><a href="XMonad.Layout.CircleEx.html#CircleExMsg"><span class="hs-identifier hs-type">CircleExMsg</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="XMonad.Layout.CircleEx.html#CircleEx"><span class="hs-identifier hs-type">CircleEx</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679411468"><span class="hs-identifier hs-type">a</span></a></span></span><span>
+</span><span id="line-145"></span><span>      </span><span id="local-6989586621679411212"><span class="annot"><span class="annottext">specific :: forall a. CircleExMsg -&gt; CircleEx a
+</span><a href="#local-6989586621679411212"><span class="hs-identifier hs-var hs-var">specific</span></a></span></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="XMonad.Layout.CircleEx.html#Rotate"><span class="hs-identifier hs-type">Rotate</span></a></span><span> </span><span id="local-6989586621679411168"><span class="annot"><span class="annottext">Double
+</span><a href="#local-6989586621679411168"><span class="hs-identifier hs-var">delta</span></a></span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">CircleEx Window
+</span><a href="#local-6989586621679411219"><span class="hs-identifier hs-var">layout</span></a></span><span> </span><span class="hs-special">{</span><span class="annot"><span class="annottext">cDelta :: Double
+</span><a href="XMonad.Layout.CircleEx.html#cDelta"><span class="hs-identifier hs-var">cDelta</span></a></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Double
+</span><a href="#local-6989586621679411168"><span class="hs-identifier hs-var">delta</span></a></span><span> </span><span class="annot"><span class="annottext">forall a. Num a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-operator hs-var">+</span></span><span> </span><span class="annot"><span class="annottext">forall a. CircleEx a -&gt; Double
+</span><a href="XMonad.Layout.CircleEx.html#cDelta"><span class="hs-identifier hs-var">cDelta</span></a></span><span> </span><span class="annot"><span class="annottext">CircleEx Window
+</span><a href="#local-6989586621679411219"><span class="hs-identifier hs-var">layout</span></a></span><span class="hs-special">}</span><span>
+</span><span id="line-146"></span><span>      </span><span class="annot"><a href="#local-6989586621679411212"><span class="hs-identifier hs-var">specific</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="XMonad.Layout.CircleEx.html#IncStackRatio"><span class="hs-identifier hs-type">IncStackRatio</span></a></span><span> </span><span id="local-6989586621679411167"><span class="annot"><span class="annottext">Rational
+</span><a href="#local-6989586621679411167"><span class="hs-identifier hs-var">delta</span></a></span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">CircleEx Window
+</span><a href="#local-6989586621679411219"><span class="hs-identifier hs-var">layout</span></a></span><span> </span><span class="hs-special">{</span><span class="annot"><span class="annottext">cStackRatio :: Rational
+</span><a href="XMonad.Layout.CircleEx.html#cStackRatio"><span class="hs-identifier hs-var">cStackRatio</span></a></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">forall a. Ord a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-identifier hs-var">max</span></span><span> </span><span class="annot"><span class="annottext">Rational
+</span><span class="hs-number">0.1</span></span><span> </span><span class="annot"><span class="annottext">forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">forall a. Ord a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-identifier hs-var">min</span></span><span> </span><span class="annot"><span class="annottext">Rational
+</span><span class="hs-number">2.0</span></span><span> </span><span class="annot"><span class="annottext">forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">Rational
+</span><a href="#local-6989586621679411167"><span class="hs-identifier hs-var">delta</span></a></span><span> </span><span class="annot"><span class="annottext">forall a. Num a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-operator hs-var">+</span></span><span> </span><span class="annot"><span class="annottext">forall a. CircleEx a -&gt; Rational
+</span><a href="XMonad.Layout.CircleEx.html#cStackRatio"><span class="hs-identifier hs-var">cStackRatio</span></a></span><span> </span><span class="annot"><span class="annottext">CircleEx Window
+</span><a href="#local-6989586621679411219"><span class="hs-identifier hs-var">layout</span></a></span><span class="hs-special">}</span><span>
+</span><span id="line-147"></span><span>      </span><span class="annot"><a href="#local-6989586621679411212"><span class="hs-identifier hs-var">specific</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="XMonad.Layout.CircleEx.html#IncMultiplier"><span class="hs-identifier hs-type">IncMultiplier</span></a></span><span> </span><span id="local-6989586621679411166"><span class="annot"><span class="annottext">Rational
+</span><a href="#local-6989586621679411166"><span class="hs-identifier hs-var">delta</span></a></span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">CircleEx Window
+</span><a href="#local-6989586621679411219"><span class="hs-identifier hs-var">layout</span></a></span><span> </span><span class="hs-special">{</span><span class="annot"><span class="annottext">cMultiplier :: Rational
+</span><a href="XMonad.Layout.CircleEx.html#cMultiplier"><span class="hs-identifier hs-var">cMultiplier</span></a></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">forall a. Ord a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-identifier hs-var">max</span></span><span> </span><span class="annot"><span class="annottext">Rational
+</span><span class="hs-number">0.1</span></span><span> </span><span class="annot"><span class="annottext">forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">forall a. Ord a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-identifier hs-var">min</span></span><span> </span><span class="annot"><span class="annottext">Rational
+</span><span class="hs-number">2.0</span></span><span> </span><span class="annot"><span class="annottext">forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">Rational
+</span><a href="#local-6989586621679411166"><span class="hs-identifier hs-var">delta</span></a></span><span> </span><span class="annot"><span class="annottext">forall a. Num a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-operator hs-var">+</span></span><span> </span><span class="annot"><span class="annottext">forall a. CircleEx a -&gt; Rational
+</span><a href="XMonad.Layout.CircleEx.html#cMultiplier"><span class="hs-identifier hs-var">cMultiplier</span></a></span><span> </span><span class="annot"><span class="annottext">CircleEx Window
+</span><a href="#local-6989586621679411219"><span class="hs-identifier hs-var">layout</span></a></span><span class="hs-special">}</span><span>
+</span><span id="line-148"></span><span>
+</span><span id="line-149"></span><span id="local-6989586621679411485"><span class="annot"><a href="XMonad.Layout.CircleEx.html#circleLayout"><span class="hs-identifier hs-type">circleLayout</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><a href="XMonad.Layout.CircleEx.html#CircleEx"><span class="hs-identifier hs-type">CircleEx</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679411485"><span class="hs-identifier hs-type">a</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Rectangle</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="hs-special">[</span><span class="annot"><a href="#local-6989586621679411485"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">]</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="hs-special">[</span><span class="hs-special">(</span><span class="annot"><a href="#local-6989586621679411485"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Rectangle</span></span><span class="hs-special">)</span><span class="hs-special">]</span></span><span>
+</span><span id="line-150"></span><span id="circleLayout"><span class="annot"><span class="annottext">circleLayout :: forall a. CircleEx a -&gt; Rectangle -&gt; [a] -&gt; [(a, Rectangle)]
+</span><a href="XMonad.Layout.CircleEx.html#circleLayout"><span class="hs-identifier hs-var hs-var">circleLayout</span></a></span></span><span> </span><span class="annot"><span class="annottext">CircleEx a
+</span><span class="hs-identifier">_</span></span><span> </span><span class="annot"><span class="annottext">Rectangle
+</span><span class="hs-identifier">_</span></span><span> </span><span class="hs-special">[</span><span class="hs-special">]</span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-special">[</span><span class="hs-special">]</span><span>
+</span><span id="line-151"></span><span class="annot"><a href="XMonad.Layout.CircleEx.html#circleLayout"><span class="hs-identifier hs-var">circleLayout</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="XMonad.Layout.CircleEx.html#CircleEx"><span class="hs-identifier hs-type">CircleEx</span></a></span><span> </span><span class="hs-special">{</span><span id="local-6989586621679411161"><span id="local-6989586621679411162"><span id="local-6989586621679411163"><span id="local-6989586621679411164"><span id="local-6989586621679411165"><span class="annot"><span class="annottext">Double
+Int
+Rational
+cDelta :: Double
+cMultiplier :: Rational
+cStackRatio :: Rational
+cMasterRatio :: Rational
+cNMaster :: Int
+cDelta :: forall a. CircleEx a -&gt; Double
+cMultiplier :: forall a. CircleEx a -&gt; Rational
+cStackRatio :: forall a. CircleEx a -&gt; Rational
+cMasterRatio :: forall a. CircleEx a -&gt; Rational
+cNMaster :: forall a. CircleEx a -&gt; Int
+</span><a href="#local-6989586621679411161"><span class="hs-glyph hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var">..</span></a></span></span></span></span></span></span><span class="hs-special">}</span><span class="hs-special">)</span><span> </span><span id="local-6989586621679411160"><span class="annot"><span class="annottext">Rectangle
+</span><a href="#local-6989586621679411160"><span class="hs-identifier hs-var">rectangle</span></a></span></span><span> </span><span id="local-6989586621679411159"><span class="annot"><span class="annottext">[a]
+</span><a href="#local-6989586621679411159"><span class="hs-identifier hs-var">wins</span></a></span></span><span> </span><span class="hs-glyph">=</span><span>
+</span><span id="line-152"></span><span>    </span><span class="annot"><span class="annottext">forall a. [a] -&gt; [(a, Rectangle)]
+</span><a href="#local-6989586621679411158"><span class="hs-identifier hs-var">master</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">forall a. Int -&gt; [a] -&gt; [a]
+</span><span class="hs-identifier hs-var">take</span></span><span> </span><span class="annot"><span class="annottext">Int
+</span><a href="#local-6989586621679411165"><span class="hs-identifier hs-var">cNMaster</span></a></span><span> </span><span class="annot"><span class="annottext">[a]
+</span><a href="#local-6989586621679411159"><span class="hs-identifier hs-var">wins</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">forall a. [a] -&gt; [a] -&gt; [a]
+</span><span class="hs-operator hs-var">++</span></span><span> </span><span class="annot"><span class="annottext">forall a. [a] -&gt; [(a, Rectangle)]
+</span><a href="#local-6989586621679411156"><span class="hs-identifier hs-var">rest</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">forall a. Int -&gt; [a] -&gt; [a]
+</span><span class="hs-identifier hs-var">drop</span></span><span> </span><span class="annot"><span class="annottext">Int
+</span><a href="#local-6989586621679411165"><span class="hs-identifier hs-var">cNMaster</span></a></span><span> </span><span class="annot"><span class="annottext">[a]
+</span><a href="#local-6989586621679411159"><span class="hs-identifier hs-var">wins</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-153"></span><span>  </span><span class="hs-keyword">where</span><span>
+</span><span id="line-154"></span><span>    </span><span id="local-6989586621679411461"><span class="annot"><a href="#local-6989586621679411158"><span class="hs-identifier hs-type">master</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="hs-special">[</span><span class="annot"><a href="#local-6989586621679411461"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">]</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="hs-special">[</span><span class="hs-special">(</span><span class="annot"><a href="#local-6989586621679411461"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Rectangle</span></span><span class="hs-special">)</span><span class="hs-special">]</span></span><span>
+</span><span id="line-155"></span><span>    </span><span id="local-6989586621679411158"><span class="annot"><span class="annottext">master :: forall a. [a] -&gt; [(a, Rectangle)]
+</span><a href="#local-6989586621679411158"><span class="hs-identifier hs-var hs-var">master</span></a></span></span><span> </span><span id="local-6989586621679411147"><span class="annot"><span class="annottext">[a]
+</span><a href="#local-6989586621679411147"><span class="hs-identifier hs-var">ws</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">forall a b. [a] -&gt; [b] -&gt; [(a, b)]
+</span><span class="hs-identifier hs-var">zip</span></span><span> </span><span class="annot"><span class="annottext">[a]
+</span><a href="#local-6989586621679411147"><span class="hs-identifier hs-var">ws</span></a></span><span> </span><span class="annot"><span class="annottext">forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">forall a b. (a -&gt; b) -&gt; [a] -&gt; [b]
+</span><span class="hs-identifier hs-var">map</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Rational -&gt; Rational -&gt; Rectangle -&gt; Int -&gt; Rectangle
+</span><a href="XMonad.Layout.CircleEx.html#placeCenter"><span class="hs-identifier hs-var">placeCenter</span></a></span><span> </span><span class="annot"><span class="annottext">Rational
+</span><a href="#local-6989586621679411164"><span class="hs-identifier hs-var">cMasterRatio</span></a></span><span> </span><span class="annot"><span class="annottext">Rational
+</span><a href="#local-6989586621679411162"><span class="hs-identifier hs-var">cMultiplier</span></a></span><span> </span><span class="annot"><span class="annottext">Rectangle
+</span><a href="#local-6989586621679411160"><span class="hs-identifier hs-var">rectangle</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-156"></span><span>                           </span><span class="hs-special">[</span><span class="annot"><span class="annottext">Int
+</span><a href="#local-6989586621679411165"><span class="hs-identifier hs-var">cNMaster</span></a></span><span class="annot"><span class="annottext">forall a. Num a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-glyph hs-var">-</span></span><span class="annot"><span class="annottext">Int
+</span><span class="hs-number">1</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">Int
+</span><a href="#local-6989586621679411165"><span class="hs-identifier hs-var">cNMaster</span></a></span><span class="annot"><span class="annottext">forall a. Num a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-glyph hs-var">-</span></span><span class="annot"><span class="annottext">Int
+</span><span class="hs-number">2</span></span><span> </span><span class="hs-glyph">..</span><span> </span><span class="annot"><span class="annottext">Int
+</span><span class="hs-number">0</span></span><span class="hs-special">]</span><span>
+</span><span id="line-157"></span><span>    </span><span id="local-6989586621679411145"><span class="annot"><a href="#local-6989586621679411156"><span class="hs-identifier hs-type">rest</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="hs-special">[</span><span class="annot"><a href="#local-6989586621679411145"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">]</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="hs-special">[</span><span class="hs-special">(</span><span class="annot"><a href="#local-6989586621679411145"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Rectangle</span></span><span class="hs-special">)</span><span class="hs-special">]</span></span><span>
+</span><span id="line-158"></span><span>    </span><span id="local-6989586621679411156"><span class="annot"><span class="annottext">rest :: forall a. [a] -&gt; [(a, Rectangle)]
+</span><a href="#local-6989586621679411156"><span class="hs-identifier hs-var hs-var">rest</span></a></span></span><span> </span><span id="local-6989586621679411128"><span class="annot"><span class="annottext">[a]
+</span><a href="#local-6989586621679411128"><span class="hs-identifier hs-var">ws</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">forall a b. [a] -&gt; [b] -&gt; [(a, b)]
+</span><span class="hs-identifier hs-var">zip</span></span><span> </span><span class="annot"><span class="annottext">[a]
+</span><a href="#local-6989586621679411128"><span class="hs-identifier hs-var">ws</span></a></span><span> </span><span class="annot"><span class="annottext">forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">forall a b c. (a -&gt; b -&gt; c) -&gt; [a] -&gt; [b] -&gt; [c]
+</span><span class="hs-identifier hs-var">zipWith</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Rational -&gt; Rational -&gt; Rectangle -&gt; Double -&gt; Int -&gt; Rectangle
+</span><a href="XMonad.Layout.CircleEx.html#placeSatellite"><span class="hs-identifier hs-var">placeSatellite</span></a></span><span> </span><span class="annot"><span class="annottext">Rational
+</span><a href="#local-6989586621679411163"><span class="hs-identifier hs-var">cStackRatio</span></a></span><span> </span><span class="annot"><span class="annottext">Rational
+</span><a href="#local-6989586621679411162"><span class="hs-identifier hs-var">cMultiplier</span></a></span><span> </span><span class="annot"><span class="annottext">Rectangle
+</span><a href="#local-6989586621679411160"><span class="hs-identifier hs-var">rectangle</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-159"></span><span>                        </span><span class="hs-special">(</span><span class="annot"><span class="annottext">forall a b. (a -&gt; b) -&gt; [a] -&gt; [b]
+</span><span class="hs-identifier hs-var">map</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">forall a. Num a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-operator hs-var">+</span></span><span> </span><span class="annot"><span class="annottext">Double
+</span><a href="#local-6989586621679411161"><span class="hs-identifier hs-var">cDelta</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-special">[</span><span class="annot"><span class="annottext">Double
+</span><span class="hs-number">0</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">forall a. Floating a =&gt; a
+</span><span class="hs-identifier hs-var">pi</span></span><span class="annot"><span class="annottext">forall a. Num a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-operator hs-var">*</span></span><span class="annot"><span class="annottext">Double
+</span><span class="hs-number">2</span></span><span> </span><span class="annot"><span class="annottext">forall a. Fractional a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-operator hs-var">/</span></span><span> </span><span class="annot"><span class="annottext">forall a b. (Integral a, Num b) =&gt; a -&gt; b
+</span><span class="hs-identifier hs-var">fromIntegral</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">forall (t :: * -&gt; *) a. Foldable t =&gt; t a -&gt; Int
+</span><span class="hs-identifier hs-var">length</span></span><span> </span><span class="annot"><span class="annottext">[a]
+</span><a href="#local-6989586621679411128"><span class="hs-identifier hs-var">ws</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">..</span><span class="hs-special">]</span><span class="hs-special">)</span><span>
+</span><span id="line-160"></span><span>                        </span><span class="hs-special">[</span><span class="annot"><span class="annottext">Int
+</span><span class="hs-number">0</span></span><span> </span><span class="hs-glyph">..</span><span class="hs-special">]</span><span>
+</span><span id="line-161"></span><span>
+</span><span id="line-162"></span><span>
+</span><span id="line-163"></span><span class="annot"><a href="XMonad.Layout.CircleEx.html#raiseFocus"><span class="hs-identifier hs-type">raiseFocus</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="hs-special">[</span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">Window</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Rectangle</span></span><span class="hs-special">)</span><span class="hs-special">]</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">X</span></span><span> </span><span class="hs-special">[</span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">Window</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Rectangle</span></span><span class="hs-special">)</span><span class="hs-special">]</span><span>
+</span><span id="line-164"></span><span id="raiseFocus"><span class="annot"><span class="annottext">raiseFocus :: [(Window, Rectangle)] -&gt; X [(Window, Rectangle)]
+</span><a href="XMonad.Layout.CircleEx.html#raiseFocus"><span class="hs-identifier hs-var hs-var">raiseFocus</span></a></span></span><span> </span><span id="local-6989586621679411123"><span class="annot"><span class="annottext">[(Window, Rectangle)]
+</span><a href="#local-6989586621679411123"><span class="hs-identifier hs-var">wrs</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-165"></span><span>  </span><span id="local-6989586621679411122"><span class="annot"><span class="annottext">Maybe Window
+</span><a href="#local-6989586621679411122"><span class="hs-identifier hs-var">focused</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">forall a. (WindowSet -&gt; X a) -&gt; X a
+</span><span class="hs-identifier hs-var">withWindowSet</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">forall (m :: * -&gt; *) a. Monad m =&gt; a -&gt; m a
+</span><span class="hs-identifier hs-var">return</span></span><span> </span><span class="annot"><span class="annottext">forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">forall i l a s sd. StackSet i l a s sd -&gt; Maybe a
+</span><span class="hs-identifier hs-var">W.peek</span></span><span class="hs-special">)</span><span>
+</span><span id="line-166"></span><span>  </span><span class="annot"><span class="annottext">forall (m :: * -&gt; *) a. Monad m =&gt; a -&gt; m a
+</span><span class="hs-identifier hs-var">return</span></span><span> </span><span class="annot"><span class="annottext">forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="hs-keyword">case</span><span> </span><span class="annot"><span class="annottext">forall (t :: * -&gt; *) a. Foldable t =&gt; (a -&gt; Bool) -&gt; t a -&gt; Maybe a
+</span><span class="hs-identifier hs-var">find</span></span><span> </span><span class="hs-special">(</span><span class="hs-special">(</span><span class="annot"><span class="annottext">forall a. Eq a =&gt; a -&gt; a -&gt; Bool
+</span><span class="hs-operator hs-var">==</span></span><span> </span><span class="annot"><span class="annottext">Maybe Window
+</span><a href="#local-6989586621679411122"><span class="hs-identifier hs-var">focused</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">forall a. a -&gt; Maybe a
+</span><span class="hs-identifier hs-var">Just</span></span><span> </span><span class="annot"><span class="annottext">forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">forall a b. (a, b) -&gt; a
+</span><span class="hs-identifier hs-var">fst</span></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">[(Window, Rectangle)]
+</span><a href="#local-6989586621679411123"><span class="hs-identifier hs-var">wrs</span></a></span><span> </span><span class="hs-keyword">of</span><span>
+</span><span id="line-167"></span><span>             </span><span class="annot"><span class="hs-identifier hs-type">Just</span></span><span> </span><span id="local-6989586621679411117"><span class="annot"><span class="annottext">(Window, Rectangle)
+</span><a href="#local-6989586621679411117"><span class="hs-identifier hs-var">x</span></a></span></span><span>  </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">(Window, Rectangle)
+</span><a href="#local-6989586621679411117"><span class="hs-identifier hs-var">x</span></a></span><span> </span><span class="annot"><span class="annottext">forall a. a -&gt; [a] -&gt; [a]
+</span><span class="hs-glyph hs-var">:</span></span><span> </span><span class="annot"><span class="annottext">forall a. Eq a =&gt; a -&gt; [a] -&gt; [a]
+</span><span class="hs-identifier hs-var">delete</span></span><span> </span><span class="annot"><span class="annottext">(Window, Rectangle)
+</span><a href="#local-6989586621679411117"><span class="hs-identifier hs-var">x</span></a></span><span> </span><span class="annot"><span class="annottext">[(Window, Rectangle)]
+</span><a href="#local-6989586621679411123"><span class="hs-identifier hs-var">wrs</span></a></span><span>
+</span><span id="line-168"></span><span>             </span><span class="annot"><span class="annottext">Maybe (Window, Rectangle)
+</span><span class="hs-identifier hs-var">Nothing</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">[(Window, Rectangle)]
+</span><a href="#local-6989586621679411123"><span class="hs-identifier hs-var">wrs</span></a></span><span>
+</span><span id="line-169"></span><span>
+</span><span id="line-170"></span><span class="annot"><a href="XMonad.Layout.CircleEx.html#placeCenter"><span class="hs-identifier hs-type">placeCenter</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Rational</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Rational</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Rectangle</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Int</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Rectangle</span></span><span>
+</span><span id="line-171"></span><span id="placeCenter"><span class="annot"><span class="annottext">placeCenter :: Rational -&gt; Rational -&gt; Rectangle -&gt; Int -&gt; Rectangle
+</span><a href="XMonad.Layout.CircleEx.html#placeCenter"><span class="hs-identifier hs-var hs-var">placeCenter</span></a></span></span><span> </span><span id="local-6989586621679411115"><span class="annot"><span class="annottext">Rational
+</span><a href="#local-6989586621679411115"><span class="hs-identifier hs-var">ratio</span></a></span></span><span> </span><span id="local-6989586621679411114"><span class="annot"><span class="annottext">Rational
+</span><a href="#local-6989586621679411114"><span class="hs-identifier hs-var">multiplier</span></a></span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">Rectangle</span></span><span> </span><span id="local-6989586621679411112"><span class="annot"><span class="annottext">Position
+</span><a href="#local-6989586621679411112"><span class="hs-identifier hs-var">x</span></a></span></span><span> </span><span id="local-6989586621679411111"><span class="annot"><span class="annottext">Position
+</span><a href="#local-6989586621679411111"><span class="hs-identifier hs-var">y</span></a></span></span><span> </span><span id="local-6989586621679411110"><span class="annot"><span class="annottext">Dimension
+</span><a href="#local-6989586621679411110"><span class="hs-identifier hs-var">width</span></a></span></span><span> </span><span id="local-6989586621679411109"><span class="annot"><span class="annottext">Dimension
+</span><a href="#local-6989586621679411109"><span class="hs-identifier hs-var">height</span></a></span></span><span class="hs-special">)</span><span> </span><span id="local-6989586621679411108"><span class="annot"><span class="annottext">Int
+</span><a href="#local-6989586621679411108"><span class="hs-identifier hs-var">n</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Position -&gt; Position -&gt; Dimension -&gt; Dimension -&gt; Rectangle
+</span><span class="hs-identifier hs-var">Rectangle</span></span><span> </span><span class="annot"><span class="annottext">Position
+</span><a href="#local-6989586621679411107"><span class="hs-identifier hs-var">x'</span></a></span><span> </span><span class="annot"><span class="annottext">Position
+</span><a href="#local-6989586621679411106"><span class="hs-identifier hs-var">y'</span></a></span><span> </span><span class="annot"><span class="annottext">Dimension
+</span><a href="#local-6989586621679411105"><span class="hs-identifier hs-var">width'</span></a></span><span> </span><span class="annot"><span class="annottext">Dimension
+</span><a href="#local-6989586621679411104"><span class="hs-identifier hs-var">height'</span></a></span><span>
+</span><span id="line-172"></span><span>  </span><span class="hs-keyword">where</span><span>
+</span><span id="line-173"></span><span>    </span><span id="local-6989586621679411099"><span class="annot"><span class="annottext">m :: Rational
+</span><a href="#local-6989586621679411099"><span class="hs-identifier hs-var hs-var">m</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Rational
+</span><a href="#local-6989586621679411115"><span class="hs-identifier hs-var">ratio</span></a></span><span> </span><span class="annot"><span class="annottext">forall a. Num a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-operator hs-var">*</span></span><span> </span><span class="annot"><span class="annottext">Rational
+</span><a href="#local-6989586621679411114"><span class="hs-identifier hs-var">multiplier</span></a></span><span> </span><span class="annot"><span class="annottext">forall a b. (Num a, Integral b) =&gt; a -&gt; b -&gt; a
+</span><span class="hs-operator hs-var">^</span></span><span> </span><span class="annot"><span class="annottext">Int
+</span><a href="#local-6989586621679411108"><span class="hs-identifier hs-var">n</span></a></span><span>
+</span><span id="line-174"></span><span>    </span><span id="local-6989586621679411105"><span class="annot"><span class="annottext">width' :: Dimension
+</span><a href="#local-6989586621679411105"><span class="hs-identifier hs-var hs-var">width'</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">forall a b. (RealFrac a, Integral b) =&gt; a -&gt; b
+</span><span class="hs-identifier hs-var">round</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Rational
+</span><a href="#local-6989586621679411099"><span class="hs-identifier hs-var">m</span></a></span><span> </span><span class="annot"><span class="annottext">forall a. Num a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-operator hs-var">*</span></span><span> </span><span class="annot"><span class="annottext">forall a b. (Integral a, Num b) =&gt; a -&gt; b
+</span><span class="hs-identifier hs-var">fromIntegral</span></span><span> </span><span class="annot"><span class="annottext">Dimension
+</span><a href="#local-6989586621679411110"><span class="hs-identifier hs-var">width</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-175"></span><span>    </span><span id="local-6989586621679411104"><span class="annot"><span class="annottext">height' :: Dimension
+</span><a href="#local-6989586621679411104"><span class="hs-identifier hs-var hs-var">height'</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">forall a b. (RealFrac a, Integral b) =&gt; a -&gt; b
+</span><span class="hs-identifier hs-var">round</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Rational
+</span><a href="#local-6989586621679411099"><span class="hs-identifier hs-var">m</span></a></span><span> </span><span class="annot"><span class="annottext">forall a. Num a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-operator hs-var">*</span></span><span> </span><span class="annot"><span class="annottext">forall a b. (Integral a, Num b) =&gt; a -&gt; b
+</span><span class="hs-identifier hs-var">fromIntegral</span></span><span> </span><span class="annot"><span class="annottext">Dimension
+</span><a href="#local-6989586621679411109"><span class="hs-identifier hs-var">height</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-176"></span><span>    </span><span id="local-6989586621679411107"><span class="annot"><span class="annottext">x' :: Position
+</span><a href="#local-6989586621679411107"><span class="hs-identifier hs-var hs-var">x'</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Position
+</span><a href="#local-6989586621679411112"><span class="hs-identifier hs-var">x</span></a></span><span> </span><span class="annot"><span class="annottext">forall a. Num a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-operator hs-var">+</span></span><span> </span><span class="annot"><span class="annottext">forall a b. (Integral a, Num b) =&gt; a -&gt; b
+</span><span class="hs-identifier hs-var">fromIntegral</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Dimension
+</span><a href="#local-6989586621679411110"><span class="hs-identifier hs-var">width</span></a></span><span> </span><span class="annot"><span class="annottext">forall a. Num a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-glyph hs-var">-</span></span><span> </span><span class="annot"><span class="annottext">Dimension
+</span><a href="#local-6989586621679411105"><span class="hs-identifier hs-var">width'</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">forall a. Integral a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-operator hs-var">`div`</span></span><span> </span><span class="annot"><span class="annottext">Position
+</span><span class="hs-number">2</span></span><span>
+</span><span id="line-177"></span><span>    </span><span id="local-6989586621679411106"><span class="annot"><span class="annottext">y' :: Position
+</span><a href="#local-6989586621679411106"><span class="hs-identifier hs-var hs-var">y'</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Position
+</span><a href="#local-6989586621679411111"><span class="hs-identifier hs-var">y</span></a></span><span> </span><span class="annot"><span class="annottext">forall a. Num a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-operator hs-var">+</span></span><span> </span><span class="annot"><span class="annottext">forall a b. (Integral a, Num b) =&gt; a -&gt; b
+</span><span class="hs-identifier hs-var">fromIntegral</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Dimension
+</span><a href="#local-6989586621679411109"><span class="hs-identifier hs-var">height</span></a></span><span> </span><span class="annot"><span class="annottext">forall a. Num a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-glyph hs-var">-</span></span><span> </span><span class="annot"><span class="annottext">Dimension
+</span><a href="#local-6989586621679411104"><span class="hs-identifier hs-var">height'</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">forall a. Integral a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-operator hs-var">`div`</span></span><span> </span><span class="annot"><span class="annottext">Position
+</span><span class="hs-number">2</span></span><span>
+</span><span id="line-178"></span><span>
+</span><span id="line-179"></span><span class="annot"><a href="XMonad.Layout.CircleEx.html#placeSatellite"><span class="hs-identifier hs-type">placeSatellite</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Rational</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Rational</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Rectangle</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Double</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Int</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Rectangle</span></span><span>
+</span><span id="line-180"></span><span id="placeSatellite"><span class="annot"><span class="annottext">placeSatellite :: Rational -&gt; Rational -&gt; Rectangle -&gt; Double -&gt; Int -&gt; Rectangle
+</span><a href="XMonad.Layout.CircleEx.html#placeSatellite"><span class="hs-identifier hs-var hs-var">placeSatellite</span></a></span></span><span> </span><span id="local-6989586621679411066"><span class="annot"><span class="annottext">Rational
+</span><a href="#local-6989586621679411066"><span class="hs-identifier hs-var">ratio</span></a></span></span><span> </span><span id="local-6989586621679411065"><span class="annot"><span class="annottext">Rational
+</span><a href="#local-6989586621679411065"><span class="hs-identifier hs-var">multiplier</span></a></span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">Rectangle</span></span><span> </span><span id="local-6989586621679411064"><span class="annot"><span class="annottext">Position
+</span><a href="#local-6989586621679411064"><span class="hs-identifier hs-var">x</span></a></span></span><span> </span><span id="local-6989586621679411063"><span class="annot"><span class="annottext">Position
+</span><a href="#local-6989586621679411063"><span class="hs-identifier hs-var">y</span></a></span></span><span> </span><span id="local-6989586621679411062"><span class="annot"><span class="annottext">Dimension
+</span><a href="#local-6989586621679411062"><span class="hs-identifier hs-var">width</span></a></span></span><span> </span><span id="local-6989586621679411061"><span class="annot"><span class="annottext">Dimension
+</span><a href="#local-6989586621679411061"><span class="hs-identifier hs-var">height</span></a></span></span><span class="hs-special">)</span><span> </span><span id="local-6989586621679411060"><span class="annot"><span class="annottext">Double
+</span><a href="#local-6989586621679411060"><span class="hs-identifier hs-var">alpha</span></a></span></span><span> </span><span id="local-6989586621679411059"><span class="annot"><span class="annottext">Int
+</span><a href="#local-6989586621679411059"><span class="hs-identifier hs-var">n</span></a></span></span><span> </span><span class="hs-glyph">=</span><span>
+</span><span id="line-181"></span><span>    </span><span class="annot"><span class="annottext">Position -&gt; Position -&gt; Dimension -&gt; Dimension -&gt; Rectangle
+</span><span class="hs-identifier hs-var">Rectangle</span></span><span> </span><span class="annot"><span class="annottext">Position
+</span><a href="#local-6989586621679411058"><span class="hs-identifier hs-var">x'</span></a></span><span> </span><span class="annot"><span class="annottext">Position
+</span><a href="#local-6989586621679411057"><span class="hs-identifier hs-var">y'</span></a></span><span> </span><span class="annot"><span class="annottext">Dimension
+</span><a href="#local-6989586621679411056"><span class="hs-identifier hs-var">width'</span></a></span><span> </span><span class="annot"><span class="annottext">Dimension
+</span><a href="#local-6989586621679411055"><span class="hs-identifier hs-var">height'</span></a></span><span>
+</span><span id="line-182"></span><span>  </span><span class="hs-keyword">where</span><span>
+</span><span id="line-183"></span><span>    </span><span id="local-6989586621679411050"><span class="annot"><span class="annottext">m :: Rational
+</span><a href="#local-6989586621679411050"><span class="hs-identifier hs-var hs-var">m</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Rational
+</span><a href="#local-6989586621679411066"><span class="hs-identifier hs-var">ratio</span></a></span><span> </span><span class="annot"><span class="annottext">forall a. Num a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-operator hs-var">*</span></span><span> </span><span class="annot"><span class="annottext">Rational
+</span><a href="#local-6989586621679411065"><span class="hs-identifier hs-var">multiplier</span></a></span><span> </span><span class="annot"><span class="annottext">forall a b. (Num a, Integral b) =&gt; a -&gt; b -&gt; a
+</span><span class="hs-operator hs-var">^</span></span><span> </span><span class="annot"><span class="annottext">Int
+</span><a href="#local-6989586621679411059"><span class="hs-identifier hs-var">n</span></a></span><span>
+</span><span id="line-184"></span><span>    </span><span id="local-6989586621679411058"><span class="annot"><span class="annottext">x' :: Position
+</span><a href="#local-6989586621679411058"><span class="hs-identifier hs-var hs-var">x'</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Position
+</span><a href="#local-6989586621679411064"><span class="hs-identifier hs-var">x</span></a></span><span> </span><span class="annot"><span class="annottext">forall a. Num a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-operator hs-var">+</span></span><span> </span><span class="annot"><span class="annottext">forall a b. (RealFrac a, Integral b) =&gt; a -&gt; b
+</span><span class="hs-identifier hs-var">round</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Double
+</span><a href="#local-6989586621679411042"><span class="hs-identifier hs-var">rx</span></a></span><span> </span><span class="annot"><span class="annottext">forall a. Num a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-operator hs-var">+</span></span><span> </span><span class="annot"><span class="annottext">Double
+</span><a href="#local-6989586621679411042"><span class="hs-identifier hs-var">rx</span></a></span><span> </span><span class="annot"><span class="annottext">forall a. Num a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-operator hs-var">*</span></span><span> </span><span class="annot"><span class="annottext">forall a. Floating a =&gt; a -&gt; a
+</span><span class="hs-identifier hs-var">cos</span></span><span> </span><span class="annot"><span class="annottext">Double
+</span><a href="#local-6989586621679411060"><span class="hs-identifier hs-var">alpha</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-185"></span><span>    </span><span id="local-6989586621679411057"><span class="annot"><span class="annottext">y' :: Position
+</span><a href="#local-6989586621679411057"><span class="hs-identifier hs-var hs-var">y'</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Position
+</span><a href="#local-6989586621679411063"><span class="hs-identifier hs-var">y</span></a></span><span> </span><span class="annot"><span class="annottext">forall a. Num a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-operator hs-var">+</span></span><span> </span><span class="annot"><span class="annottext">forall a b. (RealFrac a, Integral b) =&gt; a -&gt; b
+</span><span class="hs-identifier hs-var">round</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Double
+</span><a href="#local-6989586621679411034"><span class="hs-identifier hs-var">ry</span></a></span><span> </span><span class="annot"><span class="annottext">forall a. Num a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-operator hs-var">+</span></span><span> </span><span class="annot"><span class="annottext">Double
+</span><a href="#local-6989586621679411034"><span class="hs-identifier hs-var">ry</span></a></span><span> </span><span class="annot"><span class="annottext">forall a. Num a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-operator hs-var">*</span></span><span> </span><span class="annot"><span class="annottext">forall a. Floating a =&gt; a -&gt; a
+</span><span class="hs-identifier hs-var">sin</span></span><span> </span><span class="annot"><span class="annottext">Double
+</span><a href="#local-6989586621679411060"><span class="hs-identifier hs-var">alpha</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-186"></span><span>    </span><span id="local-6989586621679411042"><span class="annot"><span class="annottext">rx :: Double
+</span><a href="#local-6989586621679411042"><span class="hs-identifier hs-var hs-var">rx</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">forall a b. (Integral a, Num b) =&gt; a -&gt; b
+</span><span class="hs-identifier hs-var">fromIntegral</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Dimension
+</span><a href="#local-6989586621679411062"><span class="hs-identifier hs-var">width</span></a></span><span> </span><span class="annot"><span class="annottext">forall a. Num a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-glyph hs-var">-</span></span><span> </span><span class="annot"><span class="annottext">Dimension
+</span><a href="#local-6989586621679411056"><span class="hs-identifier hs-var">width'</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">forall a. Fractional a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-operator hs-var">/</span></span><span> </span><span class="annot"><span class="annottext">Double
+</span><span class="hs-number">2</span></span><span>
+</span><span id="line-187"></span><span>    </span><span id="local-6989586621679411034"><span class="annot"><span class="annottext">ry :: Double
+</span><a href="#local-6989586621679411034"><span class="hs-identifier hs-var hs-var">ry</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">forall a b. (Integral a, Num b) =&gt; a -&gt; b
+</span><span class="hs-identifier hs-var">fromIntegral</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Dimension
+</span><a href="#local-6989586621679411061"><span class="hs-identifier hs-var">height</span></a></span><span> </span><span class="annot"><span class="annottext">forall a. Num a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-glyph hs-var">-</span></span><span> </span><span class="annot"><span class="annottext">Dimension
+</span><a href="#local-6989586621679411055"><span class="hs-identifier hs-var">height'</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">forall a. Fractional a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-operator hs-var">/</span></span><span> </span><span class="annot"><span class="annottext">Double
+</span><span class="hs-number">2</span></span><span>
+</span><span id="line-188"></span><span>    </span><span id="local-6989586621679411056"><span class="annot"><span class="annottext">width' :: Dimension
+</span><a href="#local-6989586621679411056"><span class="hs-identifier hs-var hs-var">width'</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">forall a b. (RealFrac a, Integral b) =&gt; a -&gt; b
+</span><span class="hs-identifier hs-var">round</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">forall a b. (Integral a, Num b) =&gt; a -&gt; b
+</span><span class="hs-identifier hs-var">fromIntegral</span></span><span> </span><span class="annot"><span class="annottext">Dimension
+</span><a href="#local-6989586621679411062"><span class="hs-identifier hs-var">width</span></a></span><span> </span><span class="annot"><span class="annottext">forall a. Num a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-operator hs-var">*</span></span><span> </span><span class="annot"><span class="annottext">Rational
+</span><a href="#local-6989586621679411050"><span class="hs-identifier hs-var">m</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-189"></span><span>    </span><span id="local-6989586621679411055"><span class="annot"><span class="annottext">height' :: Dimension
+</span><a href="#local-6989586621679411055"><span class="hs-identifier hs-var hs-var">height'</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">forall a b. (RealFrac a, Integral b) =&gt; a -&gt; b
+</span><span class="hs-identifier hs-var">round</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">forall a b. (Integral a, Num b) =&gt; a -&gt; b
+</span><span class="hs-identifier hs-var">fromIntegral</span></span><span> </span><span class="annot"><span class="annottext">Dimension
+</span><a href="#local-6989586621679411061"><span class="hs-identifier hs-var">height</span></a></span><span> </span><span class="annot"><span class="annottext">forall a. Num a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-operator hs-var">*</span></span><span> </span><span class="annot"><span class="annottext">Rational
+</span><a href="#local-6989586621679411050"><span class="hs-identifier hs-var">m</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-190"></span></pre></body></html>

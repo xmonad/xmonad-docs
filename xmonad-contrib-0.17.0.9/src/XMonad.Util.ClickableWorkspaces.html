@@ -1,0 +1,180 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd"><html xmlns="http://www.w3.org/1999/xhtml"><head><link rel="stylesheet" type="text/css" href="style.css" /><script type="text/javascript" src="highlight.js"></script></head><body><pre><span class="hs-comment">-------------------------------------------------------------------------------</span><span>
+</span><span id="line-2"></span><span class="hs-comment">-- |</span><span>
+</span><span id="line-3"></span><span class="hs-comment">-- Module      :  XMonad.Util.ClickableWorkspaces</span><span>
+</span><span id="line-4"></span><span class="hs-comment">-- Description :  Make workspace tags clickable in XMobar (for switching focus).</span><span>
+</span><span id="line-5"></span><span class="hs-comment">-- Copyright   :  (c) Geoff deRosenroll &lt;geoffderosenroll@gmail.com&gt;</span><span>
+</span><span id="line-6"></span><span class="hs-comment">-- License     :  BSD3-style (see LICENSE)</span><span>
+</span><span id="line-7"></span><span class="hs-comment">--</span><span>
+</span><span id="line-8"></span><span class="hs-comment">-- Maintainer  :  Geoff deRosenroll &lt;geoffderosenroll@gmail.com&gt;</span><span>
+</span><span id="line-9"></span><span class="hs-comment">-- Stability   :  unstable</span><span>
+</span><span id="line-10"></span><span class="hs-comment">-- Portability :  unportable</span><span>
+</span><span id="line-11"></span><span class="hs-comment">--</span><span>
+</span><span id="line-12"></span><span class="hs-comment">-- Provides @clickablePP@, which when applied to the 'PP' pretty-printer used</span><span>
+</span><span id="line-13"></span><span class="hs-comment">-- by &quot;XMonad.Hooks.StatusBar&quot; will make the workspace tags clickable in</span><span>
+</span><span id="line-14"></span><span class="hs-comment">-- XMobar (for switching focus).</span><span>
+</span><span id="line-15"></span><span class="hs-comment">--</span><span>
+</span><span id="line-16"></span><span class="hs-comment">-----------------------------------------------------------------------------</span><span>
+</span><span id="line-17"></span><span>
+</span><span id="line-18"></span><span class="hs-keyword">module</span><span> </span><span class="hs-identifier">XMonad.Util.ClickableWorkspaces</span><span> </span><span class="hs-special">(</span><span>
+</span><span id="line-19"></span><span>  </span><span class="annot"><span class="hs-comment">-- * Usage</span></span><span>
+</span><span id="line-20"></span><span>  </span><span class="annot"><span class="hs-comment">-- $usage</span></span><span>
+</span><span id="line-21"></span><span>  </span><span class="annot"><a href="XMonad.Util.ClickableWorkspaces.html#clickablePP"><span class="hs-identifier">clickablePP</span></a></span><span class="hs-special">,</span><span>
+</span><span id="line-22"></span><span>  </span><span class="annot"><a href="XMonad.Util.ClickableWorkspaces.html#clickableWrap"><span class="hs-identifier">clickableWrap</span></a></span><span class="hs-special">,</span><span>
+</span><span id="line-23"></span><span>  </span><span class="hs-special">)</span><span> </span><span class="hs-keyword">where</span><span>
+</span><span id="line-24"></span><span>
+</span><span id="line-25"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><a href="XMonad.Prelude.html"><span class="hs-identifier">XMonad.Prelude</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-operator">(&lt;&amp;&gt;)</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-operator">(&gt;=&gt;)</span></span><span class="hs-special">)</span><span>
+</span><span id="line-26"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><span class="hs-identifier">XMonad</span></span><span>
+</span><span id="line-27"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><a href="XMonad.Hooks.StatusBar.PP.html"><span class="hs-identifier">XMonad.Hooks.StatusBar.PP</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="XMonad.Hooks.StatusBar.PP.html#xmobarAction"><span class="hs-identifier">xmobarAction</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><a href="XMonad.Hooks.StatusBar.PP.html#PP"><span class="hs-identifier">PP</span></a></span><span class="hs-special">(</span><span class="hs-glyph">..</span><span class="hs-special">)</span><span class="hs-special">)</span><span>
+</span><span id="line-28"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><a href="XMonad.Util.WorkspaceCompare.html"><span class="hs-identifier">XMonad.Util.WorkspaceCompare</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="XMonad.Util.WorkspaceCompare.html#getSortByIndex"><span class="hs-identifier">getSortByIndex</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-29"></span><span class="hs-keyword">import</span><span> </span><span class="hs-keyword">qualified</span><span> </span><span class="annot"><span class="hs-identifier">XMonad.StackSet</span></span><span> </span><span class="hs-keyword">as</span><span> </span><span class="annot"><span class="hs-identifier">W</span></span><span>
+</span><span id="line-30"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><span class="hs-identifier">Data.List</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier">elemIndex</span></span><span class="hs-special">)</span><span>
+</span><span id="line-31"></span><span>
+</span><span id="line-32"></span><span class="hs-comment">-- $usage</span><span>
+</span><span id="line-33"></span><span class="hs-comment">-- If you're using the &quot;XMonad.Hooks.StatusBar&quot; interface, apply 'clickablePP'</span><span>
+</span><span id="line-34"></span><span class="hs-comment">-- to the 'PP' passed to 'XMonad.Hooks.StatusBar.statusBarProp':</span><span>
+</span><span id="line-35"></span><span class="hs-comment">--</span><span>
+</span><span id="line-36"></span><span class="hs-comment">-- &gt; mySB &lt;- statusBarProp &quot;xmobar&quot; (clickablePP xmobarPP)</span><span>
+</span><span id="line-37"></span><span class="hs-comment">--</span><span>
+</span><span id="line-38"></span><span class="hs-comment">-- Or if you're using the old &quot;XMonad.Hooks.DynamicLog&quot; interface:</span><span>
+</span><span id="line-39"></span><span class="hs-comment">--</span><span>
+</span><span id="line-40"></span><span class="hs-comment">-- &gt; logHook = clickablePP xmobarPP { ... } &gt;&gt;= dynamicLogWithPP</span><span>
+</span><span id="line-41"></span><span class="hs-comment">--</span><span>
+</span><span id="line-42"></span><span class="hs-comment">-- Requirements:</span><span>
+</span><span id="line-43"></span><span class="hs-comment">--</span><span>
+</span><span id="line-44"></span><span class="hs-comment">--   * @xdotool@ on system (in path)</span><span>
+</span><span id="line-45"></span><span class="hs-comment">--   * &quot;XMonad.Hooks.EwmhDesktops&quot; for @xdotool@ support (see Hackage docs for setup)</span><span>
+</span><span id="line-46"></span><span class="hs-comment">--   * use of UnsafeStdinReader\/UnsafeXMonadLog in xmobarrc (rather than StdinReader\/XMonadLog)</span><span>
+</span><span id="line-47"></span><span class="hs-comment">--</span><span>
+</span><span id="line-48"></span><span class="hs-comment">-- Note that UnsafeStdinReader is potentially dangerous if your workspace</span><span>
+</span><span id="line-49"></span><span class="hs-comment">-- names are dynamically generated from untrusted input (like window titles).</span><span>
+</span><span id="line-50"></span><span class="hs-comment">-- You may need to add @xmobarRaw@ to 'ppRename' before applying</span><span>
+</span><span id="line-51"></span><span class="hs-comment">-- 'clickablePP' in such case.</span><span>
+</span><span id="line-52"></span><span>
+</span><span id="line-53"></span><span class="hs-comment">-- | Wrap string with an xmobar action that uses @xdotool@ to switch to</span><span>
+</span><span id="line-54"></span><span class="hs-comment">-- workspace @i@.</span><span>
+</span><span id="line-55"></span><span class="annot"><a href="XMonad.Util.ClickableWorkspaces.html#clickableWrap"><span class="hs-identifier hs-type">clickableWrap</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Int</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">String</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">String</span></span><span>
+</span><span id="line-56"></span><span id="clickableWrap"><span class="annot"><span class="annottext">clickableWrap :: Int -&gt; WorkspaceId -&gt; WorkspaceId
+</span><a href="XMonad.Util.ClickableWorkspaces.html#clickableWrap"><span class="hs-identifier hs-var hs-var">clickableWrap</span></a></span></span><span> </span><span id="local-6989586621679420876"><span class="annot"><span class="annottext">Int
+</span><a href="#local-6989586621679420876"><span class="hs-identifier hs-var">i</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">WorkspaceId -&gt; WorkspaceId -&gt; WorkspaceId -&gt; WorkspaceId
+</span><a href="XMonad.Hooks.StatusBar.PP.html#xmobarAction"><span class="hs-identifier hs-var">xmobarAction</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">WorkspaceId
+</span><span class="hs-string">&quot;xdotool set_desktop &quot;</span></span><span> </span><span class="annot"><span class="annottext">WorkspaceId -&gt; WorkspaceId -&gt; WorkspaceId
+forall a. [a] -&gt; [a] -&gt; [a]
+</span><span class="hs-operator hs-var">++</span></span><span> </span><span class="annot"><span class="annottext">Int -&gt; WorkspaceId
+forall a. Show a =&gt; a -&gt; WorkspaceId
+</span><span class="hs-identifier hs-var">show</span></span><span> </span><span class="annot"><span class="annottext">Int
+</span><a href="#local-6989586621679420876"><span class="hs-identifier hs-var">i</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">WorkspaceId
+</span><span class="hs-string">&quot;1&quot;</span></span><span>
+</span><span id="line-57"></span><span>
+</span><span id="line-58"></span><span class="hs-comment">-- | 'XMonad.Util.WorkspaceCompare.getWsIndex' extended to handle workspaces</span><span>
+</span><span id="line-59"></span><span class="hs-comment">-- not in the static 'workspaces' config, such as those created by</span><span>
+</span><span id="line-60"></span><span class="hs-comment">-- &quot;XMonad.Action.DynamicWorkspaces&quot;.</span><span>
+</span><span id="line-61"></span><span class="hs-comment">--</span><span>
+</span><span id="line-62"></span><span class="hs-comment">-- Uses 'getSortByIndex', as that's what &quot;XMonad.Hooks.EwmhDesktops&quot; uses to</span><span>
+</span><span id="line-63"></span><span class="hs-comment">-- export the information to tools like @xdotool@. (Note that EwmhDesktops can</span><span>
+</span><span id="line-64"></span><span class="hs-comment">-- be configured with a custom sort function, and we don't handle that here</span><span>
+</span><span id="line-65"></span><span class="hs-comment">-- yet.)</span><span>
+</span><span id="line-66"></span><span class="annot"><a href="XMonad.Util.ClickableWorkspaces.html#getWsIndex"><span class="hs-identifier hs-type">getWsIndex</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">X</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">WorkspaceId</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Maybe</span></span><span> </span><span class="annot"><span class="hs-identifier hs-type">Int</span></span><span class="hs-special">)</span><span>
+</span><span id="line-67"></span><span id="getWsIndex"><span class="annot"><span class="annottext">getWsIndex :: X (WorkspaceId -&gt; Maybe Int)
+</span><a href="XMonad.Util.ClickableWorkspaces.html#getWsIndex"><span class="hs-identifier hs-var hs-var">getWsIndex</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-68"></span><span>    </span><span id="local-6989586621679420873"><span class="annot"><span class="annottext">WorkspaceSort
+</span><a href="#local-6989586621679420873"><span class="hs-identifier hs-var">wSort</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">X WorkspaceSort
+</span><a href="XMonad.Util.WorkspaceCompare.html#getSortByIndex"><span class="hs-identifier hs-var">getSortByIndex</span></a></span><span>
+</span><span id="line-69"></span><span>    </span><span id="local-6989586621679420872"><span class="annot"><span class="annottext">[WorkspaceId]
+</span><a href="#local-6989586621679420872"><span class="hs-identifier hs-var">spaces</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">(XState -&gt; [WorkspaceId]) -&gt; X [WorkspaceId]
+forall s (m :: * -&gt; *) a. MonadState s m =&gt; (s -&gt; a) -&gt; m a
+</span><span class="hs-identifier hs-var">gets</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">(WindowSpace -&gt; WorkspaceId) -&gt; [WindowSpace] -&gt; [WorkspaceId]
+forall a b. (a -&gt; b) -&gt; [a] -&gt; [b]
+</span><span class="hs-identifier hs-var">map</span></span><span> </span><span class="annot"><span class="annottext">WindowSpace -&gt; WorkspaceId
+forall i l a. Workspace i l a -&gt; i
+</span><span class="hs-identifier hs-var hs-var">W.tag</span></span><span> </span><span class="annot"><span class="annottext">([WindowSpace] -&gt; [WorkspaceId])
+-&gt; (XState -&gt; [WindowSpace]) -&gt; XState -&gt; [WorkspaceId]
+forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">WorkspaceSort
+</span><a href="#local-6989586621679420873"><span class="hs-identifier hs-var">wSort</span></a></span><span> </span><span class="annot"><span class="annottext">WorkspaceSort
+-&gt; (XState -&gt; [WindowSpace]) -&gt; XState -&gt; [WindowSpace]
+forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">StackSet WorkspaceId (Layout Window) Window ScreenId ScreenDetail
+-&gt; [WindowSpace]
+forall i l a s sd. StackSet i l a s sd -&gt; [Workspace i l a]
+</span><span class="hs-identifier hs-var">W.workspaces</span></span><span> </span><span class="annot"><span class="annottext">(StackSet WorkspaceId (Layout Window) Window ScreenId ScreenDetail
+ -&gt; [WindowSpace])
+-&gt; (XState
+    -&gt; StackSet
+         WorkspaceId (Layout Window) Window ScreenId ScreenDetail)
+-&gt; XState
+-&gt; [WindowSpace]
+forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">XState
+-&gt; StackSet
+     WorkspaceId (Layout Window) Window ScreenId ScreenDetail
+</span><span class="hs-identifier hs-var hs-var">windowset</span></span><span class="hs-special">)</span><span>
+</span><span id="line-70"></span><span>    </span><span class="annot"><span class="annottext">(WorkspaceId -&gt; Maybe Int) -&gt; X (WorkspaceId -&gt; Maybe Int)
+forall (m :: * -&gt; *) a. Monad m =&gt; a -&gt; m a
+</span><span class="hs-identifier hs-var">return</span></span><span> </span><span class="annot"><span class="annottext">((WorkspaceId -&gt; Maybe Int) -&gt; X (WorkspaceId -&gt; Maybe Int))
+-&gt; (WorkspaceId -&gt; Maybe Int) -&gt; X (WorkspaceId -&gt; Maybe Int)
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">(WorkspaceId -&gt; [WorkspaceId] -&gt; Maybe Int)
+-&gt; [WorkspaceId] -&gt; WorkspaceId -&gt; Maybe Int
+forall a b c. (a -&gt; b -&gt; c) -&gt; b -&gt; a -&gt; c
+</span><span class="hs-identifier hs-var">flip</span></span><span> </span><span class="annot"><span class="annottext">WorkspaceId -&gt; [WorkspaceId] -&gt; Maybe Int
+forall a. Eq a =&gt; a -&gt; [a] -&gt; Maybe Int
+</span><span class="hs-identifier hs-var">elemIndex</span></span><span> </span><span class="annot"><span class="annottext">[WorkspaceId]
+</span><a href="#local-6989586621679420872"><span class="hs-identifier hs-var">spaces</span></a></span><span>
+</span><span id="line-71"></span><span>
+</span><span id="line-72"></span><span class="hs-comment">-- | Return a function that wraps workspace names in an xmobar action that</span><span>
+</span><span id="line-73"></span><span class="hs-comment">-- switches to that workspace.</span><span>
+</span><span id="line-74"></span><span class="hs-comment">--</span><span>
+</span><span id="line-75"></span><span class="hs-comment">-- This assumes that 'XMonad.Hooks.EwmhDesktops.ewmhDesktopsEventHook'</span><span>
+</span><span id="line-76"></span><span class="hs-comment">-- isn't configured to change the workspace order. We might need to add an</span><span>
+</span><span id="line-77"></span><span class="hs-comment">-- additional parameter if anyone needs that.</span><span>
+</span><span id="line-78"></span><span class="annot"><a href="XMonad.Util.ClickableWorkspaces.html#getClickable"><span class="hs-identifier hs-type">getClickable</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">X</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">String</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">WindowSpace</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">String</span></span><span class="hs-special">)</span><span>
+</span><span id="line-79"></span><span id="getClickable"><span class="annot"><span class="annottext">getClickable :: X (WorkspaceId -&gt; WindowSpace -&gt; WorkspaceId)
+</span><a href="XMonad.Util.ClickableWorkspaces.html#getClickable"><span class="hs-identifier hs-var hs-var">getClickable</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">X (WorkspaceId -&gt; Maybe Int)
+</span><a href="XMonad.Util.ClickableWorkspaces.html#getWsIndex"><span class="hs-identifier hs-var">getWsIndex</span></a></span><span> </span><span class="annot"><span class="annottext">X (WorkspaceId -&gt; Maybe Int)
+-&gt; ((WorkspaceId -&gt; Maybe Int)
+    -&gt; WorkspaceId -&gt; WindowSpace -&gt; WorkspaceId)
+-&gt; X (WorkspaceId -&gt; WindowSpace -&gt; WorkspaceId)
+forall (f :: * -&gt; *) a b. Functor f =&gt; f a -&gt; (a -&gt; b) -&gt; f b
+</span><span class="hs-operator hs-var">&lt;&amp;&gt;</span></span><span> </span><span class="hs-glyph">\</span><span id="local-6989586621679420864"><span class="annot"><span class="annottext">WorkspaceId -&gt; Maybe Int
+</span><a href="#local-6989586621679420864"><span class="hs-identifier hs-var">idx</span></a></span></span><span> </span><span id="local-6989586621679420863"><span class="annot"><span class="annottext">WorkspaceId
+</span><a href="#local-6989586621679420863"><span class="hs-identifier hs-var">s</span></a></span></span><span> </span><span id="local-6989586621679420862"><span class="annot"><span class="annottext">WindowSpace
+</span><a href="#local-6989586621679420862"><span class="hs-identifier hs-var">w</span></a></span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">(WorkspaceId -&gt; WorkspaceId)
+-&gt; (Int -&gt; WorkspaceId -&gt; WorkspaceId)
+-&gt; Maybe Int
+-&gt; WorkspaceId
+-&gt; WorkspaceId
+forall b a. b -&gt; (a -&gt; b) -&gt; Maybe a -&gt; b
+</span><span class="hs-identifier hs-var">maybe</span></span><span> </span><span class="annot"><span class="annottext">WorkspaceId -&gt; WorkspaceId
+forall a. a -&gt; a
+</span><span class="hs-identifier hs-var">id</span></span><span> </span><span class="annot"><span class="annottext">Int -&gt; WorkspaceId -&gt; WorkspaceId
+</span><a href="XMonad.Util.ClickableWorkspaces.html#clickableWrap"><span class="hs-identifier hs-var">clickableWrap</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">WorkspaceId -&gt; Maybe Int
+</span><a href="#local-6989586621679420864"><span class="hs-identifier hs-var">idx</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">WindowSpace -&gt; WorkspaceId
+forall i l a. Workspace i l a -&gt; i
+</span><span class="hs-identifier hs-var hs-var">W.tag</span></span><span> </span><span class="annot"><span class="annottext">WindowSpace
+</span><a href="#local-6989586621679420862"><span class="hs-identifier hs-var">w</span></a></span><span class="hs-special">)</span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">WorkspaceId
+</span><a href="#local-6989586621679420863"><span class="hs-identifier hs-var">s</span></a></span><span>
+</span><span id="line-80"></span><span>
+</span><span id="line-81"></span><span class="hs-comment">-- | Apply clickable wrapping to the given PP.</span><span>
+</span><span id="line-82"></span><span class="annot"><a href="XMonad.Util.ClickableWorkspaces.html#clickablePP"><span class="hs-identifier hs-type">clickablePP</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><a href="XMonad.Hooks.StatusBar.PP.html#PP"><span class="hs-identifier hs-type">PP</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">X</span></span><span> </span><span class="annot"><a href="XMonad.Hooks.StatusBar.PP.html#PP"><span class="hs-identifier hs-type">PP</span></a></span><span>
+</span><span id="line-83"></span><span id="clickablePP"><span class="annot"><span class="annottext">clickablePP :: PP -&gt; X PP
+</span><a href="XMonad.Util.ClickableWorkspaces.html#clickablePP"><span class="hs-identifier hs-var hs-var">clickablePP</span></a></span></span><span> </span><span id="local-6989586621679420859"><span class="annot"><span class="annottext">PP
+</span><a href="#local-6989586621679420859"><span class="hs-identifier hs-var">pp</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">X (WorkspaceId -&gt; WindowSpace -&gt; WorkspaceId)
+</span><a href="XMonad.Util.ClickableWorkspaces.html#getClickable"><span class="hs-identifier hs-var">getClickable</span></a></span><span> </span><span class="annot"><span class="annottext">X (WorkspaceId -&gt; WindowSpace -&gt; WorkspaceId)
+-&gt; ((WorkspaceId -&gt; WindowSpace -&gt; WorkspaceId) -&gt; PP) -&gt; X PP
+forall (f :: * -&gt; *) a b. Functor f =&gt; f a -&gt; (a -&gt; b) -&gt; f b
+</span><span class="hs-operator hs-var">&lt;&amp;&gt;</span></span><span> </span><span class="hs-glyph">\</span><span id="local-6989586621679420858"><span class="annot"><span class="annottext">WorkspaceId -&gt; WindowSpace -&gt; WorkspaceId
+</span><a href="#local-6989586621679420858"><span class="hs-identifier hs-var">ren</span></a></span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">PP
+</span><a href="#local-6989586621679420859"><span class="hs-identifier hs-var">pp</span></a></span><span class="hs-special">{</span><span> </span><span class="annot"><span class="annottext">ppRename :: WorkspaceId -&gt; WindowSpace -&gt; WorkspaceId
+</span><a href="XMonad.Hooks.StatusBar.PP.html#ppRename"><span class="hs-identifier hs-var">ppRename</span></a></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">PP -&gt; WorkspaceId -&gt; WindowSpace -&gt; WorkspaceId
+</span><a href="XMonad.Hooks.StatusBar.PP.html#ppRename"><span class="hs-identifier hs-var hs-var">ppRename</span></a></span><span> </span><span class="annot"><span class="annottext">PP
+</span><a href="#local-6989586621679420859"><span class="hs-identifier hs-var">pp</span></a></span><span> </span><span class="annot"><span class="annottext">(WorkspaceId -&gt; WindowSpace -&gt; WorkspaceId)
+-&gt; (WorkspaceId -&gt; WindowSpace -&gt; WorkspaceId)
+-&gt; WorkspaceId
+-&gt; WindowSpace
+-&gt; WorkspaceId
+forall (m :: * -&gt; *) a b c.
+Monad m =&gt;
+(a -&gt; m b) -&gt; (b -&gt; m c) -&gt; a -&gt; m c
+</span><span class="hs-operator hs-var">&gt;=&gt;</span></span><span> </span><span class="annot"><span class="annottext">WorkspaceId -&gt; WindowSpace -&gt; WorkspaceId
+</span><a href="#local-6989586621679420858"><span class="hs-identifier hs-var">ren</span></a></span><span> </span><span class="hs-special">}</span><span>
+</span><span id="line-84"></span></pre></body></html>

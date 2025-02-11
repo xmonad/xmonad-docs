@@ -1,0 +1,224 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd"><html xmlns="http://www.w3.org/1999/xhtml"><head><link rel="stylesheet" type="text/css" href="style.css" /><script type="text/javascript" src="highlight.js"></script></head><body><pre><span class="hs-pragma">{-# LANGUAGE FlexibleInstances, MultiParamTypeClasses #-}</span><span>
+</span><span id="line-2"></span><span>
+</span><span id="line-3"></span><span class="hs-comment">-----------------------------------------------------------------------------</span><span>
+</span><span id="line-4"></span><span class="hs-comment">-- |</span><span>
+</span><span id="line-5"></span><span class="hs-comment">-- Module      :  XMonad.Layout.MultiDishes</span><span>
+</span><span id="line-6"></span><span class="hs-comment">-- Description :  A layout stacking groups of extra windows underneath the master windows.</span><span>
+</span><span id="line-7"></span><span class="hs-comment">-- Copyright   :  (c) Jeremy Apthorp, Nathan Fairhurst</span><span>
+</span><span id="line-8"></span><span class="hs-comment">-- License     :  BSD-style (see LICENSE)</span><span>
+</span><span id="line-9"></span><span class="hs-comment">--</span><span>
+</span><span id="line-10"></span><span class="hs-comment">-- Maintainer  :  Nathan Fairhurst &lt;nathan.p3pictures@gmail.com&gt;</span><span>
+</span><span id="line-11"></span><span class="hs-comment">-- Stability   :  unstable</span><span>
+</span><span id="line-12"></span><span class="hs-comment">-- Portability :  portable</span><span>
+</span><span id="line-13"></span><span class="hs-comment">--</span><span>
+</span><span id="line-14"></span><span class="hs-comment">-- MultiDishes is a layout that stacks groups of extra windows underneath</span><span>
+</span><span id="line-15"></span><span class="hs-comment">-- the master windows.</span><span>
+</span><span id="line-16"></span><span class="hs-comment">--</span><span>
+</span><span id="line-17"></span><span class="hs-comment">-----------------------------------------------------------------------------</span><span>
+</span><span id="line-18"></span><span>
+</span><span id="line-19"></span><span class="hs-keyword">module</span><span> </span><span class="hs-identifier">XMonad.Layout.MultiDishes</span><span> </span><span class="hs-special">(</span><span>
+</span><span id="line-20"></span><span>                              </span><span class="annot"><span class="hs-comment">-- * Usage</span></span><span>
+</span><span id="line-21"></span><span>                              </span><span class="annot"><span class="hs-comment">-- $usage</span></span><span>
+</span><span id="line-22"></span><span>                              </span><span class="annot"><a href="XMonad.Layout.MultiDishes.html#MultiDishes"><span class="hs-identifier">MultiDishes</span></a></span><span> </span><span class="hs-special">(</span><span class="hs-glyph">..</span><span class="hs-special">)</span><span>
+</span><span id="line-23"></span><span>                            </span><span class="hs-special">)</span><span> </span><span class="hs-keyword">where</span><span>
+</span><span id="line-24"></span><span>
+</span><span id="line-25"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><span class="hs-identifier">XMonad</span></span><span>
+</span><span id="line-26"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><span class="hs-identifier">XMonad.StackSet</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier">integrate</span></span><span class="hs-special">)</span><span>
+</span><span id="line-27"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><a href="XMonad.Prelude.html"><span class="hs-identifier">XMonad.Prelude</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier">ap</span></span><span class="hs-special">)</span><span>
+</span><span id="line-28"></span><span>
+</span><span id="line-29"></span><span class="hs-comment">-- $usage</span><span>
+</span><span id="line-30"></span><span class="hs-comment">-- You can use this module with the following in your @xmonad.hs@:</span><span>
+</span><span id="line-31"></span><span class="hs-comment">--</span><span>
+</span><span id="line-32"></span><span class="hs-comment">-- &gt; import XMonad.Layout.MultiDishes</span><span>
+</span><span id="line-33"></span><span class="hs-comment">--</span><span>
+</span><span id="line-34"></span><span class="hs-comment">-- Then edit your @layoutHook@ by adding the MultiDishes layout:</span><span>
+</span><span id="line-35"></span><span class="hs-comment">--</span><span>
+</span><span id="line-36"></span><span class="hs-comment">-- &gt; myLayout = MultiDishes 2 3 (1/6) ||| Full ||| etc..</span><span>
+</span><span id="line-37"></span><span class="hs-comment">-- &gt; main = xmonad def { layoutHook = myLayout }</span><span>
+</span><span id="line-38"></span><span class="hs-comment">--</span><span>
+</span><span id="line-39"></span><span class="hs-comment">-- This is based on the Layout Dishes, but accepts another parameter for</span><span>
+</span><span id="line-40"></span><span class="hs-comment">-- the maximum number of dishes allowed within a stack.</span><span>
+</span><span id="line-41"></span><span class="hs-comment">--</span><span>
+</span><span id="line-42"></span><span class="hs-comment">-- &gt; MultiDishes x 1 y</span><span>
+</span><span id="line-43"></span><span class="hs-comment">-- is equivalent to</span><span>
+</span><span id="line-44"></span><span class="hs-comment">-- &gt; Dishes x y</span><span>
+</span><span id="line-45"></span><span class="hs-comment">--</span><span>
+</span><span id="line-46"></span><span class="hs-comment">-- The stack with the fewest dishes is always on top, so 4 windows</span><span>
+</span><span id="line-47"></span><span class="hs-comment">-- with the layout `MultiDishes 1 2 (1/5)` would look like this:</span><span>
+</span><span id="line-48"></span><span class="hs-comment">--</span><span>
+</span><span id="line-49"></span><span class="hs-comment">-- &gt; _________</span><span>
+</span><span id="line-50"></span><span class="hs-comment">-- &gt; |       |</span><span>
+</span><span id="line-51"></span><span class="hs-comment">-- &gt; |   M   |</span><span>
+</span><span id="line-52"></span><span class="hs-comment">-- &gt; |_______|</span><span>
+</span><span id="line-53"></span><span class="hs-comment">-- &gt; |_______|</span><span>
+</span><span id="line-54"></span><span class="hs-comment">-- &gt; |___|___|</span><span>
+</span><span id="line-55"></span><span class="hs-comment">--</span><span>
+</span><span id="line-56"></span><span class="hs-comment">-- For more detailed instructions on editing the layoutHook see</span><span>
+</span><span id="line-57"></span><span class="hs-comment">-- &lt;https://xmonad.org/TUTORIAL.html#customizing-xmonad the tutorial&gt; and</span><span>
+</span><span id="line-58"></span><span class="hs-comment">-- &quot;XMonad.Doc.Extending#Editing_the_layout_hook&quot;.</span><span>
+</span><span id="line-59"></span><span>
+</span><span id="line-60"></span><span class="hs-keyword">data</span><span> </span><span id="MultiDishes"><span class="annot"><a href="XMonad.Layout.MultiDishes.html#MultiDishes"><span class="hs-identifier hs-var">MultiDishes</span></a></span></span><span> </span><span id="local-6989586621679412044"><span class="annot"><a href="#local-6989586621679412044"><span class="hs-identifier hs-type">a</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span id="MultiDishes"><span class="annot"><a href="XMonad.Layout.MultiDishes.html#MultiDishes"><span class="hs-identifier hs-var">MultiDishes</span></a></span></span><span> </span><span class="annot"><span class="hs-identifier hs-type">Int</span></span><span> </span><span class="annot"><span class="hs-identifier hs-type">Int</span></span><span> </span><span class="annot"><span class="hs-identifier hs-type">Rational</span></span><span> </span><span class="hs-keyword">deriving</span><span> </span><span class="hs-special">(</span><span id="local-6989586621679411970"><span id="local-6989586621679411972"><span id="local-6989586621679411981"><span class="annot"><span class="annottext">Int -&gt; MultiDishes a -&gt; ShowS
+forall a. Int -&gt; MultiDishes a -&gt; ShowS
+forall a. [MultiDishes a] -&gt; ShowS
+forall a. MultiDishes a -&gt; String
+forall a.
+(Int -&gt; a -&gt; ShowS) -&gt; (a -&gt; String) -&gt; ([a] -&gt; ShowS) -&gt; Show a
+showList :: [MultiDishes a] -&gt; ShowS
+$cshowList :: forall a. [MultiDishes a] -&gt; ShowS
+show :: MultiDishes a -&gt; String
+$cshow :: forall a. MultiDishes a -&gt; String
+showsPrec :: Int -&gt; MultiDishes a -&gt; ShowS
+$cshowsPrec :: forall a. Int -&gt; MultiDishes a -&gt; ShowS
+</span><span class="hs-identifier hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var">Show</span></span></span></span></span><span class="hs-special">,</span><span> </span><span id="local-6989586621679411946"><span id="local-6989586621679411961"><span id="local-6989586621679411964"><span id="local-6989586621679411966"><span class="annot"><span class="annottext">ReadPrec [MultiDishes a]
+ReadPrec (MultiDishes a)
+ReadS [MultiDishes a]
+forall a. ReadPrec [MultiDishes a]
+forall a. ReadPrec (MultiDishes a)
+forall a. Int -&gt; ReadS (MultiDishes a)
+forall a. ReadS [MultiDishes a]
+forall a.
+(Int -&gt; ReadS a)
+-&gt; ReadS [a] -&gt; ReadPrec a -&gt; ReadPrec [a] -&gt; Read a
+readListPrec :: ReadPrec [MultiDishes a]
+$creadListPrec :: forall a. ReadPrec [MultiDishes a]
+readPrec :: ReadPrec (MultiDishes a)
+$creadPrec :: forall a. ReadPrec (MultiDishes a)
+readList :: ReadS [MultiDishes a]
+$creadList :: forall a. ReadS [MultiDishes a]
+readsPrec :: Int -&gt; ReadS (MultiDishes a)
+$creadsPrec :: forall a. Int -&gt; ReadS (MultiDishes a)
+</span><span class="hs-identifier hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var">Read</span></span></span></span></span></span><span class="hs-special">)</span><span>
+</span><span id="line-61"></span><span class="hs-keyword">instance</span><span> </span><span id="local-6989586621679411926"><span id="local-6989586621679411929"><span id="local-6989586621679411931"><span id="local-6989586621679411934"><span id="local-6989586621679411936"><span id="local-6989586621679412032"><span class="annot"><span class="hs-identifier hs-type">LayoutClass</span></span><span> </span><span class="annot"><a href="XMonad.Layout.MultiDishes.html#MultiDishes"><span class="hs-identifier hs-type">MultiDishes</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679412032"><span class="hs-identifier hs-type">a</span></a></span></span></span></span></span></span></span><span> </span><span class="hs-keyword">where</span><span>
+</span><span id="line-62"></span><span>    </span><span id="local-6989586621679411920"><span class="annot"><span class="annottext">pureLayout :: MultiDishes a -&gt; Rectangle -&gt; Stack a -&gt; [(a, Rectangle)]
+</span><span class="hs-identifier hs-var hs-var hs-var hs-var">pureLayout</span></span></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="XMonad.Layout.MultiDishes.html#MultiDishes"><span class="hs-identifier hs-type">MultiDishes</span></a></span><span> </span><span id="local-6989586621679411918"><span class="annot"><span class="annottext">Int
+</span><a href="#local-6989586621679411918"><span class="hs-identifier hs-var">nmaster</span></a></span></span><span> </span><span id="local-6989586621679411917"><span class="annot"><span class="annottext">Int
+</span><a href="#local-6989586621679411917"><span class="hs-identifier hs-var">dishesPerStack</span></a></span></span><span> </span><span id="local-6989586621679411916"><span class="annot"><span class="annottext">Rational
+</span><a href="#local-6989586621679411916"><span class="hs-identifier hs-var">h</span></a></span></span><span class="hs-special">)</span><span> </span><span id="local-6989586621679411915"><span class="annot"><span class="annottext">Rectangle
+</span><a href="#local-6989586621679411915"><span class="hs-identifier hs-var">r</span></a></span></span><span> </span><span class="hs-glyph">=</span><span>
+</span><span id="line-63"></span><span>        </span><span class="annot"><span class="annottext">forall (m :: * -&gt; *) a b. Monad m =&gt; m (a -&gt; b) -&gt; m a -&gt; m b
+</span><span class="hs-identifier hs-var">ap</span></span><span> </span><span class="annot"><span class="annottext">forall a b. [a] -&gt; [b] -&gt; [(a, b)]
+</span><span class="hs-identifier hs-var">zip</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Rational -&gt; Rectangle -&gt; Int -&gt; Int -&gt; Int -&gt; [Rectangle]
+</span><a href="XMonad.Layout.MultiDishes.html#multiDishes"><span class="hs-identifier hs-var">multiDishes</span></a></span><span> </span><span class="annot"><span class="annottext">Rational
+</span><a href="#local-6989586621679411916"><span class="hs-identifier hs-var">h</span></a></span><span> </span><span class="annot"><span class="annottext">Rectangle
+</span><a href="#local-6989586621679411915"><span class="hs-identifier hs-var">r</span></a></span><span> </span><span class="annot"><span class="annottext">Int
+</span><a href="#local-6989586621679411918"><span class="hs-identifier hs-var">nmaster</span></a></span><span> </span><span class="annot"><span class="annottext">Int
+</span><a href="#local-6989586621679411917"><span class="hs-identifier hs-var">dishesPerStack</span></a></span><span> </span><span class="annot"><span class="annottext">forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">forall (t :: * -&gt; *) a. Foldable t =&gt; t a -&gt; Int
+</span><span class="hs-identifier hs-var">length</span></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">forall a. Stack a -&gt; [a]
+</span><span class="hs-identifier hs-var">integrate</span></span><span>
+</span><span id="line-64"></span><span>    </span><span id="local-6989586621679411907"><span class="annot"><span class="annottext">pureMessage :: MultiDishes a -&gt; SomeMessage -&gt; Maybe (MultiDishes a)
+</span><span class="hs-identifier hs-var hs-var hs-var hs-var">pureMessage</span></span></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="XMonad.Layout.MultiDishes.html#MultiDishes"><span class="hs-identifier hs-type">MultiDishes</span></a></span><span> </span><span id="local-6989586621679411905"><span class="annot"><span class="annottext">Int
+</span><a href="#local-6989586621679411905"><span class="hs-identifier hs-var">nmaster</span></a></span></span><span> </span><span id="local-6989586621679411904"><span class="annot"><span class="annottext">Int
+</span><a href="#local-6989586621679411904"><span class="hs-identifier hs-var">dishesPerStack</span></a></span></span><span> </span><span id="local-6989586621679411903"><span class="annot"><span class="annottext">Rational
+</span><a href="#local-6989586621679411903"><span class="hs-identifier hs-var">h</span></a></span></span><span class="hs-special">)</span><span> </span><span id="local-6989586621679411902"><span class="annot"><span class="annottext">SomeMessage
+</span><a href="#local-6989586621679411902"><span class="hs-identifier hs-var">m</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">forall (f :: * -&gt; *) a b. Functor f =&gt; (a -&gt; b) -&gt; f a -&gt; f b
+</span><span class="hs-identifier hs-var">fmap</span></span><span> </span><span class="annot"><span class="annottext">forall {a}. IncMasterN -&gt; MultiDishes a
+</span><a href="#local-6989586621679411901"><span class="hs-identifier hs-var">incmastern</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">forall m. Message m =&gt; SomeMessage -&gt; Maybe m
+</span><span class="hs-identifier hs-var">fromMessage</span></span><span> </span><span class="annot"><span class="annottext">SomeMessage
+</span><a href="#local-6989586621679411902"><span class="hs-identifier hs-var">m</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-65"></span><span>        </span><span class="hs-keyword">where</span><span> </span><span id="local-6989586621679411901"><span class="annot"><span class="annottext">incmastern :: IncMasterN -&gt; MultiDishes a
+</span><a href="#local-6989586621679411901"><span class="hs-identifier hs-var hs-var">incmastern</span></a></span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">IncMasterN</span></span><span> </span><span id="local-6989586621679411894"><span class="annot"><span class="annottext">Int
+</span><a href="#local-6989586621679411894"><span class="hs-identifier hs-var">d</span></a></span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">forall a. Int -&gt; Int -&gt; Rational -&gt; MultiDishes a
+</span><a href="XMonad.Layout.MultiDishes.html#MultiDishes"><span class="hs-identifier hs-var">MultiDishes</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">forall a. Ord a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-identifier hs-var">max</span></span><span> </span><span class="annot"><span class="annottext">Int
+</span><span class="hs-number">0</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Int
+</span><a href="#local-6989586621679411905"><span class="hs-identifier hs-var">nmaster</span></a></span><span class="annot"><span class="annottext">forall a. Num a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-operator hs-var">+</span></span><span class="annot"><span class="annottext">Int
+</span><a href="#local-6989586621679411894"><span class="hs-identifier hs-var">d</span></a></span><span class="hs-special">)</span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">Int
+</span><a href="#local-6989586621679411904"><span class="hs-identifier hs-var">dishesPerStack</span></a></span><span> </span><span class="annot"><span class="annottext">Rational
+</span><a href="#local-6989586621679411903"><span class="hs-identifier hs-var">h</span></a></span><span>
+</span><span id="line-66"></span><span>
+</span><span id="line-67"></span><span class="annot"><a href="XMonad.Layout.MultiDishes.html#multiDishes"><span class="hs-identifier hs-type">multiDishes</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Rational</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Rectangle</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Int</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Int</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Int</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="hs-special">[</span><span class="annot"><span class="hs-identifier hs-type">Rectangle</span></span><span class="hs-special">]</span><span>
+</span><span id="line-68"></span><span id="multiDishes"><span class="annot"><span class="annottext">multiDishes :: Rational -&gt; Rectangle -&gt; Int -&gt; Int -&gt; Int -&gt; [Rectangle]
+</span><a href="XMonad.Layout.MultiDishes.html#multiDishes"><span class="hs-identifier hs-var hs-var">multiDishes</span></a></span></span><span> </span><span id="local-6989586621679411891"><span class="annot"><span class="annottext">Rational
+</span><a href="#local-6989586621679411891"><span class="hs-identifier hs-var">h</span></a></span></span><span> </span><span id="local-6989586621679411890"><span class="annot"><span class="annottext">Rectangle
+</span><a href="#local-6989586621679411890"><span class="hs-identifier hs-var">s</span></a></span></span><span> </span><span id="local-6989586621679411889"><span class="annot"><span class="annottext">Int
+</span><a href="#local-6989586621679411889"><span class="hs-identifier hs-var">nmaster</span></a></span></span><span> </span><span id="local-6989586621679411888"><span class="annot"><span class="annottext">Int
+</span><a href="#local-6989586621679411888"><span class="hs-identifier hs-var">dishesPerStack</span></a></span></span><span> </span><span id="local-6989586621679411887"><span class="annot"><span class="annottext">Int
+</span><a href="#local-6989586621679411887"><span class="hs-identifier hs-var">n</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-keyword">if</span><span> </span><span class="annot"><span class="annottext">Int
+</span><a href="#local-6989586621679411887"><span class="hs-identifier hs-var">n</span></a></span><span> </span><span class="annot"><span class="annottext">forall a. Ord a =&gt; a -&gt; a -&gt; Bool
+</span><span class="hs-operator hs-var">&lt;=</span></span><span> </span><span class="annot"><span class="annottext">Int
+</span><a href="#local-6989586621679411889"><span class="hs-identifier hs-var">nmaster</span></a></span><span>
+</span><span id="line-69"></span><span>                        </span><span class="hs-keyword">then</span><span> </span><span class="annot"><span class="annottext">Int -&gt; Rectangle -&gt; [Rectangle]
+</span><span class="hs-identifier hs-var">splitHorizontally</span></span><span> </span><span class="annot"><span class="annottext">Int
+</span><a href="#local-6989586621679411887"><span class="hs-identifier hs-var">n</span></a></span><span> </span><span class="annot"><span class="annottext">Rectangle
+</span><a href="#local-6989586621679411890"><span class="hs-identifier hs-var">s</span></a></span><span>
+</span><span id="line-70"></span><span>                        </span><span class="hs-keyword">else</span><span> </span><span class="annot"><span class="annottext">[Rectangle]
+</span><a href="#local-6989586621679411884"><span class="hs-identifier hs-var">ws</span></a></span><span>
+</span><span id="line-71"></span><span> </span><span class="hs-keyword">where</span><span>
+</span><span id="line-72"></span><span>    </span><span class="hs-special">(</span><span id="local-6989586621679411878"><span class="annot"><span class="annottext">Int
+</span><a href="#local-6989586621679411878"><span class="hs-identifier hs-var">filledDishStackCount</span></a></span></span><span class="hs-special">,</span><span> </span><span id="local-6989586621679411877"><span class="annot"><span class="annottext">Int
+</span><a href="#local-6989586621679411877"><span class="hs-identifier hs-var">remainder</span></a></span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=</span><span>
+</span><span id="line-73"></span><span>      </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Int
+</span><a href="#local-6989586621679411887"><span class="hs-identifier hs-var">n</span></a></span><span> </span><span class="annot"><span class="annottext">forall a. Num a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-glyph hs-var">-</span></span><span> </span><span class="annot"><span class="annottext">Int
+</span><a href="#local-6989586621679411889"><span class="hs-identifier hs-var">nmaster</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">forall a. Integral a =&gt; a -&gt; a -&gt; (a, a)
+</span><span class="hs-operator hs-var">`quotRem`</span></span><span> </span><span class="annot"><span class="annottext">forall a. Ord a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-identifier hs-var">max</span></span><span> </span><span class="annot"><span class="annottext">Int
+</span><span class="hs-number">1</span></span><span> </span><span class="annot"><span class="annottext">Int
+</span><a href="#local-6989586621679411888"><span class="hs-identifier hs-var">dishesPerStack</span></a></span><span>
+</span><span id="line-74"></span><span>
+</span><span id="line-75"></span><span>    </span><span class="hs-special">(</span><span id="local-6989586621679411870"><span class="annot"><span class="annottext">Int
+</span><a href="#local-6989586621679411870"><span class="hs-identifier hs-var">firstDepth</span></a></span></span><span class="hs-special">,</span><span> </span><span id="local-6989586621679411869"><span class="annot"><span class="annottext">Int
+</span><a href="#local-6989586621679411869"><span class="hs-identifier hs-var">dishStackCount</span></a></span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=</span><span>
+</span><span id="line-76"></span><span>      </span><span class="hs-keyword">if</span><span> </span><span class="annot"><span class="annottext">Int
+</span><a href="#local-6989586621679411877"><span class="hs-identifier hs-var">remainder</span></a></span><span> </span><span class="annot"><span class="annottext">forall a. Eq a =&gt; a -&gt; a -&gt; Bool
+</span><span class="hs-operator hs-var">==</span></span><span> </span><span class="annot"><span class="annottext">Int
+</span><span class="hs-number">0</span></span><span> </span><span class="hs-keyword">then</span><span>
+</span><span id="line-77"></span><span>        </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Int
+</span><a href="#local-6989586621679411888"><span class="hs-identifier hs-var">dishesPerStack</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">Int
+</span><a href="#local-6989586621679411878"><span class="hs-identifier hs-var">filledDishStackCount</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-78"></span><span>      </span><span class="hs-keyword">else</span><span>
+</span><span id="line-79"></span><span>        </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Int
+</span><a href="#local-6989586621679411877"><span class="hs-identifier hs-var">remainder</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">Int
+</span><a href="#local-6989586621679411878"><span class="hs-identifier hs-var">filledDishStackCount</span></a></span><span> </span><span class="annot"><span class="annottext">forall a. Num a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-operator hs-var">+</span></span><span> </span><span class="annot"><span class="annottext">Int
+</span><span class="hs-number">1</span></span><span class="hs-special">)</span><span>
+</span><span id="line-80"></span><span>
+</span><span id="line-81"></span><span>    </span><span class="hs-special">(</span><span id="local-6989586621679411859"><span class="annot"><span class="annottext">Rectangle
+</span><a href="#local-6989586621679411859"><span class="hs-identifier hs-var">masterRect</span></a></span></span><span class="hs-special">,</span><span> </span><span id="local-6989586621679411858"><span class="annot"><span class="annottext">Rectangle
+</span><a href="#local-6989586621679411858"><span class="hs-identifier hs-var">dishesRect</span></a></span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=</span><span>
+</span><span id="line-82"></span><span>      </span><span class="annot"><span class="annottext">forall r. RealFrac r =&gt; r -&gt; Rectangle -&gt; (Rectangle, Rectangle)
+</span><span class="hs-identifier hs-var">splitVerticallyBy</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Rational
+</span><span class="hs-number">1</span></span><span> </span><span class="annot"><span class="annottext">forall a. Num a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-glyph hs-var">-</span></span><span> </span><span class="annot"><span class="annottext">forall a b. (Integral a, Num b) =&gt; a -&gt; b
+</span><span class="hs-identifier hs-var">fromIntegral</span></span><span> </span><span class="annot"><span class="annottext">Int
+</span><a href="#local-6989586621679411869"><span class="hs-identifier hs-var">dishStackCount</span></a></span><span> </span><span class="annot"><span class="annottext">forall a. Num a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-operator hs-var">*</span></span><span> </span><span class="annot"><span class="annottext">Rational
+</span><a href="#local-6989586621679411891"><span class="hs-identifier hs-var">h</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">Rectangle
+</span><a href="#local-6989586621679411890"><span class="hs-identifier hs-var">s</span></a></span><span>
+</span><span id="line-83"></span><span>
+</span><span id="line-84"></span><span>    </span><span id="local-6989586621679411855"><span class="annot"><span class="annottext">dishStackRects :: [Rectangle]
+</span><a href="#local-6989586621679411855"><span class="hs-identifier hs-var hs-var">dishStackRects</span></a></span></span><span> </span><span class="hs-glyph">=</span><span>
+</span><span id="line-85"></span><span>      </span><span class="annot"><span class="annottext">Int -&gt; Rectangle -&gt; [Rectangle]
+</span><span class="hs-identifier hs-var">splitVertically</span></span><span> </span><span class="annot"><span class="annottext">Int
+</span><a href="#local-6989586621679411869"><span class="hs-identifier hs-var">dishStackCount</span></a></span><span> </span><span class="annot"><span class="annottext">Rectangle
+</span><a href="#local-6989586621679411858"><span class="hs-identifier hs-var">dishesRect</span></a></span><span>
+</span><span id="line-86"></span><span>
+</span><span id="line-87"></span><span>    </span><span id="local-6989586621679411851"><span class="annot"><span class="annottext">allDishRects :: [Rectangle]
+</span><a href="#local-6989586621679411851"><span class="hs-identifier hs-var hs-var">allDishRects</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-keyword">case</span><span> </span><span class="annot"><span class="annottext">[Rectangle]
+</span><a href="#local-6989586621679411855"><span class="hs-identifier hs-var">dishStackRects</span></a></span><span> </span><span class="hs-keyword">of</span><span>
+</span><span id="line-88"></span><span>      </span><span class="hs-special">(</span><span id="local-6989586621679411850"><span class="annot"><span class="annottext">Rectangle
+</span><a href="#local-6989586621679411850"><span class="hs-identifier hs-var">firstStack</span></a></span></span><span class="annot"><span class="hs-glyph hs-type">:</span></span><span id="local-6989586621679411849"><span class="annot"><span class="annottext">[Rectangle]
+</span><a href="#local-6989586621679411849"><span class="hs-identifier hs-var">bottomDishStacks</span></a></span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">-&gt;</span><span>
+</span><span id="line-89"></span><span>        </span><span class="annot"><span class="annottext">Int -&gt; Rectangle -&gt; [Rectangle]
+</span><span class="hs-identifier hs-var">splitHorizontally</span></span><span> </span><span class="annot"><span class="annottext">Int
+</span><a href="#local-6989586621679411870"><span class="hs-identifier hs-var">firstDepth</span></a></span><span> </span><span class="annot"><span class="annottext">Rectangle
+</span><a href="#local-6989586621679411850"><span class="hs-identifier hs-var">firstStack</span></a></span><span> </span><span class="annot"><span class="annottext">forall a. [a] -&gt; [a] -&gt; [a]
+</span><span class="hs-operator hs-var">++</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">[Rectangle]
+</span><a href="#local-6989586621679411849"><span class="hs-identifier hs-var">bottomDishStacks</span></a></span><span> </span><span class="annot"><span class="annottext">forall (m :: * -&gt; *) a b. Monad m =&gt; m a -&gt; (a -&gt; m b) -&gt; m b
+</span><span class="hs-operator hs-var">&gt;&gt;=</span></span><span> </span><span class="annot"><span class="annottext">Int -&gt; Rectangle -&gt; [Rectangle]
+</span><span class="hs-identifier hs-var">splitHorizontally</span></span><span> </span><span class="annot"><span class="annottext">Int
+</span><a href="#local-6989586621679411888"><span class="hs-identifier hs-var">dishesPerStack</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-90"></span><span>      </span><span class="hs-special">[</span><span class="hs-special">]</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="hs-special">[</span><span class="hs-special">]</span><span>
+</span><span id="line-91"></span><span>
+</span><span id="line-92"></span><span>    </span><span id="local-6989586621679411884"><span class="annot"><span class="annottext">ws :: [Rectangle]
+</span><a href="#local-6989586621679411884"><span class="hs-identifier hs-var hs-var">ws</span></a></span></span><span> </span><span class="hs-glyph">=</span><span>
+</span><span id="line-93"></span><span>      </span><span class="annot"><span class="annottext">Int -&gt; Rectangle -&gt; [Rectangle]
+</span><span class="hs-identifier hs-var">splitHorizontally</span></span><span> </span><span class="annot"><span class="annottext">Int
+</span><a href="#local-6989586621679411889"><span class="hs-identifier hs-var">nmaster</span></a></span><span> </span><span class="annot"><span class="annottext">Rectangle
+</span><a href="#local-6989586621679411859"><span class="hs-identifier hs-var">masterRect</span></a></span><span> </span><span class="annot"><span class="annottext">forall a. [a] -&gt; [a] -&gt; [a]
+</span><span class="hs-operator hs-var">++</span></span><span> </span><span class="annot"><span class="annottext">[Rectangle]
+</span><a href="#local-6989586621679411851"><span class="hs-identifier hs-var">allDishRects</span></a></span><span>
+</span><span id="line-94"></span></pre></body></html>

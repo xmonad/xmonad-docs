@@ -1,0 +1,152 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd"><html xmlns="http://www.w3.org/1999/xhtml"><head><link rel="stylesheet" type="text/css" href="style.css" /><script type="text/javascript" src="highlight.js"></script></head><body><pre><span class="hs-comment">-----------------------------------------------------------------------------</span><span>
+</span><span id="line-2"></span><span class="hs-comment">-- |</span><span>
+</span><span id="line-3"></span><span class="hs-comment">-- Module      :  XMonad.Util.SpawnOnce</span><span>
+</span><span id="line-4"></span><span class="hs-comment">-- Description :  A module for spawning a command once, and only once.</span><span>
+</span><span id="line-5"></span><span class="hs-comment">-- Copyright   :  (c) Spencer Janssen 2009</span><span>
+</span><span id="line-6"></span><span class="hs-comment">-- License     :  BSD3-style (see LICENSE)</span><span>
+</span><span id="line-7"></span><span class="hs-comment">--</span><span>
+</span><span id="line-8"></span><span class="hs-comment">-- Maintainer  :  spencerjanssen@gmail.com</span><span>
+</span><span id="line-9"></span><span class="hs-comment">-- Stability   :  unstable</span><span>
+</span><span id="line-10"></span><span class="hs-comment">-- Portability :  not portable</span><span>
+</span><span id="line-11"></span><span class="hs-comment">--</span><span>
+</span><span id="line-12"></span><span class="hs-comment">-- A module for spawning a command once, and only once.  Useful to start</span><span>
+</span><span id="line-13"></span><span class="hs-comment">-- status bars and make session settings inside startupHook. See also</span><span>
+</span><span id="line-14"></span><span class="hs-comment">-- &quot;XMonad.Util.SessionStart&quot; for a different and more flexible way to</span><span>
+</span><span id="line-15"></span><span class="hs-comment">-- run commands only on first startup.</span><span>
+</span><span id="line-16"></span><span class="hs-comment">--</span><span>
+</span><span id="line-17"></span><span class="hs-comment">-----------------------------------------------------------------------------</span><span>
+</span><span id="line-18"></span><span>
+</span><span id="line-19"></span><span class="hs-keyword">module</span><span> </span><span class="hs-identifier">XMonad.Util.SpawnOnce</span><span> </span><span class="hs-special">(</span><span class="annot"><a href="XMonad.Util.SpawnOnce.html#spawnOnce"><span class="hs-identifier">spawnOnce</span></a></span><span class="hs-special">,</span><span>
+</span><span id="line-20"></span><span>                              </span><span class="annot"><span class="hs-comment">-- * 'SpawnOn' helpers</span></span><span>
+</span><span id="line-21"></span><span>                              </span><span class="annot"><span class="hs-comment">-- $spawnon</span></span><span>
+</span><span id="line-22"></span><span>                              </span><span class="annot"><a href="XMonad.Actions.SpawnOn.html#manageSpawn"><span class="hs-identifier">manageSpawn</span></a></span><span class="hs-special">,</span><span>
+</span><span id="line-23"></span><span>                              </span><span class="annot"><a href="XMonad.Util.SpawnOnce.html#spawnOnOnce"><span class="hs-identifier">spawnOnOnce</span></a></span><span class="hs-special">,</span><span>
+</span><span id="line-24"></span><span>                              </span><span class="annot"><a href="XMonad.Util.SpawnOnce.html#spawnNOnOnce"><span class="hs-identifier">spawnNOnOnce</span></a></span><span class="hs-special">,</span><span>
+</span><span id="line-25"></span><span>                              </span><span class="annot"><a href="XMonad.Util.SpawnOnce.html#spawnAndDoOnce"><span class="hs-identifier">spawnAndDoOnce</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-keyword">where</span><span>
+</span><span id="line-26"></span><span>
+</span><span id="line-27"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><span class="hs-identifier">XMonad</span></span><span>
+</span><span id="line-28"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><a href="XMonad.Actions.SpawnOn.html"><span class="hs-identifier">XMonad.Actions.SpawnOn</span></a></span><span>
+</span><span id="line-29"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><span class="hs-identifier">Data.Set</span></span><span> </span><span class="hs-keyword">as</span><span> </span><span class="annot"><span class="hs-identifier">Set</span></span><span>
+</span><span id="line-30"></span><span class="hs-keyword">import</span><span> </span><span class="hs-keyword">qualified</span><span> </span><span class="annot"><a href="XMonad.Util.ExtensibleState.html"><span class="hs-identifier">XMonad.Util.ExtensibleState</span></a></span><span> </span><span class="hs-keyword">as</span><span> </span><span class="annot"><span class="hs-identifier">XS</span></span><span>
+</span><span id="line-31"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><a href="XMonad.Prelude.html"><span class="hs-identifier">XMonad.Prelude</span></a></span><span>
+</span><span id="line-32"></span><span>
+</span><span id="line-33"></span><span class="hs-keyword">newtype</span><span> </span><span id="SpawnOnce"><span class="annot"><a href="XMonad.Util.SpawnOnce.html#SpawnOnce"><span class="hs-identifier hs-var">SpawnOnce</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span id="SpawnOnce"><span class="annot"><a href="XMonad.Util.SpawnOnce.html#SpawnOnce"><span class="hs-identifier hs-var">SpawnOnce</span></a></span></span><span> </span><span class="hs-special">{</span><span> </span><span id="unspawnOnce"><span class="annot"><span class="annottext">SpawnOnce -&gt; Set String
+</span><a href="XMonad.Util.SpawnOnce.html#unspawnOnce"><span class="hs-identifier hs-var hs-var">unspawnOnce</span></a></span></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Set</span></span><span> </span><span class="annot"><span class="hs-identifier hs-type">String</span></span><span> </span><span class="hs-special">}</span><span>
+</span><span id="line-34"></span><span>    </span><span class="hs-keyword">deriving</span><span> </span><span class="hs-special">(</span><span id="local-6989586621679479248"><span id="local-6989586621679479259"><span id="local-6989586621679479262"><span id="local-6989586621679479264"><span class="annot"><span class="annottext">ReadPrec [SpawnOnce]
+ReadPrec SpawnOnce
+Int -&gt; ReadS SpawnOnce
+ReadS [SpawnOnce]
+forall a.
+(Int -&gt; ReadS a)
+-&gt; ReadS [a] -&gt; ReadPrec a -&gt; ReadPrec [a] -&gt; Read a
+readListPrec :: ReadPrec [SpawnOnce]
+$creadListPrec :: ReadPrec [SpawnOnce]
+readPrec :: ReadPrec SpawnOnce
+$creadPrec :: ReadPrec SpawnOnce
+readList :: ReadS [SpawnOnce]
+$creadList :: ReadS [SpawnOnce]
+readsPrec :: Int -&gt; ReadS SpawnOnce
+$creadsPrec :: Int -&gt; ReadS SpawnOnce
+</span><span class="hs-identifier hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var">Read</span></span></span></span></span></span><span class="hs-special">,</span><span> </span><span id="local-6989586621679479232"><span id="local-6989586621679479234"><span id="local-6989586621679479241"><span class="annot"><span class="annottext">Int -&gt; SpawnOnce -&gt; ShowS
+[SpawnOnce] -&gt; ShowS
+SpawnOnce -&gt; String
+forall a.
+(Int -&gt; a -&gt; ShowS) -&gt; (a -&gt; String) -&gt; ([a] -&gt; ShowS) -&gt; Show a
+showList :: [SpawnOnce] -&gt; ShowS
+$cshowList :: [SpawnOnce] -&gt; ShowS
+show :: SpawnOnce -&gt; String
+$cshow :: SpawnOnce -&gt; String
+showsPrec :: Int -&gt; SpawnOnce -&gt; ShowS
+$cshowsPrec :: Int -&gt; SpawnOnce -&gt; ShowS
+</span><span class="hs-identifier hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var">Show</span></span></span></span></span><span class="hs-special">)</span><span>
+</span><span id="line-35"></span><span>
+</span><span id="line-36"></span><span class="hs-keyword">instance</span><span> </span><span class="annot"><span class="hs-identifier hs-type">ExtensionClass</span></span><span> </span><span class="annot"><a href="XMonad.Util.SpawnOnce.html#SpawnOnce"><span class="hs-identifier hs-type">SpawnOnce</span></a></span><span> </span><span class="hs-keyword">where</span><span>
+</span><span id="line-37"></span><span>    </span><span id="local-6989586621679479222"><span class="annot"><span class="annottext">initialValue :: SpawnOnce
+</span><span class="hs-identifier hs-var hs-var hs-var hs-var">initialValue</span></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Set String -&gt; SpawnOnce
+</span><a href="XMonad.Util.SpawnOnce.html#SpawnOnce"><span class="hs-identifier hs-var">SpawnOnce</span></a></span><span> </span><span class="annot"><span class="annottext">forall a. Set a
+</span><span class="hs-identifier hs-var">Set.empty</span></span><span>
+</span><span id="line-38"></span><span>    </span><span id="local-6989586621679479216"><span class="annot"><span class="annottext">extensionType :: SpawnOnce -&gt; StateExtension
+</span><span class="hs-identifier hs-var hs-var hs-var hs-var">extensionType</span></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">forall a. (Read a, Show a, ExtensionClass a) =&gt; a -&gt; StateExtension
+</span><span class="hs-identifier hs-var">PersistentExtension</span></span><span>
+</span><span id="line-39"></span><span>
+</span><span id="line-40"></span><span class="annot"><a href="XMonad.Util.SpawnOnce.html#doOnce"><span class="hs-identifier hs-type">doOnce</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">String</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">X</span></span><span> </span><span class="hs-special">(</span><span class="hs-special">)</span><span class="hs-special">)</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">String</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">X</span></span><span> </span><span class="hs-special">(</span><span class="hs-special">)</span><span>
+</span><span id="line-41"></span><span id="doOnce"><span class="annot"><span class="annottext">doOnce :: (String -&gt; X ()) -&gt; String -&gt; X ()
+</span><a href="XMonad.Util.SpawnOnce.html#doOnce"><span class="hs-identifier hs-var hs-var">doOnce</span></a></span></span><span> </span><span id="local-6989586621679479212"><span class="annot"><span class="annottext">String -&gt; X ()
+</span><a href="#local-6989586621679479212"><span class="hs-identifier hs-var">f</span></a></span></span><span> </span><span id="local-6989586621679479211"><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679479211"><span class="hs-identifier hs-var">s</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-42"></span><span>    </span><span id="local-6989586621679479210"><span class="annot"><span class="annottext">Bool
+</span><a href="#local-6989586621679479210"><span class="hs-identifier hs-var">b</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">forall a (m :: * -&gt; *) b.
+(ExtensionClass a, XLike m) =&gt;
+(a -&gt; b) -&gt; m b
+</span><a href="XMonad.Util.ExtensibleState.html#gets"><span class="hs-identifier hs-var">XS.gets</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">forall a. Ord a =&gt; a -&gt; Set a -&gt; Bool
+</span><span class="hs-identifier hs-var">Set.member</span></span><span> </span><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679479211"><span class="hs-identifier hs-var">s</span></a></span><span> </span><span class="annot"><span class="annottext">forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">SpawnOnce -&gt; Set String
+</span><a href="XMonad.Util.SpawnOnce.html#unspawnOnce"><span class="hs-identifier hs-var">unspawnOnce</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-43"></span><span>    </span><span class="annot"><span class="annottext">forall (f :: * -&gt; *). Applicative f =&gt; Bool -&gt; f () -&gt; f ()
+</span><span class="hs-identifier hs-var">unless</span></span><span> </span><span class="annot"><span class="annottext">Bool
+</span><a href="#local-6989586621679479210"><span class="hs-identifier hs-var">b</span></a></span><span> </span><span class="annot"><span class="annottext">forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-44"></span><span>        </span><span class="annot"><span class="annottext">String -&gt; X ()
+</span><a href="#local-6989586621679479212"><span class="hs-identifier hs-var">f</span></a></span><span> </span><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679479211"><span class="hs-identifier hs-var">s</span></a></span><span>
+</span><span id="line-45"></span><span>        </span><span class="annot"><span class="annottext">forall a (m :: * -&gt; *).
+(ExtensionClass a, XLike m) =&gt;
+(a -&gt; a) -&gt; m ()
+</span><a href="XMonad.Util.ExtensibleState.html#modify"><span class="hs-identifier hs-var">XS.modify</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Set String -&gt; SpawnOnce
+</span><a href="XMonad.Util.SpawnOnce.html#SpawnOnce"><span class="hs-identifier hs-var">SpawnOnce</span></a></span><span> </span><span class="annot"><span class="annottext">forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">forall a. Ord a =&gt; a -&gt; Set a -&gt; Set a
+</span><span class="hs-identifier hs-var">Set.insert</span></span><span> </span><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679479211"><span class="hs-identifier hs-var">s</span></a></span><span> </span><span class="annot"><span class="annottext">forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">SpawnOnce -&gt; Set String
+</span><a href="XMonad.Util.SpawnOnce.html#unspawnOnce"><span class="hs-identifier hs-var">unspawnOnce</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-46"></span><span>
+</span><span id="line-47"></span><span>
+</span><span id="line-48"></span><span class="hs-comment">-- | The first time 'spawnOnce' is executed on a particular command,</span><span>
+</span><span id="line-49"></span><span class="hs-comment">-- that command is executed.  Subsequent invocations for a command do</span><span>
+</span><span id="line-50"></span><span class="hs-comment">-- nothing.</span><span>
+</span><span id="line-51"></span><span class="annot"><a href="XMonad.Util.SpawnOnce.html#spawnOnce"><span class="hs-identifier hs-type">spawnOnce</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">String</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">X</span></span><span> </span><span class="hs-special">(</span><span class="hs-special">)</span><span>
+</span><span id="line-52"></span><span id="spawnOnce"><span class="annot"><span class="annottext">spawnOnce :: String -&gt; X ()
+</span><a href="XMonad.Util.SpawnOnce.html#spawnOnce"><span class="hs-identifier hs-var hs-var">spawnOnce</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">(String -&gt; X ()) -&gt; String -&gt; X ()
+</span><a href="XMonad.Util.SpawnOnce.html#doOnce"><span class="hs-identifier hs-var">doOnce</span></a></span><span> </span><span class="annot"><span class="annottext">forall (m :: * -&gt; *). MonadIO m =&gt; String -&gt; m ()
+</span><span class="hs-identifier hs-var">spawn</span></span><span>
+</span><span id="line-53"></span><span>
+</span><span id="line-54"></span><span class="hs-comment">-- $spawnon</span><span>
+</span><span id="line-55"></span><span class="hs-comment">-- These functions combine 'spawnOnce' with their relatives in</span><span>
+</span><span id="line-56"></span><span class="hs-comment">-- &quot;XMonad.Actions.SpawnOn&quot;. You must add 'manageSpawn' to your</span><span>
+</span><span id="line-57"></span><span class="hs-comment">-- @manageHook@ for them to work, as with @SpawnOn@.</span><span>
+</span><span id="line-58"></span><span>
+</span><span id="line-59"></span><span class="hs-comment">-- | Like 'spawnOnce' but launches the application on the given workspace.</span><span>
+</span><span id="line-60"></span><span class="annot"><a href="XMonad.Util.SpawnOnce.html#spawnOnOnce"><span class="hs-identifier hs-type">spawnOnOnce</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">WorkspaceId</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">String</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">X</span></span><span> </span><span class="hs-special">(</span><span class="hs-special">)</span><span>
+</span><span id="line-61"></span><span id="spawnOnOnce"><span class="annot"><span class="annottext">spawnOnOnce :: String -&gt; String -&gt; X ()
+</span><a href="XMonad.Util.SpawnOnce.html#spawnOnOnce"><span class="hs-identifier hs-var hs-var">spawnOnOnce</span></a></span></span><span> </span><span id="local-6989586621679479201"><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679479201"><span class="hs-identifier hs-var">ws</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">(String -&gt; X ()) -&gt; String -&gt; X ()
+</span><a href="XMonad.Util.SpawnOnce.html#doOnce"><span class="hs-identifier hs-var">doOnce</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">String -&gt; String -&gt; X ()
+</span><a href="XMonad.Actions.SpawnOn.html#spawnOn"><span class="hs-identifier hs-var">spawnOn</span></a></span><span> </span><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679479201"><span class="hs-identifier hs-var">ws</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-62"></span><span>
+</span><span id="line-63"></span><span class="hs-comment">-- | Lanch the given application n times on the specified</span><span>
+</span><span id="line-64"></span><span class="hs-comment">-- workspace. Subsequent attempts to spawn this application will be</span><span>
+</span><span id="line-65"></span><span class="hs-comment">-- ignored.</span><span>
+</span><span id="line-66"></span><span class="annot"><a href="XMonad.Util.SpawnOnce.html#spawnNOnOnce"><span class="hs-identifier hs-type">spawnNOnOnce</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Int</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">WorkspaceId</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">String</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">X</span></span><span> </span><span class="hs-special">(</span><span class="hs-special">)</span><span>
+</span><span id="line-67"></span><span id="spawnNOnOnce"><span class="annot"><span class="annottext">spawnNOnOnce :: Int -&gt; String -&gt; String -&gt; X ()
+</span><a href="XMonad.Util.SpawnOnce.html#spawnNOnOnce"><span class="hs-identifier hs-var hs-var">spawnNOnOnce</span></a></span></span><span> </span><span id="local-6989586621679479199"><span class="annot"><span class="annottext">Int
+</span><a href="#local-6989586621679479199"><span class="hs-identifier hs-var">n</span></a></span></span><span> </span><span id="local-6989586621679479198"><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679479198"><span class="hs-identifier hs-var">ws</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">(String -&gt; X ()) -&gt; String -&gt; X ()
+</span><a href="XMonad.Util.SpawnOnce.html#doOnce"><span class="hs-identifier hs-var">doOnce</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">forall (m :: * -&gt; *) a. Applicative m =&gt; Int -&gt; m a -&gt; m ()
+</span><span class="hs-identifier hs-var">replicateM_</span></span><span> </span><span class="annot"><span class="annottext">Int
+</span><a href="#local-6989586621679479199"><span class="hs-identifier hs-var">n</span></a></span><span> </span><span class="annot"><span class="annottext">forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">String -&gt; String -&gt; X ()
+</span><a href="XMonad.Actions.SpawnOn.html#spawnOn"><span class="hs-identifier hs-var">spawnOn</span></a></span><span> </span><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679479198"><span class="hs-identifier hs-var">ws</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-68"></span><span>
+</span><span id="line-69"></span><span class="hs-comment">-- | Spawn the application once and apply the manage hook. Subsequent</span><span>
+</span><span id="line-70"></span><span class="hs-comment">-- attempts to spawn this application will be ignored.</span><span>
+</span><span id="line-71"></span><span class="annot"><a href="XMonad.Util.SpawnOnce.html#spawnAndDoOnce"><span class="hs-identifier hs-type">spawnAndDoOnce</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">ManageHook</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">String</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">X</span></span><span> </span><span class="hs-special">(</span><span class="hs-special">)</span><span>
+</span><span id="line-72"></span><span id="spawnAndDoOnce"><span class="annot"><span class="annottext">spawnAndDoOnce :: ManageHook -&gt; String -&gt; X ()
+</span><a href="XMonad.Util.SpawnOnce.html#spawnAndDoOnce"><span class="hs-identifier hs-var hs-var">spawnAndDoOnce</span></a></span></span><span> </span><span id="local-6989586621679479196"><span class="annot"><span class="annottext">ManageHook
+</span><a href="#local-6989586621679479196"><span class="hs-identifier hs-var">mh</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">(String -&gt; X ()) -&gt; String -&gt; X ()
+</span><a href="XMonad.Util.SpawnOnce.html#doOnce"><span class="hs-identifier hs-var">doOnce</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">ManageHook -&gt; String -&gt; X ()
+</span><a href="XMonad.Actions.SpawnOn.html#spawnAndDo"><span class="hs-identifier hs-var">spawnAndDo</span></a></span><span> </span><span class="annot"><span class="annottext">ManageHook
+</span><a href="#local-6989586621679479196"><span class="hs-identifier hs-var">mh</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-73"></span></pre></body></html>

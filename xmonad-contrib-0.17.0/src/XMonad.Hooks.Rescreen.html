@@ -1,0 +1,426 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd"><html xmlns="http://www.w3.org/1999/xhtml"><head><link rel="stylesheet" type="text/css" href="style.css" /><script type="text/javascript" src="highlight.js"></script></head><body><pre><span class="hs-pragma">{-# LANGUAGE LambdaCase #-}</span><span>
+</span><span id="line-2"></span><span class="hs-pragma">{-# LANGUAGE MultiWayIf #-}</span><span>
+</span><span id="line-3"></span><span class="hs-pragma">{-# LANGUAGE RecordWildCards #-}</span><span>
+</span><span id="line-4"></span><span class="hs-comment">-- |</span><span>
+</span><span id="line-5"></span><span class="hs-comment">-- Module      :  XMonad.Hooks.Rescreen</span><span>
+</span><span id="line-6"></span><span class="hs-comment">-- Description :  Custom hooks for screen (xrandr) configuration changes.</span><span>
+</span><span id="line-7"></span><span class="hs-comment">-- Copyright   :  (c) 2021 Tom&#225;&#353; Janou&#353;ek &lt;tomi@nomi.cz&gt;</span><span>
+</span><span id="line-8"></span><span class="hs-comment">-- License     :  BSD3</span><span>
+</span><span id="line-9"></span><span class="hs-comment">-- Maintainer  :  Tom&#225;&#353; Janou&#353;ek &lt;tomi@nomi.cz&gt;</span><span>
+</span><span id="line-10"></span><span class="hs-comment">--</span><span>
+</span><span id="line-11"></span><span class="hs-comment">-- Custom hooks for screen (xrandr) configuration changes.</span><span>
+</span><span id="line-12"></span><span class="hs-comment">--</span><span>
+</span><span id="line-13"></span><span class="hs-keyword">module</span><span> </span><span class="hs-identifier">XMonad.Hooks.Rescreen</span><span> </span><span class="hs-special">(</span><span>
+</span><span id="line-14"></span><span>    </span><span class="annot"><span class="hs-comment">-- * Usage</span></span><span>
+</span><span id="line-15"></span><span>    </span><span class="annot"><span class="hs-comment">-- $usage</span></span><span>
+</span><span id="line-16"></span><span>    </span><span class="annot"><a href="XMonad.Hooks.Rescreen.html#RescreenConfig"><span class="hs-identifier">RescreenConfig</span></a></span><span class="hs-special">(</span><span class="hs-glyph">..</span><span class="hs-special">)</span><span class="hs-special">,</span><span>
+</span><span id="line-17"></span><span>    </span><span class="annot"><a href="XMonad.Hooks.Rescreen.html#addAfterRescreenHook"><span class="hs-identifier">addAfterRescreenHook</span></a></span><span class="hs-special">,</span><span>
+</span><span id="line-18"></span><span>    </span><span class="annot"><a href="XMonad.Hooks.Rescreen.html#addRandrChangeHook"><span class="hs-identifier">addRandrChangeHook</span></a></span><span class="hs-special">,</span><span>
+</span><span id="line-19"></span><span>    </span><span class="annot"><a href="XMonad.Hooks.Rescreen.html#rescreenHook"><span class="hs-identifier">rescreenHook</span></a></span><span class="hs-special">,</span><span>
+</span><span id="line-20"></span><span>    </span><span class="hs-special">)</span><span> </span><span class="hs-keyword">where</span><span>
+</span><span id="line-21"></span><span>
+</span><span id="line-22"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><span class="hs-identifier">Graphics.X11.Xrandr</span></span><span>
+</span><span id="line-23"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><span class="hs-identifier">XMonad</span></span><span>
+</span><span id="line-24"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><a href="XMonad.Prelude.html"><span class="hs-identifier">XMonad.Prelude</span></a></span><span>
+</span><span id="line-25"></span><span class="hs-keyword">import</span><span> </span><span class="hs-keyword">qualified</span><span> </span><span class="annot"><a href="XMonad.Util.ExtensibleConf.html"><span class="hs-identifier">XMonad.Util.ExtensibleConf</span></a></span><span> </span><span class="hs-keyword">as</span><span> </span><span class="annot"><span class="hs-identifier">XC</span></span><span>
+</span><span id="line-26"></span><span>
+</span><span id="line-27"></span><span class="hs-comment">-- $usage</span><span>
+</span><span id="line-28"></span><span class="hs-comment">-- This module provides a replacement for the screen configuration change</span><span>
+</span><span id="line-29"></span><span class="hs-comment">-- handling in core that enables attaching custom hooks to screen (xrandr)</span><span>
+</span><span id="line-30"></span><span class="hs-comment">-- configuration change events. These can be used to restart/reposition status</span><span>
+</span><span id="line-31"></span><span class="hs-comment">-- bars or systrays automatically after xrandr, as well as to actually invoke</span><span>
+</span><span id="line-32"></span><span class="hs-comment">-- xrandr or autorandr when an output is (dis)connected.</span><span>
+</span><span id="line-33"></span><span class="hs-comment">--</span><span>
+</span><span id="line-34"></span><span class="hs-comment">-- You can use it by including the following in your @~\/.xmonad\/xmonad.hs@:</span><span>
+</span><span id="line-35"></span><span class="hs-comment">--</span><span>
+</span><span id="line-36"></span><span class="hs-comment">-- &gt; import XMonad.Hooks.RescreenHook</span><span>
+</span><span id="line-37"></span><span class="hs-comment">--</span><span>
+</span><span id="line-38"></span><span class="hs-comment">-- defining your custom hooks:</span><span>
+</span><span id="line-39"></span><span class="hs-comment">--</span><span>
+</span><span id="line-40"></span><span class="hs-comment">-- &gt; myAfterRescreenHook :: X ()</span><span>
+</span><span id="line-41"></span><span class="hs-comment">-- &gt; myAfterRescreenHook = &#8230;</span><span>
+</span><span id="line-42"></span><span class="hs-comment">--</span><span>
+</span><span id="line-43"></span><span class="hs-comment">-- &gt; myRandrChangeHook :: X ()</span><span>
+</span><span id="line-44"></span><span class="hs-comment">-- &gt; myRandrChangeHook = &#8230;</span><span>
+</span><span id="line-45"></span><span class="hs-comment">--</span><span>
+</span><span id="line-46"></span><span class="hs-comment">-- &gt; rescreenCfg = def{</span><span>
+</span><span id="line-47"></span><span class="hs-comment">-- &gt;     afterRescreenHook = myAfterRescreenHook,</span><span>
+</span><span id="line-48"></span><span class="hs-comment">-- &gt;     randrChangeHook = myRandrChangeHook</span><span>
+</span><span id="line-49"></span><span class="hs-comment">-- &gt; }</span><span>
+</span><span id="line-50"></span><span class="hs-comment">--</span><span>
+</span><span id="line-51"></span><span class="hs-comment">-- and adding 'rescreenHook' to your 'xmonad' config:</span><span>
+</span><span id="line-52"></span><span class="hs-comment">--</span><span>
+</span><span id="line-53"></span><span class="hs-comment">-- &gt; main = xmonad $ &#8230; . rescreenHook rescreenCfg . &#8230; $ def{&#8230;}</span><span>
+</span><span id="line-54"></span><span>
+</span><span id="line-55"></span><span class="hs-comment">-- | Hook configuration for 'rescreenHook'.</span><span>
+</span><span id="line-56"></span><span class="hs-keyword">data</span><span> </span><span id="RescreenConfig"><span class="annot"><a href="XMonad.Hooks.Rescreen.html#RescreenConfig"><span class="hs-identifier hs-var">RescreenConfig</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span id="RescreenConfig"><span class="annot"><a href="XMonad.Hooks.Rescreen.html#RescreenConfig"><span class="hs-identifier hs-var">RescreenConfig</span></a></span></span><span>
+</span><span id="line-57"></span><span>    </span><span class="hs-special">{</span><span> </span><span id="afterRescreenHook"><span class="annot"><span class="annottext">RescreenConfig -&gt; X ()
+</span><a href="XMonad.Hooks.Rescreen.html#afterRescreenHook"><span class="hs-identifier hs-var hs-var">afterRescreenHook</span></a></span></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">X</span></span><span> </span><span class="hs-special">(</span><span class="hs-special">)</span><span> </span><span class="hs-comment">-- ^ hook to invoke after 'rescreen'</span><span>
+</span><span id="line-58"></span><span>    </span><span class="hs-special">,</span><span> </span><span id="randrChangeHook"><span class="annot"><span class="annottext">RescreenConfig -&gt; X ()
+</span><a href="XMonad.Hooks.Rescreen.html#randrChangeHook"><span class="hs-identifier hs-var hs-var">randrChangeHook</span></a></span></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">X</span></span><span> </span><span class="hs-special">(</span><span class="hs-special">)</span><span> </span><span class="hs-comment">-- ^ hook for other randr changes, e.g. (dis)connects</span><span>
+</span><span id="line-59"></span><span>    </span><span class="hs-special">}</span><span>
+</span><span id="line-60"></span><span>
+</span><span id="line-61"></span><span class="hs-keyword">instance</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Default</span></span><span> </span><span class="annot"><a href="XMonad.Hooks.Rescreen.html#RescreenConfig"><span class="hs-identifier hs-type">RescreenConfig</span></a></span><span> </span><span class="hs-keyword">where</span><span>
+</span><span id="line-62"></span><span>    </span><span id="local-6989586621679371256"><span class="annot"><span class="annottext">def :: RescreenConfig
+</span><span class="hs-identifier hs-var hs-var hs-var hs-var">def</span></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">RescreenConfig :: X () -&gt; X () -&gt; RescreenConfig
+</span><a href="XMonad.Hooks.Rescreen.html#RescreenConfig"><span class="hs-identifier hs-type">RescreenConfig</span></a></span><span>
+</span><span id="line-63"></span><span>        </span><span class="hs-special">{</span><span> </span><span class="annot"><span class="annottext">afterRescreenHook :: X ()
+</span><a href="XMonad.Hooks.Rescreen.html#afterRescreenHook"><span class="hs-identifier hs-var">afterRescreenHook</span></a></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">X ()
+forall a. Monoid a =&gt; a
+</span><span class="hs-identifier hs-var">mempty</span></span><span>
+</span><span id="line-64"></span><span>        </span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">randrChangeHook :: X ()
+</span><a href="XMonad.Hooks.Rescreen.html#randrChangeHook"><span class="hs-identifier hs-var">randrChangeHook</span></a></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">X ()
+forall a. Monoid a =&gt; a
+</span><span class="hs-identifier hs-var">mempty</span></span><span>
+</span><span id="line-65"></span><span>        </span><span class="hs-special">}</span><span>
+</span><span id="line-66"></span><span>
+</span><span id="line-67"></span><span class="hs-keyword">instance</span><span> </span><span id="local-6989586621679371250"><span id="local-6989586621679371252"><span class="annot"><span class="hs-identifier hs-type">Semigroup</span></span><span> </span><span class="annot"><a href="XMonad.Hooks.Rescreen.html#RescreenConfig"><span class="hs-identifier hs-type">RescreenConfig</span></a></span></span></span><span> </span><span class="hs-keyword">where</span><span>
+</span><span id="line-68"></span><span>    </span><span class="annot"><a href="XMonad.Hooks.Rescreen.html#RescreenConfig"><span class="hs-identifier hs-type">RescreenConfig</span></a></span><span> </span><span id="local-6989586621679371248"><span class="annot"><span class="annottext">X ()
+</span><a href="#local-6989586621679371248"><span class="hs-identifier hs-var">arh</span></a></span></span><span> </span><span id="local-6989586621679371247"><span class="annot"><span class="annottext">X ()
+</span><a href="#local-6989586621679371247"><span class="hs-identifier hs-var">rch</span></a></span></span><span> </span><span id="local-6989586621679371246"><span class="annot"><span class="annottext">&lt;&gt; :: RescreenConfig -&gt; RescreenConfig -&gt; RescreenConfig
+</span><span class="hs-operator hs-var hs-var hs-var hs-var">&lt;&gt;</span></span></span><span> </span><span class="annot"><a href="XMonad.Hooks.Rescreen.html#RescreenConfig"><span class="hs-identifier hs-type">RescreenConfig</span></a></span><span> </span><span id="local-6989586621679371245"><span class="annot"><span class="annottext">X ()
+</span><a href="#local-6989586621679371245"><span class="hs-identifier hs-var">arh'</span></a></span></span><span> </span><span id="local-6989586621679371244"><span class="annot"><span class="annottext">X ()
+</span><a href="#local-6989586621679371244"><span class="hs-identifier hs-var">rch'</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">X () -&gt; X () -&gt; RescreenConfig
+</span><a href="XMonad.Hooks.Rescreen.html#RescreenConfig"><span class="hs-identifier hs-var">RescreenConfig</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">X ()
+</span><a href="#local-6989586621679371248"><span class="hs-identifier hs-var">arh</span></a></span><span> </span><span class="annot"><span class="annottext">X () -&gt; X () -&gt; X ()
+forall a. Semigroup a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-operator hs-var">&lt;&gt;</span></span><span> </span><span class="annot"><span class="annottext">X ()
+</span><a href="#local-6989586621679371245"><span class="hs-identifier hs-var">arh'</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">X ()
+</span><a href="#local-6989586621679371247"><span class="hs-identifier hs-var">rch</span></a></span><span> </span><span class="annot"><span class="annottext">X () -&gt; X () -&gt; X ()
+forall a. Semigroup a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-operator hs-var">&lt;&gt;</span></span><span> </span><span class="annot"><span class="annottext">X ()
+</span><a href="#local-6989586621679371244"><span class="hs-identifier hs-var">rch'</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-69"></span><span>
+</span><span id="line-70"></span><span class="hs-keyword">instance</span><span> </span><span id="local-6989586621679371238"><span id="local-6989586621679371240"><span class="annot"><span class="hs-identifier hs-type">Monoid</span></span><span> </span><span class="annot"><a href="XMonad.Hooks.Rescreen.html#RescreenConfig"><span class="hs-identifier hs-type">RescreenConfig</span></a></span></span></span><span> </span><span class="hs-keyword">where</span><span>
+</span><span id="line-71"></span><span>    </span><span id="local-6989586621679371236"><span class="annot"><span class="annottext">mempty :: RescreenConfig
+</span><span class="hs-identifier hs-var hs-var hs-var hs-var">mempty</span></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">RescreenConfig
+forall a. Default a =&gt; a
+</span><span class="hs-identifier hs-var">def</span></span><span>
+</span><span id="line-72"></span><span>
+</span><span id="line-73"></span><span class="hs-comment">-- | Attach custom hooks to screen (xrandr) configuration change events.</span><span>
+</span><span id="line-74"></span><span class="hs-comment">-- Replaces the built-in rescreen handling of xmonad core with:</span><span>
+</span><span id="line-75"></span><span class="hs-comment">--</span><span>
+</span><span id="line-76"></span><span class="hs-comment">-- 1. listen to 'RRScreenChangeNotifyEvent' in addition to 'ConfigureEvent' on</span><span>
+</span><span id="line-77"></span><span class="hs-comment">--    the root window</span><span>
+</span><span id="line-78"></span><span class="hs-comment">-- 2. whenever such event is received:</span><span>
+</span><span id="line-79"></span><span class="hs-comment">-- 3. clear any other similar events (Xorg server emits them in bunches)</span><span>
+</span><span id="line-80"></span><span class="hs-comment">-- 4. if any event was 'ConfigureEvent', 'rescreen' and invoke 'afterRescreenHook'</span><span>
+</span><span id="line-81"></span><span class="hs-comment">-- 5. if there was no 'ConfigureEvent', invoke 'randrChangeHook' only</span><span>
+</span><span id="line-82"></span><span class="hs-comment">--</span><span>
+</span><span id="line-83"></span><span class="hs-comment">-- 'afterRescreenHook' is useful for restarting/repositioning status bars and</span><span>
+</span><span id="line-84"></span><span class="hs-comment">-- systray.</span><span>
+</span><span id="line-85"></span><span class="hs-comment">--</span><span>
+</span><span id="line-86"></span><span class="hs-comment">-- 'randrChangeHook' may be used to automatically trigger xrandr (or perhaps</span><span>
+</span><span id="line-87"></span><span class="hs-comment">-- autorandr) when outputs are (dis)connected.</span><span>
+</span><span id="line-88"></span><span class="hs-comment">--</span><span>
+</span><span id="line-89"></span><span class="hs-comment">-- Note that 'rescreenHook' is safe to use several times, 'rescreen' is still</span><span>
+</span><span id="line-90"></span><span class="hs-comment">-- done just once and hooks are invoked in sequence, also just once.</span><span>
+</span><span id="line-91"></span><span id="local-6989586621679371311"><span class="annot"><a href="XMonad.Hooks.Rescreen.html#rescreenHook"><span class="hs-identifier hs-type">rescreenHook</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><a href="XMonad.Hooks.Rescreen.html#RescreenConfig"><span class="hs-identifier hs-type">RescreenConfig</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">XConfig</span></span><span> </span><span class="annot"><a href="#local-6989586621679371311"><span class="hs-identifier hs-type">l</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">XConfig</span></span><span> </span><span class="annot"><a href="#local-6989586621679371311"><span class="hs-identifier hs-type">l</span></a></span></span><span>
+</span><span id="line-92"></span><span id="rescreenHook"><span class="annot"><span class="annottext">rescreenHook :: RescreenConfig -&gt; XConfig l -&gt; XConfig l
+</span><a href="XMonad.Hooks.Rescreen.html#rescreenHook"><span class="hs-identifier hs-var hs-var">rescreenHook</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">(XConfig l -&gt; XConfig l)
+-&gt; RescreenConfig -&gt; XConfig l -&gt; XConfig l
+forall a (l :: * -&gt; *).
+(Semigroup a, Typeable a) =&gt;
+(XConfig l -&gt; XConfig l) -&gt; a -&gt; XConfig l -&gt; XConfig l
+</span><a href="XMonad.Util.ExtensibleConf.html#once"><span class="hs-identifier hs-var">XC.once</span></a></span><span> </span><span class="annot"><span class="annottext">((XConfig l -&gt; XConfig l)
+ -&gt; RescreenConfig -&gt; XConfig l -&gt; XConfig l)
+-&gt; (XConfig l -&gt; XConfig l)
+-&gt; RescreenConfig
+-&gt; XConfig l
+-&gt; XConfig l
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="hs-glyph">\</span><span id="local-6989586621679371234"><span class="annot"><span class="annottext">XConfig l
+</span><a href="#local-6989586621679371234"><span class="hs-identifier hs-var">c</span></a></span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">XConfig l
+</span><a href="#local-6989586621679371234"><span class="hs-identifier hs-var">c</span></a></span><span>
+</span><span id="line-93"></span><span>    </span><span class="hs-special">{</span><span> </span><span class="annot"><span class="annottext">startupHook :: X ()
+</span><span class="hs-identifier hs-var">startupHook</span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">XConfig l -&gt; X ()
+forall (l :: * -&gt; *). XConfig l -&gt; X ()
+</span><span class="hs-identifier hs-var hs-var">startupHook</span></span><span> </span><span class="annot"><span class="annottext">XConfig l
+</span><a href="#local-6989586621679371234"><span class="hs-identifier hs-var">c</span></a></span><span> </span><span class="annot"><span class="annottext">X () -&gt; X () -&gt; X ()
+forall a. Semigroup a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-operator hs-var">&lt;&gt;</span></span><span> </span><span class="annot"><span class="annottext">X ()
+</span><a href="XMonad.Hooks.Rescreen.html#rescreenStartupHook"><span class="hs-identifier hs-var">rescreenStartupHook</span></a></span><span>
+</span><span id="line-94"></span><span>    </span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">handleEventHook :: Event -&gt; X All
+</span><span class="hs-identifier hs-var">handleEventHook</span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">XConfig l -&gt; Event -&gt; X All
+forall (l :: * -&gt; *). XConfig l -&gt; Event -&gt; X All
+</span><span class="hs-identifier hs-var hs-var">handleEventHook</span></span><span> </span><span class="annot"><span class="annottext">XConfig l
+</span><a href="#local-6989586621679371234"><span class="hs-identifier hs-var">c</span></a></span><span> </span><span class="annot"><span class="annottext">(Event -&gt; X All) -&gt; (Event -&gt; X All) -&gt; Event -&gt; X All
+forall a. Semigroup a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-operator hs-var">&lt;&gt;</span></span><span> </span><span class="annot"><span class="annottext">Event -&gt; X All
+</span><a href="XMonad.Hooks.Rescreen.html#rescreenEventHook"><span class="hs-identifier hs-var">rescreenEventHook</span></a></span><span> </span><span class="hs-special">}</span><span>
+</span><span id="line-95"></span><span>
+</span><span id="line-96"></span><span class="hs-comment">-- | Shortcut for 'rescreenHook'.</span><span>
+</span><span id="line-97"></span><span id="local-6989586621679371229"><span class="annot"><a href="XMonad.Hooks.Rescreen.html#addAfterRescreenHook"><span class="hs-identifier hs-type">addAfterRescreenHook</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">X</span></span><span> </span><span class="hs-special">(</span><span class="hs-special">)</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">XConfig</span></span><span> </span><span class="annot"><a href="#local-6989586621679371229"><span class="hs-identifier hs-type">l</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">XConfig</span></span><span> </span><span class="annot"><a href="#local-6989586621679371229"><span class="hs-identifier hs-type">l</span></a></span></span><span>
+</span><span id="line-98"></span><span id="addAfterRescreenHook"><span class="annot"><span class="annottext">addAfterRescreenHook :: X () -&gt; XConfig l -&gt; XConfig l
+</span><a href="XMonad.Hooks.Rescreen.html#addAfterRescreenHook"><span class="hs-identifier hs-var hs-var">addAfterRescreenHook</span></a></span></span><span> </span><span id="local-6989586621679371228"><span class="annot"><span class="annottext">X ()
+</span><a href="#local-6989586621679371228"><span class="hs-identifier hs-var">h</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">RescreenConfig -&gt; XConfig l -&gt; XConfig l
+forall (l :: * -&gt; *). RescreenConfig -&gt; XConfig l -&gt; XConfig l
+</span><a href="XMonad.Hooks.Rescreen.html#rescreenHook"><span class="hs-identifier hs-var">rescreenHook</span></a></span><span> </span><span class="annot"><span class="annottext">RescreenConfig
+forall a. Default a =&gt; a
+</span><span class="hs-identifier hs-var">def</span></span><span class="hs-special">{</span><span> </span><span class="annot"><span class="annottext">afterRescreenHook :: X ()
+</span><a href="XMonad.Hooks.Rescreen.html#afterRescreenHook"><span class="hs-identifier hs-var">afterRescreenHook</span></a></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">X ()
+</span><a href="#local-6989586621679371228"><span class="hs-identifier hs-var">h</span></a></span><span> </span><span class="hs-special">}</span><span>
+</span><span id="line-99"></span><span>
+</span><span id="line-100"></span><span class="hs-comment">-- | Shortcut for 'rescreenHook'.</span><span>
+</span><span id="line-101"></span><span id="local-6989586621679371227"><span class="annot"><a href="XMonad.Hooks.Rescreen.html#addRandrChangeHook"><span class="hs-identifier hs-type">addRandrChangeHook</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">X</span></span><span> </span><span class="hs-special">(</span><span class="hs-special">)</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">XConfig</span></span><span> </span><span class="annot"><a href="#local-6989586621679371227"><span class="hs-identifier hs-type">l</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">XConfig</span></span><span> </span><span class="annot"><a href="#local-6989586621679371227"><span class="hs-identifier hs-type">l</span></a></span></span><span>
+</span><span id="line-102"></span><span id="addRandrChangeHook"><span class="annot"><span class="annottext">addRandrChangeHook :: X () -&gt; XConfig l -&gt; XConfig l
+</span><a href="XMonad.Hooks.Rescreen.html#addRandrChangeHook"><span class="hs-identifier hs-var hs-var">addRandrChangeHook</span></a></span></span><span> </span><span id="local-6989586621679371226"><span class="annot"><span class="annottext">X ()
+</span><a href="#local-6989586621679371226"><span class="hs-identifier hs-var">h</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">RescreenConfig -&gt; XConfig l -&gt; XConfig l
+forall (l :: * -&gt; *). RescreenConfig -&gt; XConfig l -&gt; XConfig l
+</span><a href="XMonad.Hooks.Rescreen.html#rescreenHook"><span class="hs-identifier hs-var">rescreenHook</span></a></span><span> </span><span class="annot"><span class="annottext">RescreenConfig
+forall a. Default a =&gt; a
+</span><span class="hs-identifier hs-var">def</span></span><span class="hs-special">{</span><span> </span><span class="annot"><span class="annottext">randrChangeHook :: X ()
+</span><a href="XMonad.Hooks.Rescreen.html#randrChangeHook"><span class="hs-identifier hs-var">randrChangeHook</span></a></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">X ()
+</span><a href="#local-6989586621679371226"><span class="hs-identifier hs-var">h</span></a></span><span> </span><span class="hs-special">}</span><span>
+</span><span id="line-103"></span><span>
+</span><span id="line-104"></span><span class="hs-comment">-- | Startup hook to listen for @RRScreenChangeNotify@ events.</span><span>
+</span><span id="line-105"></span><span class="annot"><a href="XMonad.Hooks.Rescreen.html#rescreenStartupHook"><span class="hs-identifier hs-type">rescreenStartupHook</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">X</span></span><span> </span><span class="hs-special">(</span><span class="hs-special">)</span><span>
+</span><span id="line-106"></span><span id="rescreenStartupHook"><span class="annot"><span class="annottext">rescreenStartupHook :: X ()
+</span><a href="XMonad.Hooks.Rescreen.html#rescreenStartupHook"><span class="hs-identifier hs-var hs-var">rescreenStartupHook</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-107"></span><span>    </span><span id="local-6989586621679371225"><span class="annot"><span class="annottext">Display
+</span><a href="#local-6989586621679371225"><span class="hs-identifier hs-var">dpy</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">(XConf -&gt; Display) -&gt; X Display
+forall r (m :: * -&gt; *) a. MonadReader r m =&gt; (r -&gt; a) -&gt; m a
+</span><span class="hs-identifier hs-var">asks</span></span><span> </span><span class="annot"><span class="annottext">XConf -&gt; Display
+</span><span class="hs-identifier hs-var hs-var">display</span></span><span>
+</span><span id="line-108"></span><span>    </span><span id="local-6989586621679371222"><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679371222"><span class="hs-identifier hs-var">root</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">(XConf -&gt; Window) -&gt; X Window
+forall r (m :: * -&gt; *) a. MonadReader r m =&gt; (r -&gt; a) -&gt; m a
+</span><span class="hs-identifier hs-var">asks</span></span><span> </span><span class="annot"><span class="annottext">XConf -&gt; Window
+</span><span class="hs-identifier hs-var hs-var">theRoot</span></span><span>
+</span><span id="line-109"></span><span>    </span><span class="annot"><span class="annottext">IO () -&gt; X ()
+forall (m :: * -&gt; *) a. MonadIO m =&gt; IO a -&gt; m a
+</span><span class="hs-identifier hs-var">io</span></span><span> </span><span class="annot"><span class="annottext">(IO () -&gt; X ()) -&gt; IO () -&gt; X ()
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">Display -&gt; Window -&gt; Window -&gt; IO ()
+</span><span class="hs-identifier hs-var">xrrSelectInput</span></span><span> </span><span class="annot"><span class="annottext">Display
+</span><a href="#local-6989586621679371225"><span class="hs-identifier hs-var">dpy</span></a></span><span> </span><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679371222"><span class="hs-identifier hs-var">root</span></a></span><span> </span><span class="annot"><span class="annottext">Window
+</span><span class="hs-identifier hs-var">rrScreenChangeNotifyMask</span></span><span>
+</span><span id="line-110"></span><span>
+</span><span id="line-111"></span><span class="hs-comment">-- | Event hook with custom rescreen/randr hooks. See 'rescreenHook' for more.</span><span>
+</span><span id="line-112"></span><span class="annot"><a href="XMonad.Hooks.Rescreen.html#rescreenEventHook"><span class="hs-identifier hs-type">rescreenEventHook</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Event</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">X</span></span><span> </span><span class="annot"><span class="hs-identifier hs-type">All</span></span><span>
+</span><span id="line-113"></span><span id="rescreenEventHook"><span class="annot"><span class="annottext">rescreenEventHook :: Event -&gt; X All
+</span><a href="XMonad.Hooks.Rescreen.html#rescreenEventHook"><span class="hs-identifier hs-var hs-var">rescreenEventHook</span></a></span></span><span> </span><span id="local-6989586621679371217"><span class="annot"><span class="annottext">Event
+</span><a href="#local-6989586621679371217"><span class="hs-identifier hs-var">e</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-114"></span><span>    </span><span id="local-6989586621679371216"><span class="annot"><span class="annottext">Bool
+</span><a href="#local-6989586621679371216"><span class="hs-identifier hs-var">shouldHandle</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="hs-keyword">case</span><span> </span><span class="annot"><span class="annottext">Event
+</span><a href="#local-6989586621679371217"><span class="hs-identifier hs-var">e</span></a></span><span> </span><span class="hs-keyword">of</span><span>
+</span><span id="line-115"></span><span>        </span><span class="annot"><span class="hs-identifier hs-type">ConfigureEvent</span></span><span class="hs-special">{</span><span> </span><span class="annot"><span class="annottext">ev_window :: Event -&gt; Window
+</span><span class="hs-identifier hs-var">ev_window</span></span><span> </span><span class="hs-glyph">=</span><span> </span><span id="local-6989586621679371213"><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679371213"><span class="hs-identifier hs-var">w</span></a></span></span><span> </span><span class="hs-special">}</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">Window -&gt; X Bool
+</span><span class="hs-identifier hs-var">isRoot</span></span><span> </span><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679371213"><span class="hs-identifier hs-var">w</span></a></span><span>
+</span><span id="line-116"></span><span>        </span><span class="annot"><span class="hs-identifier hs-type">RRScreenChangeNotifyEvent</span></span><span class="hs-special">{</span><span> </span><span class="annot"><span class="annottext">ev_window :: Event -&gt; Window
+</span><span class="hs-identifier hs-var">ev_window</span></span><span> </span><span class="hs-glyph">=</span><span> </span><span id="local-6989586621679371210"><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679371210"><span class="hs-identifier hs-var">w</span></a></span></span><span> </span><span class="hs-special">}</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">Window -&gt; X Bool
+</span><span class="hs-identifier hs-var">isRoot</span></span><span> </span><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679371210"><span class="hs-identifier hs-var">w</span></a></span><span>
+</span><span id="line-117"></span><span>        </span><span class="annot"><span class="annottext">Event
+</span><span class="hs-identifier">_</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">Bool -&gt; X Bool
+forall (f :: * -&gt; *) a. Applicative f =&gt; a -&gt; f a
+</span><span class="hs-identifier hs-var">pure</span></span><span> </span><span class="annot"><span class="annottext">Bool
+</span><span class="hs-identifier hs-var">False</span></span><span>
+</span><span id="line-118"></span><span>    </span><span class="hs-keyword">if</span><span> </span><span class="annot"><span class="annottext">Bool
+</span><a href="#local-6989586621679371216"><span class="hs-identifier hs-var">shouldHandle</span></a></span><span>
+</span><span id="line-119"></span><span>        </span><span class="hs-keyword">then</span><span> </span><span class="annot"><span class="annottext">Bool -&gt; All
+</span><span class="hs-identifier hs-var">All</span></span><span> </span><span class="annot"><span class="annottext">Bool
+</span><span class="hs-identifier hs-var">False</span></span><span> </span><span class="annot"><span class="annottext">All -&gt; X () -&gt; X All
+forall (f :: * -&gt; *) a b. Functor f =&gt; a -&gt; f b -&gt; f a
+</span><span class="hs-operator hs-var">&lt;$</span></span><span> </span><span class="annot"><span class="annottext">Event -&gt; X ()
+</span><a href="XMonad.Hooks.Rescreen.html#handleEvent"><span class="hs-identifier hs-var">handleEvent</span></a></span><span> </span><span class="annot"><span class="annottext">Event
+</span><a href="#local-6989586621679371217"><span class="hs-identifier hs-var">e</span></a></span><span>
+</span><span id="line-120"></span><span>        </span><span class="hs-keyword">else</span><span> </span><span class="annot"><span class="annottext">X All
+forall a. Monoid a =&gt; a
+</span><span class="hs-identifier hs-var">mempty</span></span><span>
+</span><span id="line-121"></span><span>
+</span><span id="line-122"></span><span class="annot"><a href="XMonad.Hooks.Rescreen.html#handleEvent"><span class="hs-identifier hs-type">handleEvent</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Event</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">X</span></span><span> </span><span class="hs-special">(</span><span class="hs-special">)</span><span>
+</span><span id="line-123"></span><span id="handleEvent"><span class="annot"><span class="annottext">handleEvent :: Event -&gt; X ()
+</span><a href="XMonad.Hooks.Rescreen.html#handleEvent"><span class="hs-identifier hs-var hs-var">handleEvent</span></a></span></span><span> </span><span id="local-6989586621679371206"><span class="annot"><span class="annottext">Event
+</span><a href="#local-6989586621679371206"><span class="hs-identifier hs-var">e</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">(RescreenConfig -&gt; X ()) -&gt; X ()
+forall (m :: * -&gt; *) a b.
+(MonadReader XConf m, Typeable a, Monoid b) =&gt;
+(a -&gt; m b) -&gt; m b
+</span><a href="XMonad.Util.ExtensibleConf.html#with"><span class="hs-identifier hs-var">XC.with</span></a></span><span> </span><span class="annot"><span class="annottext">((RescreenConfig -&gt; X ()) -&gt; X ())
+-&gt; (RescreenConfig -&gt; X ()) -&gt; X ()
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="hs-glyph">\</span><span class="annot"><a href="XMonad.Hooks.Rescreen.html#RescreenConfig"><span class="hs-identifier hs-type">RescreenConfig</span></a></span><span class="hs-special">{</span><span id="local-6989586621679371203"><span id="local-6989586621679371204"><span class="annot"><span class="annottext">X ()
+randrChangeHook :: X ()
+afterRescreenHook :: X ()
+randrChangeHook :: RescreenConfig -&gt; X ()
+afterRescreenHook :: RescreenConfig -&gt; X ()
+</span><a href="#local-6989586621679371203"><span class="hs-glyph hs-var hs-var hs-var hs-var">..</span></a></span></span></span><span class="hs-special">}</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-124"></span><span>    </span><span class="hs-comment">-- Xorg emits several events after every change, clear them to prevent</span><span>
+</span><span id="line-125"></span><span>    </span><span class="hs-comment">-- triggering the hook multiple times.</span><span>
+</span><span id="line-126"></span><span>    </span><span id="local-6989586621679371202"><span class="annot"><span class="annottext">Bool
+</span><a href="#local-6989586621679371202"><span class="hs-identifier hs-var">moreConfigureEvents</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">Window -&gt; EventType -&gt; X Bool
+</span><a href="XMonad.Hooks.Rescreen.html#clearTypedWindowEvents"><span class="hs-identifier hs-var">clearTypedWindowEvents</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Event -&gt; Window
+</span><span class="hs-identifier hs-var hs-var">ev_window</span></span><span> </span><span class="annot"><span class="annottext">Event
+</span><a href="#local-6989586621679371206"><span class="hs-identifier hs-var">e</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">EventType
+</span><span class="hs-identifier hs-var">configureNotify</span></span><span>
+</span><span id="line-127"></span><span>    </span><span class="annot"><span class="annottext">Bool
+</span><span class="hs-identifier">_</span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">Window -&gt; EventType -&gt; X Bool
+</span><a href="XMonad.Hooks.Rescreen.html#clearTypedWindowRREvents"><span class="hs-identifier hs-var">clearTypedWindowRREvents</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Event -&gt; Window
+</span><span class="hs-identifier hs-var hs-var">ev_window</span></span><span> </span><span class="annot"><span class="annottext">Event
+</span><a href="#local-6989586621679371206"><span class="hs-identifier hs-var">e</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">EventType
+</span><span class="hs-identifier hs-var">rrScreenChangeNotify</span></span><span>
+</span><span id="line-128"></span><span>    </span><span class="hs-comment">-- If there were any ConfigureEvents, this is an actual screen</span><span>
+</span><span id="line-129"></span><span>    </span><span class="hs-comment">-- configuration change, so rescreen and fire rescreenHook. Otherwise,</span><span>
+</span><span id="line-130"></span><span>    </span><span class="hs-comment">-- this is just a connect/disconnect, fire randrChangeHook.</span><span>
+</span><span id="line-131"></span><span>    </span><span class="hs-keyword">if</span><span> </span><span class="annot"><span class="annottext">Event -&gt; EventType
+</span><span class="hs-identifier hs-var hs-var">ev_event_type</span></span><span> </span><span class="annot"><span class="annottext">Event
+</span><a href="#local-6989586621679371206"><span class="hs-identifier hs-var">e</span></a></span><span> </span><span class="annot"><span class="annottext">EventType -&gt; EventType -&gt; Bool
+forall a. Eq a =&gt; a -&gt; a -&gt; Bool
+</span><span class="hs-operator hs-var">==</span></span><span> </span><span class="annot"><span class="annottext">EventType
+</span><span class="hs-identifier hs-var">configureNotify</span></span><span> </span><span class="annot"><span class="annottext">Bool -&gt; Bool -&gt; Bool
+</span><span class="hs-operator hs-var">||</span></span><span> </span><span class="annot"><span class="annottext">Bool
+</span><a href="#local-6989586621679371202"><span class="hs-identifier hs-var">moreConfigureEvents</span></a></span><span>
+</span><span id="line-132"></span><span>        </span><span class="hs-keyword">then</span><span> </span><span class="annot"><span class="annottext">X ()
+</span><span class="hs-identifier hs-var">rescreen</span></span><span> </span><span class="annot"><span class="annottext">X () -&gt; X () -&gt; X ()
+forall (m :: * -&gt; *) a b. Monad m =&gt; m a -&gt; m b -&gt; m b
+</span><span class="hs-operator hs-var">&gt;&gt;</span></span><span> </span><span class="annot"><span class="annottext">X ()
+</span><a href="#local-6989586621679371204"><span class="hs-identifier hs-var">afterRescreenHook</span></a></span><span>
+</span><span id="line-133"></span><span>        </span><span class="hs-keyword">else</span><span> </span><span class="annot"><span class="annottext">X ()
+</span><a href="#local-6989586621679371203"><span class="hs-identifier hs-var">randrChangeHook</span></a></span><span>
+</span><span id="line-134"></span><span>
+</span><span id="line-135"></span><span class="hs-comment">-- | Remove all X events of a given window and type from the event queue,</span><span>
+</span><span id="line-136"></span><span class="hs-comment">-- return whether there were any.</span><span>
+</span><span id="line-137"></span><span class="annot"><a href="XMonad.Hooks.Rescreen.html#clearTypedWindowEvents"><span class="hs-identifier hs-type">clearTypedWindowEvents</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Window</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">EventType</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">X</span></span><span> </span><span class="annot"><span class="hs-identifier hs-type">Bool</span></span><span>
+</span><span id="line-138"></span><span id="clearTypedWindowEvents"><span class="annot"><span class="annottext">clearTypedWindowEvents :: Window -&gt; EventType -&gt; X Bool
+</span><a href="XMonad.Hooks.Rescreen.html#clearTypedWindowEvents"><span class="hs-identifier hs-var hs-var">clearTypedWindowEvents</span></a></span></span><span> </span><span id="local-6989586621679371194"><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679371194"><span class="hs-identifier hs-var">w</span></a></span></span><span> </span><span id="local-6989586621679371193"><span class="annot"><span class="annottext">EventType
+</span><a href="#local-6989586621679371193"><span class="hs-identifier hs-var">t</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">(Display -&gt; X Bool) -&gt; X Bool
+forall a. (Display -&gt; X a) -&gt; X a
+</span><span class="hs-identifier hs-var">withDisplay</span></span><span> </span><span class="annot"><span class="annottext">((Display -&gt; X Bool) -&gt; X Bool) -&gt; (Display -&gt; X Bool) -&gt; X Bool
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="hs-glyph">\</span><span id="local-6989586621679371191"><span class="annot"><span class="annottext">Display
+</span><a href="#local-6989586621679371191"><span class="hs-identifier hs-var">d</span></a></span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">IO Bool -&gt; X Bool
+forall (m :: * -&gt; *) a. MonadIO m =&gt; IO a -&gt; m a
+</span><span class="hs-identifier hs-var">io</span></span><span> </span><span class="annot"><span class="annottext">(IO Bool -&gt; X Bool) -&gt; IO Bool -&gt; X Bool
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">(XEventPtr -&gt; IO Bool) -&gt; IO Bool
+forall a. (XEventPtr -&gt; IO a) -&gt; IO a
+</span><span class="hs-identifier hs-var">allocaXEvent</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Display -&gt; XEventPtr -&gt; IO Bool
+</span><a href="#local-6989586621679371189"><span class="hs-identifier hs-var">go</span></a></span><span> </span><span class="annot"><span class="annottext">Display
+</span><a href="#local-6989586621679371191"><span class="hs-identifier hs-var">d</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-139"></span><span>  </span><span class="hs-keyword">where</span><span>
+</span><span id="line-140"></span><span>    </span><span id="local-6989586621679371189"><span class="annot"><span class="annottext">go :: Display -&gt; XEventPtr -&gt; IO Bool
+</span><a href="#local-6989586621679371189"><span class="hs-identifier hs-var hs-var">go</span></a></span></span><span> </span><span id="local-6989586621679371188"><span class="annot"><span class="annottext">Display
+</span><a href="#local-6989586621679371188"><span class="hs-identifier hs-var">d</span></a></span></span><span> </span><span id="local-6989586621679371187"><span class="annot"><span class="annottext">XEventPtr
+</span><a href="#local-6989586621679371187"><span class="hs-identifier hs-var">e'</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-141"></span><span>        </span><span class="annot"><span class="annottext">Display -&gt; Bool -&gt; IO ()
+</span><span class="hs-identifier hs-var">sync</span></span><span> </span><span class="annot"><span class="annottext">Display
+</span><a href="#local-6989586621679371188"><span class="hs-identifier hs-var">d</span></a></span><span> </span><span class="annot"><span class="annottext">Bool
+</span><span class="hs-identifier hs-var">False</span></span><span>
+</span><span id="line-142"></span><span>        </span><span id="local-6989586621679371185"><span class="annot"><span class="annottext">Bool
+</span><a href="#local-6989586621679371185"><span class="hs-identifier hs-var">gotEvent</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">Display -&gt; Window -&gt; EventType -&gt; XEventPtr -&gt; IO Bool
+</span><span class="hs-identifier hs-var">checkTypedWindowEvent</span></span><span> </span><span class="annot"><span class="annottext">Display
+</span><a href="#local-6989586621679371188"><span class="hs-identifier hs-var">d</span></a></span><span> </span><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679371194"><span class="hs-identifier hs-var">w</span></a></span><span> </span><span class="annot"><span class="annottext">EventType
+</span><a href="#local-6989586621679371193"><span class="hs-identifier hs-var">t</span></a></span><span> </span><span class="annot"><span class="annottext">XEventPtr
+</span><a href="#local-6989586621679371187"><span class="hs-identifier hs-var">e'</span></a></span><span>
+</span><span id="line-143"></span><span>        </span><span id="local-6989586621679371183"><span class="annot"><span class="annottext">Maybe Event
+</span><a href="#local-6989586621679371183"><span class="hs-identifier hs-var">e</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="hs-keyword">if</span><span> </span><span class="annot"><span class="annottext">Bool
+</span><a href="#local-6989586621679371185"><span class="hs-identifier hs-var">gotEvent</span></a></span><span> </span><span class="hs-keyword">then</span><span> </span><span class="annot"><span class="annottext">Event -&gt; Maybe Event
+forall a. a -&gt; Maybe a
+</span><span class="hs-identifier hs-var">Just</span></span><span> </span><span class="annot"><span class="annottext">(Event -&gt; Maybe Event) -&gt; IO Event -&gt; IO (Maybe Event)
+forall (f :: * -&gt; *) a b. Functor f =&gt; (a -&gt; b) -&gt; f a -&gt; f b
+</span><span class="hs-operator hs-var">&lt;$&gt;</span></span><span> </span><span class="annot"><span class="annottext">XEventPtr -&gt; IO Event
+</span><span class="hs-identifier hs-var">getEvent</span></span><span> </span><span class="annot"><span class="annottext">XEventPtr
+</span><a href="#local-6989586621679371187"><span class="hs-identifier hs-var">e'</span></a></span><span> </span><span class="hs-keyword">else</span><span> </span><span class="annot"><span class="annottext">Maybe Event -&gt; IO (Maybe Event)
+forall (f :: * -&gt; *) a. Applicative f =&gt; a -&gt; f a
+</span><span class="hs-identifier hs-var">pure</span></span><span> </span><span class="annot"><span class="annottext">Maybe Event
+forall a. Maybe a
+</span><span class="hs-identifier hs-var">Nothing</span></span><span>
+</span><span id="line-144"></span><span>        </span><span class="annot"><span class="annottext">Bool
+</span><a href="#local-6989586621679371185"><span class="hs-identifier hs-var">gotEvent</span></a></span><span> </span><span class="annot"><span class="annottext">Bool -&gt; IO () -&gt; IO Bool
+forall (f :: * -&gt; *) a b. Functor f =&gt; a -&gt; f b -&gt; f a
+</span><span class="hs-operator hs-var">&lt;$</span></span><span> </span><span class="hs-keyword">if</span><span>
+</span><span id="line-145"></span><span>            </span><span class="hs-glyph">|</span><span> </span><span class="annot"><span class="annottext">Bool -&gt; Bool
+</span><span class="hs-identifier hs-var">not</span></span><span> </span><span class="annot"><span class="annottext">Bool
+</span><a href="#local-6989586621679371185"><span class="hs-identifier hs-var">gotEvent</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">IO ()
+forall a. Monoid a =&gt; a
+</span><span class="hs-identifier hs-var">mempty</span></span><span>
+</span><span id="line-146"></span><span>            </span><span class="hs-glyph">|</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Event -&gt; Window
+</span><span class="hs-identifier hs-var hs-var">ev_window</span></span><span> </span><span class="annot"><span class="annottext">(Event -&gt; Window) -&gt; Maybe Event -&gt; Maybe Window
+forall (f :: * -&gt; *) a b. Functor f =&gt; (a -&gt; b) -&gt; f a -&gt; f b
+</span><span class="hs-operator hs-var">&lt;$&gt;</span></span><span> </span><span class="annot"><span class="annottext">Maybe Event
+</span><a href="#local-6989586621679371183"><span class="hs-identifier hs-var">e</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">Maybe Window -&gt; Maybe Window -&gt; Bool
+forall a. Eq a =&gt; a -&gt; a -&gt; Bool
+</span><span class="hs-operator hs-var">==</span></span><span> </span><span class="annot"><span class="annottext">Window -&gt; Maybe Window
+forall a. a -&gt; Maybe a
+</span><span class="hs-identifier hs-var">Just</span></span><span> </span><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679371194"><span class="hs-identifier hs-var">w</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">IO Bool -&gt; IO ()
+forall (f :: * -&gt; *) a. Functor f =&gt; f a -&gt; f ()
+</span><span class="hs-identifier hs-var">void</span></span><span> </span><span class="annot"><span class="annottext">(IO Bool -&gt; IO ()) -&gt; IO Bool -&gt; IO ()
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">Display -&gt; XEventPtr -&gt; IO Bool
+</span><a href="#local-6989586621679371189"><span class="hs-identifier hs-var">go</span></a></span><span> </span><span class="annot"><span class="annottext">Display
+</span><a href="#local-6989586621679371188"><span class="hs-identifier hs-var">d</span></a></span><span> </span><span class="annot"><span class="annottext">XEventPtr
+</span><a href="#local-6989586621679371187"><span class="hs-identifier hs-var">e'</span></a></span><span>
+</span><span id="line-147"></span><span>            </span><span class="hs-comment">-- checkTypedWindowEvent checks ev_event instead of ev_window, so</span><span>
+</span><span id="line-148"></span><span>            </span><span class="hs-comment">-- we may need to put some events back</span><span>
+</span><span id="line-149"></span><span>            </span><span class="hs-glyph">|</span><span> </span><span class="annot"><span class="annottext">Bool
+</span><span class="hs-identifier hs-var">otherwise</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">(XEventPtr -&gt; IO Bool) -&gt; IO Bool
+forall a. (XEventPtr -&gt; IO a) -&gt; IO a
+</span><span class="hs-identifier hs-var">allocaXEvent</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Display -&gt; XEventPtr -&gt; IO Bool
+</span><a href="#local-6989586621679371189"><span class="hs-identifier hs-var">go</span></a></span><span> </span><span class="annot"><span class="annottext">Display
+</span><a href="#local-6989586621679371188"><span class="hs-identifier hs-var">d</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">IO Bool -&gt; IO () -&gt; IO ()
+forall (m :: * -&gt; *) a b. Monad m =&gt; m a -&gt; m b -&gt; m b
+</span><span class="hs-operator hs-var">&gt;&gt;</span></span><span> </span><span class="annot"><span class="annottext">IO () -&gt; IO ()
+forall (m :: * -&gt; *) a. MonadIO m =&gt; IO a -&gt; m a
+</span><span class="hs-identifier hs-var">io</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Display -&gt; XEventPtr -&gt; IO ()
+</span><span class="hs-identifier hs-var">putBackEvent</span></span><span> </span><span class="annot"><span class="annottext">Display
+</span><a href="#local-6989586621679371188"><span class="hs-identifier hs-var">d</span></a></span><span> </span><span class="annot"><span class="annottext">XEventPtr
+</span><a href="#local-6989586621679371187"><span class="hs-identifier hs-var">e'</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-150"></span><span>
+</span><span id="line-151"></span><span class="annot"><a href="XMonad.Hooks.Rescreen.html#clearTypedWindowRREvents"><span class="hs-identifier hs-type">clearTypedWindowRREvents</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Window</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">EventType</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">X</span></span><span> </span><span class="annot"><span class="hs-identifier hs-type">Bool</span></span><span>
+</span><span id="line-152"></span><span id="clearTypedWindowRREvents"><span class="annot"><span class="annottext">clearTypedWindowRREvents :: Window -&gt; EventType -&gt; X Bool
+</span><a href="XMonad.Hooks.Rescreen.html#clearTypedWindowRREvents"><span class="hs-identifier hs-var hs-var">clearTypedWindowRREvents</span></a></span></span><span> </span><span id="local-6989586621679371177"><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679371177"><span class="hs-identifier hs-var">w</span></a></span></span><span> </span><span id="local-6989586621679371176"><span class="annot"><span class="annottext">EventType
+</span><a href="#local-6989586621679371176"><span class="hs-identifier hs-var">t</span></a></span></span><span> </span><span class="hs-glyph">=</span><span>
+</span><span id="line-153"></span><span>    </span><span class="annot"><span class="annottext">X (Maybe EventType)
+</span><a href="XMonad.Hooks.Rescreen.html#rrEventBase"><span class="hs-identifier hs-var">rrEventBase</span></a></span><span> </span><span class="annot"><span class="annottext">X (Maybe EventType) -&gt; (Maybe EventType -&gt; X Bool) -&gt; X Bool
+forall (m :: * -&gt; *) a b. Monad m =&gt; m a -&gt; (a -&gt; m b) -&gt; m b
+</span><span class="hs-operator hs-var">&gt;&gt;=</span></span><span> </span><span class="hs-glyph">\</span><span class="hs-glyph">case</span><span>
+</span><span id="line-154"></span><span>        </span><span class="annot"><span class="hs-identifier hs-type">Just</span></span><span> </span><span id="local-6989586621679371174"><span class="annot"><span class="annottext">EventType
+</span><a href="#local-6989586621679371174"><span class="hs-identifier hs-var">base</span></a></span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">Window -&gt; EventType -&gt; X Bool
+</span><a href="XMonad.Hooks.Rescreen.html#clearTypedWindowEvents"><span class="hs-identifier hs-var">clearTypedWindowEvents</span></a></span><span> </span><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679371177"><span class="hs-identifier hs-var">w</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">EventType
+</span><a href="#local-6989586621679371174"><span class="hs-identifier hs-var">base</span></a></span><span> </span><span class="annot"><span class="annottext">EventType -&gt; EventType -&gt; EventType
+forall a. Num a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-operator hs-var">+</span></span><span> </span><span class="annot"><span class="annottext">EventType
+</span><a href="#local-6989586621679371176"><span class="hs-identifier hs-var">t</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-155"></span><span>        </span><span class="annot"><span class="annottext">Maybe EventType
+</span><span class="hs-identifier hs-var">Nothing</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">Bool -&gt; X Bool
+forall (f :: * -&gt; *) a. Applicative f =&gt; a -&gt; f a
+</span><span class="hs-identifier hs-var">pure</span></span><span> </span><span class="annot"><span class="annottext">Bool
+</span><span class="hs-identifier hs-var">False</span></span><span>
+</span><span id="line-156"></span><span>
+</span><span id="line-157"></span><span class="annot"><a href="XMonad.Hooks.Rescreen.html#rrEventBase"><span class="hs-identifier hs-type">rrEventBase</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">X</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">Maybe</span></span><span> </span><span class="annot"><span class="hs-identifier hs-type">EventType</span></span><span class="hs-special">)</span><span>
+</span><span id="line-158"></span><span id="rrEventBase"><span class="annot"><span class="annottext">rrEventBase :: X (Maybe EventType)
+</span><a href="XMonad.Hooks.Rescreen.html#rrEventBase"><span class="hs-identifier hs-var hs-var">rrEventBase</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">(Display -&gt; X (Maybe EventType)) -&gt; X (Maybe EventType)
+forall a. (Display -&gt; X a) -&gt; X a
+</span><span class="hs-identifier hs-var">withDisplay</span></span><span> </span><span class="annot"><span class="annottext">((Display -&gt; X (Maybe EventType)) -&gt; X (Maybe EventType))
+-&gt; (Display -&gt; X (Maybe EventType)) -&gt; X (Maybe EventType)
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="hs-glyph">\</span><span id="local-6989586621679371172"><span class="annot"><span class="annottext">Display
+</span><a href="#local-6989586621679371172"><span class="hs-identifier hs-var">d</span></a></span></span><span> </span><span class="hs-glyph">-&gt;</span><span>
+</span><span id="line-159"></span><span>    </span><span class="annot"><span class="annottext">((CInt, CInt) -&gt; EventType)
+-&gt; Maybe (CInt, CInt) -&gt; Maybe EventType
+forall (f :: * -&gt; *) a b. Functor f =&gt; (a -&gt; b) -&gt; f a -&gt; f b
+</span><span class="hs-identifier hs-var">fmap</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">CInt -&gt; EventType
+forall a b. (Integral a, Num b) =&gt; a -&gt; b
+</span><span class="hs-identifier hs-var">fromIntegral</span></span><span> </span><span class="annot"><span class="annottext">(CInt -&gt; EventType)
+-&gt; ((CInt, CInt) -&gt; CInt) -&gt; (CInt, CInt) -&gt; EventType
+forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">(CInt, CInt) -&gt; CInt
+forall a b. (a, b) -&gt; a
+</span><span class="hs-identifier hs-var">fst</span></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">(Maybe (CInt, CInt) -&gt; Maybe EventType)
+-&gt; X (Maybe (CInt, CInt)) -&gt; X (Maybe EventType)
+forall (f :: * -&gt; *) a b. Functor f =&gt; (a -&gt; b) -&gt; f a -&gt; f b
+</span><span class="hs-operator hs-var">&lt;$&gt;</span></span><span> </span><span class="annot"><span class="annottext">IO (Maybe (CInt, CInt)) -&gt; X (Maybe (CInt, CInt))
+forall (m :: * -&gt; *) a. MonadIO m =&gt; IO a -&gt; m a
+</span><span class="hs-identifier hs-var">io</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Display -&gt; IO (Maybe (CInt, CInt))
+</span><span class="hs-identifier hs-var">xrrQueryExtension</span></span><span> </span><span class="annot"><span class="annottext">Display
+</span><a href="#local-6989586621679371172"><span class="hs-identifier hs-var">d</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-160"></span></pre></body></html>

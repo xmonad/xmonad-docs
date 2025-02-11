@@ -1,0 +1,651 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd"><html xmlns="http://www.w3.org/1999/xhtml"><head><link rel="stylesheet" type="text/css" href="style.css" /><script type="text/javascript" src="highlight.js"></script></head><body><pre><span class="hs-pragma">{-# LANGUAGE MultiParamTypeClasses, PatternGuards, TypeSynonymInstances #-}</span><span>
+</span><span id="line-2"></span><span>
+</span><span id="line-3"></span><span class="hs-comment">-----------------------------------------------------------------------------</span><span>
+</span><span id="line-4"></span><span class="hs-comment">-- |</span><span>
+</span><span id="line-5"></span><span class="hs-comment">-- Module      :  XMonad.Actions.MouseResize</span><span>
+</span><span id="line-6"></span><span class="hs-comment">-- Description :  A layout modifier to resize windows with the mouse.</span><span>
+</span><span id="line-7"></span><span class="hs-comment">-- Copyright   :  (c) 2007 Andrea Rossato</span><span>
+</span><span id="line-8"></span><span class="hs-comment">-- License     :  BSD-style (see xmonad/LICENSE)</span><span>
+</span><span id="line-9"></span><span class="hs-comment">--</span><span>
+</span><span id="line-10"></span><span class="hs-comment">-- Maintainer  :  andrea.rossato@unibz.it</span><span>
+</span><span id="line-11"></span><span class="hs-comment">-- Stability   :  unstable</span><span>
+</span><span id="line-12"></span><span class="hs-comment">-- Portability :  unportable</span><span>
+</span><span id="line-13"></span><span class="hs-comment">--</span><span>
+</span><span id="line-14"></span><span class="hs-comment">-- A layout modifier to resize windows with the mouse by grabbing the</span><span>
+</span><span id="line-15"></span><span class="hs-comment">-- window's lower right corner.</span><span>
+</span><span id="line-16"></span><span class="hs-comment">--</span><span>
+</span><span id="line-17"></span><span class="hs-comment">-- This module must be used together with &quot;XMonad.Layout.WindowArranger&quot;.</span><span>
+</span><span id="line-18"></span><span class="hs-comment">-----------------------------------------------------------------------------</span><span>
+</span><span id="line-19"></span><span>
+</span><span id="line-20"></span><span class="hs-keyword">module</span><span> </span><span class="hs-identifier">XMonad.Actions.MouseResize</span><span>
+</span><span id="line-21"></span><span>    </span><span class="hs-special">(</span><span> </span><span class="annot"><span class="hs-comment">-- * Usage:</span></span><span>
+</span><span id="line-22"></span><span>      </span><span class="annot"><span class="hs-comment">-- $usage</span></span><span>
+</span><span id="line-23"></span><span>      </span><span class="annot"><a href="XMonad.Actions.MouseResize.html#mouseResize"><span class="hs-identifier">mouseResize</span></a></span><span>
+</span><span id="line-24"></span><span>    </span><span class="hs-special">,</span><span> </span><span class="annot"><a href="XMonad.Actions.MouseResize.html#MouseResize"><span class="hs-identifier">MouseResize</span></a></span><span> </span><span class="hs-special">(</span><span class="hs-glyph">..</span><span class="hs-special">)</span><span>
+</span><span id="line-25"></span><span>    </span><span class="hs-special">)</span><span> </span><span class="hs-keyword">where</span><span>
+</span><span id="line-26"></span><span>
+</span><span id="line-27"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><span class="hs-identifier">XMonad</span></span><span>
+</span><span id="line-28"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><a href="XMonad.Layout.Decoration.html"><span class="hs-identifier">XMonad.Layout.Decoration</span></a></span><span>
+</span><span id="line-29"></span><span>
+</span><span id="line-30"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><a href="XMonad.Layout.WindowArranger.html"><span class="hs-identifier">XMonad.Layout.WindowArranger</span></a></span><span>
+</span><span id="line-31"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><a href="XMonad.Util.XUtils.html"><span class="hs-identifier">XMonad.Util.XUtils</span></a></span><span>
+</span><span id="line-32"></span><span>
+</span><span id="line-33"></span><span class="hs-comment">-- $usage</span><span>
+</span><span id="line-34"></span><span class="hs-comment">-- Usually this module is used to create layouts, but you can also use</span><span>
+</span><span id="line-35"></span><span class="hs-comment">-- it to resize windows in any layout, together with the</span><span>
+</span><span id="line-36"></span><span class="hs-comment">-- &quot;XMonad.Layout.WindowArranger&quot;. For usage example see</span><span>
+</span><span id="line-37"></span><span class="hs-comment">-- &quot;XMonad.Layout.SimpleFloat&quot; or &quot;XMonad.Layout.DecorationMadness&quot;.</span><span>
+</span><span id="line-38"></span><span class="hs-comment">--</span><span>
+</span><span id="line-39"></span><span class="hs-comment">-- You can use this module with the following in your</span><span>
+</span><span id="line-40"></span><span class="hs-comment">-- @~\/.xmonad\/xmonad.hs@:</span><span>
+</span><span id="line-41"></span><span class="hs-comment">--</span><span>
+</span><span id="line-42"></span><span class="hs-comment">-- &gt; import XMonad.Actions.MouseResize</span><span>
+</span><span id="line-43"></span><span class="hs-comment">-- &gt; import XMonad.Layout.WindowArranger</span><span>
+</span><span id="line-44"></span><span class="hs-comment">--</span><span>
+</span><span id="line-45"></span><span class="hs-comment">-- Then edit your @layoutHook@ by modifying a given layout:</span><span>
+</span><span id="line-46"></span><span class="hs-comment">--</span><span>
+</span><span id="line-47"></span><span class="hs-comment">-- &gt; myLayout = mouseResize $ windowArrange $ layoutHook def</span><span>
+</span><span id="line-48"></span><span class="hs-comment">--</span><span>
+</span><span id="line-49"></span><span class="hs-comment">-- and then:</span><span>
+</span><span id="line-50"></span><span class="hs-comment">--</span><span>
+</span><span id="line-51"></span><span class="hs-comment">-- &gt; main = xmonad def { layoutHook = myLayout }</span><span>
+</span><span id="line-52"></span><span class="hs-comment">--</span><span>
+</span><span id="line-53"></span><span class="hs-comment">-- For more detailed instructions on editing the layoutHook see:</span><span>
+</span><span id="line-54"></span><span class="hs-comment">--</span><span>
+</span><span id="line-55"></span><span class="hs-comment">-- &quot;XMonad.Doc.Extending#Editing_the_layout_hook&quot;</span><span>
+</span><span id="line-56"></span><span>
+</span><span id="line-57"></span><span id="local-6989586621679461056"><span id="local-6989586621679461057"><span class="annot"><a href="XMonad.Actions.MouseResize.html#mouseResize"><span class="hs-identifier hs-type">mouseResize</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><a href="#local-6989586621679461057"><span class="hs-identifier hs-type">l</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679461056"><span class="hs-identifier hs-type">a</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="XMonad.Layout.LayoutModifier.html#ModifiedLayout"><span class="hs-identifier hs-type">ModifiedLayout</span></a></span><span> </span><span class="annot"><a href="XMonad.Actions.MouseResize.html#MouseResize"><span class="hs-identifier hs-type">MouseResize</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679461057"><span class="hs-identifier hs-type">l</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679461056"><span class="hs-identifier hs-type">a</span></a></span></span></span><span>
+</span><span id="line-58"></span><span id="mouseResize"><span class="annot"><span class="annottext">mouseResize :: forall (l :: * -&gt; *) a. l a -&gt; ModifiedLayout MouseResize l a
+</span><a href="XMonad.Actions.MouseResize.html#mouseResize"><span class="hs-identifier hs-var hs-var">mouseResize</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">MouseResize a -&gt; l a -&gt; ModifiedLayout MouseResize l a
+forall (m :: * -&gt; *) (l :: * -&gt; *) a.
+m a -&gt; l a -&gt; ModifiedLayout m l a
+</span><a href="XMonad.Layout.LayoutModifier.html#ModifiedLayout"><span class="hs-identifier hs-var">ModifiedLayout</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">[((a, Rectangle), Maybe a)] -&gt; MouseResize a
+forall a. [((a, Rectangle), Maybe a)] -&gt; MouseResize a
+</span><a href="XMonad.Actions.MouseResize.html#MR"><span class="hs-identifier hs-var">MR</span></a></span><span> </span><span class="hs-special">[</span><span class="hs-special">]</span><span class="hs-special">)</span><span>
+</span><span id="line-59"></span><span>
+</span><span id="line-60"></span><span class="hs-keyword">newtype</span><span> </span><span id="MouseResize"><span class="annot"><a href="XMonad.Actions.MouseResize.html#MouseResize"><span class="hs-identifier hs-var">MouseResize</span></a></span></span><span> </span><span id="local-6989586621679461048"><span class="annot"><a href="#local-6989586621679461048"><span class="hs-identifier hs-type">a</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span id="MR"><span class="annot"><a href="XMonad.Actions.MouseResize.html#MR"><span class="hs-identifier hs-var">MR</span></a></span></span><span> </span><span class="hs-special">[</span><span class="hs-special">(</span><span class="hs-special">(</span><span class="annot"><a href="#local-6989586621679461048"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">,</span><span class="annot"><span class="hs-identifier hs-type">Rectangle</span></span><span class="hs-special">)</span><span class="hs-special">,</span><span class="annot"><span class="hs-identifier hs-type">Maybe</span></span><span> </span><span class="annot"><a href="#local-6989586621679461048"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">)</span><span class="hs-special">]</span><span>
+</span><span id="line-61"></span><span id="local-6989586621679461044"><span class="hs-keyword">instance</span><span> </span><span id="local-6989586621679460911"><span id="local-6989586621679460914"><span class="annot"><span class="hs-identifier hs-type">Show</span></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="XMonad.Actions.MouseResize.html#MouseResize"><span class="hs-identifier hs-type">MouseResize</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679461044"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">)</span></span></span><span> </span><span class="hs-keyword">where</span><span> </span><span id="local-6989586621679460909"><span class="annot"><span class="annottext">show :: MouseResize a -&gt; String
+</span><span class="hs-identifier hs-var hs-var hs-var hs-var">show</span></span></span><span>        </span><span class="annot"><span class="annottext">MouseResize a
+</span><span class="hs-identifier">_</span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot;&quot;</span></span></span><span>
+</span><span id="line-62"></span><span id="local-6989586621679461040"><span class="hs-keyword">instance</span><span> </span><span id="local-6989586621679460901"><span id="local-6989586621679460903"><span id="local-6989586621679460905"><span class="annot"><span class="hs-identifier hs-type">Read</span></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="XMonad.Actions.MouseResize.html#MouseResize"><span class="hs-identifier hs-type">MouseResize</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679461040"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">)</span></span></span></span><span> </span><span class="hs-keyword">where</span><span> </span><span id="local-6989586621679460899"><span class="annot"><span class="annottext">readsPrec :: Int -&gt; ReadS (MouseResize a)
+</span><span class="hs-identifier hs-var hs-var hs-var hs-var">readsPrec</span></span></span><span> </span><span class="annot"><span class="annottext">Int
+</span><span class="hs-identifier">_</span></span><span> </span><span id="local-6989586621679460897"><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679460897"><span class="hs-identifier hs-var">s</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-special">[</span><span class="hs-special">(</span><span class="annot"><span class="annottext">[((a, Rectangle), Maybe a)] -&gt; MouseResize a
+forall a. [((a, Rectangle), Maybe a)] -&gt; MouseResize a
+</span><a href="XMonad.Actions.MouseResize.html#MR"><span class="hs-identifier hs-var">MR</span></a></span><span> </span><span class="hs-special">[</span><span class="hs-special">]</span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679460897"><span class="hs-identifier hs-var">s</span></a></span><span class="hs-special">)</span><span class="hs-special">]</span></span><span>
+</span><span id="line-63"></span><span>
+</span><span id="line-64"></span><span class="hs-keyword">instance</span><span> </span><span id="local-6989586621679460873"><span id="local-6989586621679460875"><span id="local-6989586621679460877"><span id="local-6989586621679460879"><span id="local-6989586621679460881"><span id="local-6989586621679460884"><span id="local-6989586621679460886"><span id="local-6989586621679460889"><span id="local-6989586621679460891"><span class="annot"><a href="XMonad.Layout.LayoutModifier.html#LayoutModifier"><span class="hs-identifier hs-type">LayoutModifier</span></a></span><span> </span><span class="annot"><a href="XMonad.Actions.MouseResize.html#MouseResize"><span class="hs-identifier hs-type">MouseResize</span></a></span><span> </span><span class="annot"><span class="hs-identifier hs-type">Window</span></span></span></span></span></span></span></span></span></span></span><span> </span><span class="hs-keyword">where</span><span>
+</span><span id="line-65"></span><span>    </span><span id="local-6989586621679460866"><span class="annot"><span class="annottext">redoLayout :: MouseResize Window
+-&gt; Rectangle
+-&gt; Maybe (Stack Window)
+-&gt; [(Window, Rectangle)]
+-&gt; X ([(Window, Rectangle)], Maybe (MouseResize Window))
+</span><a href="XMonad.Layout.LayoutModifier.html#redoLayout"><span class="hs-identifier hs-var hs-var hs-var hs-var">redoLayout</span></a></span></span><span> </span><span class="annot"><span class="annottext">MouseResize Window
+</span><span class="hs-identifier">_</span></span><span>       </span><span class="annot"><span class="annottext">Rectangle
+</span><span class="hs-identifier">_</span></span><span> </span><span class="annot"><span class="annottext">Maybe (Stack Window)
+</span><span class="hs-identifier hs-var">Nothing</span></span><span>  </span><span id="local-6989586621679460864"><span class="annot"><span class="annottext">[(Window, Rectangle)]
+</span><a href="#local-6989586621679460864"><span class="hs-identifier hs-var">wrs</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">([(Window, Rectangle)], Maybe (MouseResize Window))
+-&gt; X ([(Window, Rectangle)], Maybe (MouseResize Window))
+forall (m :: * -&gt; *) a. Monad m =&gt; a -&gt; m a
+</span><span class="hs-identifier hs-var">return</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">[(Window, Rectangle)]
+</span><a href="#local-6989586621679460864"><span class="hs-identifier hs-var">wrs</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">Maybe (MouseResize Window)
+forall a. Maybe a
+</span><span class="hs-identifier hs-var">Nothing</span></span><span class="hs-special">)</span><span>
+</span><span id="line-66"></span><span>    </span><span class="annot"><a href="XMonad.Layout.LayoutModifier.html#redoLayout"><span class="hs-identifier hs-var">redoLayout</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="XMonad.Actions.MouseResize.html#MR"><span class="hs-identifier hs-type">MR</span></a></span><span> </span><span id="local-6989586621679460863"><span class="annot"><span class="annottext">[((Window, Rectangle), Maybe Window)]
+</span><a href="#local-6989586621679460863"><span class="hs-identifier hs-var">st</span></a></span></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">Rectangle
+</span><span class="hs-identifier">_</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">Just</span></span><span> </span><span id="local-6989586621679460862"><span class="annot"><span class="annottext">Stack Window
+</span><a href="#local-6989586621679460862"><span class="hs-identifier hs-var">s</span></a></span></span><span class="hs-special">)</span><span> </span><span id="local-6989586621679460861"><span class="annot"><span class="annottext">[(Window, Rectangle)]
+</span><a href="#local-6989586621679460861"><span class="hs-identifier hs-var">wrs</span></a></span></span><span>
+</span><span id="line-67"></span><span>        </span><span class="hs-glyph">|</span><span> </span><span class="hs-special">[</span><span class="hs-special">]</span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">[((Window, Rectangle), Maybe Window)]
+</span><a href="#local-6989586621679460863"><span class="hs-identifier hs-var">st</span></a></span><span>  </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">X [((Window, Rectangle), Maybe Window)]
+</span><a href="#local-6989586621679460860"><span class="hs-identifier hs-var">initState</span></a></span><span>    </span><span class="annot"><span class="annottext">X [((Window, Rectangle), Maybe Window)]
+-&gt; ([((Window, Rectangle), Maybe Window)]
+    -&gt; X ([(Window, Rectangle)], Maybe (MouseResize Window)))
+-&gt; X ([(Window, Rectangle)], Maybe (MouseResize Window))
+forall (m :: * -&gt; *) a b. Monad m =&gt; m a -&gt; (a -&gt; m b) -&gt; m b
+</span><span class="hs-operator hs-var">&gt;&gt;=</span></span><span> </span><span class="hs-glyph">\</span><span id="local-6989586621679460859"><span class="annot"><span class="annottext">[((Window, Rectangle), Maybe Window)]
+</span><a href="#local-6989586621679460859"><span class="hs-identifier hs-var">nst</span></a></span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">([(Window, Rectangle)], Maybe (MouseResize Window))
+-&gt; X ([(Window, Rectangle)], Maybe (MouseResize Window))
+forall (m :: * -&gt; *) a. Monad m =&gt; a -&gt; m a
+</span><span class="hs-identifier hs-var">return</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">[(Window, Rectangle)]
+</span><a href="#local-6989586621679460861"><span class="hs-identifier hs-var">wrs</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">MouseResize Window -&gt; Maybe (MouseResize Window)
+forall a. a -&gt; Maybe a
+</span><span class="hs-identifier hs-var">Just</span></span><span> </span><span class="annot"><span class="annottext">(MouseResize Window -&gt; Maybe (MouseResize Window))
+-&gt; MouseResize Window -&gt; Maybe (MouseResize Window)
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">[((Window, Rectangle), Maybe Window)] -&gt; MouseResize Window
+forall a. [((a, Rectangle), Maybe a)] -&gt; MouseResize a
+</span><a href="XMonad.Actions.MouseResize.html#MR"><span class="hs-identifier hs-var">MR</span></a></span><span> </span><span class="annot"><span class="annottext">[((Window, Rectangle), Maybe Window)]
+</span><a href="#local-6989586621679460859"><span class="hs-identifier hs-var">nst</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-68"></span><span>        </span><span class="hs-glyph">|</span><span> </span><span class="annot"><span class="annottext">Bool
+</span><span class="hs-identifier hs-var">otherwise</span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">X [((Window, Rectangle), Maybe Window)]
+</span><a href="#local-6989586621679460858"><span class="hs-identifier hs-var">processState</span></a></span><span> </span><span class="annot"><span class="annottext">X [((Window, Rectangle), Maybe Window)]
+-&gt; ([((Window, Rectangle), Maybe Window)]
+    -&gt; X ([(Window, Rectangle)], Maybe (MouseResize Window)))
+-&gt; X ([(Window, Rectangle)], Maybe (MouseResize Window))
+forall (m :: * -&gt; *) a b. Monad m =&gt; m a -&gt; (a -&gt; m b) -&gt; m b
+</span><span class="hs-operator hs-var">&gt;&gt;=</span></span><span> </span><span class="hs-glyph">\</span><span id="local-6989586621679460857"><span class="annot"><span class="annottext">[((Window, Rectangle), Maybe Window)]
+</span><a href="#local-6989586621679460857"><span class="hs-identifier hs-var">nst</span></a></span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">([(Window, Rectangle)], Maybe (MouseResize Window))
+-&gt; X ([(Window, Rectangle)], Maybe (MouseResize Window))
+forall (m :: * -&gt; *) a. Monad m =&gt; a -&gt; m a
+</span><span class="hs-identifier hs-var">return</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">[(Window, Rectangle)]
+</span><a href="#local-6989586621679460861"><span class="hs-identifier hs-var">wrs</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">MouseResize Window -&gt; Maybe (MouseResize Window)
+forall a. a -&gt; Maybe a
+</span><span class="hs-identifier hs-var">Just</span></span><span> </span><span class="annot"><span class="annottext">(MouseResize Window -&gt; Maybe (MouseResize Window))
+-&gt; MouseResize Window -&gt; Maybe (MouseResize Window)
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">[((Window, Rectangle), Maybe Window)] -&gt; MouseResize Window
+forall a. [((a, Rectangle), Maybe a)] -&gt; MouseResize a
+</span><a href="XMonad.Actions.MouseResize.html#MR"><span class="hs-identifier hs-var">MR</span></a></span><span> </span><span class="annot"><span class="annottext">[((Window, Rectangle), Maybe Window)]
+</span><a href="#local-6989586621679460857"><span class="hs-identifier hs-var">nst</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-69"></span><span>        </span><span class="hs-keyword">where</span><span>
+</span><span id="line-70"></span><span>          </span><span id="local-6989586621679460855"><span class="annot"><span class="annottext">wrs' :: [((Window, Rectangle), Maybe Rectangle)]
+</span><a href="#local-6989586621679460855"><span class="hs-identifier hs-var hs-var">wrs'</span></a></span></span><span>         </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">[Rectangle]
+-&gt; [(Window, Rectangle)]
+-&gt; [((Window, Rectangle), Maybe Rectangle)]
+forall {a}.
+[Rectangle]
+-&gt; [(a, Rectangle)] -&gt; [((a, Rectangle), Maybe Rectangle)]
+</span><a href="#local-6989586621679460854"><span class="hs-identifier hs-var">wrs_to_state</span></a></span><span> </span><span class="hs-special">[</span><span class="hs-special">]</span><span> </span><span class="annot"><span class="annottext">([(Window, Rectangle)] -&gt; [((Window, Rectangle), Maybe Rectangle)])
+-&gt; ([(Window, Rectangle)] -&gt; [(Window, Rectangle)])
+-&gt; [(Window, Rectangle)]
+-&gt; [((Window, Rectangle), Maybe Rectangle)]
+forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">((Window, Rectangle) -&gt; Bool)
+-&gt; [(Window, Rectangle)] -&gt; [(Window, Rectangle)]
+forall a. (a -&gt; Bool) -&gt; [a] -&gt; [a]
+</span><span class="hs-identifier hs-var">filter</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Stack Window -&gt; Window -&gt; Bool
+forall a. Eq a =&gt; Stack a -&gt; a -&gt; Bool
+</span><a href="XMonad.Layout.Decoration.html#isInStack"><span class="hs-identifier hs-var">isInStack</span></a></span><span> </span><span class="annot"><span class="annottext">Stack Window
+</span><a href="#local-6989586621679460862"><span class="hs-identifier hs-var">s</span></a></span><span> </span><span class="annot"><span class="annottext">(Window -&gt; Bool)
+-&gt; ((Window, Rectangle) -&gt; Window) -&gt; (Window, Rectangle) -&gt; Bool
+forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">(Window, Rectangle) -&gt; Window
+forall a b. (a, b) -&gt; a
+</span><span class="hs-identifier hs-var">fst</span></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">([(Window, Rectangle)] -&gt; [((Window, Rectangle), Maybe Rectangle)])
+-&gt; [(Window, Rectangle)]
+-&gt; [((Window, Rectangle), Maybe Rectangle)]
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">[(Window, Rectangle)]
+</span><a href="#local-6989586621679460861"><span class="hs-identifier hs-var">wrs</span></a></span><span>
+</span><span id="line-71"></span><span>          </span><span id="local-6989586621679460860"><span class="annot"><span class="annottext">initState :: X [((Window, Rectangle), Maybe Window)]
+</span><a href="#local-6989586621679460860"><span class="hs-identifier hs-var hs-var">initState</span></a></span></span><span>    </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">(((Window, Rectangle), Maybe Rectangle)
+ -&gt; X ((Window, Rectangle), Maybe Window))
+-&gt; [((Window, Rectangle), Maybe Rectangle)]
+-&gt; X [((Window, Rectangle), Maybe Window)]
+forall (t :: * -&gt; *) (m :: * -&gt; *) a b.
+(Traversable t, Monad m) =&gt;
+(a -&gt; m b) -&gt; t a -&gt; m (t b)
+</span><span class="hs-identifier hs-var">mapM</span></span><span> </span><span class="annot"><span class="annottext">((Window, Rectangle), Maybe Rectangle)
+-&gt; X ((Window, Rectangle), Maybe Window)
+</span><a href="XMonad.Actions.MouseResize.html#createInputWindow"><span class="hs-identifier hs-var">createInputWindow</span></a></span><span> </span><span class="annot"><span class="annottext">[((Window, Rectangle), Maybe Rectangle)]
+</span><a href="#local-6989586621679460855"><span class="hs-identifier hs-var">wrs'</span></a></span><span>
+</span><span id="line-72"></span><span>          </span><span id="local-6989586621679460858"><span class="annot"><span class="annottext">processState :: X [((Window, Rectangle), Maybe Window)]
+</span><a href="#local-6989586621679460858"><span class="hs-identifier hs-var hs-var">processState</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">(((Window, Rectangle), Maybe Window) -&gt; X ())
+-&gt; [((Window, Rectangle), Maybe Window)] -&gt; X ()
+forall (t :: * -&gt; *) (m :: * -&gt; *) a b.
+(Foldable t, Monad m) =&gt;
+(a -&gt; m b) -&gt; t a -&gt; m ()
+</span><span class="hs-identifier hs-var">mapM_</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Maybe Window -&gt; X ()
+</span><a href="XMonad.Actions.MouseResize.html#deleteInputWin"><span class="hs-identifier hs-var">deleteInputWin</span></a></span><span> </span><span class="annot"><span class="annottext">(Maybe Window -&gt; X ())
+-&gt; (((Window, Rectangle), Maybe Window) -&gt; Maybe Window)
+-&gt; ((Window, Rectangle), Maybe Window)
+-&gt; X ()
+forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">((Window, Rectangle), Maybe Window) -&gt; Maybe Window
+forall a b. (a, b) -&gt; b
+</span><span class="hs-identifier hs-var">snd</span></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">[((Window, Rectangle), Maybe Window)]
+</span><a href="#local-6989586621679460863"><span class="hs-identifier hs-var">st</span></a></span><span> </span><span class="annot"><span class="annottext">X ()
+-&gt; X [((Window, Rectangle), Maybe Window)]
+-&gt; X [((Window, Rectangle), Maybe Window)]
+forall (m :: * -&gt; *) a b. Monad m =&gt; m a -&gt; m b -&gt; m b
+</span><span class="hs-operator hs-var">&gt;&gt;</span></span><span> </span><span class="annot"><span class="annottext">(((Window, Rectangle), Maybe Rectangle)
+ -&gt; X ((Window, Rectangle), Maybe Window))
+-&gt; [((Window, Rectangle), Maybe Rectangle)]
+-&gt; X [((Window, Rectangle), Maybe Window)]
+forall (t :: * -&gt; *) (m :: * -&gt; *) a b.
+(Traversable t, Monad m) =&gt;
+(a -&gt; m b) -&gt; t a -&gt; m (t b)
+</span><span class="hs-identifier hs-var">mapM</span></span><span> </span><span class="annot"><span class="annottext">((Window, Rectangle), Maybe Rectangle)
+-&gt; X ((Window, Rectangle), Maybe Window)
+</span><a href="XMonad.Actions.MouseResize.html#createInputWindow"><span class="hs-identifier hs-var">createInputWindow</span></a></span><span> </span><span class="annot"><span class="annottext">[((Window, Rectangle), Maybe Rectangle)]
+</span><a href="#local-6989586621679460855"><span class="hs-identifier hs-var">wrs'</span></a></span><span>
+</span><span id="line-73"></span><span>
+</span><span id="line-74"></span><span>          </span><span id="local-6989586621679460823"><span class="annot"><span class="annottext">inputRectangle :: Rectangle -&gt; Rectangle
+</span><a href="#local-6989586621679460823"><span class="hs-identifier hs-var hs-var">inputRectangle</span></a></span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">Rectangle</span></span><span> </span><span id="local-6989586621679460821"><span class="annot"><span class="annottext">Position
+</span><a href="#local-6989586621679460821"><span class="hs-identifier hs-var">x</span></a></span></span><span> </span><span id="local-6989586621679460820"><span class="annot"><span class="annottext">Position
+</span><a href="#local-6989586621679460820"><span class="hs-identifier hs-var">y</span></a></span></span><span> </span><span id="local-6989586621679460819"><span class="annot"><span class="annottext">EventType
+</span><a href="#local-6989586621679460819"><span class="hs-identifier hs-var">wh</span></a></span></span><span> </span><span id="local-6989586621679460818"><span class="annot"><span class="annottext">EventType
+</span><a href="#local-6989586621679460818"><span class="hs-identifier hs-var">ht</span></a></span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Position -&gt; Position -&gt; EventType -&gt; EventType -&gt; Rectangle
+</span><span class="hs-identifier hs-var">Rectangle</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Position
+</span><a href="#local-6989586621679460821"><span class="hs-identifier hs-var">x</span></a></span><span> </span><span class="annot"><span class="annottext">Position -&gt; Position -&gt; Position
+forall a. Num a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-operator hs-var">+</span></span><span> </span><span class="annot"><span class="annottext">EventType -&gt; Position
+forall a b. (Integral a, Num b) =&gt; a -&gt; b
+</span><a href="XMonad.Prelude.html#fi"><span class="hs-identifier hs-var">fi</span></a></span><span> </span><span class="annot"><span class="annottext">EventType
+</span><a href="#local-6989586621679460819"><span class="hs-identifier hs-var">wh</span></a></span><span> </span><span class="annot"><span class="annottext">Position -&gt; Position -&gt; Position
+forall a. Num a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-glyph hs-var">-</span></span><span> </span><span class="annot"><span class="annottext">Position
+</span><span class="hs-number">5</span></span><span class="hs-special">)</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Position
+</span><a href="#local-6989586621679460820"><span class="hs-identifier hs-var">y</span></a></span><span> </span><span class="annot"><span class="annottext">Position -&gt; Position -&gt; Position
+forall a. Num a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-operator hs-var">+</span></span><span> </span><span class="annot"><span class="annottext">EventType -&gt; Position
+forall a b. (Integral a, Num b) =&gt; a -&gt; b
+</span><a href="XMonad.Prelude.html#fi"><span class="hs-identifier hs-var">fi</span></a></span><span> </span><span class="annot"><span class="annottext">EventType
+</span><a href="#local-6989586621679460818"><span class="hs-identifier hs-var">ht</span></a></span><span> </span><span class="annot"><span class="annottext">Position -&gt; Position -&gt; Position
+forall a. Num a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-glyph hs-var">-</span></span><span> </span><span class="annot"><span class="annottext">Position
+</span><span class="hs-number">5</span></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">EventType
+</span><span class="hs-number">10</span></span><span> </span><span class="annot"><span class="annottext">EventType
+</span><span class="hs-number">10</span></span><span>
+</span><span id="line-75"></span><span>
+</span><span id="line-76"></span><span>          </span><span id="local-6989586621679460854"><span class="annot"><span class="annottext">wrs_to_state :: [Rectangle]
+-&gt; [(a, Rectangle)] -&gt; [((a, Rectangle), Maybe Rectangle)]
+</span><a href="#local-6989586621679460854"><span class="hs-identifier hs-var hs-var">wrs_to_state</span></a></span></span><span> </span><span id="local-6989586621679460815"><span class="annot"><span class="annottext">[Rectangle]
+</span><a href="#local-6989586621679460815"><span class="hs-identifier hs-var">rs</span></a></span></span><span> </span><span class="hs-special">(</span><span class="hs-special">(</span><span id="local-6989586621679460814"><span class="annot"><span class="annottext">a
+</span><a href="#local-6989586621679460814"><span class="hs-identifier hs-var">w</span></a></span></span><span class="hs-special">,</span><span id="local-6989586621679460813"><span class="annot"><span class="annottext">Rectangle
+</span><a href="#local-6989586621679460813"><span class="hs-identifier hs-var">r</span></a></span></span><span class="hs-special">)</span><span class="annot"><span class="hs-glyph hs-type">:</span></span><span id="local-6989586621679460812"><span class="annot"><span class="annottext">[(a, Rectangle)]
+</span><a href="#local-6989586621679460812"><span class="hs-identifier hs-var">xs</span></a></span></span><span class="hs-special">)</span><span>
+</span><span id="line-77"></span><span>              </span><span class="hs-glyph">|</span><span> </span><span class="annot"><span class="annottext">Rectangle
+</span><a href="#local-6989586621679460811"><span class="hs-identifier hs-var">ir</span></a></span><span> </span><span class="annot"><span class="annottext">Rectangle -&gt; [Rectangle] -&gt; Bool
+</span><a href="XMonad.Layout.Decoration.html#isVisible"><span class="hs-operator hs-var">`isVisible`</span></a></span><span> </span><span class="annot"><span class="annottext">[Rectangle]
+</span><a href="#local-6989586621679460815"><span class="hs-identifier hs-var">rs</span></a></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-special">(</span><span class="hs-special">(</span><span class="annot"><span class="annottext">a
+</span><a href="#local-6989586621679460814"><span class="hs-identifier hs-var">w</span></a></span><span class="hs-special">,</span><span class="annot"><span class="annottext">Rectangle
+</span><a href="#local-6989586621679460813"><span class="hs-identifier hs-var">r</span></a></span><span class="hs-special">)</span><span class="hs-special">,</span><span class="annot"><span class="annottext">Rectangle -&gt; Maybe Rectangle
+forall a. a -&gt; Maybe a
+</span><span class="hs-identifier hs-var">Just</span></span><span> </span><span class="annot"><span class="annottext">Rectangle
+</span><a href="#local-6989586621679460811"><span class="hs-identifier hs-var">ir</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">((a, Rectangle), Maybe Rectangle)
+-&gt; [((a, Rectangle), Maybe Rectangle)]
+-&gt; [((a, Rectangle), Maybe Rectangle)]
+forall a. a -&gt; [a] -&gt; [a]
+</span><span class="hs-glyph hs-var">:</span></span><span> </span><span class="annot"><span class="annottext">[Rectangle]
+-&gt; [(a, Rectangle)] -&gt; [((a, Rectangle), Maybe Rectangle)]
+</span><a href="#local-6989586621679460854"><span class="hs-identifier hs-var">wrs_to_state</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Rectangle
+</span><a href="#local-6989586621679460813"><span class="hs-identifier hs-var">r</span></a></span><span class="annot"><span class="annottext">Rectangle -&gt; [Rectangle] -&gt; [Rectangle]
+forall a. a -&gt; [a] -&gt; [a]
+</span><span class="hs-glyph hs-var">:</span></span><span class="annot"><span class="annottext">Rectangle
+</span><a href="#local-6989586621679460811"><span class="hs-identifier hs-var">ir</span></a></span><span class="annot"><span class="annottext">Rectangle -&gt; [Rectangle] -&gt; [Rectangle]
+forall a. a -&gt; [a] -&gt; [a]
+</span><span class="hs-glyph hs-var">:</span></span><span class="annot"><span class="annottext">[Rectangle]
+</span><a href="#local-6989586621679460815"><span class="hs-identifier hs-var">rs</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">[(a, Rectangle)]
+</span><a href="#local-6989586621679460812"><span class="hs-identifier hs-var">xs</span></a></span><span>
+</span><span id="line-78"></span><span>              </span><span class="hs-glyph">|</span><span> </span><span class="annot"><span class="annottext">Bool
+</span><span class="hs-identifier hs-var">otherwise</span></span><span>         </span><span class="hs-glyph">=</span><span> </span><span class="hs-special">(</span><span class="hs-special">(</span><span class="annot"><span class="annottext">a
+</span><a href="#local-6989586621679460814"><span class="hs-identifier hs-var">w</span></a></span><span class="hs-special">,</span><span class="annot"><span class="annottext">Rectangle
+</span><a href="#local-6989586621679460813"><span class="hs-identifier hs-var">r</span></a></span><span class="hs-special">)</span><span class="hs-special">,</span><span class="annot"><span class="annottext">Maybe Rectangle
+forall a. Maybe a
+</span><span class="hs-identifier hs-var">Nothing</span></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">((a, Rectangle), Maybe Rectangle)
+-&gt; [((a, Rectangle), Maybe Rectangle)]
+-&gt; [((a, Rectangle), Maybe Rectangle)]
+forall a. a -&gt; [a] -&gt; [a]
+</span><span class="hs-glyph hs-var">:</span></span><span> </span><span class="annot"><span class="annottext">[Rectangle]
+-&gt; [(a, Rectangle)] -&gt; [((a, Rectangle), Maybe Rectangle)]
+</span><a href="#local-6989586621679460854"><span class="hs-identifier hs-var">wrs_to_state</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Rectangle
+</span><a href="#local-6989586621679460813"><span class="hs-identifier hs-var">r</span></a></span><span class="annot"><span class="annottext">Rectangle -&gt; [Rectangle] -&gt; [Rectangle]
+forall a. a -&gt; [a] -&gt; [a]
+</span><span class="hs-glyph hs-var">:</span></span><span>   </span><span class="annot"><span class="annottext">[Rectangle]
+</span><a href="#local-6989586621679460815"><span class="hs-identifier hs-var">rs</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">[(a, Rectangle)]
+</span><a href="#local-6989586621679460812"><span class="hs-identifier hs-var">xs</span></a></span><span>
+</span><span id="line-79"></span><span>              </span><span class="hs-keyword">where</span><span> </span><span id="local-6989586621679460811"><span class="annot"><span class="annottext">ir :: Rectangle
+</span><a href="#local-6989586621679460811"><span class="hs-identifier hs-var hs-var">ir</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Rectangle -&gt; Rectangle
+</span><a href="#local-6989586621679460823"><span class="hs-identifier hs-var">inputRectangle</span></a></span><span> </span><span class="annot"><span class="annottext">Rectangle
+</span><a href="#local-6989586621679460813"><span class="hs-identifier hs-var">r</span></a></span><span>
+</span><span id="line-80"></span><span>          </span><span class="annot"><a href="#local-6989586621679460854"><span class="hs-identifier hs-var">wrs_to_state</span></a></span><span> </span><span class="annot"><span class="annottext">[Rectangle]
+</span><span class="hs-identifier">_</span></span><span> </span><span class="hs-special">[</span><span class="hs-special">]</span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-special">[</span><span class="hs-special">]</span><span>
+</span><span id="line-81"></span><span>
+</span><span id="line-82"></span><span>    </span><span id="local-6989586621679460797"><span class="annot"><span class="annottext">handleMess :: MouseResize Window -&gt; SomeMessage -&gt; X (Maybe (MouseResize Window))
+</span><a href="XMonad.Layout.LayoutModifier.html#handleMess"><span class="hs-identifier hs-var hs-var hs-var hs-var">handleMess</span></a></span></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="XMonad.Actions.MouseResize.html#MR"><span class="hs-identifier hs-type">MR</span></a></span><span> </span><span id="local-6989586621679460795"><span class="annot"><span class="annottext">[((Window, Rectangle), Maybe Window)]
+</span><a href="#local-6989586621679460795"><span class="hs-identifier hs-var">s</span></a></span></span><span class="hs-special">)</span><span> </span><span id="local-6989586621679460794"><span class="annot"><span class="annottext">SomeMessage
+</span><a href="#local-6989586621679460794"><span class="hs-identifier hs-var">m</span></a></span></span><span>
+</span><span id="line-83"></span><span>        </span><span class="hs-glyph">|</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Just</span></span><span> </span><span id="local-6989586621679460793"><span class="annot"><span class="annottext">Event
+</span><a href="#local-6989586621679460793"><span class="hs-identifier hs-var">e</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">SomeMessage -&gt; Maybe Event
+forall m. Message m =&gt; SomeMessage -&gt; Maybe m
+</span><span class="hs-identifier hs-var">fromMessage</span></span><span> </span><span class="annot"><span class="annottext">SomeMessage
+</span><a href="#local-6989586621679460794"><span class="hs-identifier hs-var">m</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Maybe</span></span><span> </span><span class="annot"><span class="hs-identifier hs-type">Event</span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">[((Window, Rectangle), Maybe Window)] -&gt; Event -&gt; X ()
+</span><a href="XMonad.Actions.MouseResize.html#handleResize"><span class="hs-identifier hs-var">handleResize</span></a></span><span> </span><span class="annot"><span class="annottext">[((Window, Rectangle), Maybe Window)]
+</span><a href="#local-6989586621679460795"><span class="hs-identifier hs-var">s</span></a></span><span> </span><span class="annot"><span class="annottext">Event
+</span><a href="#local-6989586621679460793"><span class="hs-identifier hs-var">e</span></a></span><span> </span><span class="annot"><span class="annottext">X ()
+-&gt; X (Maybe (MouseResize Window)) -&gt; X (Maybe (MouseResize Window))
+forall (m :: * -&gt; *) a b. Monad m =&gt; m a -&gt; m b -&gt; m b
+</span><span class="hs-operator hs-var">&gt;&gt;</span></span><span> </span><span class="annot"><span class="annottext">Maybe (MouseResize Window) -&gt; X (Maybe (MouseResize Window))
+forall (m :: * -&gt; *) a. Monad m =&gt; a -&gt; m a
+</span><span class="hs-identifier hs-var">return</span></span><span> </span><span class="annot"><span class="annottext">Maybe (MouseResize Window)
+forall a. Maybe a
+</span><span class="hs-identifier hs-var">Nothing</span></span><span>
+</span><span id="line-84"></span><span>        </span><span class="hs-glyph">|</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Just</span></span><span> </span><span class="annot"><span class="annottext">LayoutMessages
+</span><span class="hs-identifier hs-var">Hide</span></span><span>             </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">SomeMessage -&gt; Maybe LayoutMessages
+forall m. Message m =&gt; SomeMessage -&gt; Maybe m
+</span><span class="hs-identifier hs-var">fromMessage</span></span><span> </span><span class="annot"><span class="annottext">SomeMessage
+</span><a href="#local-6989586621679460794"><span class="hs-identifier hs-var">m</span></a></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">X ()
+</span><a href="#local-6989586621679460789"><span class="hs-identifier hs-var">releaseResources</span></a></span><span> </span><span class="annot"><span class="annottext">X ()
+-&gt; X (Maybe (MouseResize Window)) -&gt; X (Maybe (MouseResize Window))
+forall (m :: * -&gt; *) a b. Monad m =&gt; m a -&gt; m b -&gt; m b
+</span><span class="hs-operator hs-var">&gt;&gt;</span></span><span> </span><span class="annot"><span class="annottext">Maybe (MouseResize Window) -&gt; X (Maybe (MouseResize Window))
+forall (m :: * -&gt; *) a. Monad m =&gt; a -&gt; m a
+</span><span class="hs-identifier hs-var">return</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">MouseResize Window -&gt; Maybe (MouseResize Window)
+forall a. a -&gt; Maybe a
+</span><span class="hs-identifier hs-var">Just</span></span><span> </span><span class="annot"><span class="annottext">(MouseResize Window -&gt; Maybe (MouseResize Window))
+-&gt; MouseResize Window -&gt; Maybe (MouseResize Window)
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">[((Window, Rectangle), Maybe Window)] -&gt; MouseResize Window
+forall a. [((a, Rectangle), Maybe a)] -&gt; MouseResize a
+</span><a href="XMonad.Actions.MouseResize.html#MR"><span class="hs-identifier hs-var">MR</span></a></span><span> </span><span class="hs-special">[</span><span class="hs-special">]</span><span class="hs-special">)</span><span>
+</span><span id="line-85"></span><span>        </span><span class="hs-glyph">|</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Just</span></span><span> </span><span class="annot"><span class="annottext">LayoutMessages
+</span><span class="hs-identifier hs-var">ReleaseResources</span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">SomeMessage -&gt; Maybe LayoutMessages
+forall m. Message m =&gt; SomeMessage -&gt; Maybe m
+</span><span class="hs-identifier hs-var">fromMessage</span></span><span> </span><span class="annot"><span class="annottext">SomeMessage
+</span><a href="#local-6989586621679460794"><span class="hs-identifier hs-var">m</span></a></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">X ()
+</span><a href="#local-6989586621679460789"><span class="hs-identifier hs-var">releaseResources</span></a></span><span> </span><span class="annot"><span class="annottext">X ()
+-&gt; X (Maybe (MouseResize Window)) -&gt; X (Maybe (MouseResize Window))
+forall (m :: * -&gt; *) a b. Monad m =&gt; m a -&gt; m b -&gt; m b
+</span><span class="hs-operator hs-var">&gt;&gt;</span></span><span> </span><span class="annot"><span class="annottext">Maybe (MouseResize Window) -&gt; X (Maybe (MouseResize Window))
+forall (m :: * -&gt; *) a. Monad m =&gt; a -&gt; m a
+</span><span class="hs-identifier hs-var">return</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">MouseResize Window -&gt; Maybe (MouseResize Window)
+forall a. a -&gt; Maybe a
+</span><span class="hs-identifier hs-var">Just</span></span><span> </span><span class="annot"><span class="annottext">(MouseResize Window -&gt; Maybe (MouseResize Window))
+-&gt; MouseResize Window -&gt; Maybe (MouseResize Window)
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">[((Window, Rectangle), Maybe Window)] -&gt; MouseResize Window
+forall a. [((a, Rectangle), Maybe a)] -&gt; MouseResize a
+</span><a href="XMonad.Actions.MouseResize.html#MR"><span class="hs-identifier hs-var">MR</span></a></span><span> </span><span class="hs-special">[</span><span class="hs-special">]</span><span class="hs-special">)</span><span>
+</span><span id="line-86"></span><span>        </span><span class="hs-keyword">where</span><span> </span><span id="local-6989586621679460789"><span class="annot"><span class="annottext">releaseResources :: X ()
+</span><a href="#local-6989586621679460789"><span class="hs-identifier hs-var hs-var">releaseResources</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">(((Window, Rectangle), Maybe Window) -&gt; X ())
+-&gt; [((Window, Rectangle), Maybe Window)] -&gt; X ()
+forall (t :: * -&gt; *) (m :: * -&gt; *) a b.
+(Foldable t, Monad m) =&gt;
+(a -&gt; m b) -&gt; t a -&gt; m ()
+</span><span class="hs-identifier hs-var">mapM_</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Maybe Window -&gt; X ()
+</span><a href="XMonad.Actions.MouseResize.html#deleteInputWin"><span class="hs-identifier hs-var">deleteInputWin</span></a></span><span> </span><span class="annot"><span class="annottext">(Maybe Window -&gt; X ())
+-&gt; (((Window, Rectangle), Maybe Window) -&gt; Maybe Window)
+-&gt; ((Window, Rectangle), Maybe Window)
+-&gt; X ()
+forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">((Window, Rectangle), Maybe Window) -&gt; Maybe Window
+forall a b. (a, b) -&gt; b
+</span><span class="hs-identifier hs-var">snd</span></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">[((Window, Rectangle), Maybe Window)]
+</span><a href="#local-6989586621679460795"><span class="hs-identifier hs-var">s</span></a></span><span>
+</span><span id="line-87"></span><span>    </span><span class="annot"><a href="XMonad.Layout.LayoutModifier.html#handleMess"><span class="hs-identifier hs-var">handleMess</span></a></span><span> </span><span class="annot"><span class="annottext">MouseResize Window
+</span><span class="hs-identifier">_</span></span><span> </span><span class="annot"><span class="annottext">SomeMessage
+</span><span class="hs-identifier">_</span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Maybe (MouseResize Window) -&gt; X (Maybe (MouseResize Window))
+forall (m :: * -&gt; *) a. Monad m =&gt; a -&gt; m a
+</span><span class="hs-identifier hs-var">return</span></span><span> </span><span class="annot"><span class="annottext">Maybe (MouseResize Window)
+forall a. Maybe a
+</span><span class="hs-identifier hs-var">Nothing</span></span><span>
+</span><span id="line-88"></span><span>
+</span><span id="line-89"></span><span class="annot"><a href="XMonad.Actions.MouseResize.html#handleResize"><span class="hs-identifier hs-type">handleResize</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="hs-special">[</span><span class="hs-special">(</span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">Window</span></span><span class="hs-special">,</span><span class="annot"><span class="hs-identifier hs-type">Rectangle</span></span><span class="hs-special">)</span><span class="hs-special">,</span><span class="annot"><span class="hs-identifier hs-type">Maybe</span></span><span> </span><span class="annot"><span class="hs-identifier hs-type">Window</span></span><span class="hs-special">)</span><span class="hs-special">]</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Event</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">X</span></span><span> </span><span class="hs-special">(</span><span class="hs-special">)</span><span>
+</span><span id="line-90"></span><span id="handleResize"><span class="annot"><span class="annottext">handleResize :: [((Window, Rectangle), Maybe Window)] -&gt; Event -&gt; X ()
+</span><a href="XMonad.Actions.MouseResize.html#handleResize"><span class="hs-identifier hs-var hs-var">handleResize</span></a></span></span><span> </span><span id="local-6989586621679460785"><span class="annot"><span class="annottext">[((Window, Rectangle), Maybe Window)]
+</span><a href="#local-6989586621679460785"><span class="hs-identifier hs-var">st</span></a></span></span><span> </span><span class="annot"><span class="hs-identifier hs-type">ButtonEvent</span></span><span> </span><span class="hs-special">{</span><span> </span><span class="annot"><span class="annottext">ev_window :: Event -&gt; Window
+</span><span class="hs-identifier hs-var">ev_window</span></span><span> </span><span class="hs-glyph">=</span><span> </span><span id="local-6989586621679460782"><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679460782"><span class="hs-identifier hs-var">ew</span></a></span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">ev_event_type :: Event -&gt; EventType
+</span><span class="hs-identifier hs-var">ev_event_type</span></span><span> </span><span class="hs-glyph">=</span><span> </span><span id="local-6989586621679460780"><span class="annot"><span class="annottext">EventType
+</span><a href="#local-6989586621679460780"><span class="hs-identifier hs-var">et</span></a></span></span><span> </span><span class="hs-special">}</span><span>
+</span><span id="line-91"></span><span>    </span><span class="hs-glyph">|</span><span> </span><span class="annot"><span class="annottext">EventType
+</span><a href="#local-6989586621679460780"><span class="hs-identifier hs-var">et</span></a></span><span> </span><span class="annot"><span class="annottext">EventType -&gt; EventType -&gt; Bool
+forall a. Eq a =&gt; a -&gt; a -&gt; Bool
+</span><span class="hs-operator hs-var">==</span></span><span> </span><span class="annot"><span class="annottext">EventType
+</span><span class="hs-identifier hs-var">buttonPress</span></span><span>
+</span><span id="line-92"></span><span>    </span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Just</span></span><span> </span><span class="hs-special">(</span><span id="local-6989586621679460778"><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679460778"><span class="hs-identifier hs-var">w</span></a></span></span><span class="hs-special">,</span><span class="annot"><span class="hs-identifier hs-type">Rectangle</span></span><span> </span><span id="local-6989586621679460777"><span class="annot"><span class="annottext">Position
+</span><a href="#local-6989586621679460777"><span class="hs-identifier hs-var">wx</span></a></span></span><span> </span><span id="local-6989586621679460776"><span class="annot"><span class="annottext">Position
+</span><a href="#local-6989586621679460776"><span class="hs-identifier hs-var">wy</span></a></span></span><span> </span><span class="annot"><span class="annottext">EventType
+</span><span class="hs-identifier">_</span></span><span> </span><span class="annot"><span class="annottext">EventType
+</span><span class="hs-identifier">_</span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">Window
+-&gt; [((Window, Rectangle), Maybe Window)]
+-&gt; Maybe (Window, Rectangle)
+forall {t} {a} {b}.
+Eq t =&gt;
+t -&gt; [((a, b), Maybe t)] -&gt; Maybe (a, b)
+</span><a href="#local-6989586621679460775"><span class="hs-identifier hs-var">getWin</span></a></span><span> </span><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679460782"><span class="hs-identifier hs-var">ew</span></a></span><span> </span><span class="annot"><span class="annottext">[((Window, Rectangle), Maybe Window)]
+</span><a href="#local-6989586621679460785"><span class="hs-identifier hs-var">st</span></a></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-93"></span><span>                                        </span><span class="annot"><span class="annottext">Window -&gt; X ()
+</span><span class="hs-identifier hs-var">focus</span></span><span> </span><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679460778"><span class="hs-identifier hs-var">w</span></a></span><span>
+</span><span id="line-94"></span><span>                                        </span><span class="annot"><span class="annottext">(Position -&gt; Position -&gt; X ()) -&gt; X () -&gt; X ()
+</span><span class="hs-identifier hs-var">mouseDrag</span></span><span> </span><span class="hs-special">(</span><span class="hs-glyph">\</span><span id="local-6989586621679460772"><span class="annot"><span class="annottext">Position
+</span><a href="#local-6989586621679460772"><span class="hs-identifier hs-var">x</span></a></span></span><span> </span><span id="local-6989586621679460771"><span class="annot"><span class="annottext">Position
+</span><a href="#local-6989586621679460771"><span class="hs-identifier hs-var">y</span></a></span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-95"></span><span>                                                     </span><span class="hs-keyword">let</span><span> </span><span id="local-6989586621679460758"><span class="annot"><span class="annottext">rect :: Rectangle
+</span><a href="#local-6989586621679460758"><span class="hs-identifier hs-var hs-var">rect</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Position -&gt; Position -&gt; EventType -&gt; EventType -&gt; Rectangle
+</span><span class="hs-identifier hs-var">Rectangle</span></span><span> </span><span class="annot"><span class="annottext">Position
+</span><a href="#local-6989586621679460777"><span class="hs-identifier hs-var">wx</span></a></span><span> </span><span class="annot"><span class="annottext">Position
+</span><a href="#local-6989586621679460776"><span class="hs-identifier hs-var">wy</span></a></span><span>
+</span><span id="line-96"></span><span>                                                                </span><span class="hs-special">(</span><span class="annot"><span class="annottext">EventType -&gt; EventType -&gt; EventType
+forall a. Ord a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-identifier hs-var">max</span></span><span> </span><span class="annot"><span class="annottext">EventType
+</span><span class="hs-number">1</span></span><span> </span><span class="annot"><span class="annottext">(EventType -&gt; EventType)
+-&gt; (Position -&gt; EventType) -&gt; Position -&gt; EventType
+forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">Position -&gt; EventType
+forall a b. (Integral a, Num b) =&gt; a -&gt; b
+</span><a href="XMonad.Prelude.html#fi"><span class="hs-identifier hs-var">fi</span></a></span><span> </span><span class="annot"><span class="annottext">(Position -&gt; EventType) -&gt; Position -&gt; EventType
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">Position
+</span><a href="#local-6989586621679460772"><span class="hs-identifier hs-var">x</span></a></span><span> </span><span class="annot"><span class="annottext">Position -&gt; Position -&gt; Position
+forall a. Num a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-glyph hs-var">-</span></span><span> </span><span class="annot"><span class="annottext">Position
+</span><a href="#local-6989586621679460777"><span class="hs-identifier hs-var">wx</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-97"></span><span>                                                                </span><span class="hs-special">(</span><span class="annot"><span class="annottext">EventType -&gt; EventType -&gt; EventType
+forall a. Ord a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-identifier hs-var">max</span></span><span> </span><span class="annot"><span class="annottext">EventType
+</span><span class="hs-number">1</span></span><span> </span><span class="annot"><span class="annottext">(EventType -&gt; EventType)
+-&gt; (Position -&gt; EventType) -&gt; Position -&gt; EventType
+forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">Position -&gt; EventType
+forall a b. (Integral a, Num b) =&gt; a -&gt; b
+</span><a href="XMonad.Prelude.html#fi"><span class="hs-identifier hs-var">fi</span></a></span><span> </span><span class="annot"><span class="annottext">(Position -&gt; EventType) -&gt; Position -&gt; EventType
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">Position
+</span><a href="#local-6989586621679460771"><span class="hs-identifier hs-var">y</span></a></span><span> </span><span class="annot"><span class="annottext">Position -&gt; Position -&gt; Position
+forall a. Num a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-glyph hs-var">-</span></span><span> </span><span class="annot"><span class="annottext">Position
+</span><a href="#local-6989586621679460776"><span class="hs-identifier hs-var">wy</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-98"></span><span>                                                     </span><span class="annot"><span class="annottext">WindowArrangerMsg -&gt; X ()
+forall a. Message a =&gt; a -&gt; X ()
+</span><span class="hs-identifier hs-var">sendMessage</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Rectangle -&gt; WindowArrangerMsg
+</span><a href="XMonad.Layout.WindowArranger.html#SetGeometry"><span class="hs-identifier hs-var">SetGeometry</span></a></span><span> </span><span class="annot"><span class="annottext">Rectangle
+</span><a href="#local-6989586621679460758"><span class="hs-identifier hs-var">rect</span></a></span><span class="hs-special">)</span><span class="hs-special">)</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">() -&gt; X ()
+forall (m :: * -&gt; *) a. Monad m =&gt; a -&gt; m a
+</span><span class="hs-identifier hs-var">return</span></span><span> </span><span class="hs-special">(</span><span class="hs-special">)</span><span class="hs-special">)</span><span>
+</span><span id="line-99"></span><span>
+</span><span id="line-100"></span><span>      </span><span class="hs-keyword">where</span><span>
+</span><span id="line-101"></span><span>        </span><span id="local-6989586621679460775"><span class="annot"><span class="annottext">getWin :: t -&gt; [((a, b), Maybe t)] -&gt; Maybe (a, b)
+</span><a href="#local-6989586621679460775"><span class="hs-identifier hs-var hs-var">getWin</span></a></span></span><span> </span><span id="local-6989586621679460752"><span class="annot"><span class="annottext">t
+</span><a href="#local-6989586621679460752"><span class="hs-identifier hs-var">w</span></a></span></span><span> </span><span class="hs-special">(</span><span class="hs-special">(</span><span class="hs-special">(</span><span id="local-6989586621679460751"><span class="annot"><span class="annottext">a
+</span><a href="#local-6989586621679460751"><span class="hs-identifier hs-var">win</span></a></span></span><span class="hs-special">,</span><span id="local-6989586621679460750"><span class="annot"><span class="annottext">b
+</span><a href="#local-6989586621679460750"><span class="hs-identifier hs-var">r</span></a></span></span><span class="hs-special">)</span><span class="hs-special">,</span><span id="local-6989586621679460749"><span class="annot"><span class="annottext">Maybe t
+</span><a href="#local-6989586621679460749"><span class="hs-identifier hs-var">tw</span></a></span></span><span class="hs-special">)</span><span class="annot"><span class="hs-glyph hs-type">:</span></span><span id="local-6989586621679460748"><span class="annot"><span class="annottext">[((a, b), Maybe t)]
+</span><a href="#local-6989586621679460748"><span class="hs-identifier hs-var">xs</span></a></span></span><span class="hs-special">)</span><span>
+</span><span id="line-102"></span><span>            </span><span class="hs-glyph">|</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Just</span></span><span> </span><span id="local-6989586621679460747"><span class="annot"><span class="annottext">t
+</span><a href="#local-6989586621679460747"><span class="hs-identifier hs-var">w'</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">Maybe t
+</span><a href="#local-6989586621679460749"><span class="hs-identifier hs-var">tw</span></a></span><span>
+</span><span id="line-103"></span><span>            </span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">t
+</span><a href="#local-6989586621679460752"><span class="hs-identifier hs-var">w</span></a></span><span> </span><span class="annot"><span class="annottext">t -&gt; t -&gt; Bool
+forall a. Eq a =&gt; a -&gt; a -&gt; Bool
+</span><span class="hs-operator hs-var">==</span></span><span> </span><span class="annot"><span class="annottext">t
+</span><a href="#local-6989586621679460747"><span class="hs-identifier hs-var">w'</span></a></span><span>   </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">(a, b) -&gt; Maybe (a, b)
+forall a. a -&gt; Maybe a
+</span><span class="hs-identifier hs-var">Just</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">a
+</span><a href="#local-6989586621679460751"><span class="hs-identifier hs-var">win</span></a></span><span class="hs-special">,</span><span class="annot"><span class="annottext">b
+</span><a href="#local-6989586621679460750"><span class="hs-identifier hs-var">r</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-104"></span><span>            </span><span class="hs-glyph">|</span><span> </span><span class="annot"><span class="annottext">Bool
+</span><span class="hs-identifier hs-var">otherwise</span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">t -&gt; [((a, b), Maybe t)] -&gt; Maybe (a, b)
+</span><a href="#local-6989586621679460775"><span class="hs-identifier hs-var">getWin</span></a></span><span> </span><span class="annot"><span class="annottext">t
+</span><a href="#local-6989586621679460752"><span class="hs-identifier hs-var">w</span></a></span><span> </span><span class="annot"><span class="annottext">[((a, b), Maybe t)]
+</span><a href="#local-6989586621679460748"><span class="hs-identifier hs-var">xs</span></a></span><span>
+</span><span id="line-105"></span><span>        </span><span class="annot"><a href="#local-6989586621679460775"><span class="hs-identifier hs-var">getWin</span></a></span><span> </span><span class="annot"><span class="annottext">t
+</span><span class="hs-identifier">_</span></span><span> </span><span class="hs-special">[</span><span class="hs-special">]</span><span>     </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Maybe (a, b)
+forall a. Maybe a
+</span><span class="hs-identifier hs-var">Nothing</span></span><span>
+</span><span id="line-106"></span><span class="annot"><a href="XMonad.Actions.MouseResize.html#handleResize"><span class="hs-identifier hs-var">handleResize</span></a></span><span> </span><span class="annot"><span class="annottext">[((Window, Rectangle), Maybe Window)]
+</span><span class="hs-identifier">_</span></span><span> </span><span class="annot"><span class="annottext">Event
+</span><span class="hs-identifier">_</span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">() -&gt; X ()
+forall (m :: * -&gt; *) a. Monad m =&gt; a -&gt; m a
+</span><span class="hs-identifier hs-var">return</span></span><span> </span><span class="hs-special">(</span><span class="hs-special">)</span><span>
+</span><span id="line-107"></span><span>
+</span><span id="line-108"></span><span class="annot"><a href="XMonad.Actions.MouseResize.html#createInputWindow"><span class="hs-identifier hs-type">createInputWindow</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="hs-special">(</span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">Window</span></span><span class="hs-special">,</span><span class="annot"><span class="hs-identifier hs-type">Rectangle</span></span><span class="hs-special">)</span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Maybe</span></span><span> </span><span class="annot"><span class="hs-identifier hs-type">Rectangle</span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">X</span></span><span> </span><span class="hs-special">(</span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">Window</span></span><span class="hs-special">,</span><span class="annot"><span class="hs-identifier hs-type">Rectangle</span></span><span class="hs-special">)</span><span class="hs-special">,</span><span class="annot"><span class="hs-identifier hs-type">Maybe</span></span><span> </span><span class="annot"><span class="hs-identifier hs-type">Window</span></span><span class="hs-special">)</span><span>
+</span><span id="line-109"></span><span id="createInputWindow"><span class="annot"><span class="annottext">createInputWindow :: ((Window, Rectangle), Maybe Rectangle)
+-&gt; X ((Window, Rectangle), Maybe Window)
+</span><a href="XMonad.Actions.MouseResize.html#createInputWindow"><span class="hs-identifier hs-var hs-var">createInputWindow</span></a></span></span><span> </span><span class="hs-special">(</span><span class="hs-special">(</span><span id="local-6989586621679460746"><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679460746"><span class="hs-identifier hs-var">w</span></a></span></span><span class="hs-special">,</span><span id="local-6989586621679460745"><span class="annot"><span class="annottext">Rectangle
+</span><a href="#local-6989586621679460745"><span class="hs-identifier hs-var">r</span></a></span></span><span class="hs-special">)</span><span class="hs-special">,</span><span id="local-6989586621679460744"><span class="annot"><span class="annottext">Maybe Rectangle
+</span><a href="#local-6989586621679460744"><span class="hs-identifier hs-var">mr</span></a></span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=</span><span>
+</span><span id="line-110"></span><span>  </span><span class="hs-keyword">case</span><span> </span><span class="annot"><span class="annottext">Maybe Rectangle
+</span><a href="#local-6989586621679460744"><span class="hs-identifier hs-var">mr</span></a></span><span> </span><span class="hs-keyword">of</span><span>
+</span><span id="line-111"></span><span>    </span><span class="annot"><span class="hs-identifier hs-type">Just</span></span><span> </span><span id="local-6989586621679460743"><span class="annot"><span class="annottext">Rectangle
+</span><a href="#local-6989586621679460743"><span class="hs-identifier hs-var">tr</span></a></span></span><span>  </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">(Display -&gt; X ((Window, Rectangle), Maybe Window))
+-&gt; X ((Window, Rectangle), Maybe Window)
+forall a. (Display -&gt; X a) -&gt; X a
+</span><span class="hs-identifier hs-var">withDisplay</span></span><span> </span><span class="annot"><span class="annottext">((Display -&gt; X ((Window, Rectangle), Maybe Window))
+ -&gt; X ((Window, Rectangle), Maybe Window))
+-&gt; (Display -&gt; X ((Window, Rectangle), Maybe Window))
+-&gt; X ((Window, Rectangle), Maybe Window)
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="hs-glyph">\</span><span id="local-6989586621679460741"><span class="annot"><span class="annottext">Display
+</span><a href="#local-6989586621679460741"><span class="hs-identifier hs-var">d</span></a></span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-112"></span><span>                  </span><span id="local-6989586621679460740"><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679460740"><span class="hs-identifier hs-var">tw</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">Display -&gt; Rectangle -&gt; X Window
+</span><a href="XMonad.Actions.MouseResize.html#mkInputWindow"><span class="hs-identifier hs-var">mkInputWindow</span></a></span><span> </span><span class="annot"><span class="annottext">Display
+</span><a href="#local-6989586621679460741"><span class="hs-identifier hs-var">d</span></a></span><span> </span><span class="annot"><span class="annottext">Rectangle
+</span><a href="#local-6989586621679460743"><span class="hs-identifier hs-var">tr</span></a></span><span>
+</span><span id="line-113"></span><span>                  </span><span class="annot"><span class="annottext">IO () -&gt; X ()
+forall (m :: * -&gt; *) a. MonadIO m =&gt; IO a -&gt; m a
+</span><span class="hs-identifier hs-var">io</span></span><span> </span><span class="annot"><span class="annottext">(IO () -&gt; X ()) -&gt; IO () -&gt; X ()
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">Display -&gt; Window -&gt; Window -&gt; IO ()
+</span><span class="hs-identifier hs-var">selectInput</span></span><span> </span><span class="annot"><span class="annottext">Display
+</span><a href="#local-6989586621679460741"><span class="hs-identifier hs-var">d</span></a></span><span> </span><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679460740"><span class="hs-identifier hs-var">tw</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Window
+</span><span class="hs-identifier hs-var">exposureMask</span></span><span> </span><span class="annot"><span class="annottext">Window -&gt; Window -&gt; Window
+forall a. Bits a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-operator hs-var">.|.</span></span><span> </span><span class="annot"><span class="annottext">Window
+</span><span class="hs-identifier hs-var">buttonPressMask</span></span><span class="hs-special">)</span><span>
+</span><span id="line-114"></span><span>
+</span><span id="line-115"></span><span>                  </span><span id="local-6989586621679460733"><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679460733"><span class="hs-identifier hs-var">cursor</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">IO Window -&gt; X Window
+forall (m :: * -&gt; *) a. MonadIO m =&gt; IO a -&gt; m a
+</span><span class="hs-identifier hs-var">io</span></span><span> </span><span class="annot"><span class="annottext">(IO Window -&gt; X Window) -&gt; IO Window -&gt; X Window
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">Display -&gt; Glyph -&gt; IO Window
+</span><span class="hs-identifier hs-var">createFontCursor</span></span><span> </span><span class="annot"><span class="annottext">Display
+</span><a href="#local-6989586621679460741"><span class="hs-identifier hs-var">d</span></a></span><span> </span><span class="annot"><span class="annottext">Glyph
+</span><span class="hs-identifier hs-var">xC_bottom_right_corner</span></span><span>
+</span><span id="line-116"></span><span>                  </span><span class="annot"><span class="annottext">IO () -&gt; X ()
+forall (m :: * -&gt; *) a. MonadIO m =&gt; IO a -&gt; m a
+</span><span class="hs-identifier hs-var">io</span></span><span> </span><span class="annot"><span class="annottext">(IO () -&gt; X ()) -&gt; IO () -&gt; X ()
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">Display -&gt; Window -&gt; Window -&gt; IO ()
+</span><span class="hs-identifier hs-var">defineCursor</span></span><span> </span><span class="annot"><span class="annottext">Display
+</span><a href="#local-6989586621679460741"><span class="hs-identifier hs-var">d</span></a></span><span> </span><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679460740"><span class="hs-identifier hs-var">tw</span></a></span><span> </span><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679460733"><span class="hs-identifier hs-var">cursor</span></a></span><span>
+</span><span id="line-117"></span><span>                  </span><span class="annot"><span class="annottext">IO () -&gt; X ()
+forall (m :: * -&gt; *) a. MonadIO m =&gt; IO a -&gt; m a
+</span><span class="hs-identifier hs-var">io</span></span><span> </span><span class="annot"><span class="annottext">(IO () -&gt; X ()) -&gt; IO () -&gt; X ()
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">Display -&gt; Window -&gt; IO ()
+</span><span class="hs-identifier hs-var">freeCursor</span></span><span> </span><span class="annot"><span class="annottext">Display
+</span><a href="#local-6989586621679460741"><span class="hs-identifier hs-var">d</span></a></span><span> </span><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679460733"><span class="hs-identifier hs-var">cursor</span></a></span><span>
+</span><span id="line-118"></span><span>
+</span><span id="line-119"></span><span>                  </span><span class="annot"><span class="annottext">Window -&gt; X ()
+</span><a href="XMonad.Util.XUtils.html#showWindow"><span class="hs-identifier hs-var">showWindow</span></a></span><span> </span><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679460740"><span class="hs-identifier hs-var">tw</span></a></span><span>
+</span><span id="line-120"></span><span>                  </span><span class="annot"><span class="annottext">((Window, Rectangle), Maybe Window)
+-&gt; X ((Window, Rectangle), Maybe Window)
+forall (m :: * -&gt; *) a. Monad m =&gt; a -&gt; m a
+</span><span class="hs-identifier hs-var">return</span></span><span> </span><span class="hs-special">(</span><span class="hs-special">(</span><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679460746"><span class="hs-identifier hs-var">w</span></a></span><span class="hs-special">,</span><span class="annot"><span class="annottext">Rectangle
+</span><a href="#local-6989586621679460745"><span class="hs-identifier hs-var">r</span></a></span><span class="hs-special">)</span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">Window -&gt; Maybe Window
+forall a. a -&gt; Maybe a
+</span><span class="hs-identifier hs-var">Just</span></span><span> </span><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679460740"><span class="hs-identifier hs-var">tw</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-121"></span><span>    </span><span class="annot"><span class="annottext">Maybe Rectangle
+</span><span class="hs-identifier hs-var">Nothing</span></span><span> </span><span class="hs-glyph">-&gt;</span><span>    </span><span class="annot"><span class="annottext">((Window, Rectangle), Maybe Window)
+-&gt; X ((Window, Rectangle), Maybe Window)
+forall (m :: * -&gt; *) a. Monad m =&gt; a -&gt; m a
+</span><span class="hs-identifier hs-var">return</span></span><span> </span><span class="hs-special">(</span><span class="hs-special">(</span><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679460746"><span class="hs-identifier hs-var">w</span></a></span><span class="hs-special">,</span><span class="annot"><span class="annottext">Rectangle
+</span><a href="#local-6989586621679460745"><span class="hs-identifier hs-var">r</span></a></span><span class="hs-special">)</span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">Maybe Window
+forall a. Maybe a
+</span><span class="hs-identifier hs-var">Nothing</span></span><span class="hs-special">)</span><span>
+</span><span id="line-122"></span><span>
+</span><span id="line-123"></span><span class="annot"><a href="XMonad.Actions.MouseResize.html#deleteInputWin"><span class="hs-identifier hs-type">deleteInputWin</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Maybe</span></span><span> </span><span class="annot"><span class="hs-identifier hs-type">Window</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">X</span></span><span> </span><span class="hs-special">(</span><span class="hs-special">)</span><span>
+</span><span id="line-124"></span><span id="deleteInputWin"><span class="annot"><span class="annottext">deleteInputWin :: Maybe Window -&gt; X ()
+</span><a href="XMonad.Actions.MouseResize.html#deleteInputWin"><span class="hs-identifier hs-var hs-var">deleteInputWin</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">X () -&gt; (Window -&gt; X ()) -&gt; Maybe Window -&gt; X ()
+forall b a. b -&gt; (a -&gt; b) -&gt; Maybe a -&gt; b
+</span><span class="hs-identifier hs-var">maybe</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">() -&gt; X ()
+forall (m :: * -&gt; *) a. Monad m =&gt; a -&gt; m a
+</span><span class="hs-identifier hs-var">return</span></span><span> </span><span class="hs-special">(</span><span class="hs-special">)</span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">Window -&gt; X ()
+</span><a href="XMonad.Util.XUtils.html#deleteWindow"><span class="hs-identifier hs-var">deleteWindow</span></a></span><span>
+</span><span id="line-125"></span><span>
+</span><span id="line-126"></span><span class="annot"><a href="XMonad.Actions.MouseResize.html#mkInputWindow"><span class="hs-identifier hs-type">mkInputWindow</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Display</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Rectangle</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">X</span></span><span> </span><span class="annot"><span class="hs-identifier hs-type">Window</span></span><span>
+</span><span id="line-127"></span><span id="mkInputWindow"><span class="annot"><span class="annottext">mkInputWindow :: Display -&gt; Rectangle -&gt; X Window
+</span><a href="XMonad.Actions.MouseResize.html#mkInputWindow"><span class="hs-identifier hs-var hs-var">mkInputWindow</span></a></span></span><span> </span><span id="local-6989586621679460725"><span class="annot"><span class="annottext">Display
+</span><a href="#local-6989586621679460725"><span class="hs-identifier hs-var">d</span></a></span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">Rectangle</span></span><span> </span><span id="local-6989586621679460724"><span class="annot"><span class="annottext">Position
+</span><a href="#local-6989586621679460724"><span class="hs-identifier hs-var">x</span></a></span></span><span> </span><span id="local-6989586621679460723"><span class="annot"><span class="annottext">Position
+</span><a href="#local-6989586621679460723"><span class="hs-identifier hs-var">y</span></a></span></span><span> </span><span id="local-6989586621679460722"><span class="annot"><span class="annottext">EventType
+</span><a href="#local-6989586621679460722"><span class="hs-identifier hs-var">w</span></a></span></span><span> </span><span id="local-6989586621679460721"><span class="annot"><span class="annottext">EventType
+</span><a href="#local-6989586621679460721"><span class="hs-identifier hs-var">h</span></a></span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-128"></span><span>  </span><span id="local-6989586621679460720"><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679460720"><span class="hs-identifier hs-var">rw</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">(XConf -&gt; Window) -&gt; X Window
+forall r (m :: * -&gt; *) a. MonadReader r m =&gt; (r -&gt; a) -&gt; m a
+</span><span class="hs-identifier hs-var">asks</span></span><span> </span><span class="annot"><span class="annottext">XConf -&gt; Window
+</span><span class="hs-identifier hs-var hs-var">theRoot</span></span><span>
+</span><span id="line-129"></span><span>  </span><span class="hs-keyword">let</span><span> </span><span id="local-6989586621679460717"><span class="annot"><span class="annottext">screen :: Screen
+</span><a href="#local-6989586621679460717"><span class="hs-identifier hs-var hs-var">screen</span></a></span></span><span>   </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Display -&gt; Screen
+</span><span class="hs-identifier hs-var">defaultScreenOfDisplay</span></span><span> </span><span class="annot"><span class="annottext">Display
+</span><a href="#local-6989586621679460725"><span class="hs-identifier hs-var">d</span></a></span><span>
+</span><span id="line-130"></span><span>      </span><span id="local-6989586621679460715"><span class="annot"><span class="annottext">visual :: Visual
+</span><a href="#local-6989586621679460715"><span class="hs-identifier hs-var hs-var">visual</span></a></span></span><span>   </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Screen -&gt; Visual
+</span><span class="hs-identifier hs-var">defaultVisualOfScreen</span></span><span> </span><span class="annot"><span class="annottext">Screen
+</span><a href="#local-6989586621679460717"><span class="hs-identifier hs-var">screen</span></a></span><span>
+</span><span id="line-131"></span><span>      </span><span id="local-6989586621679460713"><span class="annot"><span class="annottext">attrmask :: Window
+</span><a href="#local-6989586621679460713"><span class="hs-identifier hs-var hs-var">attrmask</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Window
+</span><span class="hs-identifier hs-var">cWOverrideRedirect</span></span><span>
+</span><span id="line-132"></span><span>  </span><span class="annot"><span class="annottext">IO Window -&gt; X Window
+forall (m :: * -&gt; *) a. MonadIO m =&gt; IO a -&gt; m a
+</span><span class="hs-identifier hs-var">io</span></span><span> </span><span class="annot"><span class="annottext">(IO Window -&gt; X Window) -&gt; IO Window -&gt; X Window
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">(Ptr SetWindowAttributes -&gt; IO Window) -&gt; IO Window
+forall a. (Ptr SetWindowAttributes -&gt; IO a) -&gt; IO a
+</span><span class="hs-identifier hs-var">allocaSetWindowAttributes</span></span><span> </span><span class="annot"><span class="annottext">((Ptr SetWindowAttributes -&gt; IO Window) -&gt; IO Window)
+-&gt; (Ptr SetWindowAttributes -&gt; IO Window) -&gt; IO Window
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span>
+</span><span id="line-133"></span><span>         </span><span class="hs-glyph">\</span><span id="local-6989586621679460710"><span class="annot"><span class="annottext">Ptr SetWindowAttributes
+</span><a href="#local-6989586621679460710"><span class="hs-identifier hs-var">attributes</span></a></span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-134"></span><span>           </span><span class="annot"><span class="annottext">Ptr SetWindowAttributes -&gt; Bool -&gt; IO ()
+</span><span class="hs-identifier hs-var">set_override_redirect</span></span><span> </span><span class="annot"><span class="annottext">Ptr SetWindowAttributes
+</span><a href="#local-6989586621679460710"><span class="hs-identifier hs-var">attributes</span></a></span><span> </span><span class="annot"><span class="annottext">Bool
+</span><span class="hs-identifier hs-var">True</span></span><span>
+</span><span id="line-135"></span><span>           </span><span class="annot"><span class="annottext">Display
+-&gt; Window
+-&gt; Position
+-&gt; Position
+-&gt; EventType
+-&gt; EventType
+-&gt; CInt
+-&gt; CInt
+-&gt; CInt
+-&gt; Visual
+-&gt; Window
+-&gt; Ptr SetWindowAttributes
+-&gt; IO Window
+</span><span class="hs-identifier hs-var">createWindow</span></span><span> </span><span class="annot"><span class="annottext">Display
+</span><a href="#local-6989586621679460725"><span class="hs-identifier hs-var">d</span></a></span><span> </span><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679460720"><span class="hs-identifier hs-var">rw</span></a></span><span> </span><span class="annot"><span class="annottext">Position
+</span><a href="#local-6989586621679460724"><span class="hs-identifier hs-var">x</span></a></span><span> </span><span class="annot"><span class="annottext">Position
+</span><a href="#local-6989586621679460723"><span class="hs-identifier hs-var">y</span></a></span><span> </span><span class="annot"><span class="annottext">EventType
+</span><a href="#local-6989586621679460722"><span class="hs-identifier hs-var">w</span></a></span><span> </span><span class="annot"><span class="annottext">EventType
+</span><a href="#local-6989586621679460721"><span class="hs-identifier hs-var">h</span></a></span><span> </span><span class="annot"><span class="annottext">CInt
+</span><span class="hs-number">0</span></span><span> </span><span class="annot"><span class="annottext">CInt
+</span><span class="hs-number">0</span></span><span> </span><span class="annot"><span class="annottext">CInt
+</span><span class="hs-identifier hs-var">inputOnly</span></span><span> </span><span class="annot"><span class="annottext">Visual
+</span><a href="#local-6989586621679460715"><span class="hs-identifier hs-var">visual</span></a></span><span> </span><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679460713"><span class="hs-identifier hs-var">attrmask</span></a></span><span> </span><span class="annot"><span class="annottext">Ptr SetWindowAttributes
+</span><a href="#local-6989586621679460710"><span class="hs-identifier hs-var">attributes</span></a></span><span>
+</span><span id="line-136"></span></pre></body></html>

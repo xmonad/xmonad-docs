@@ -1,0 +1,262 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd"><html xmlns="http://www.w3.org/1999/xhtml"><head><link rel="stylesheet" type="text/css" href="style.css" /><script type="text/javascript" src="highlight.js"></script></head><body><pre><span class="hs-comment">-----------------------------------------------------------------------------</span><span>
+</span><span id="line-2"></span><span class="hs-comment">-- |</span><span>
+</span><span id="line-3"></span><span class="hs-comment">-- Module      :  XMonad.Actions.Submap</span><span>
+</span><span id="line-4"></span><span class="hs-comment">-- Description :  Create a sub-mapping of key bindings.</span><span>
+</span><span id="line-5"></span><span class="hs-comment">-- Copyright   :  (c) Jason Creighton &lt;jcreigh@gmail.com&gt;</span><span>
+</span><span id="line-6"></span><span class="hs-comment">-- License     :  BSD3-style (see LICENSE)</span><span>
+</span><span id="line-7"></span><span class="hs-comment">--</span><span>
+</span><span id="line-8"></span><span class="hs-comment">-- Maintainer  :  Jason Creighton &lt;jcreigh@gmail.com&gt;</span><span>
+</span><span id="line-9"></span><span class="hs-comment">-- Stability   :  unstable</span><span>
+</span><span id="line-10"></span><span class="hs-comment">-- Portability :  unportable</span><span>
+</span><span id="line-11"></span><span class="hs-comment">--</span><span>
+</span><span id="line-12"></span><span class="hs-comment">-- A module that allows the user to create a sub-mapping of key bindings.</span><span>
+</span><span id="line-13"></span><span class="hs-comment">--</span><span>
+</span><span id="line-14"></span><span class="hs-comment">-----------------------------------------------------------------------------</span><span>
+</span><span id="line-15"></span><span>
+</span><span id="line-16"></span><span class="hs-keyword">module</span><span> </span><span class="hs-identifier">XMonad.Actions.Submap</span><span> </span><span class="hs-special">(</span><span>
+</span><span id="line-17"></span><span>                             </span><span class="annot"><span class="hs-comment">-- * Usage</span></span><span>
+</span><span id="line-18"></span><span>                             </span><span class="annot"><span class="hs-comment">-- $usage</span></span><span>
+</span><span id="line-19"></span><span>                             </span><span class="annot"><a href="XMonad.Actions.Submap.html#submap"><span class="hs-identifier">submap</span></a></span><span class="hs-special">,</span><span>
+</span><span id="line-20"></span><span>                             </span><span class="annot"><a href="XMonad.Actions.Submap.html#submapDefault"><span class="hs-identifier">submapDefault</span></a></span><span class="hs-special">,</span><span>
+</span><span id="line-21"></span><span>                             </span><span class="annot"><a href="XMonad.Actions.Submap.html#submapDefaultWithKey"><span class="hs-identifier">submapDefaultWithKey</span></a></span><span>
+</span><span id="line-22"></span><span>                            </span><span class="hs-special">)</span><span> </span><span class="hs-keyword">where</span><span>
+</span><span id="line-23"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><span class="hs-identifier">Data.Bits</span></span><span>
+</span><span id="line-24"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><a href="XMonad.Prelude.html"><span class="hs-identifier">XMonad.Prelude</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier">fix</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier">fromMaybe</span></span><span class="hs-special">)</span><span>
+</span><span id="line-25"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><span class="hs-identifier">XMonad</span></span><span> </span><span class="hs-keyword">hiding</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier">keys</span></span><span class="hs-special">)</span><span>
+</span><span id="line-26"></span><span class="hs-keyword">import</span><span> </span><span class="hs-keyword">qualified</span><span> </span><span class="annot"><span class="hs-identifier">Data.Map</span></span><span> </span><span class="hs-keyword">as</span><span> </span><span class="annot"><span class="hs-identifier">M</span></span><span>
+</span><span id="line-27"></span><span>
+</span><span id="line-28"></span><span class="hs-comment">{- $usage
+
+
+
+
+First, import this module into your @~\/.xmonad\/xmonad.hs@:
+
+&gt; import XMonad.Actions.Submap
+
+Allows you to create a sub-mapping of keys. Example:
+
+&gt;    , ((modm, xK_a), submap . M.fromList $
+&gt;        [ ((0, xK_n),     spawn &quot;mpc next&quot;)
+&gt;        , ((0, xK_p),     spawn &quot;mpc prev&quot;)
+&gt;        , ((0, xK_z),     spawn &quot;mpc random&quot;)
+&gt;        , ((0, xK_space), spawn &quot;mpc toggle&quot;)
+&gt;        ])
+
+So, for example, to run 'spawn \&quot;mpc next\&quot;', you would hit mod-a (to
+trigger the submapping) and then 'n' to run that action. (0 means \&quot;no
+modifier\&quot;). You are, of course, free to use any combination of
+modifiers in the submapping. However, anyModifier will not work,
+because that is a special value passed to XGrabKey() and not an actual
+modifier.
+
+For detailed instructions on editing your key bindings, see
+&quot;XMonad.Doc.Extending#Editing_key_bindings&quot;.
+
+-}</span><span>
+</span><span id="line-57"></span><span>
+</span><span id="line-58"></span><span class="hs-comment">-- | Given a 'Data.Map.Map' from key bindings to X () actions, return</span><span>
+</span><span id="line-59"></span><span class="hs-comment">--   an action which waits for a user keypress and executes the</span><span>
+</span><span id="line-60"></span><span class="hs-comment">--   corresponding action, or does nothing if the key is not found in</span><span>
+</span><span id="line-61"></span><span class="hs-comment">--   the map.</span><span>
+</span><span id="line-62"></span><span class="annot"><a href="XMonad.Actions.Submap.html#submap"><span class="hs-identifier hs-type">submap</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">M.Map</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">KeyMask</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier hs-type">KeySym</span></span><span class="hs-special">)</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">X</span></span><span> </span><span class="hs-special">(</span><span class="hs-special">)</span><span class="hs-special">)</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">X</span></span><span> </span><span class="hs-special">(</span><span class="hs-special">)</span><span>
+</span><span id="line-63"></span><span id="submap"><span class="annot"><span class="annottext">submap :: Map (KeyMask, KeySym) (X ()) -&gt; X ()
+</span><a href="XMonad.Actions.Submap.html#submap"><span class="hs-identifier hs-var hs-var">submap</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">X () -&gt; Map (KeyMask, KeySym) (X ()) -&gt; X ()
+</span><a href="XMonad.Actions.Submap.html#submapDefault"><span class="hs-identifier hs-var">submapDefault</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">() -&gt; X ()
+forall (m :: * -&gt; *) a. Monad m =&gt; a -&gt; m a
+</span><span class="hs-identifier hs-var">return</span></span><span> </span><span class="hs-special">(</span><span class="hs-special">)</span><span class="hs-special">)</span><span>
+</span><span id="line-64"></span><span>
+</span><span id="line-65"></span><span class="hs-comment">-- | Like 'submap', but executes a default action if the key did not match.</span><span>
+</span><span id="line-66"></span><span class="annot"><a href="XMonad.Actions.Submap.html#submapDefault"><span class="hs-identifier hs-type">submapDefault</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">X</span></span><span> </span><span class="hs-special">(</span><span class="hs-special">)</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">M.Map</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">KeyMask</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier hs-type">KeySym</span></span><span class="hs-special">)</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">X</span></span><span> </span><span class="hs-special">(</span><span class="hs-special">)</span><span class="hs-special">)</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">X</span></span><span> </span><span class="hs-special">(</span><span class="hs-special">)</span><span>
+</span><span id="line-67"></span><span id="submapDefault"><span class="annot"><span class="annottext">submapDefault :: X () -&gt; Map (KeyMask, KeySym) (X ()) -&gt; X ()
+</span><a href="XMonad.Actions.Submap.html#submapDefault"><span class="hs-identifier hs-var hs-var">submapDefault</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">((KeyMask, KeySym) -&gt; X ()) -&gt; Map (KeyMask, KeySym) (X ()) -&gt; X ()
+</span><a href="XMonad.Actions.Submap.html#submapDefaultWithKey"><span class="hs-identifier hs-var">submapDefaultWithKey</span></a></span><span> </span><span class="annot"><span class="annottext">(((KeyMask, KeySym) -&gt; X ())
+ -&gt; Map (KeyMask, KeySym) (X ()) -&gt; X ())
+-&gt; (X () -&gt; (KeyMask, KeySym) -&gt; X ())
+-&gt; X ()
+-&gt; Map (KeyMask, KeySym) (X ())
+-&gt; X ()
+forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">X () -&gt; (KeyMask, KeySym) -&gt; X ()
+forall a b. a -&gt; b -&gt; a
+</span><span class="hs-identifier hs-var">const</span></span><span>
+</span><span id="line-68"></span><span>
+</span><span id="line-69"></span><span class="hs-comment">-- | Like 'submapDefault', but sends the unmatched key to the default</span><span>
+</span><span id="line-70"></span><span class="hs-comment">-- action as argument.</span><span>
+</span><span id="line-71"></span><span class="annot"><a href="XMonad.Actions.Submap.html#submapDefaultWithKey"><span class="hs-identifier hs-type">submapDefaultWithKey</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="hs-special">(</span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">KeyMask</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier hs-type">KeySym</span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">X</span></span><span> </span><span class="hs-special">(</span><span class="hs-special">)</span><span class="hs-special">)</span><span>
+</span><span id="line-72"></span><span>                     </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">M.Map</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">KeyMask</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier hs-type">KeySym</span></span><span class="hs-special">)</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">X</span></span><span> </span><span class="hs-special">(</span><span class="hs-special">)</span><span class="hs-special">)</span><span>
+</span><span id="line-73"></span><span>                     </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">X</span></span><span> </span><span class="hs-special">(</span><span class="hs-special">)</span><span>
+</span><span id="line-74"></span><span id="submapDefaultWithKey"><span class="annot"><span class="annottext">submapDefaultWithKey :: ((KeyMask, KeySym) -&gt; X ()) -&gt; Map (KeyMask, KeySym) (X ()) -&gt; X ()
+</span><a href="XMonad.Actions.Submap.html#submapDefaultWithKey"><span class="hs-identifier hs-var hs-var">submapDefaultWithKey</span></a></span></span><span> </span><span id="local-6989586621679367213"><span class="annot"><span class="annottext">(KeyMask, KeySym) -&gt; X ()
+</span><a href="#local-6989586621679367213"><span class="hs-identifier hs-var">defAction</span></a></span></span><span> </span><span id="local-6989586621679367212"><span class="annot"><span class="annottext">Map (KeyMask, KeySym) (X ())
+</span><a href="#local-6989586621679367212"><span class="hs-identifier hs-var">keys</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-75"></span><span>    </span><span class="annot"><span class="hs-identifier hs-type">XConf</span></span><span> </span><span class="hs-special">{</span><span> </span><span class="annot"><span class="annottext">theRoot :: XConf -&gt; KeySym
+</span><span class="hs-identifier hs-var">theRoot</span></span><span> </span><span class="hs-glyph">=</span><span> </span><span id="local-6989586621679367209"><span class="annot"><span class="annottext">KeySym
+</span><a href="#local-6989586621679367209"><span class="hs-identifier hs-var">root</span></a></span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">display :: XConf -&gt; Display
+</span><span class="hs-identifier hs-var">display</span></span><span> </span><span class="hs-glyph">=</span><span> </span><span id="local-6989586621679367207"><span class="annot"><span class="annottext">Display
+</span><a href="#local-6989586621679367207"><span class="hs-identifier hs-var">d</span></a></span></span><span> </span><span class="hs-special">}</span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">X XConf
+forall r (m :: * -&gt; *). MonadReader r m =&gt; m r
+</span><span class="hs-identifier hs-var">ask</span></span><span>
+</span><span id="line-76"></span><span>
+</span><span id="line-77"></span><span>    </span><span class="annot"><span class="annottext">IO GrabStatus -&gt; X GrabStatus
+forall (m :: * -&gt; *) a. MonadIO m =&gt; IO a -&gt; m a
+</span><span class="hs-identifier hs-var">io</span></span><span> </span><span class="annot"><span class="annottext">(IO GrabStatus -&gt; X GrabStatus) -&gt; IO GrabStatus -&gt; X GrabStatus
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">Display
+-&gt; KeySym
+-&gt; Bool
+-&gt; GrabStatus
+-&gt; GrabStatus
+-&gt; KeySym
+-&gt; IO GrabStatus
+</span><span class="hs-identifier hs-var">grabKeyboard</span></span><span> </span><span class="annot"><span class="annottext">Display
+</span><a href="#local-6989586621679367207"><span class="hs-identifier hs-var">d</span></a></span><span> </span><span class="annot"><span class="annottext">KeySym
+</span><a href="#local-6989586621679367209"><span class="hs-identifier hs-var">root</span></a></span><span> </span><span class="annot"><span class="annottext">Bool
+</span><span class="hs-identifier hs-var">False</span></span><span> </span><span class="annot"><span class="annottext">GrabStatus
+</span><span class="hs-identifier hs-var">grabModeAsync</span></span><span> </span><span class="annot"><span class="annottext">GrabStatus
+</span><span class="hs-identifier hs-var">grabModeAsync</span></span><span> </span><span class="annot"><span class="annottext">KeySym
+</span><span class="hs-identifier hs-var">currentTime</span></span><span>
+</span><span id="line-78"></span><span>    </span><span class="annot"><span class="annottext">IO GrabStatus -&gt; X GrabStatus
+forall (m :: * -&gt; *) a. MonadIO m =&gt; IO a -&gt; m a
+</span><span class="hs-identifier hs-var">io</span></span><span> </span><span class="annot"><span class="annottext">(IO GrabStatus -&gt; X GrabStatus) -&gt; IO GrabStatus -&gt; X GrabStatus
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">Display
+-&gt; KeySym
+-&gt; Bool
+-&gt; KeySym
+-&gt; GrabStatus
+-&gt; GrabStatus
+-&gt; KeySym
+-&gt; KeySym
+-&gt; KeySym
+-&gt; IO GrabStatus
+</span><span class="hs-identifier hs-var">grabPointer</span></span><span> </span><span class="annot"><span class="annottext">Display
+</span><a href="#local-6989586621679367207"><span class="hs-identifier hs-var">d</span></a></span><span> </span><span class="annot"><span class="annottext">KeySym
+</span><a href="#local-6989586621679367209"><span class="hs-identifier hs-var">root</span></a></span><span> </span><span class="annot"><span class="annottext">Bool
+</span><span class="hs-identifier hs-var">False</span></span><span> </span><span class="annot"><span class="annottext">KeySym
+</span><span class="hs-identifier hs-var">buttonPressMask</span></span><span> </span><span class="annot"><span class="annottext">GrabStatus
+</span><span class="hs-identifier hs-var">grabModeAsync</span></span><span> </span><span class="annot"><span class="annottext">GrabStatus
+</span><span class="hs-identifier hs-var">grabModeAsync</span></span><span>
+</span><span id="line-79"></span><span>                     </span><span class="annot"><span class="annottext">KeySym
+</span><span class="hs-identifier hs-var">none</span></span><span> </span><span class="annot"><span class="annottext">KeySym
+</span><span class="hs-identifier hs-var">none</span></span><span> </span><span class="annot"><span class="annottext">KeySym
+</span><span class="hs-identifier hs-var">currentTime</span></span><span>
+</span><span id="line-80"></span><span>
+</span><span id="line-81"></span><span>    </span><span class="hs-special">(</span><span id="local-6989586621679367198"><span class="annot"><span class="annottext">KeyMask
+</span><a href="#local-6989586621679367198"><span class="hs-identifier hs-var">m</span></a></span></span><span class="hs-special">,</span><span> </span><span id="local-6989586621679367197"><span class="annot"><span class="annottext">KeySym
+</span><a href="#local-6989586621679367197"><span class="hs-identifier hs-var">s</span></a></span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">IO (KeyMask, KeySym) -&gt; X (KeyMask, KeySym)
+forall (m :: * -&gt; *) a. MonadIO m =&gt; IO a -&gt; m a
+</span><span class="hs-identifier hs-var">io</span></span><span> </span><span class="annot"><span class="annottext">(IO (KeyMask, KeySym) -&gt; X (KeyMask, KeySym))
+-&gt; IO (KeyMask, KeySym) -&gt; X (KeyMask, KeySym)
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">(XEventPtr -&gt; IO (KeyMask, KeySym)) -&gt; IO (KeyMask, KeySym)
+forall a. (XEventPtr -&gt; IO a) -&gt; IO a
+</span><span class="hs-identifier hs-var">allocaXEvent</span></span><span> </span><span class="annot"><span class="annottext">((XEventPtr -&gt; IO (KeyMask, KeySym)) -&gt; IO (KeyMask, KeySym))
+-&gt; (XEventPtr -&gt; IO (KeyMask, KeySym)) -&gt; IO (KeyMask, KeySym)
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="hs-glyph">\</span><span id="local-6989586621679367195"><span class="annot"><span class="annottext">XEventPtr
+</span><a href="#local-6989586621679367195"><span class="hs-identifier hs-var">p</span></a></span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">(IO (KeyMask, KeySym) -&gt; IO (KeyMask, KeySym))
+-&gt; IO (KeyMask, KeySym)
+forall a. (a -&gt; a) -&gt; a
+</span><span class="hs-identifier hs-var">fix</span></span><span> </span><span class="annot"><span class="annottext">((IO (KeyMask, KeySym) -&gt; IO (KeyMask, KeySym))
+ -&gt; IO (KeyMask, KeySym))
+-&gt; (IO (KeyMask, KeySym) -&gt; IO (KeyMask, KeySym))
+-&gt; IO (KeyMask, KeySym)
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="hs-glyph">\</span><span id="local-6989586621679367194"><span class="annot"><span class="annottext">IO (KeyMask, KeySym)
+</span><a href="#local-6989586621679367194"><span class="hs-identifier hs-var">nextkey</span></a></span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-82"></span><span>        </span><span class="annot"><span class="annottext">Display -&gt; KeySym -&gt; XEventPtr -&gt; IO ()
+</span><span class="hs-identifier hs-var">maskEvent</span></span><span> </span><span class="annot"><span class="annottext">Display
+</span><a href="#local-6989586621679367207"><span class="hs-identifier hs-var">d</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">KeySym
+</span><span class="hs-identifier hs-var">keyPressMask</span></span><span> </span><span class="annot"><span class="annottext">KeySym -&gt; KeySym -&gt; KeySym
+forall a. Bits a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-operator hs-var">.|.</span></span><span> </span><span class="annot"><span class="annottext">KeySym
+</span><span class="hs-identifier hs-var">buttonPressMask</span></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">XEventPtr
+</span><a href="#local-6989586621679367195"><span class="hs-identifier hs-var">p</span></a></span><span>
+</span><span id="line-83"></span><span>        </span><span id="local-6989586621679367190"><span class="annot"><span class="annottext">Event
+</span><a href="#local-6989586621679367190"><span class="hs-identifier hs-var">ev</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">XEventPtr -&gt; IO Event
+</span><span class="hs-identifier hs-var">getEvent</span></span><span> </span><span class="annot"><span class="annottext">XEventPtr
+</span><a href="#local-6989586621679367195"><span class="hs-identifier hs-var">p</span></a></span><span>
+</span><span id="line-84"></span><span>        </span><span class="hs-keyword">case</span><span> </span><span class="annot"><span class="annottext">Event
+</span><a href="#local-6989586621679367190"><span class="hs-identifier hs-var">ev</span></a></span><span> </span><span class="hs-keyword">of</span><span>
+</span><span id="line-85"></span><span>          </span><span class="annot"><span class="hs-identifier hs-type">KeyEvent</span></span><span> </span><span class="hs-special">{</span><span> </span><span class="annot"><span class="annottext">ev_keycode :: Event -&gt; KeyCode
+</span><span class="hs-identifier hs-var">ev_keycode</span></span><span> </span><span class="hs-glyph">=</span><span> </span><span id="local-6989586621679367186"><span class="annot"><span class="annottext">KeyCode
+</span><a href="#local-6989586621679367186"><span class="hs-identifier hs-var">code</span></a></span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">ev_state :: Event -&gt; KeyMask
+</span><span class="hs-identifier hs-var">ev_state</span></span><span> </span><span class="hs-glyph">=</span><span> </span><span id="local-6989586621679367184"><span class="annot"><span class="annottext">KeyMask
+</span><a href="#local-6989586621679367184"><span class="hs-identifier hs-var">m</span></a></span></span><span> </span><span class="hs-special">}</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-86"></span><span>            </span><span id="local-6989586621679367183"><span class="annot"><span class="annottext">KeySym
+</span><a href="#local-6989586621679367183"><span class="hs-identifier hs-var">keysym</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">Display -&gt; KeyCode -&gt; GrabStatus -&gt; IO KeySym
+</span><span class="hs-identifier hs-var">keycodeToKeysym</span></span><span> </span><span class="annot"><span class="annottext">Display
+</span><a href="#local-6989586621679367207"><span class="hs-identifier hs-var">d</span></a></span><span> </span><span class="annot"><span class="annottext">KeyCode
+</span><a href="#local-6989586621679367186"><span class="hs-identifier hs-var">code</span></a></span><span> </span><span class="annot"><span class="annottext">GrabStatus
+</span><span class="hs-number">0</span></span><span>
+</span><span id="line-87"></span><span>            </span><span class="hs-keyword">if</span><span> </span><span class="annot"><span class="annottext">KeySym -&gt; Bool
+</span><span class="hs-identifier hs-var">isModifierKey</span></span><span> </span><span class="annot"><span class="annottext">KeySym
+</span><a href="#local-6989586621679367183"><span class="hs-identifier hs-var">keysym</span></a></span><span>
+</span><span id="line-88"></span><span>                </span><span class="hs-keyword">then</span><span> </span><span class="annot"><span class="annottext">IO (KeyMask, KeySym)
+</span><a href="#local-6989586621679367194"><span class="hs-identifier hs-var">nextkey</span></a></span><span>
+</span><span id="line-89"></span><span>                </span><span class="hs-keyword">else</span><span> </span><span class="annot"><span class="annottext">(KeyMask, KeySym) -&gt; IO (KeyMask, KeySym)
+forall (m :: * -&gt; *) a. Monad m =&gt; a -&gt; m a
+</span><span class="hs-identifier hs-var">return</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">KeyMask
+</span><a href="#local-6989586621679367184"><span class="hs-identifier hs-var">m</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">KeySym
+</span><a href="#local-6989586621679367183"><span class="hs-identifier hs-var">keysym</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-90"></span><span>          </span><span class="annot"><span class="annottext">Event
+</span><span class="hs-identifier">_</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">(KeyMask, KeySym) -&gt; IO (KeyMask, KeySym)
+forall (m :: * -&gt; *) a. Monad m =&gt; a -&gt; m a
+</span><span class="hs-identifier hs-var">return</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">KeyMask
+</span><span class="hs-number">0</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">KeySym
+</span><span class="hs-number">0</span></span><span class="hs-special">)</span><span>
+</span><span id="line-91"></span><span>    </span><span class="hs-comment">-- Remove num lock mask and Xkb group state bits</span><span>
+</span><span id="line-92"></span><span>    </span><span id="local-6989586621679367180"><span class="annot"><span class="annottext">KeyMask
+</span><a href="#local-6989586621679367180"><span class="hs-identifier hs-var">m'</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">KeyMask -&gt; X KeyMask
+</span><span class="hs-identifier hs-var">cleanMask</span></span><span> </span><span class="annot"><span class="annottext">(KeyMask -&gt; X KeyMask) -&gt; KeyMask -&gt; X KeyMask
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">KeyMask
+</span><a href="#local-6989586621679367198"><span class="hs-identifier hs-var">m</span></a></span><span> </span><span class="annot"><span class="annottext">KeyMask -&gt; KeyMask -&gt; KeyMask
+forall a. Bits a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-operator hs-var">.&amp;.</span></span><span> </span><span class="hs-special">(</span><span class="hs-special">(</span><span class="annot"><span class="annottext">KeyMask
+</span><span class="hs-number">1</span></span><span> </span><span class="annot"><span class="annottext">KeyMask -&gt; Int -&gt; KeyMask
+forall a. Bits a =&gt; a -&gt; Int -&gt; a
+</span><span class="hs-operator hs-var">`shiftL`</span></span><span> </span><span class="annot"><span class="annottext">Int
+</span><span class="hs-number">12</span></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">KeyMask -&gt; KeyMask -&gt; KeyMask
+forall a. Num a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-glyph hs-var">-</span></span><span> </span><span class="annot"><span class="annottext">KeyMask
+</span><span class="hs-number">1</span></span><span class="hs-special">)</span><span>
+</span><span id="line-93"></span><span>
+</span><span id="line-94"></span><span>    </span><span class="annot"><span class="annottext">IO () -&gt; X ()
+forall (m :: * -&gt; *) a. MonadIO m =&gt; IO a -&gt; m a
+</span><span class="hs-identifier hs-var">io</span></span><span> </span><span class="annot"><span class="annottext">(IO () -&gt; X ()) -&gt; IO () -&gt; X ()
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">Display -&gt; KeySym -&gt; IO ()
+</span><span class="hs-identifier hs-var">ungrabPointer</span></span><span> </span><span class="annot"><span class="annottext">Display
+</span><a href="#local-6989586621679367207"><span class="hs-identifier hs-var">d</span></a></span><span> </span><span class="annot"><span class="annottext">KeySym
+</span><span class="hs-identifier hs-var">currentTime</span></span><span>
+</span><span id="line-95"></span><span>    </span><span class="annot"><span class="annottext">IO () -&gt; X ()
+forall (m :: * -&gt; *) a. MonadIO m =&gt; IO a -&gt; m a
+</span><span class="hs-identifier hs-var">io</span></span><span> </span><span class="annot"><span class="annottext">(IO () -&gt; X ()) -&gt; IO () -&gt; X ()
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">Display -&gt; KeySym -&gt; IO ()
+</span><span class="hs-identifier hs-var">ungrabKeyboard</span></span><span> </span><span class="annot"><span class="annottext">Display
+</span><a href="#local-6989586621679367207"><span class="hs-identifier hs-var">d</span></a></span><span> </span><span class="annot"><span class="annottext">KeySym
+</span><span class="hs-identifier hs-var">currentTime</span></span><span>
+</span><span id="line-96"></span><span>    </span><span class="annot"><span class="annottext">IO () -&gt; X ()
+forall (m :: * -&gt; *) a. MonadIO m =&gt; IO a -&gt; m a
+</span><span class="hs-identifier hs-var">io</span></span><span> </span><span class="annot"><span class="annottext">(IO () -&gt; X ()) -&gt; IO () -&gt; X ()
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">Display -&gt; Bool -&gt; IO ()
+</span><span class="hs-identifier hs-var">sync</span></span><span> </span><span class="annot"><span class="annottext">Display
+</span><a href="#local-6989586621679367207"><span class="hs-identifier hs-var">d</span></a></span><span> </span><span class="annot"><span class="annottext">Bool
+</span><span class="hs-identifier hs-var">False</span></span><span>
+</span><span id="line-97"></span><span>
+</span><span id="line-98"></span><span>    </span><span class="annot"><span class="annottext">X () -&gt; Maybe (X ()) -&gt; X ()
+forall a. a -&gt; Maybe a -&gt; a
+</span><span class="hs-identifier hs-var">fromMaybe</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">(KeyMask, KeySym) -&gt; X ()
+</span><a href="#local-6989586621679367213"><span class="hs-identifier hs-var">defAction</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">KeyMask
+</span><a href="#local-6989586621679367180"><span class="hs-identifier hs-var">m'</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">KeySym
+</span><a href="#local-6989586621679367197"><span class="hs-identifier hs-var">s</span></a></span><span class="hs-special">)</span><span class="hs-special">)</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">(KeyMask, KeySym) -&gt; Map (KeyMask, KeySym) (X ()) -&gt; Maybe (X ())
+forall k a. Ord k =&gt; k -&gt; Map k a -&gt; Maybe a
+</span><span class="hs-identifier hs-var">M.lookup</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">KeyMask
+</span><a href="#local-6989586621679367180"><span class="hs-identifier hs-var">m'</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">KeySym
+</span><a href="#local-6989586621679367197"><span class="hs-identifier hs-var">s</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">Map (KeyMask, KeySym) (X ())
+</span><a href="#local-6989586621679367212"><span class="hs-identifier hs-var">keys</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-99"></span></pre></body></html>

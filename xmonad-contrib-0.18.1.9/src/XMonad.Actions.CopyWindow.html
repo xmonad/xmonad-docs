@@ -1,0 +1,495 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd"><html xmlns="http://www.w3.org/1999/xhtml"><head><link rel="stylesheet" type="text/css" href="style.css" /><script type="text/javascript" src="highlight.js"></script></head><body><pre><span class="hs-pragma">{-# LANGUAGE PatternGuards #-}</span><span>
+</span><span id="line-2"></span><span class="hs-pragma">{-# LANGUAGE RecordWildCards #-}</span><span>
+</span><span id="line-3"></span><span class="hs-comment">-----------------------------------------------------------------------------</span><span>
+</span><span id="line-4"></span><span class="hs-comment">-- |</span><span>
+</span><span id="line-5"></span><span class="hs-comment">-- Module      :  XMonad.Actions.CopyWindow</span><span>
+</span><span id="line-6"></span><span class="hs-comment">-- Description :  Duplicate a window on multiple workspaces.</span><span>
+</span><span id="line-7"></span><span class="hs-comment">-- Copyright   :  (c) David Roundy &lt;droundy@darcs.net&gt;, Ivan Veselov &lt;veselov@gmail.com&gt;, Lanny Ripple &lt;lan3ny@gmail.com&gt;</span><span>
+</span><span id="line-8"></span><span class="hs-comment">-- License     :  BSD3-style (see LICENSE)</span><span>
+</span><span id="line-9"></span><span class="hs-comment">--</span><span>
+</span><span id="line-10"></span><span class="hs-comment">-- Maintainer  :  ???</span><span>
+</span><span id="line-11"></span><span class="hs-comment">-- Stability   :  unstable</span><span>
+</span><span id="line-12"></span><span class="hs-comment">-- Portability :  unportable</span><span>
+</span><span id="line-13"></span><span class="hs-comment">--</span><span>
+</span><span id="line-14"></span><span class="hs-comment">-- Provides bindings to duplicate a window on multiple workspaces,</span><span>
+</span><span id="line-15"></span><span class="hs-comment">-- providing dwm-like tagging functionality.</span><span>
+</span><span id="line-16"></span><span class="hs-comment">--</span><span>
+</span><span id="line-17"></span><span class="hs-comment">-----------------------------------------------------------------------------</span><span>
+</span><span id="line-18"></span><span>
+</span><span id="line-19"></span><span class="hs-keyword">module</span><span> </span><span class="hs-identifier">XMonad.Actions.CopyWindow</span><span> </span><span class="hs-special">(</span><span>
+</span><span id="line-20"></span><span>                                 </span><span class="annot"><span class="hs-comment">-- * Usage</span></span><span>
+</span><span id="line-21"></span><span>                                 </span><span class="annot"><span class="hs-comment">-- $usage</span></span><span>
+</span><span id="line-22"></span><span>                                 </span><span class="annot"><a href="XMonad.Actions.CopyWindow.html#copy"><span class="hs-identifier">copy</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><a href="XMonad.Actions.CopyWindow.html#copyToAll"><span class="hs-identifier">copyToAll</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><a href="XMonad.Actions.CopyWindow.html#copyWindow"><span class="hs-identifier">copyWindow</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><a href="XMonad.Actions.CopyWindow.html#runOrCopy"><span class="hs-identifier">runOrCopy</span></a></span><span>
+</span><span id="line-23"></span><span>                                 </span><span class="hs-special">,</span><span> </span><span class="annot"><a href="XMonad.Actions.CopyWindow.html#killAllOtherCopies"><span class="hs-identifier">killAllOtherCopies</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><a href="XMonad.Actions.CopyWindow.html#kill1"><span class="hs-identifier">kill1</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><a href="XMonad.Actions.CopyWindow.html#taggedWindows"><span class="hs-identifier">taggedWindows</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><a href="XMonad.Actions.CopyWindow.html#copiesOfOn"><span class="hs-identifier">copiesOfOn</span></a></span><span>
+</span><span id="line-24"></span><span>                                 </span><span class="annot"><span class="hs-comment">-- * Highlight workspaces containing copies in logHook</span></span><span>
+</span><span id="line-25"></span><span>                                 </span><span class="annot"><span class="hs-comment">-- $logHook</span></span><span>
+</span><span id="line-26"></span><span>                                 </span><span class="hs-special">,</span><span> </span><span class="annot"><a href="XMonad.Actions.CopyWindow.html#wsContainingCopies"><span class="hs-identifier">wsContainingCopies</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><a href="XMonad.Actions.CopyWindow.html#copiesPP"><span class="hs-identifier">copiesPP</span></a></span><span>
+</span><span id="line-27"></span><span>                                </span><span class="hs-special">)</span><span> </span><span class="hs-keyword">where</span><span>
+</span><span id="line-28"></span><span>
+</span><span id="line-29"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><span class="hs-identifier">XMonad</span></span><span>
+</span><span id="line-30"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><a href="XMonad.Prelude.html"><span class="hs-identifier">XMonad.Prelude</span></a></span><span>
+</span><span id="line-31"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><span class="hs-identifier">Control.Arrow</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-operator">(&amp;&amp;&amp;)</span></span><span class="hs-special">)</span><span>
+</span><span id="line-32"></span><span class="hs-keyword">import</span><span> </span><span class="hs-keyword">qualified</span><span> </span><span class="annot"><span class="hs-identifier">Data.List</span></span><span> </span><span class="hs-keyword">as</span><span> </span><span class="annot"><span class="hs-identifier">L</span></span><span>
+</span><span id="line-33"></span><span>
+</span><span id="line-34"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><a href="XMonad.Actions.WindowGo.html"><span class="hs-identifier">XMonad.Actions.WindowGo</span></a></span><span>
+</span><span id="line-35"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><a href="XMonad.Hooks.StatusBar.PP.html"><span class="hs-identifier">XMonad.Hooks.StatusBar.PP</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="XMonad.Hooks.StatusBar.PP.html#PP"><span class="hs-identifier">PP</span></a></span><span class="hs-special">(</span><span class="hs-glyph">..</span><span class="hs-special">)</span><span class="hs-special">,</span><span> </span><span class="annot"><a href="XMonad.Hooks.StatusBar.PP.html#WS"><span class="hs-identifier">WS</span></a></span><span class="hs-special">(</span><span class="hs-glyph">..</span><span class="hs-special">)</span><span class="hs-special">,</span><span> </span><span class="annot"><a href="XMonad.Hooks.StatusBar.PP.html#isHidden"><span class="hs-identifier">isHidden</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-36"></span><span class="hs-keyword">import</span><span> </span><span class="hs-keyword">qualified</span><span> </span><span class="annot"><span class="hs-identifier">XMonad.StackSet</span></span><span> </span><span class="hs-keyword">as</span><span> </span><span class="annot"><span class="hs-identifier">W</span></span><span>
+</span><span id="line-37"></span><span>
+</span><span id="line-38"></span><span class="hs-comment">-- $usage</span><span>
+</span><span id="line-39"></span><span class="hs-comment">--</span><span>
+</span><span id="line-40"></span><span class="hs-comment">-- You can use this module with the following in your @xmonad.hs@ file:</span><span>
+</span><span id="line-41"></span><span class="hs-comment">--</span><span>
+</span><span id="line-42"></span><span class="hs-comment">-- &gt; import XMonad.Actions.CopyWindow</span><span>
+</span><span id="line-43"></span><span class="hs-comment">--</span><span>
+</span><span id="line-44"></span><span class="hs-comment">-- Then add something like this to your keybindings:</span><span>
+</span><span id="line-45"></span><span class="hs-comment">--</span><span>
+</span><span id="line-46"></span><span class="hs-comment">-- &gt; -- mod-[1..9] @@ Switch to workspace N</span><span>
+</span><span id="line-47"></span><span class="hs-comment">-- &gt; -- mod-shift-[1..9] @@ Move client to workspace N</span><span>
+</span><span id="line-48"></span><span class="hs-comment">-- &gt; -- mod-control-shift-[1..9] @@ Copy client to workspace N</span><span>
+</span><span id="line-49"></span><span class="hs-comment">-- &gt; [((m .|. modm, k), windows $ f i)</span><span>
+</span><span id="line-50"></span><span class="hs-comment">-- &gt;     | (i, k) &lt;- zip (workspaces x) [xK_1 ..]</span><span>
+</span><span id="line-51"></span><span class="hs-comment">-- &gt;     , (f, m) &lt;- [(W.view, 0), (W.shift, shiftMask), (copy, shiftMask .|. controlMask)]]</span><span>
+</span><span id="line-52"></span><span class="hs-comment">--</span><span>
+</span><span id="line-53"></span><span class="hs-comment">-- To use the above key bindings you need also to import</span><span>
+</span><span id="line-54"></span><span class="hs-comment">-- &quot;XMonad.StackSet&quot;:</span><span>
+</span><span id="line-55"></span><span class="hs-comment">--</span><span>
+</span><span id="line-56"></span><span class="hs-comment">-- &gt; import qualified XMonad.StackSet as W</span><span>
+</span><span id="line-57"></span><span class="hs-comment">--</span><span>
+</span><span id="line-58"></span><span class="hs-comment">-- You may also wish to redefine the binding to kill a window so it only</span><span>
+</span><span id="line-59"></span><span class="hs-comment">-- removes it from the current workspace, if it's present elsewhere:</span><span>
+</span><span id="line-60"></span><span class="hs-comment">--</span><span>
+</span><span id="line-61"></span><span class="hs-comment">-- &gt;  , ((modm .|. shiftMask, xK_c     ), kill1) -- @@ Close the focused window</span><span>
+</span><span id="line-62"></span><span class="hs-comment">--</span><span>
+</span><span id="line-63"></span><span class="hs-comment">-- Instead of copying a window from one workspace to another maybe you don't</span><span>
+</span><span id="line-64"></span><span class="hs-comment">-- want to have to remember where you placed it.  For that consider:</span><span>
+</span><span id="line-65"></span><span class="hs-comment">--</span><span>
+</span><span id="line-66"></span><span class="hs-comment">-- &gt;  , ((modm, xK_b    ), runOrCopy &quot;firefox&quot; (className =? &quot;Firefox&quot;)) -- @@ run or copy firefox</span><span>
+</span><span id="line-67"></span><span class="hs-comment">--</span><span>
+</span><span id="line-68"></span><span class="hs-comment">-- Another possibility which this extension provides is 'making window</span><span>
+</span><span id="line-69"></span><span class="hs-comment">-- always visible' (i.e. always on current workspace), similar to corresponding</span><span>
+</span><span id="line-70"></span><span class="hs-comment">-- metacity functionality. This behaviour is emulated through copying given</span><span>
+</span><span id="line-71"></span><span class="hs-comment">-- window to all the workspaces and then removing it when it's unneeded on</span><span>
+</span><span id="line-72"></span><span class="hs-comment">-- all workspaces any more.</span><span>
+</span><span id="line-73"></span><span class="hs-comment">--</span><span>
+</span><span id="line-74"></span><span class="hs-comment">-- Here is the example of keybindings which provide these actions:</span><span>
+</span><span id="line-75"></span><span class="hs-comment">--</span><span>
+</span><span id="line-76"></span><span class="hs-comment">-- &gt;  , ((modm, xK_v ), windows copyToAll) -- @@ Make focused window always visible</span><span>
+</span><span id="line-77"></span><span class="hs-comment">-- &gt;  , ((modm .|. shiftMask, xK_v ),  killAllOtherCopies) -- @@ Toggle window state back</span><span>
+</span><span id="line-78"></span><span class="hs-comment">--</span><span>
+</span><span id="line-79"></span><span class="hs-comment">-- For detailed instructions on editing your key bindings, see</span><span>
+</span><span id="line-80"></span><span class="hs-comment">-- &lt;https://xmonad.org/TUTORIAL.html#customizing-xmonad the tutorial&gt;.</span><span>
+</span><span id="line-81"></span><span>
+</span><span id="line-82"></span><span class="hs-comment">-- $logHook</span><span>
+</span><span id="line-83"></span><span class="hs-comment">--</span><span>
+</span><span id="line-84"></span><span class="hs-comment">-- To distinguish workspaces containing copies of the focused window, use 'copiesPP'.</span><span>
+</span><span id="line-85"></span><span class="hs-comment">-- 'copiesPP' takes a pretty printer and makes it aware of copies of the focused window.</span><span>
+</span><span id="line-86"></span><span class="hs-comment">-- It can be applied when creating a 'XMonad.Hooks.StatusBar.StatusBarConfig'.</span><span>
+</span><span id="line-87"></span><span class="hs-comment">--</span><span>
+</span><span id="line-88"></span><span class="hs-comment">-- A sample config looks like this:</span><span>
+</span><span id="line-89"></span><span class="hs-comment">--</span><span>
+</span><span id="line-90"></span><span class="hs-comment">-- &gt; mySB = statusBarProp &quot;xmobar&quot; (copiesPP (pad . xmobarColor &quot;red&quot; &quot;black&quot;) xmobarPP)</span><span>
+</span><span id="line-91"></span><span class="hs-comment">-- &gt; main = xmonad $ withEasySB mySB defToggleStrutsKey def</span><span>
+</span><span id="line-92"></span><span>
+</span><span id="line-93"></span><span class="hs-comment">-- | Take a pretty printer and make it aware of copies by using the provided function</span><span>
+</span><span id="line-94"></span><span class="hs-comment">-- to show hidden workspaces that contain copies of the focused window.</span><span>
+</span><span id="line-95"></span><span class="annot"><a href="XMonad.Actions.CopyWindow.html#copiesPP"><span class="hs-identifier hs-type">copiesPP</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">WorkspaceId</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">String</span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="XMonad.Hooks.StatusBar.PP.html#PP"><span class="hs-identifier hs-type">PP</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">X</span></span><span> </span><span class="annot"><a href="XMonad.Hooks.StatusBar.PP.html#PP"><span class="hs-identifier hs-type">PP</span></a></span><span>
+</span><span id="line-96"></span><span id="copiesPP"><span class="annot"><span class="annottext">copiesPP :: (WorkspaceId -&gt; WorkspaceId) -&gt; PP -&gt; X PP
+</span><a href="XMonad.Actions.CopyWindow.html#copiesPP"><span class="hs-identifier hs-var hs-var">copiesPP</span></a></span></span><span> </span><span id="local-6989586621679470400"><span class="annot"><span class="annottext">WorkspaceId -&gt; WorkspaceId
+</span><a href="#local-6989586621679470400"><span class="hs-identifier hs-var">wtoS</span></a></span></span><span> </span><span id="local-6989586621679470399"><span class="annot"><span class="annottext">PP
+</span><a href="#local-6989586621679470399"><span class="hs-identifier hs-var">pp</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-97"></span><span>    </span><span id="local-6989586621679470398"><span class="annot"><span class="annottext">[WorkspaceId]
+</span><a href="#local-6989586621679470398"><span class="hs-identifier hs-var">copies</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">X [WorkspaceId]
+</span><a href="XMonad.Actions.CopyWindow.html#wsContainingCopies"><span class="hs-identifier hs-var">wsContainingCopies</span></a></span><span>
+</span><span id="line-98"></span><span>    </span><span class="hs-keyword">let</span><span> </span><span id="local-6989586621679470393"><span class="annot"><span class="annottext">check :: WS -&gt; Bool
+</span><a href="#local-6989586621679470393"><span class="hs-identifier hs-var hs-var">check</span></a></span></span><span> </span><span class="annot"><a href="XMonad.Hooks.StatusBar.PP.html#WS"><span class="hs-identifier hs-type">WS</span></a></span><span class="hs-special">{</span><span id="local-6989586621679470388"><span id="local-6989586621679470389"><span id="local-6989586621679470390"><span id="local-6989586621679470391"><span class="annot"><span class="annottext">[Window]
+WindowSet
+WindowSpace
+PP
+wsPP :: WS -&gt; PP
+wsWS :: WS -&gt; WindowSpace
+wsWindowSet :: WS -&gt; WindowSet
+wsUrgents :: WS -&gt; [Window]
+wsPP :: PP
+wsWS :: WindowSpace
+wsWindowSet :: WindowSet
+wsUrgents :: [Window]
+</span><a href="XMonad.Hooks.StatusBar.PP.html#wsPP"><span class="hs-glyph hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var">..</span></a></span></span></span></span></span><span class="hs-special">}</span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">forall i l a. Workspace i l a -&gt; i
+</span><span class="hs-identifier hs-var">W.tag</span></span><span> </span><span class="annot"><span class="annottext">WindowSpace
+</span><a href="#local-6989586621679470389"><span class="hs-identifier hs-var">wsWS</span></a></span><span> </span><span class="annot"><span class="annottext">forall (t :: * -&gt; *) a. (Foldable t, Eq a) =&gt; a -&gt; t a -&gt; Bool
+</span><span class="hs-operator hs-var">`elem`</span></span><span> </span><span class="annot"><span class="annottext">[WorkspaceId]
+</span><a href="#local-6989586621679470398"><span class="hs-identifier hs-var">copies</span></a></span><span>
+</span><span id="line-99"></span><span>    </span><span class="hs-keyword">let</span><span> </span><span id="local-6989586621679470368"><span class="annot"><span class="annottext">printer :: ReaderT WS Maybe (WorkspaceId -&gt; WorkspaceId)
+</span><a href="#local-6989586621679470368"><span class="hs-identifier hs-var hs-var">printer</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">forall r (m :: * -&gt; *) a. MonadReader r m =&gt; (r -&gt; a) -&gt; m a
+</span><span class="hs-identifier hs-var">asks</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">WS -&gt; Bool
+</span><a href="XMonad.Hooks.StatusBar.PP.html#isHidden"><span class="hs-identifier hs-var">isHidden</span></a></span><span> </span><span class="annot"><span class="annottext">forall (m :: * -&gt; *). Monad m =&gt; m Bool -&gt; m Bool -&gt; m Bool
+</span><span class="hs-operator hs-var">&lt;&amp;&amp;&gt;</span></span><span> </span><span class="annot"><span class="annottext">WS -&gt; Bool
+</span><a href="#local-6989586621679470393"><span class="hs-identifier hs-var">check</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">forall (m :: * -&gt; *) a b. Monad m =&gt; m a -&gt; (a -&gt; m b) -&gt; m b
+</span><span class="hs-operator hs-var">&gt;&gt;=</span></span><span> </span><span class="annot"><span class="annottext">forall (f :: * -&gt; *). Alternative f =&gt; Bool -&gt; f ()
+</span><span class="hs-identifier hs-var">guard</span></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">forall (f :: * -&gt; *) a b. Functor f =&gt; f a -&gt; b -&gt; f b
+</span><span class="hs-operator hs-var">$&gt;</span></span><span> </span><span class="annot"><span class="annottext">WorkspaceId -&gt; WorkspaceId
+</span><a href="#local-6989586621679470400"><span class="hs-identifier hs-var">wtoS</span></a></span><span>
+</span><span id="line-100"></span><span>    </span><span class="annot"><span class="annottext">forall (m :: * -&gt; *) a. Monad m =&gt; a -&gt; m a
+</span><span class="hs-identifier hs-var">return</span></span><span> </span><span class="annot"><span class="annottext">PP
+</span><a href="#local-6989586621679470399"><span class="hs-identifier hs-var">pp</span></a></span><span class="hs-special">{</span><span> </span><span class="annot"><span class="annottext">ppPrinters :: ReaderT WS Maybe (WorkspaceId -&gt; WorkspaceId)
+</span><a href="XMonad.Hooks.StatusBar.PP.html#ppPrinters"><span class="hs-identifier hs-var">ppPrinters</span></a></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">ReaderT WS Maybe (WorkspaceId -&gt; WorkspaceId)
+</span><a href="#local-6989586621679470368"><span class="hs-identifier hs-var">printer</span></a></span><span> </span><span class="annot"><span class="annottext">forall (f :: * -&gt; *) a. Alternative f =&gt; f a -&gt; f a -&gt; f a
+</span><span class="hs-operator hs-var">&lt;|&gt;</span></span><span> </span><span class="annot"><span class="annottext">PP -&gt; ReaderT WS Maybe (WorkspaceId -&gt; WorkspaceId)
+</span><a href="XMonad.Hooks.StatusBar.PP.html#ppPrinters"><span class="hs-identifier hs-var">ppPrinters</span></a></span><span> </span><span class="annot"><span class="annottext">PP
+</span><a href="#local-6989586621679470399"><span class="hs-identifier hs-var">pp</span></a></span><span> </span><span class="hs-special">}</span><span>
+</span><span id="line-101"></span><span>
+</span><span id="line-102"></span><span class="hs-comment">-- | Copy the focused window to a workspace.</span><span>
+</span><span id="line-103"></span><span id="local-6989586621679470605"><span id="local-6989586621679470606"><span id="local-6989586621679470607"><span id="local-6989586621679470608"><span id="local-6989586621679470609"><span class="annot"><a href="XMonad.Actions.CopyWindow.html#copy"><span class="hs-identifier hs-type">copy</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">Eq</span></span><span> </span><span class="annot"><a href="#local-6989586621679470609"><span class="hs-identifier hs-type">s</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Eq</span></span><span> </span><span class="annot"><a href="#local-6989586621679470608"><span class="hs-identifier hs-type">i</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Eq</span></span><span> </span><span class="annot"><a href="#local-6989586621679470607"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=&gt;</span><span> </span><span class="annot"><a href="#local-6989586621679470608"><span class="hs-identifier hs-type">i</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">W.StackSet</span></span><span> </span><span class="annot"><a href="#local-6989586621679470608"><span class="hs-identifier hs-type">i</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679470606"><span class="hs-identifier hs-type">l</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679470607"><span class="hs-identifier hs-type">a</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679470609"><span class="hs-identifier hs-type">s</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679470605"><span class="hs-identifier hs-type">sd</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">W.StackSet</span></span><span> </span><span class="annot"><a href="#local-6989586621679470608"><span class="hs-identifier hs-type">i</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679470606"><span class="hs-identifier hs-type">l</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679470607"><span class="hs-identifier hs-type">a</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679470609"><span class="hs-identifier hs-type">s</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679470605"><span class="hs-identifier hs-type">sd</span></a></span></span></span></span></span></span><span>
+</span><span id="line-104"></span><span id="copy"><span class="annot"><span class="annottext">copy :: forall s i a l sd.
+(Eq s, Eq i, Eq a) =&gt;
+i -&gt; StackSet i l a s sd -&gt; StackSet i l a s sd
+</span><a href="XMonad.Actions.CopyWindow.html#copy"><span class="hs-identifier hs-var hs-var">copy</span></a></span></span><span> </span><span id="local-6989586621679470356"><span class="annot"><span class="annottext">i
+</span><a href="#local-6989586621679470356"><span class="hs-identifier hs-var">n</span></a></span></span><span> </span><span id="local-6989586621679470355"><span class="annot"><span class="annottext">StackSet i l a s sd
+</span><a href="#local-6989586621679470355"><span class="hs-identifier hs-var">s</span></a></span></span><span> </span><span class="hs-glyph">|</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Just</span></span><span> </span><span id="local-6989586621679470354"><span class="annot"><span class="annottext">a
+</span><a href="#local-6989586621679470354"><span class="hs-identifier hs-var">w</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">forall i l a s sd. StackSet i l a s sd -&gt; Maybe a
+</span><span class="hs-identifier hs-var">W.peek</span></span><span> </span><span class="annot"><span class="annottext">StackSet i l a s sd
+</span><a href="#local-6989586621679470355"><span class="hs-identifier hs-var">s</span></a></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">forall a i s l sd.
+(Eq a, Eq i, Eq s) =&gt;
+a -&gt; i -&gt; StackSet i l a s sd -&gt; StackSet i l a s sd
+</span><a href="XMonad.Actions.CopyWindow.html#copyWindow"><span class="hs-identifier hs-var">copyWindow</span></a></span><span> </span><span class="annot"><span class="annottext">a
+</span><a href="#local-6989586621679470354"><span class="hs-identifier hs-var">w</span></a></span><span> </span><span class="annot"><span class="annottext">i
+</span><a href="#local-6989586621679470356"><span class="hs-identifier hs-var">n</span></a></span><span> </span><span class="annot"><span class="annottext">StackSet i l a s sd
+</span><a href="#local-6989586621679470355"><span class="hs-identifier hs-var">s</span></a></span><span>
+</span><span id="line-105"></span><span>         </span><span class="hs-glyph">|</span><span> </span><span class="annot"><span class="annottext">Bool
+</span><span class="hs-identifier hs-var">otherwise</span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">StackSet i l a s sd
+</span><a href="#local-6989586621679470355"><span class="hs-identifier hs-var">s</span></a></span><span>
+</span><span id="line-106"></span><span>
+</span><span id="line-107"></span><span class="hs-comment">-- | Copy the focused window to all workspaces.</span><span>
+</span><span id="line-108"></span><span id="local-6989586621679470584"><span id="local-6989586621679470585"><span id="local-6989586621679470586"><span id="local-6989586621679470587"><span id="local-6989586621679470588"><span class="annot"><a href="XMonad.Actions.CopyWindow.html#copyToAll"><span class="hs-identifier hs-type">copyToAll</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">Eq</span></span><span> </span><span class="annot"><a href="#local-6989586621679470588"><span class="hs-identifier hs-type">s</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Eq</span></span><span> </span><span class="annot"><a href="#local-6989586621679470587"><span class="hs-identifier hs-type">i</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Eq</span></span><span> </span><span class="annot"><a href="#local-6989586621679470586"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">W.StackSet</span></span><span> </span><span class="annot"><a href="#local-6989586621679470587"><span class="hs-identifier hs-type">i</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679470585"><span class="hs-identifier hs-type">l</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679470586"><span class="hs-identifier hs-type">a</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679470588"><span class="hs-identifier hs-type">s</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679470584"><span class="hs-identifier hs-type">sd</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">W.StackSet</span></span><span> </span><span class="annot"><a href="#local-6989586621679470587"><span class="hs-identifier hs-type">i</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679470585"><span class="hs-identifier hs-type">l</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679470586"><span class="hs-identifier hs-type">a</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679470588"><span class="hs-identifier hs-type">s</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679470584"><span class="hs-identifier hs-type">sd</span></a></span></span></span></span></span></span><span>
+</span><span id="line-109"></span><span id="copyToAll"><span class="annot"><span class="annottext">copyToAll :: forall s i a l sd.
+(Eq s, Eq i, Eq a) =&gt;
+StackSet i l a s sd -&gt; StackSet i l a s sd
+</span><a href="XMonad.Actions.CopyWindow.html#copyToAll"><span class="hs-identifier hs-var hs-var">copyToAll</span></a></span></span><span> </span><span id="local-6989586621679470345"><span class="annot"><span class="annottext">StackSet i l a s sd
+</span><a href="#local-6989586621679470345"><span class="hs-identifier hs-var">s</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">forall (t :: * -&gt; *) a b.
+Foldable t =&gt;
+(a -&gt; b -&gt; b) -&gt; b -&gt; t a -&gt; b
+</span><span class="hs-identifier hs-var">foldr</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">forall s i a l sd.
+(Eq s, Eq i, Eq a) =&gt;
+i -&gt; StackSet i l a s sd -&gt; StackSet i l a s sd
+</span><a href="XMonad.Actions.CopyWindow.html#copy"><span class="hs-identifier hs-var">copy</span></a></span><span> </span><span class="annot"><span class="annottext">forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">forall i l a. Workspace i l a -&gt; i
+</span><span class="hs-identifier hs-var">W.tag</span></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">StackSet i l a s sd
+</span><a href="#local-6989586621679470345"><span class="hs-identifier hs-var">s</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">forall i l a s sd. StackSet i l a s sd -&gt; [Workspace i l a]
+</span><span class="hs-identifier hs-var">W.workspaces</span></span><span> </span><span class="annot"><span class="annottext">StackSet i l a s sd
+</span><a href="#local-6989586621679470345"><span class="hs-identifier hs-var">s</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-110"></span><span>
+</span><span id="line-111"></span><span class="hs-comment">-- | Copy an arbitrary window to a workspace.</span><span>
+</span><span id="line-112"></span><span id="local-6989586621679470589"><span id="local-6989586621679470590"><span id="local-6989586621679470591"><span id="local-6989586621679470592"><span id="local-6989586621679470593"><span class="annot"><a href="XMonad.Actions.CopyWindow.html#copyWindow"><span class="hs-identifier hs-type">copyWindow</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">Eq</span></span><span> </span><span class="annot"><a href="#local-6989586621679470593"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Eq</span></span><span> </span><span class="annot"><a href="#local-6989586621679470592"><span class="hs-identifier hs-type">i</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Eq</span></span><span> </span><span class="annot"><a href="#local-6989586621679470591"><span class="hs-identifier hs-type">s</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=&gt;</span><span> </span><span class="annot"><a href="#local-6989586621679470593"><span class="hs-identifier hs-type">a</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="#local-6989586621679470592"><span class="hs-identifier hs-type">i</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">W.StackSet</span></span><span> </span><span class="annot"><a href="#local-6989586621679470592"><span class="hs-identifier hs-type">i</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679470590"><span class="hs-identifier hs-type">l</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679470593"><span class="hs-identifier hs-type">a</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679470591"><span class="hs-identifier hs-type">s</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679470589"><span class="hs-identifier hs-type">sd</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">W.StackSet</span></span><span> </span><span class="annot"><a href="#local-6989586621679470592"><span class="hs-identifier hs-type">i</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679470590"><span class="hs-identifier hs-type">l</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679470593"><span class="hs-identifier hs-type">a</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679470591"><span class="hs-identifier hs-type">s</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679470589"><span class="hs-identifier hs-type">sd</span></a></span></span></span></span></span></span><span>
+</span><span id="line-113"></span><span id="copyWindow"><span class="annot"><span class="annottext">copyWindow :: forall a i s l sd.
+(Eq a, Eq i, Eq s) =&gt;
+a -&gt; i -&gt; StackSet i l a s sd -&gt; StackSet i l a s sd
+</span><a href="XMonad.Actions.CopyWindow.html#copyWindow"><span class="hs-identifier hs-var hs-var">copyWindow</span></a></span></span><span> </span><span id="local-6989586621679470337"><span class="annot"><span class="annottext">a
+</span><a href="#local-6989586621679470337"><span class="hs-identifier hs-var">w</span></a></span></span><span> </span><span id="local-6989586621679470336"><span class="annot"><span class="annottext">i
+</span><a href="#local-6989586621679470336"><span class="hs-identifier hs-var">n</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">forall {s} {l} {sd}.
+Eq s =&gt;
+StackSet i l a s sd -&gt; StackSet i l a s sd
+</span><a href="#local-6989586621679470335"><span class="hs-identifier hs-var">copy'</span></a></span><span>
+</span><span id="line-114"></span><span>    </span><span class="hs-keyword">where</span><span> </span><span id="local-6989586621679470335"><span class="annot"><span class="annottext">copy' :: StackSet i l a s sd -&gt; StackSet i l a s sd
+</span><a href="#local-6989586621679470335"><span class="hs-identifier hs-var hs-var">copy'</span></a></span></span><span> </span><span id="local-6989586621679470327"><span class="annot"><span class="annottext">StackSet i l a s sd
+</span><a href="#local-6989586621679470327"><span class="hs-identifier hs-var">s</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-keyword">if</span><span> </span><span class="annot"><span class="annottext">i
+</span><a href="#local-6989586621679470336"><span class="hs-identifier hs-var">n</span></a></span><span> </span><span class="annot"><span class="annottext">forall i l a s sd. Eq i =&gt; i -&gt; StackSet i l a s sd -&gt; Bool
+</span><span class="hs-operator hs-var">`W.tagMember`</span></span><span> </span><span class="annot"><span class="annottext">StackSet i l a s sd
+</span><a href="#local-6989586621679470327"><span class="hs-identifier hs-var">s</span></a></span><span>
+</span><span id="line-115"></span><span>                    </span><span class="hs-keyword">then</span><span> </span><span class="annot"><span class="annottext">forall s i l a sd.
+(Eq s, Eq i) =&gt;
+i -&gt; StackSet i l a s sd -&gt; StackSet i l a s sd
+</span><span class="hs-identifier hs-var">W.view</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">forall i l a s sd. StackSet i l a s sd -&gt; i
+</span><span class="hs-identifier hs-var">W.currentTag</span></span><span> </span><span class="annot"><span class="annottext">StackSet i l a s sd
+</span><a href="#local-6989586621679470327"><span class="hs-identifier hs-var">s</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">forall {a} {i} {l} {s} {sd}.
+Eq a =&gt;
+a -&gt; StackSet i l a s sd -&gt; StackSet i l a s sd
+</span><a href="#local-6989586621679470323"><span class="hs-identifier hs-var">insertUp'</span></a></span><span> </span><span class="annot"><span class="annottext">a
+</span><a href="#local-6989586621679470337"><span class="hs-identifier hs-var">w</span></a></span><span> </span><span class="annot"><span class="annottext">forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">forall s i l a sd.
+(Eq s, Eq i) =&gt;
+i -&gt; StackSet i l a s sd -&gt; StackSet i l a s sd
+</span><span class="hs-identifier hs-var">W.view</span></span><span> </span><span class="annot"><span class="annottext">i
+</span><a href="#local-6989586621679470336"><span class="hs-identifier hs-var">n</span></a></span><span> </span><span class="annot"><span class="annottext">StackSet i l a s sd
+</span><a href="#local-6989586621679470327"><span class="hs-identifier hs-var">s</span></a></span><span>
+</span><span id="line-116"></span><span>                    </span><span class="hs-keyword">else</span><span> </span><span class="annot"><span class="annottext">StackSet i l a s sd
+</span><a href="#local-6989586621679470327"><span class="hs-identifier hs-var">s</span></a></span><span>
+</span><span id="line-117"></span><span>          </span><span id="local-6989586621679470323"><span class="annot"><span class="annottext">insertUp' :: a -&gt; StackSet i l a s sd -&gt; StackSet i l a s sd
+</span><a href="#local-6989586621679470323"><span class="hs-identifier hs-var hs-var">insertUp'</span></a></span></span><span> </span><span id="local-6989586621679470317"><span class="annot"><span class="annottext">a
+</span><a href="#local-6989586621679470317"><span class="hs-identifier hs-var">a</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">forall a i l s sd.
+Maybe (Stack a)
+-&gt; (Stack a -&gt; Maybe (Stack a))
+-&gt; StackSet i l a s sd
+-&gt; StackSet i l a s sd
+</span><span class="hs-identifier hs-var">W.modify</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">forall a. a -&gt; Maybe a
+</span><span class="hs-identifier hs-var">Just</span></span><span> </span><span class="annot"><span class="annottext">forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">forall a. a -&gt; [a] -&gt; [a] -&gt; Stack a
+</span><span class="hs-identifier hs-var">W.Stack</span></span><span> </span><span class="annot"><span class="annottext">a
+</span><a href="#local-6989586621679470317"><span class="hs-identifier hs-var">a</span></a></span><span> </span><span class="hs-special">[</span><span class="hs-special">]</span><span> </span><span class="hs-special">[</span><span class="hs-special">]</span><span class="hs-special">)</span><span>
+</span><span id="line-118"></span><span>                          </span><span class="hs-special">(</span><span class="hs-glyph">\</span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">W.Stack</span></span><span> </span><span id="local-6989586621679470314"><span class="annot"><span class="annottext">a
+</span><a href="#local-6989586621679470314"><span class="hs-identifier hs-var">t</span></a></span></span><span> </span><span id="local-6989586621679470313"><span class="annot"><span class="annottext">[a]
+</span><a href="#local-6989586621679470313"><span class="hs-identifier hs-var">l</span></a></span></span><span> </span><span id="local-6989586621679470312"><span class="annot"><span class="annottext">[a]
+</span><a href="#local-6989586621679470312"><span class="hs-identifier hs-var">r</span></a></span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="hs-keyword">if</span><span> </span><span class="annot"><span class="annottext">a
+</span><a href="#local-6989586621679470317"><span class="hs-identifier hs-var">a</span></a></span><span> </span><span class="annot"><span class="annottext">forall (t :: * -&gt; *) a. (Foldable t, Eq a) =&gt; a -&gt; t a -&gt; Bool
+</span><span class="hs-operator hs-var">`elem`</span></span><span> </span><span class="annot"><span class="annottext">a
+</span><a href="#local-6989586621679470314"><span class="hs-identifier hs-var">t</span></a></span><span class="annot"><span class="annottext">forall a. a -&gt; [a] -&gt; [a]
+</span><span class="hs-glyph hs-var">:</span></span><span class="annot"><span class="annottext">[a]
+</span><a href="#local-6989586621679470313"><span class="hs-identifier hs-var">l</span></a></span><span class="annot"><span class="annottext">forall a. [a] -&gt; [a] -&gt; [a]
+</span><span class="hs-operator hs-var">++</span></span><span class="annot"><span class="annottext">[a]
+</span><a href="#local-6989586621679470312"><span class="hs-identifier hs-var">r</span></a></span><span>
+</span><span id="line-119"></span><span>                                             </span><span class="hs-keyword">then</span><span> </span><span class="annot"><span class="annottext">forall a. a -&gt; Maybe a
+</span><span class="hs-identifier hs-var">Just</span></span><span> </span><span class="annot"><span class="annottext">forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">forall a. a -&gt; [a] -&gt; [a] -&gt; Stack a
+</span><span class="hs-identifier hs-var">W.Stack</span></span><span> </span><span class="annot"><span class="annottext">a
+</span><a href="#local-6989586621679470314"><span class="hs-identifier hs-var">t</span></a></span><span> </span><span class="annot"><span class="annottext">[a]
+</span><a href="#local-6989586621679470313"><span class="hs-identifier hs-var">l</span></a></span><span> </span><span class="annot"><span class="annottext">[a]
+</span><a href="#local-6989586621679470312"><span class="hs-identifier hs-var">r</span></a></span><span>
+</span><span id="line-120"></span><span>                                             </span><span class="hs-keyword">else</span><span> </span><span class="annot"><span class="annottext">forall a. a -&gt; Maybe a
+</span><span class="hs-identifier hs-var">Just</span></span><span> </span><span class="annot"><span class="annottext">forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">forall a. a -&gt; [a] -&gt; [a] -&gt; Stack a
+</span><span class="hs-identifier hs-var">W.Stack</span></span><span> </span><span class="annot"><span class="annottext">a
+</span><a href="#local-6989586621679470317"><span class="hs-identifier hs-var">a</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">forall a. Eq a =&gt; a -&gt; [a] -&gt; [a]
+</span><span class="hs-identifier hs-var">L.delete</span></span><span> </span><span class="annot"><span class="annottext">a
+</span><a href="#local-6989586621679470317"><span class="hs-identifier hs-var">a</span></a></span><span> </span><span class="annot"><span class="annottext">[a]
+</span><a href="#local-6989586621679470313"><span class="hs-identifier hs-var">l</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">forall a. Eq a =&gt; a -&gt; [a] -&gt; [a]
+</span><span class="hs-identifier hs-var">L.delete</span></span><span> </span><span class="annot"><span class="annottext">a
+</span><a href="#local-6989586621679470317"><span class="hs-identifier hs-var">a</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">a
+</span><a href="#local-6989586621679470314"><span class="hs-identifier hs-var">t</span></a></span><span class="annot"><span class="annottext">forall a. a -&gt; [a] -&gt; [a]
+</span><span class="hs-glyph hs-var">:</span></span><span class="annot"><span class="annottext">[a]
+</span><a href="#local-6989586621679470312"><span class="hs-identifier hs-var">r</span></a></span><span class="hs-special">)</span><span class="hs-special">)</span><span class="hs-special">)</span><span>
+</span><span id="line-121"></span><span>
+</span><span id="line-122"></span><span>
+</span><span id="line-123"></span><span class="hs-comment">-- | runOrCopy will run the provided shell command unless it can</span><span>
+</span><span id="line-124"></span><span class="hs-comment">--  find a specified window in which case it will copy the window to</span><span>
+</span><span id="line-125"></span><span class="hs-comment">--  the current workspace.  Similar to (i.e., stolen from) &quot;XMonad.Actions.WindowGo&quot;.</span><span>
+</span><span id="line-126"></span><span class="annot"><a href="XMonad.Actions.CopyWindow.html#runOrCopy"><span class="hs-identifier hs-type">runOrCopy</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">String</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Query</span></span><span> </span><span class="annot"><span class="hs-identifier hs-type">Bool</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">X</span></span><span> </span><span class="hs-special">(</span><span class="hs-special">)</span><span>
+</span><span id="line-127"></span><span id="runOrCopy"><span class="annot"><span class="annottext">runOrCopy :: WorkspaceId -&gt; Query Bool -&gt; X ()
+</span><a href="XMonad.Actions.CopyWindow.html#runOrCopy"><span class="hs-identifier hs-var hs-var">runOrCopy</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">X () -&gt; Query Bool -&gt; X ()
+</span><a href="XMonad.Actions.CopyWindow.html#copyMaybe"><span class="hs-identifier hs-var">copyMaybe</span></a></span><span> </span><span class="annot"><span class="annottext">forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">forall (m :: * -&gt; *). MonadIO m =&gt; WorkspaceId -&gt; m ()
+</span><span class="hs-identifier hs-var">spawn</span></span><span>
+</span><span id="line-128"></span><span>
+</span><span id="line-129"></span><span class="hs-comment">-- | Copy a window if it exists, run the first argument otherwise.</span><span>
+</span><span id="line-130"></span><span class="annot"><a href="XMonad.Actions.CopyWindow.html#copyMaybe"><span class="hs-identifier hs-type">copyMaybe</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">X</span></span><span> </span><span class="hs-special">(</span><span class="hs-special">)</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Query</span></span><span> </span><span class="annot"><span class="hs-identifier hs-type">Bool</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">X</span></span><span> </span><span class="hs-special">(</span><span class="hs-special">)</span><span>
+</span><span id="line-131"></span><span id="copyMaybe"><span class="annot"><span class="annottext">copyMaybe :: X () -&gt; Query Bool -&gt; X ()
+</span><a href="XMonad.Actions.CopyWindow.html#copyMaybe"><span class="hs-identifier hs-var hs-var">copyMaybe</span></a></span></span><span> </span><span id="local-6989586621679470308"><span class="annot"><span class="annottext">X ()
+</span><a href="#local-6989586621679470308"><span class="hs-identifier hs-var">f</span></a></span></span><span> </span><span id="local-6989586621679470307"><span class="annot"><span class="annottext">Query Bool
+</span><a href="#local-6989586621679470307"><span class="hs-identifier hs-var">qry</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Query Bool -&gt; ManageHook -&gt; X () -&gt; X ()
+</span><a href="XMonad.Actions.WindowGo.html#ifWindow"><span class="hs-identifier hs-var">ifWindow</span></a></span><span> </span><span class="annot"><span class="annottext">Query Bool
+</span><a href="#local-6989586621679470307"><span class="hs-identifier hs-var">qry</span></a></span><span> </span><span class="annot"><span class="annottext">forall {l} {sd}.
+Query (Endo (StackSet WorkspaceId l Window ScreenId sd))
+</span><a href="#local-6989586621679470305"><span class="hs-identifier hs-var">copyWin</span></a></span><span> </span><span class="annot"><span class="annottext">X ()
+</span><a href="#local-6989586621679470308"><span class="hs-identifier hs-var">f</span></a></span><span>
+</span><span id="line-132"></span><span>    </span><span class="hs-keyword">where</span><span> </span><span id="local-6989586621679470305"><span class="annot"><span class="annottext">copyWin :: Query (Endo (StackSet WorkspaceId l Window ScreenId sd))
+</span><a href="#local-6989586621679470305"><span class="hs-identifier hs-var hs-var">copyWin</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">forall r (m :: * -&gt; *). MonadReader r m =&gt; m r
+</span><span class="hs-identifier hs-var">ask</span></span><span> </span><span class="annot"><span class="annottext">forall (m :: * -&gt; *) a b. Monad m =&gt; m a -&gt; (a -&gt; m b) -&gt; m b
+</span><span class="hs-operator hs-var">&gt;&gt;=</span></span><span> </span><span class="hs-glyph">\</span><span id="local-6989586621679470296"><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679470296"><span class="hs-identifier hs-var">w</span></a></span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">forall s. (s -&gt; s) -&gt; Query (Endo s)
+</span><span class="hs-identifier hs-var">doF</span></span><span> </span><span class="hs-special">(</span><span class="hs-glyph">\</span><span id="local-6989586621679470294"><span class="annot"><span class="annottext">StackSet WorkspaceId l Window ScreenId sd
+</span><a href="#local-6989586621679470294"><span class="hs-identifier hs-var">ws</span></a></span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">forall a i s l sd.
+(Eq a, Eq i, Eq s) =&gt;
+a -&gt; i -&gt; StackSet i l a s sd -&gt; StackSet i l a s sd
+</span><a href="XMonad.Actions.CopyWindow.html#copyWindow"><span class="hs-identifier hs-var">copyWindow</span></a></span><span> </span><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679470296"><span class="hs-identifier hs-var">w</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">forall i l a s sd. StackSet i l a s sd -&gt; i
+</span><span class="hs-identifier hs-var">W.currentTag</span></span><span> </span><span class="annot"><span class="annottext">StackSet WorkspaceId l Window ScreenId sd
+</span><a href="#local-6989586621679470294"><span class="hs-identifier hs-var">ws</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">StackSet WorkspaceId l Window ScreenId sd
+</span><a href="#local-6989586621679470294"><span class="hs-identifier hs-var">ws</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-133"></span><span>
+</span><span id="line-134"></span><span class="hs-comment">-- | Remove the focused window from this workspace.  If it's present in no</span><span>
+</span><span id="line-135"></span><span class="hs-comment">-- other workspace, then kill it instead. If we do kill it, we'll get a</span><span>
+</span><span id="line-136"></span><span class="hs-comment">-- delete notify back from X.</span><span>
+</span><span id="line-137"></span><span class="hs-comment">--</span><span>
+</span><span id="line-138"></span><span class="hs-comment">-- There are two ways to delete a window. Either just kill it, or if it</span><span>
+</span><span id="line-139"></span><span class="hs-comment">-- supports the delete protocol, send a delete event (e.g. firefox).</span><span>
+</span><span id="line-140"></span><span class="annot"><a href="XMonad.Actions.CopyWindow.html#kill1"><span class="hs-identifier hs-type">kill1</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">X</span></span><span> </span><span class="hs-special">(</span><span class="hs-special">)</span><span>
+</span><span id="line-141"></span><span id="kill1"><span class="annot"><span class="annottext">kill1 :: X ()
+</span><a href="XMonad.Actions.CopyWindow.html#kill1"><span class="hs-identifier hs-var hs-var">kill1</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-keyword">do</span><span> </span><span id="local-6989586621679470293"><span class="annot"><span class="annottext">WindowSet
+</span><a href="#local-6989586621679470293"><span class="hs-identifier hs-var">ss</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">forall s (m :: * -&gt; *) a. MonadState s m =&gt; (s -&gt; a) -&gt; m a
+</span><span class="hs-identifier hs-var">gets</span></span><span> </span><span class="annot"><span class="annottext">XState -&gt; WindowSet
+</span><span class="hs-identifier hs-var">windowset</span></span><span>
+</span><span id="line-142"></span><span>           </span><span class="annot"><span class="annottext">forall (m :: * -&gt; *) a. Monad m =&gt; Maybe a -&gt; (a -&gt; m ()) -&gt; m ()
+</span><span class="hs-identifier hs-var">whenJust</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">forall i l a s sd. StackSet i l a s sd -&gt; Maybe a
+</span><span class="hs-identifier hs-var">W.peek</span></span><span> </span><span class="annot"><span class="annottext">WindowSet
+</span><a href="#local-6989586621679470293"><span class="hs-identifier hs-var">ss</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="hs-glyph">\</span><span id="local-6989586621679470289"><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679470289"><span class="hs-identifier hs-var">w</span></a></span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="hs-keyword">if</span><span> </span><span class="annot"><span class="annottext">forall a i l s sd. Eq a =&gt; a -&gt; StackSet i l a s sd -&gt; Bool
+</span><span class="hs-identifier hs-var">W.member</span></span><span> </span><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679470289"><span class="hs-identifier hs-var">w</span></a></span><span> </span><span class="annot"><span class="annottext">forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">forall {a} {i} {l} {s} {sd}.
+Eq a =&gt;
+a -&gt; StackSet i l a s sd -&gt; StackSet i l a s sd
+</span><a href="#local-6989586621679470287"><span class="hs-identifier hs-var">delete''</span></a></span><span> </span><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679470289"><span class="hs-identifier hs-var">w</span></a></span><span> </span><span class="annot"><span class="annottext">WindowSet
+</span><a href="#local-6989586621679470293"><span class="hs-identifier hs-var">ss</span></a></span><span>
+</span><span id="line-143"></span><span>                                      </span><span class="hs-keyword">then</span><span> </span><span class="annot"><span class="annottext">(WindowSet -&gt; WindowSet) -&gt; X ()
+</span><span class="hs-identifier hs-var">windows</span></span><span> </span><span class="annot"><span class="annottext">forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">forall {a} {i} {l} {s} {sd}.
+Eq a =&gt;
+a -&gt; StackSet i l a s sd -&gt; StackSet i l a s sd
+</span><a href="#local-6989586621679470287"><span class="hs-identifier hs-var">delete''</span></a></span><span> </span><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679470289"><span class="hs-identifier hs-var">w</span></a></span><span>
+</span><span id="line-144"></span><span>                                      </span><span class="hs-keyword">else</span><span> </span><span class="annot"><span class="annottext">X ()
+</span><span class="hs-identifier hs-var">kill</span></span><span>
+</span><span id="line-145"></span><span>    </span><span class="hs-keyword">where</span><span> </span><span id="local-6989586621679470287"><span class="annot"><span class="annottext">delete'' :: a -&gt; StackSet i l a s sd -&gt; StackSet i l a s sd
+</span><a href="#local-6989586621679470287"><span class="hs-identifier hs-var hs-var">delete''</span></a></span></span><span> </span><span id="local-6989586621679470282"><span class="annot"><span class="annottext">a
+</span><a href="#local-6989586621679470282"><span class="hs-identifier hs-var">w</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">forall a i l s sd.
+Maybe (Stack a)
+-&gt; (Stack a -&gt; Maybe (Stack a))
+-&gt; StackSet i l a s sd
+-&gt; StackSet i l a s sd
+</span><span class="hs-identifier hs-var">W.modify</span></span><span> </span><span class="annot"><span class="annottext">forall a. Maybe a
+</span><span class="hs-identifier hs-var">Nothing</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">forall a. (a -&gt; Bool) -&gt; Stack a -&gt; Maybe (Stack a)
+</span><span class="hs-identifier hs-var">W.filter</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">forall a. Eq a =&gt; a -&gt; a -&gt; Bool
+</span><span class="hs-operator hs-var">/=</span></span><span> </span><span class="annot"><span class="annottext">a
+</span><a href="#local-6989586621679470282"><span class="hs-identifier hs-var">w</span></a></span><span class="hs-special">)</span><span class="hs-special">)</span><span>
+</span><span id="line-146"></span><span>
+</span><span id="line-147"></span><span class="hs-comment">-- | Kill all other copies of focused window (if they're present).</span><span>
+</span><span id="line-148"></span><span class="hs-comment">-- 'All other' means here 'copies which are not on the current workspace'.</span><span>
+</span><span id="line-149"></span><span class="annot"><a href="XMonad.Actions.CopyWindow.html#killAllOtherCopies"><span class="hs-identifier hs-type">killAllOtherCopies</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">X</span></span><span> </span><span class="hs-special">(</span><span class="hs-special">)</span><span>
+</span><span id="line-150"></span><span id="killAllOtherCopies"><span class="annot"><span class="annottext">killAllOtherCopies :: X ()
+</span><a href="XMonad.Actions.CopyWindow.html#killAllOtherCopies"><span class="hs-identifier hs-var hs-var">killAllOtherCopies</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-keyword">do</span><span> </span><span id="local-6989586621679470279"><span class="annot"><span class="annottext">WindowSet
+</span><a href="#local-6989586621679470279"><span class="hs-identifier hs-var">ss</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">forall s (m :: * -&gt; *) a. MonadState s m =&gt; (s -&gt; a) -&gt; m a
+</span><span class="hs-identifier hs-var">gets</span></span><span> </span><span class="annot"><span class="annottext">XState -&gt; WindowSet
+</span><span class="hs-identifier hs-var">windowset</span></span><span>
+</span><span id="line-151"></span><span>                        </span><span class="annot"><span class="annottext">forall (m :: * -&gt; *) a. Monad m =&gt; Maybe a -&gt; (a -&gt; m ()) -&gt; m ()
+</span><span class="hs-identifier hs-var">whenJust</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">forall i l a s sd. StackSet i l a s sd -&gt; Maybe a
+</span><span class="hs-identifier hs-var">W.peek</span></span><span> </span><span class="annot"><span class="annottext">WindowSet
+</span><a href="#local-6989586621679470279"><span class="hs-identifier hs-var">ss</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="hs-glyph">\</span><span id="local-6989586621679470278"><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679470278"><span class="hs-identifier hs-var">w</span></a></span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">(WindowSet -&gt; WindowSet) -&gt; X ()
+</span><span class="hs-identifier hs-var">windows</span></span><span> </span><span class="annot"><span class="annottext">forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span>
+</span><span id="line-152"></span><span>                                                   </span><span class="annot"><span class="annottext">forall s i l a sd.
+(Eq s, Eq i) =&gt;
+i -&gt; StackSet i l a s sd -&gt; StackSet i l a s sd
+</span><span class="hs-identifier hs-var">W.view</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">forall i l a s sd. StackSet i l a s sd -&gt; i
+</span><span class="hs-identifier hs-var">W.currentTag</span></span><span> </span><span class="annot"><span class="annottext">WindowSet
+</span><a href="#local-6989586621679470279"><span class="hs-identifier hs-var">ss</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span>
+</span><span id="line-153"></span><span>                                                   </span><span class="annot"><span class="annottext">forall {sid} {b} {a} {l} {sd}.
+(Eq sid, Eq b, Eq a) =&gt;
+a -&gt; StackSet b l a sid sd -&gt; StackSet b l a sid sd
+</span><a href="#local-6989586621679470277"><span class="hs-identifier hs-var">delFromAllButCurrent</span></a></span><span> </span><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679470278"><span class="hs-identifier hs-var">w</span></a></span><span>
+</span><span id="line-154"></span><span>    </span><span class="hs-keyword">where</span><span>
+</span><span id="line-155"></span><span>      </span><span id="local-6989586621679470277"><span class="annot"><span class="annottext">delFromAllButCurrent :: a -&gt; StackSet b l a sid sd -&gt; StackSet b l a sid sd
+</span><a href="#local-6989586621679470277"><span class="hs-identifier hs-var hs-var">delFromAllButCurrent</span></a></span></span><span> </span><span id="local-6989586621679470269"><span class="annot"><span class="annottext">a
+</span><a href="#local-6989586621679470269"><span class="hs-identifier hs-var">w</span></a></span></span><span> </span><span id="local-6989586621679470268"><span class="annot"><span class="annottext">StackSet b l a sid sd
+</span><a href="#local-6989586621679470268"><span class="hs-identifier hs-var">ss</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">forall (t :: * -&gt; *) a b.
+Foldable t =&gt;
+(a -&gt; b -&gt; b) -&gt; b -&gt; t a -&gt; b
+</span><span class="hs-identifier hs-var">foldr</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">forall {s} {i} {a} {l} {sd}.
+(Eq s, Eq i, Eq a) =&gt;
+a -&gt; i -&gt; StackSet i l a s sd -&gt; StackSet i l a s sd
+</span><a href="#local-6989586621679470267"><span class="hs-identifier hs-var">delWinFromWorkspace</span></a></span><span> </span><span class="annot"><span class="annottext">a
+</span><a href="#local-6989586621679470269"><span class="hs-identifier hs-var">w</span></a></span><span> </span><span class="annot"><span class="annottext">forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">forall i l a. Workspace i l a -&gt; i
+</span><span class="hs-identifier hs-var">W.tag</span></span><span class="hs-special">)</span><span>
+</span><span id="line-156"></span><span>                                  </span><span class="annot"><span class="annottext">StackSet b l a sid sd
+</span><a href="#local-6989586621679470268"><span class="hs-identifier hs-var">ss</span></a></span><span>
+</span><span id="line-157"></span><span>                                  </span><span class="hs-special">(</span><span class="annot"><span class="annottext">forall i l a s sd. StackSet i l a s sd -&gt; [Workspace i l a]
+</span><span class="hs-identifier hs-var">W.hidden</span></span><span> </span><span class="annot"><span class="annottext">StackSet b l a sid sd
+</span><a href="#local-6989586621679470268"><span class="hs-identifier hs-var">ss</span></a></span><span> </span><span class="annot"><span class="annottext">forall a. [a] -&gt; [a] -&gt; [a]
+</span><span class="hs-operator hs-var">++</span></span><span> </span><span class="annot"><span class="annottext">forall a b. (a -&gt; b) -&gt; [a] -&gt; [b]
+</span><span class="hs-identifier hs-var">map</span></span><span> </span><span class="annot"><span class="annottext">forall i l a sid sd. Screen i l a sid sd -&gt; Workspace i l a
+</span><span class="hs-identifier hs-var">W.workspace</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">forall i l a sid sd. StackSet i l a sid sd -&gt; [Screen i l a sid sd]
+</span><span class="hs-identifier hs-var">W.visible</span></span><span> </span><span class="annot"><span class="annottext">StackSet b l a sid sd
+</span><a href="#local-6989586621679470268"><span class="hs-identifier hs-var">ss</span></a></span><span class="hs-special">)</span><span class="hs-special">)</span><span>
+</span><span id="line-158"></span><span>      </span><span id="local-6989586621679470267"><span class="annot"><span class="annottext">delWinFromWorkspace :: a -&gt; i -&gt; StackSet i l a s sd -&gt; StackSet i l a s sd
+</span><a href="#local-6989586621679470267"><span class="hs-identifier hs-var hs-var">delWinFromWorkspace</span></a></span></span><span> </span><span id="local-6989586621679470256"><span class="annot"><span class="annottext">a
+</span><a href="#local-6989586621679470256"><span class="hs-identifier hs-var">w</span></a></span></span><span> </span><span id="local-6989586621679470255"><span class="annot"><span class="annottext">i
+</span><a href="#local-6989586621679470255"><span class="hs-identifier hs-var">wid</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">forall {s} {i} {s} {l} {a} {sd} {l} {a} {sd}.
+(Eq s, Eq i, Eq s) =&gt;
+i
+-&gt; (StackSet i l a s sd -&gt; StackSet i l a s sd)
+-&gt; StackSet i l a s sd
+-&gt; StackSet i l a s sd
+</span><a href="#local-6989586621679470254"><span class="hs-identifier hs-var">viewing</span></a></span><span> </span><span class="annot"><span class="annottext">i
+</span><a href="#local-6989586621679470255"><span class="hs-identifier hs-var">wid</span></a></span><span> </span><span class="annot"><span class="annottext">forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">forall a i l s sd.
+Maybe (Stack a)
+-&gt; (Stack a -&gt; Maybe (Stack a))
+-&gt; StackSet i l a s sd
+-&gt; StackSet i l a s sd
+</span><span class="hs-identifier hs-var">W.modify</span></span><span> </span><span class="annot"><span class="annottext">forall a. Maybe a
+</span><span class="hs-identifier hs-var">Nothing</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">forall a. (a -&gt; Bool) -&gt; Stack a -&gt; Maybe (Stack a)
+</span><span class="hs-identifier hs-var">W.filter</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">forall a. Eq a =&gt; a -&gt; a -&gt; Bool
+</span><span class="hs-operator hs-var">/=</span></span><span> </span><span class="annot"><span class="annottext">a
+</span><a href="#local-6989586621679470256"><span class="hs-identifier hs-var">w</span></a></span><span class="hs-special">)</span><span class="hs-special">)</span><span>
+</span><span id="line-159"></span><span>
+</span><span id="line-160"></span><span>      </span><span id="local-6989586621679470254"><span class="annot"><span class="annottext">viewing :: i
+-&gt; (StackSet i l a s sd -&gt; StackSet i l a s sd)
+-&gt; StackSet i l a s sd
+-&gt; StackSet i l a s sd
+</span><a href="#local-6989586621679470254"><span class="hs-identifier hs-var hs-var">viewing</span></a></span></span><span> </span><span id="local-6989586621679470246"><span class="annot"><span class="annottext">i
+</span><a href="#local-6989586621679470246"><span class="hs-identifier hs-var">wis</span></a></span></span><span> </span><span id="local-6989586621679470245"><span class="annot"><span class="annottext">StackSet i l a s sd -&gt; StackSet i l a s sd
+</span><a href="#local-6989586621679470245"><span class="hs-identifier hs-var">f</span></a></span></span><span> </span><span id="local-6989586621679470244"><span class="annot"><span class="annottext">StackSet i l a s sd
+</span><a href="#local-6989586621679470244"><span class="hs-identifier hs-var">ss</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">forall s i l a sd.
+(Eq s, Eq i) =&gt;
+i -&gt; StackSet i l a s sd -&gt; StackSet i l a s sd
+</span><span class="hs-identifier hs-var">W.view</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">forall i l a s sd. StackSet i l a s sd -&gt; i
+</span><span class="hs-identifier hs-var">W.currentTag</span></span><span> </span><span class="annot"><span class="annottext">StackSet i l a s sd
+</span><a href="#local-6989586621679470244"><span class="hs-identifier hs-var">ss</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">StackSet i l a s sd -&gt; StackSet i l a s sd
+</span><a href="#local-6989586621679470245"><span class="hs-identifier hs-var">f</span></a></span><span> </span><span class="annot"><span class="annottext">forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">forall s i l a sd.
+(Eq s, Eq i) =&gt;
+i -&gt; StackSet i l a s sd -&gt; StackSet i l a s sd
+</span><span class="hs-identifier hs-var">W.view</span></span><span> </span><span class="annot"><span class="annottext">i
+</span><a href="#local-6989586621679470246"><span class="hs-identifier hs-var">wis</span></a></span><span> </span><span class="annot"><span class="annottext">StackSet i l a s sd
+</span><a href="#local-6989586621679470244"><span class="hs-identifier hs-var">ss</span></a></span><span>
+</span><span id="line-161"></span><span>
+</span><span id="line-162"></span><span class="hs-comment">-- | A list of hidden workspaces containing a copy of the focused window.</span><span>
+</span><span id="line-163"></span><span class="annot"><a href="XMonad.Actions.CopyWindow.html#wsContainingCopies"><span class="hs-identifier hs-type">wsContainingCopies</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">X</span></span><span> </span><span class="hs-special">[</span><span class="annot"><span class="hs-identifier hs-type">WorkspaceId</span></span><span class="hs-special">]</span><span>
+</span><span id="line-164"></span><span id="wsContainingCopies"><span class="annot"><span class="annottext">wsContainingCopies :: X [WorkspaceId]
+</span><a href="XMonad.Actions.CopyWindow.html#wsContainingCopies"><span class="hs-identifier hs-var hs-var">wsContainingCopies</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-165"></span><span>    </span><span id="local-6989586621679470243"><span class="annot"><span class="annottext">WindowSet
+</span><a href="#local-6989586621679470243"><span class="hs-identifier hs-var">ws</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">forall s (m :: * -&gt; *) a. MonadState s m =&gt; (s -&gt; a) -&gt; m a
+</span><span class="hs-identifier hs-var">gets</span></span><span> </span><span class="annot"><span class="annottext">XState -&gt; WindowSet
+</span><span class="hs-identifier hs-var">windowset</span></span><span>
+</span><span id="line-166"></span><span>    </span><span class="annot"><span class="annottext">forall (m :: * -&gt; *) a. Monad m =&gt; a -&gt; m a
+</span><span class="hs-identifier hs-var">return</span></span><span> </span><span class="annot"><span class="annottext">forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">forall a i. Eq a =&gt; Maybe a -&gt; [(i, [a])] -&gt; [i]
+</span><a href="XMonad.Actions.CopyWindow.html#copiesOfOn"><span class="hs-identifier hs-var">copiesOfOn</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">forall i l a s sd. StackSet i l a s sd -&gt; Maybe a
+</span><span class="hs-identifier hs-var">W.peek</span></span><span> </span><span class="annot"><span class="annottext">WindowSet
+</span><a href="#local-6989586621679470243"><span class="hs-identifier hs-var">ws</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">forall i l a. [Workspace i l a] -&gt; [(i, [a])]
+</span><a href="XMonad.Actions.CopyWindow.html#taggedWindows"><span class="hs-identifier hs-var">taggedWindows</span></a></span><span> </span><span class="annot"><span class="annottext">forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">forall i l a s sd. StackSet i l a s sd -&gt; [Workspace i l a]
+</span><span class="hs-identifier hs-var">W.hidden</span></span><span> </span><span class="annot"><span class="annottext">WindowSet
+</span><a href="#local-6989586621679470243"><span class="hs-identifier hs-var">ws</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-167"></span><span>
+</span><span id="line-168"></span><span class="hs-comment">-- | Get a list of tuples (tag, [Window]) for each workspace.</span><span>
+</span><span id="line-169"></span><span id="local-6989586621679470467"><span id="local-6989586621679470468"><span id="local-6989586621679470469"><span class="annot"><a href="XMonad.Actions.CopyWindow.html#taggedWindows"><span class="hs-identifier hs-type">taggedWindows</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="hs-special">[</span><span class="annot"><span class="hs-identifier hs-type">W.Workspace</span></span><span> </span><span class="annot"><a href="#local-6989586621679470469"><span class="hs-identifier hs-type">i</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679470468"><span class="hs-identifier hs-type">l</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679470467"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">]</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="hs-special">[</span><span class="hs-special">(</span><span class="annot"><a href="#local-6989586621679470469"><span class="hs-identifier hs-type">i</span></a></span><span class="hs-special">,</span><span> </span><span class="hs-special">[</span><span class="annot"><a href="#local-6989586621679470467"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">]</span><span class="hs-special">)</span><span class="hs-special">]</span></span></span></span><span>
+</span><span id="line-170"></span><span id="taggedWindows"><span class="annot"><span class="annottext">taggedWindows :: forall i l a. [Workspace i l a] -&gt; [(i, [a])]
+</span><a href="XMonad.Actions.CopyWindow.html#taggedWindows"><span class="hs-identifier hs-var hs-var">taggedWindows</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">forall a b. (a -&gt; b) -&gt; [a] -&gt; [b]
+</span><span class="hs-identifier hs-var">map</span></span><span> </span><span class="annot"><span class="annottext">forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">forall i l a. Workspace i l a -&gt; i
+</span><span class="hs-identifier hs-var">W.tag</span></span><span> </span><span class="annot"><span class="annottext">forall (a :: * -&gt; * -&gt; *) b c c'.
+Arrow a =&gt;
+a b c -&gt; a b c' -&gt; a b (c, c')
+</span><span class="hs-operator hs-var">&amp;&amp;&amp;</span></span><span> </span><span class="annot"><span class="annottext">forall a. Maybe (Stack a) -&gt; [a]
+</span><span class="hs-identifier hs-var">W.integrate'</span></span><span> </span><span class="annot"><span class="annottext">forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">forall i l a. Workspace i l a -&gt; Maybe (Stack a)
+</span><span class="hs-identifier hs-var">W.stack</span></span><span>
+</span><span id="line-171"></span><span>
+</span><span id="line-172"></span><span class="hs-comment">-- | Get tags with copies of the focused window (if present.)</span><span>
+</span><span id="line-173"></span><span id="local-6989586621679470470"><span id="local-6989586621679470471"><span class="annot"><a href="XMonad.Actions.CopyWindow.html#copiesOfOn"><span class="hs-identifier hs-type">copiesOfOn</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">Eq</span></span><span> </span><span class="annot"><a href="#local-6989586621679470471"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Maybe</span></span><span> </span><span class="annot"><a href="#local-6989586621679470471"><span class="hs-identifier hs-type">a</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="hs-special">[</span><span class="hs-special">(</span><span class="annot"><a href="#local-6989586621679470470"><span class="hs-identifier hs-type">i</span></a></span><span class="hs-special">,</span><span> </span><span class="hs-special">[</span><span class="annot"><a href="#local-6989586621679470471"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">]</span><span class="hs-special">)</span><span class="hs-special">]</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="hs-special">[</span><span class="annot"><a href="#local-6989586621679470470"><span class="hs-identifier hs-type">i</span></a></span><span class="hs-special">]</span></span></span><span>
+</span><span id="line-174"></span><span id="copiesOfOn"><span class="annot"><span class="annottext">copiesOfOn :: forall a i. Eq a =&gt; Maybe a -&gt; [(i, [a])] -&gt; [i]
+</span><a href="XMonad.Actions.CopyWindow.html#copiesOfOn"><span class="hs-identifier hs-var hs-var">copiesOfOn</span></a></span></span><span> </span><span id="local-6989586621679470237"><span class="annot"><span class="annottext">Maybe a
+</span><a href="#local-6989586621679470237"><span class="hs-identifier hs-var">foc</span></a></span></span><span> </span><span id="local-6989586621679470236"><span class="annot"><span class="annottext">[(i, [a])]
+</span><a href="#local-6989586621679470236"><span class="hs-identifier hs-var">tw</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">forall b a. b -&gt; (a -&gt; b) -&gt; Maybe a -&gt; b
+</span><span class="hs-identifier hs-var">maybe</span></span><span> </span><span class="hs-special">[</span><span class="hs-special">]</span><span> </span><span class="annot"><span class="annottext">a -&gt; [i]
+</span><a href="#local-6989586621679470234"><span class="hs-identifier hs-var">hasCopyOf</span></a></span><span> </span><span class="annot"><span class="annottext">Maybe a
+</span><a href="#local-6989586621679470237"><span class="hs-identifier hs-var">foc</span></a></span><span>
+</span><span id="line-175"></span><span>  </span><span class="hs-keyword">where</span><span> </span><span id="local-6989586621679470234"><span class="annot"><span class="annottext">hasCopyOf :: a -&gt; [i]
+</span><a href="#local-6989586621679470234"><span class="hs-identifier hs-var hs-var">hasCopyOf</span></a></span></span><span> </span><span id="local-6989586621679470231"><span class="annot"><span class="annottext">a
+</span><a href="#local-6989586621679470231"><span class="hs-identifier hs-var">f</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">forall a b. (a -&gt; b) -&gt; [a] -&gt; [b]
+</span><span class="hs-identifier hs-var">map</span></span><span> </span><span class="annot"><span class="annottext">forall a b. (a, b) -&gt; a
+</span><span class="hs-identifier hs-var">fst</span></span><span> </span><span class="annot"><span class="annottext">forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">forall a. (a -&gt; Bool) -&gt; [a] -&gt; [a]
+</span><span class="hs-identifier hs-var">filter</span></span><span> </span><span class="hs-special">(</span><span class="hs-special">(</span><span class="annot"><span class="annottext">a
+</span><a href="#local-6989586621679470231"><span class="hs-identifier hs-var">f</span></a></span><span> </span><span class="annot"><span class="annottext">forall (t :: * -&gt; *) a. (Foldable t, Eq a) =&gt; a -&gt; t a -&gt; Bool
+</span><span class="hs-operator hs-var">`elem`</span></span><span> </span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">forall a b. (a, b) -&gt; b
+</span><span class="hs-identifier hs-var">snd</span></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">[(i, [a])]
+</span><a href="#local-6989586621679470236"><span class="hs-identifier hs-var">tw</span></a></span><span>
+</span><span id="line-176"></span></pre></body></html>

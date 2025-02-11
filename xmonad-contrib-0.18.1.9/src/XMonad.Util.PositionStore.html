@@ -1,0 +1,274 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd"><html xmlns="http://www.w3.org/1999/xhtml"><head><link rel="stylesheet" type="text/css" href="style.css" /><script type="text/javascript" src="highlight.js"></script></head><body><pre><span class="hs-comment">----------------------------------------------------------------------------</span><span>
+</span><span id="line-2"></span><span class="hs-comment">-- |</span><span>
+</span><span id="line-3"></span><span class="hs-comment">-- Module      :  XMonad.Util.PositionStore</span><span>
+</span><span id="line-4"></span><span class="hs-comment">-- Description :  A utility module to store information about position and size of a window.</span><span>
+</span><span id="line-5"></span><span class="hs-comment">-- Copyright   :  (c) Jan Vornberger 2009</span><span>
+</span><span id="line-6"></span><span class="hs-comment">-- License     :  BSD3-style (see LICENSE)</span><span>
+</span><span id="line-7"></span><span class="hs-comment">--</span><span>
+</span><span id="line-8"></span><span class="hs-comment">-- Maintainer  :  jan.vornberger@informatik.uni-oldenburg.de</span><span>
+</span><span id="line-9"></span><span class="hs-comment">-- Stability   :  unstable</span><span>
+</span><span id="line-10"></span><span class="hs-comment">-- Portability :  not portable</span><span>
+</span><span id="line-11"></span><span class="hs-comment">--</span><span>
+</span><span id="line-12"></span><span class="hs-comment">-- A utility module to store information about position and size of a window.</span><span>
+</span><span id="line-13"></span><span class="hs-comment">-- See &quot;XMonad.Layout.PositionStoreFloat&quot; for a layout that makes use of this.</span><span>
+</span><span id="line-14"></span><span class="hs-comment">--</span><span>
+</span><span id="line-15"></span><span class="hs-comment">-----------------------------------------------------------------------------</span><span>
+</span><span id="line-16"></span><span>
+</span><span id="line-17"></span><span class="hs-keyword">module</span><span> </span><span class="hs-identifier">XMonad.Util.PositionStore</span><span> </span><span class="hs-special">(</span><span>
+</span><span id="line-18"></span><span>        </span><span class="annot"><a href="XMonad.Util.PositionStore.html#getPosStore"><span class="hs-identifier">getPosStore</span></a></span><span class="hs-special">,</span><span>
+</span><span id="line-19"></span><span>        </span><span class="annot"><a href="XMonad.Util.PositionStore.html#modifyPosStore"><span class="hs-identifier">modifyPosStore</span></a></span><span class="hs-special">,</span><span>
+</span><span id="line-20"></span><span>
+</span><span id="line-21"></span><span>        </span><span class="annot"><a href="XMonad.Util.PositionStore.html#posStoreInsert"><span class="hs-identifier">posStoreInsert</span></a></span><span class="hs-special">,</span><span>
+</span><span id="line-22"></span><span>        </span><span class="annot"><a href="XMonad.Util.PositionStore.html#posStoreMove"><span class="hs-identifier">posStoreMove</span></a></span><span class="hs-special">,</span><span>
+</span><span id="line-23"></span><span>        </span><span class="annot"><a href="XMonad.Util.PositionStore.html#posStoreQuery"><span class="hs-identifier">posStoreQuery</span></a></span><span class="hs-special">,</span><span>
+</span><span id="line-24"></span><span>        </span><span class="annot"><a href="XMonad.Util.PositionStore.html#posStoreRemove"><span class="hs-identifier">posStoreRemove</span></a></span><span class="hs-special">,</span><span>
+</span><span id="line-25"></span><span>        </span><span class="annot"><a href="XMonad.Util.PositionStore.html#PositionStore"><span class="hs-identifier">PositionStore</span></a></span><span class="hs-special">,</span><span>
+</span><span id="line-26"></span><span>    </span><span class="hs-special">)</span><span> </span><span class="hs-keyword">where</span><span>
+</span><span id="line-27"></span><span>
+</span><span id="line-28"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><span class="hs-identifier">XMonad</span></span><span>
+</span><span id="line-29"></span><span class="hs-keyword">import</span><span> </span><span class="hs-keyword">qualified</span><span> </span><span class="annot"><a href="XMonad.Util.ExtensibleState.html"><span class="hs-identifier">XMonad.Util.ExtensibleState</span></a></span><span> </span><span class="hs-keyword">as</span><span> </span><span class="annot"><span class="hs-identifier">XS</span></span><span>
+</span><span id="line-30"></span><span class="hs-keyword">import</span><span> </span><span class="hs-keyword">qualified</span><span> </span><span class="annot"><span class="hs-identifier">Data.Map</span></span><span> </span><span class="hs-keyword">as</span><span> </span><span class="annot"><span class="hs-identifier">M</span></span><span>
+</span><span id="line-31"></span><span>
+</span><span id="line-32"></span><span class="hs-comment">-- Store window positions relative to the upper left screen edge</span><span>
+</span><span id="line-33"></span><span class="hs-comment">-- and windows sizes as well as positions as fractions of the screen size.</span><span>
+</span><span id="line-34"></span><span class="hs-comment">-- This way windows can be easily relocated and scaled when switching screens.</span><span>
+</span><span id="line-35"></span><span>
+</span><span id="line-36"></span><span class="hs-keyword">newtype</span><span> </span><span id="PositionStore"><span class="annot"><a href="XMonad.Util.PositionStore.html#PositionStore"><span class="hs-identifier hs-var">PositionStore</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span id="PS"><span class="annot"><a href="XMonad.Util.PositionStore.html#PS"><span class="hs-identifier hs-var">PS</span></a></span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">M.Map</span></span><span> </span><span class="annot"><span class="hs-identifier hs-type">Window</span></span><span> </span><span class="annot"><a href="XMonad.Util.PositionStore.html#PosStoreRectangle"><span class="hs-identifier hs-type">PosStoreRectangle</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-37"></span><span>                            </span><span class="hs-keyword">deriving</span><span> </span><span class="hs-special">(</span><span id="local-6989586621679436448"><span id="local-6989586621679436458"><span id="local-6989586621679436461"><span id="local-6989586621679436463"><span class="annot"><span class="annottext">ReadPrec [PositionStore]
+ReadPrec PositionStore
+Int -&gt; ReadS PositionStore
+ReadS [PositionStore]
+forall a.
+(Int -&gt; ReadS a)
+-&gt; ReadS [a] -&gt; ReadPrec a -&gt; ReadPrec [a] -&gt; Read a
+readListPrec :: ReadPrec [PositionStore]
+$creadListPrec :: ReadPrec [PositionStore]
+readPrec :: ReadPrec PositionStore
+$creadPrec :: ReadPrec PositionStore
+readList :: ReadS [PositionStore]
+$creadList :: ReadS [PositionStore]
+readsPrec :: Int -&gt; ReadS PositionStore
+$creadsPrec :: Int -&gt; ReadS PositionStore
+</span><span class="hs-identifier hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var">Read</span></span></span></span></span></span><span class="hs-special">,</span><span id="local-6989586621679436433"><span id="local-6989586621679436435"><span id="local-6989586621679436443"><span class="annot"><span class="annottext">Int -&gt; PositionStore -&gt; ShowS
+[PositionStore] -&gt; ShowS
+PositionStore -&gt; String
+forall a.
+(Int -&gt; a -&gt; ShowS) -&gt; (a -&gt; String) -&gt; ([a] -&gt; ShowS) -&gt; Show a
+showList :: [PositionStore] -&gt; ShowS
+$cshowList :: [PositionStore] -&gt; ShowS
+show :: PositionStore -&gt; String
+$cshow :: PositionStore -&gt; String
+showsPrec :: Int -&gt; PositionStore -&gt; ShowS
+$cshowsPrec :: Int -&gt; PositionStore -&gt; ShowS
+</span><span class="hs-identifier hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var">Show</span></span></span></span></span><span class="hs-special">)</span><span>
+</span><span id="line-38"></span><span class="hs-keyword">data</span><span> </span><span id="PosStoreRectangle"><span class="annot"><a href="XMonad.Util.PositionStore.html#PosStoreRectangle"><span class="hs-identifier hs-var">PosStoreRectangle</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span id="PSRectangle"><span class="annot"><a href="XMonad.Util.PositionStore.html#PSRectangle"><span class="hs-identifier hs-var">PSRectangle</span></a></span></span><span> </span><span class="annot"><span class="hs-identifier hs-type">Double</span></span><span> </span><span class="annot"><span class="hs-identifier hs-type">Double</span></span><span> </span><span class="annot"><span class="hs-identifier hs-type">Double</span></span><span> </span><span class="annot"><span class="hs-identifier hs-type">Double</span></span><span>
+</span><span id="line-39"></span><span>                            </span><span class="hs-keyword">deriving</span><span> </span><span class="hs-special">(</span><span id="local-6989586621679436410"><span id="local-6989586621679436423"><span id="local-6989586621679436426"><span id="local-6989586621679436428"><span class="annot"><span class="annottext">ReadPrec [PosStoreRectangle]
+ReadPrec PosStoreRectangle
+Int -&gt; ReadS PosStoreRectangle
+ReadS [PosStoreRectangle]
+forall a.
+(Int -&gt; ReadS a)
+-&gt; ReadS [a] -&gt; ReadPrec a -&gt; ReadPrec [a] -&gt; Read a
+readListPrec :: ReadPrec [PosStoreRectangle]
+$creadListPrec :: ReadPrec [PosStoreRectangle]
+readPrec :: ReadPrec PosStoreRectangle
+$creadPrec :: ReadPrec PosStoreRectangle
+readList :: ReadS [PosStoreRectangle]
+$creadList :: ReadS [PosStoreRectangle]
+readsPrec :: Int -&gt; ReadS PosStoreRectangle
+$creadsPrec :: Int -&gt; ReadS PosStoreRectangle
+</span><span class="hs-identifier hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var">Read</span></span></span></span></span></span><span class="hs-special">,</span><span id="local-6989586621679436397"><span id="local-6989586621679436399"><span id="local-6989586621679436407"><span class="annot"><span class="annottext">Int -&gt; PosStoreRectangle -&gt; ShowS
+[PosStoreRectangle] -&gt; ShowS
+PosStoreRectangle -&gt; String
+forall a.
+(Int -&gt; a -&gt; ShowS) -&gt; (a -&gt; String) -&gt; ([a] -&gt; ShowS) -&gt; Show a
+showList :: [PosStoreRectangle] -&gt; ShowS
+$cshowList :: [PosStoreRectangle] -&gt; ShowS
+show :: PosStoreRectangle -&gt; String
+$cshow :: PosStoreRectangle -&gt; String
+showsPrec :: Int -&gt; PosStoreRectangle -&gt; ShowS
+$cshowsPrec :: Int -&gt; PosStoreRectangle -&gt; ShowS
+</span><span class="hs-identifier hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var">Show</span></span></span></span></span><span class="hs-special">)</span><span>
+</span><span id="line-40"></span><span>
+</span><span id="line-41"></span><span class="hs-keyword">instance</span><span> </span><span class="annot"><span class="hs-identifier hs-type">ExtensionClass</span></span><span> </span><span class="annot"><a href="XMonad.Util.PositionStore.html#PositionStore"><span class="hs-identifier hs-type">PositionStore</span></a></span><span> </span><span class="hs-keyword">where</span><span>
+</span><span id="line-42"></span><span>  </span><span id="local-6989586621679436391"><span class="annot"><span class="annottext">initialValue :: PositionStore
+</span><span class="hs-identifier hs-var hs-var hs-var hs-var">initialValue</span></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Map Window PosStoreRectangle -&gt; PositionStore
+</span><a href="XMonad.Util.PositionStore.html#PS"><span class="hs-identifier hs-var">PS</span></a></span><span> </span><span class="annot"><span class="annottext">forall k a. Map k a
+</span><span class="hs-identifier hs-var">M.empty</span></span><span>
+</span><span id="line-43"></span><span>  </span><span id="local-6989586621679436385"><span class="annot"><span class="annottext">extensionType :: PositionStore -&gt; StateExtension
+</span><span class="hs-identifier hs-var hs-var hs-var hs-var">extensionType</span></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">forall a. (Read a, Show a, ExtensionClass a) =&gt; a -&gt; StateExtension
+</span><span class="hs-identifier hs-var">PersistentExtension</span></span><span>
+</span><span id="line-44"></span><span>
+</span><span id="line-45"></span><span class="annot"><a href="XMonad.Util.PositionStore.html#getPosStore"><span class="hs-identifier hs-type">getPosStore</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">X</span></span><span> </span><span class="annot"><a href="XMonad.Util.PositionStore.html#PositionStore"><span class="hs-identifier hs-type">PositionStore</span></a></span><span>
+</span><span id="line-46"></span><span id="getPosStore"><span class="annot"><span class="annottext">getPosStore :: X PositionStore
+</span><a href="XMonad.Util.PositionStore.html#getPosStore"><span class="hs-identifier hs-var hs-var">getPosStore</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">forall a (m :: * -&gt; *). (ExtensionClass a, XLike m) =&gt; m a
+</span><a href="XMonad.Util.ExtensibleState.html#get"><span class="hs-identifier hs-var">XS.get</span></a></span><span>
+</span><span id="line-47"></span><span>
+</span><span id="line-48"></span><span class="annot"><a href="XMonad.Util.PositionStore.html#modifyPosStore"><span class="hs-identifier hs-type">modifyPosStore</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="hs-special">(</span><span class="annot"><a href="XMonad.Util.PositionStore.html#PositionStore"><span class="hs-identifier hs-type">PositionStore</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="XMonad.Util.PositionStore.html#PositionStore"><span class="hs-identifier hs-type">PositionStore</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">X</span></span><span> </span><span class="hs-special">(</span><span class="hs-special">)</span><span>
+</span><span id="line-49"></span><span id="modifyPosStore"><span class="annot"><span class="annottext">modifyPosStore :: (PositionStore -&gt; PositionStore) -&gt; X ()
+</span><a href="XMonad.Util.PositionStore.html#modifyPosStore"><span class="hs-identifier hs-var hs-var">modifyPosStore</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">forall a (m :: * -&gt; *).
+(ExtensionClass a, XLike m) =&gt;
+(a -&gt; a) -&gt; m ()
+</span><a href="XMonad.Util.ExtensibleState.html#modify"><span class="hs-identifier hs-var">XS.modify</span></a></span><span>
+</span><span id="line-50"></span><span>
+</span><span id="line-51"></span><span class="annot"><a href="XMonad.Util.PositionStore.html#posStoreInsert"><span class="hs-identifier hs-type">posStoreInsert</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><a href="XMonad.Util.PositionStore.html#PositionStore"><span class="hs-identifier hs-type">PositionStore</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Window</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Rectangle</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Rectangle</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="XMonad.Util.PositionStore.html#PositionStore"><span class="hs-identifier hs-type">PositionStore</span></a></span><span>
+</span><span id="line-52"></span><span id="posStoreInsert"><span class="annot"><span class="annottext">posStoreInsert :: PositionStore -&gt; Window -&gt; Rectangle -&gt; Rectangle -&gt; PositionStore
+</span><a href="XMonad.Util.PositionStore.html#posStoreInsert"><span class="hs-identifier hs-var hs-var">posStoreInsert</span></a></span></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="XMonad.Util.PositionStore.html#PS"><span class="hs-identifier hs-type">PS</span></a></span><span> </span><span id="local-6989586621679436380"><span class="annot"><span class="annottext">Map Window PosStoreRectangle
+</span><a href="#local-6989586621679436380"><span class="hs-identifier hs-var">posStoreMap</span></a></span></span><span class="hs-special">)</span><span> </span><span id="local-6989586621679436379"><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679436379"><span class="hs-identifier hs-var">w</span></a></span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">Rectangle</span></span><span> </span><span id="local-6989586621679436377"><span class="annot"><span class="annottext">Position
+</span><a href="#local-6989586621679436377"><span class="hs-identifier hs-var">x</span></a></span></span><span> </span><span id="local-6989586621679436376"><span class="annot"><span class="annottext">Position
+</span><a href="#local-6989586621679436376"><span class="hs-identifier hs-var">y</span></a></span></span><span> </span><span id="local-6989586621679436375"><span class="annot"><span class="annottext">Dimension
+</span><a href="#local-6989586621679436375"><span class="hs-identifier hs-var">wh</span></a></span></span><span> </span><span id="local-6989586621679436374"><span class="annot"><span class="annottext">Dimension
+</span><a href="#local-6989586621679436374"><span class="hs-identifier hs-var">ht</span></a></span></span><span class="hs-special">)</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">Rectangle</span></span><span> </span><span id="local-6989586621679436373"><span class="annot"><span class="annottext">Position
+</span><a href="#local-6989586621679436373"><span class="hs-identifier hs-var">srX</span></a></span></span><span> </span><span id="local-6989586621679436372"><span class="annot"><span class="annottext">Position
+</span><a href="#local-6989586621679436372"><span class="hs-identifier hs-var">srY</span></a></span></span><span> </span><span id="local-6989586621679436371"><span class="annot"><span class="annottext">Dimension
+</span><a href="#local-6989586621679436371"><span class="hs-identifier hs-var">srWh</span></a></span></span><span> </span><span id="local-6989586621679436370"><span class="annot"><span class="annottext">Dimension
+</span><a href="#local-6989586621679436370"><span class="hs-identifier hs-var">srHt</span></a></span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=</span><span>
+</span><span id="line-53"></span><span>    </span><span class="hs-keyword">let</span><span> </span><span id="local-6989586621679436368"><span class="annot"><span class="annottext">offsetX :: Position
+</span><a href="#local-6989586621679436368"><span class="hs-identifier hs-var hs-var">offsetX</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Position
+</span><a href="#local-6989586621679436377"><span class="hs-identifier hs-var">x</span></a></span><span> </span><span class="annot"><span class="annottext">forall a. Num a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-glyph hs-var">-</span></span><span> </span><span class="annot"><span class="annottext">Position
+</span><a href="#local-6989586621679436373"><span class="hs-identifier hs-var">srX</span></a></span><span>
+</span><span id="line-54"></span><span>        </span><span id="local-6989586621679436366"><span class="annot"><span class="annottext">offsetY :: Position
+</span><a href="#local-6989586621679436366"><span class="hs-identifier hs-var hs-var">offsetY</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Position
+</span><a href="#local-6989586621679436376"><span class="hs-identifier hs-var">y</span></a></span><span> </span><span class="annot"><span class="annottext">forall a. Num a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-glyph hs-var">-</span></span><span> </span><span class="annot"><span class="annottext">Position
+</span><a href="#local-6989586621679436372"><span class="hs-identifier hs-var">srY</span></a></span><span>
+</span><span id="line-55"></span><span>    </span><span class="hs-keyword">in</span><span> </span><span class="annot"><span class="annottext">Map Window PosStoreRectangle -&gt; PositionStore
+</span><a href="XMonad.Util.PositionStore.html#PS"><span class="hs-identifier hs-var">PS</span></a></span><span> </span><span class="annot"><span class="annottext">forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">forall k a. Ord k =&gt; k -&gt; a -&gt; Map k a -&gt; Map k a
+</span><span class="hs-identifier hs-var">M.insert</span></span><span> </span><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679436379"><span class="hs-identifier hs-var">w</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Double -&gt; Double -&gt; Double -&gt; Double -&gt; PosStoreRectangle
+</span><a href="XMonad.Util.PositionStore.html#PSRectangle"><span class="hs-identifier hs-var">PSRectangle</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">forall a b. (Integral a, Num b) =&gt; a -&gt; b
+</span><span class="hs-identifier hs-var">fromIntegral</span></span><span> </span><span class="annot"><span class="annottext">Position
+</span><a href="#local-6989586621679436368"><span class="hs-identifier hs-var">offsetX</span></a></span><span> </span><span class="annot"><span class="annottext">forall a. Fractional a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-operator hs-var">/</span></span><span> </span><span class="annot"><span class="annottext">forall a b. (Integral a, Num b) =&gt; a -&gt; b
+</span><span class="hs-identifier hs-var">fromIntegral</span></span><span> </span><span class="annot"><span class="annottext">Dimension
+</span><a href="#local-6989586621679436371"><span class="hs-identifier hs-var">srWh</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-56"></span><span>                                               </span><span class="hs-special">(</span><span class="annot"><span class="annottext">forall a b. (Integral a, Num b) =&gt; a -&gt; b
+</span><span class="hs-identifier hs-var">fromIntegral</span></span><span> </span><span class="annot"><span class="annottext">Position
+</span><a href="#local-6989586621679436366"><span class="hs-identifier hs-var">offsetY</span></a></span><span> </span><span class="annot"><span class="annottext">forall a. Fractional a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-operator hs-var">/</span></span><span> </span><span class="annot"><span class="annottext">forall a b. (Integral a, Num b) =&gt; a -&gt; b
+</span><span class="hs-identifier hs-var">fromIntegral</span></span><span> </span><span class="annot"><span class="annottext">Dimension
+</span><a href="#local-6989586621679436370"><span class="hs-identifier hs-var">srHt</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-57"></span><span>                                               </span><span class="hs-special">(</span><span class="annot"><span class="annottext">forall a b. (Integral a, Num b) =&gt; a -&gt; b
+</span><span class="hs-identifier hs-var">fromIntegral</span></span><span> </span><span class="annot"><span class="annottext">Dimension
+</span><a href="#local-6989586621679436375"><span class="hs-identifier hs-var">wh</span></a></span><span> </span><span class="annot"><span class="annottext">forall a. Fractional a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-operator hs-var">/</span></span><span> </span><span class="annot"><span class="annottext">forall a b. (Integral a, Num b) =&gt; a -&gt; b
+</span><span class="hs-identifier hs-var">fromIntegral</span></span><span> </span><span class="annot"><span class="annottext">Dimension
+</span><a href="#local-6989586621679436371"><span class="hs-identifier hs-var">srWh</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-58"></span><span>                                               </span><span class="hs-special">(</span><span class="annot"><span class="annottext">forall a b. (Integral a, Num b) =&gt; a -&gt; b
+</span><span class="hs-identifier hs-var">fromIntegral</span></span><span> </span><span class="annot"><span class="annottext">Dimension
+</span><a href="#local-6989586621679436374"><span class="hs-identifier hs-var">ht</span></a></span><span> </span><span class="annot"><span class="annottext">forall a. Fractional a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-operator hs-var">/</span></span><span> </span><span class="annot"><span class="annottext">forall a b. (Integral a, Num b) =&gt; a -&gt; b
+</span><span class="hs-identifier hs-var">fromIntegral</span></span><span> </span><span class="annot"><span class="annottext">Dimension
+</span><a href="#local-6989586621679436370"><span class="hs-identifier hs-var">srHt</span></a></span><span class="hs-special">)</span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">Map Window PosStoreRectangle
+</span><a href="#local-6989586621679436380"><span class="hs-identifier hs-var">posStoreMap</span></a></span><span>
+</span><span id="line-59"></span><span>
+</span><span id="line-60"></span><span class="annot"><a href="XMonad.Util.PositionStore.html#posStoreRemove"><span class="hs-identifier hs-type">posStoreRemove</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><a href="XMonad.Util.PositionStore.html#PositionStore"><span class="hs-identifier hs-type">PositionStore</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Window</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="XMonad.Util.PositionStore.html#PositionStore"><span class="hs-identifier hs-type">PositionStore</span></a></span><span>
+</span><span id="line-61"></span><span id="posStoreRemove"><span class="annot"><span class="annottext">posStoreRemove :: PositionStore -&gt; Window -&gt; PositionStore
+</span><a href="XMonad.Util.PositionStore.html#posStoreRemove"><span class="hs-identifier hs-var hs-var">posStoreRemove</span></a></span></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="XMonad.Util.PositionStore.html#PS"><span class="hs-identifier hs-type">PS</span></a></span><span> </span><span id="local-6989586621679436363"><span class="annot"><span class="annottext">Map Window PosStoreRectangle
+</span><a href="#local-6989586621679436363"><span class="hs-identifier hs-var">posStoreMap</span></a></span></span><span class="hs-special">)</span><span> </span><span id="local-6989586621679436362"><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679436362"><span class="hs-identifier hs-var">w</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Map Window PosStoreRectangle -&gt; PositionStore
+</span><a href="XMonad.Util.PositionStore.html#PS"><span class="hs-identifier hs-var">PS</span></a></span><span> </span><span class="annot"><span class="annottext">forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">forall k a. Ord k =&gt; k -&gt; Map k a -&gt; Map k a
+</span><span class="hs-identifier hs-var">M.delete</span></span><span> </span><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679436362"><span class="hs-identifier hs-var">w</span></a></span><span> </span><span class="annot"><span class="annottext">Map Window PosStoreRectangle
+</span><a href="#local-6989586621679436363"><span class="hs-identifier hs-var">posStoreMap</span></a></span><span>
+</span><span id="line-62"></span><span>
+</span><span id="line-63"></span><span class="annot"><a href="XMonad.Util.PositionStore.html#posStoreQuery"><span class="hs-identifier hs-type">posStoreQuery</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><a href="XMonad.Util.PositionStore.html#PositionStore"><span class="hs-identifier hs-type">PositionStore</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Window</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Rectangle</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Maybe</span></span><span> </span><span class="annot"><span class="hs-identifier hs-type">Rectangle</span></span><span>
+</span><span id="line-64"></span><span id="posStoreQuery"><span class="annot"><span class="annottext">posStoreQuery :: PositionStore -&gt; Window -&gt; Rectangle -&gt; Maybe Rectangle
+</span><a href="XMonad.Util.PositionStore.html#posStoreQuery"><span class="hs-identifier hs-var hs-var">posStoreQuery</span></a></span></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="XMonad.Util.PositionStore.html#PS"><span class="hs-identifier hs-type">PS</span></a></span><span> </span><span id="local-6989586621679436360"><span class="annot"><span class="annottext">Map Window PosStoreRectangle
+</span><a href="#local-6989586621679436360"><span class="hs-identifier hs-var">posStoreMap</span></a></span></span><span class="hs-special">)</span><span> </span><span id="local-6989586621679436359"><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679436359"><span class="hs-identifier hs-var">w</span></a></span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">Rectangle</span></span><span> </span><span id="local-6989586621679436358"><span class="annot"><span class="annottext">Position
+</span><a href="#local-6989586621679436358"><span class="hs-identifier hs-var">srX</span></a></span></span><span> </span><span id="local-6989586621679436357"><span class="annot"><span class="annottext">Position
+</span><a href="#local-6989586621679436357"><span class="hs-identifier hs-var">srY</span></a></span></span><span> </span><span id="local-6989586621679436356"><span class="annot"><span class="annottext">Dimension
+</span><a href="#local-6989586621679436356"><span class="hs-identifier hs-var">srWh</span></a></span></span><span> </span><span id="local-6989586621679436355"><span class="annot"><span class="annottext">Dimension
+</span><a href="#local-6989586621679436355"><span class="hs-identifier hs-var">srHt</span></a></span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-65"></span><span>    </span><span class="hs-special">(</span><span class="annot"><a href="XMonad.Util.PositionStore.html#PSRectangle"><span class="hs-identifier hs-type">PSRectangle</span></a></span><span> </span><span id="local-6989586621679436354"><span class="annot"><span class="annottext">Double
+</span><a href="#local-6989586621679436354"><span class="hs-identifier hs-var">x</span></a></span></span><span> </span><span id="local-6989586621679436353"><span class="annot"><span class="annottext">Double
+</span><a href="#local-6989586621679436353"><span class="hs-identifier hs-var">y</span></a></span></span><span> </span><span id="local-6989586621679436352"><span class="annot"><span class="annottext">Double
+</span><a href="#local-6989586621679436352"><span class="hs-identifier hs-var">wh</span></a></span></span><span> </span><span id="local-6989586621679436351"><span class="annot"><span class="annottext">Double
+</span><a href="#local-6989586621679436351"><span class="hs-identifier hs-var">ht</span></a></span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">forall k a. Ord k =&gt; k -&gt; Map k a -&gt; Maybe a
+</span><span class="hs-identifier hs-var">M.lookup</span></span><span> </span><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679436359"><span class="hs-identifier hs-var">w</span></a></span><span> </span><span class="annot"><span class="annottext">Map Window PosStoreRectangle
+</span><a href="#local-6989586621679436360"><span class="hs-identifier hs-var">posStoreMap</span></a></span><span>
+</span><span id="line-66"></span><span>    </span><span class="hs-keyword">let</span><span> </span><span id="local-6989586621679436346"><span class="annot"><span class="annottext">realWh :: Double
+</span><a href="#local-6989586621679436346"><span class="hs-identifier hs-var hs-var">realWh</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">forall a b. (Integral a, Num b) =&gt; a -&gt; b
+</span><span class="hs-identifier hs-var">fromIntegral</span></span><span> </span><span class="annot"><span class="annottext">Dimension
+</span><a href="#local-6989586621679436356"><span class="hs-identifier hs-var">srWh</span></a></span><span> </span><span class="annot"><span class="annottext">forall a. Num a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-operator hs-var">*</span></span><span> </span><span class="annot"><span class="annottext">Double
+</span><a href="#local-6989586621679436352"><span class="hs-identifier hs-var">wh</span></a></span><span>
+</span><span id="line-67"></span><span>        </span><span id="local-6989586621679436341"><span class="annot"><span class="annottext">realHt :: Double
+</span><a href="#local-6989586621679436341"><span class="hs-identifier hs-var hs-var">realHt</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">forall a b. (Integral a, Num b) =&gt; a -&gt; b
+</span><span class="hs-identifier hs-var">fromIntegral</span></span><span> </span><span class="annot"><span class="annottext">Dimension
+</span><a href="#local-6989586621679436355"><span class="hs-identifier hs-var">srHt</span></a></span><span> </span><span class="annot"><span class="annottext">forall a. Num a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-operator hs-var">*</span></span><span> </span><span class="annot"><span class="annottext">Double
+</span><a href="#local-6989586621679436351"><span class="hs-identifier hs-var">ht</span></a></span><span>
+</span><span id="line-68"></span><span>        </span><span id="local-6989586621679436337"><span class="annot"><span class="annottext">realOffsetX :: Double
+</span><a href="#local-6989586621679436337"><span class="hs-identifier hs-var hs-var">realOffsetX</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">forall a b. (Integral a, Num b) =&gt; a -&gt; b
+</span><span class="hs-identifier hs-var">fromIntegral</span></span><span> </span><span class="annot"><span class="annottext">Dimension
+</span><a href="#local-6989586621679436356"><span class="hs-identifier hs-var">srWh</span></a></span><span> </span><span class="annot"><span class="annottext">forall a. Num a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-operator hs-var">*</span></span><span> </span><span class="annot"><span class="annottext">Double
+</span><a href="#local-6989586621679436354"><span class="hs-identifier hs-var">x</span></a></span><span>
+</span><span id="line-69"></span><span>        </span><span id="local-6989586621679436333"><span class="annot"><span class="annottext">realOffsetY :: Double
+</span><a href="#local-6989586621679436333"><span class="hs-identifier hs-var hs-var">realOffsetY</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">forall a b. (Integral a, Num b) =&gt; a -&gt; b
+</span><span class="hs-identifier hs-var">fromIntegral</span></span><span> </span><span class="annot"><span class="annottext">Dimension
+</span><a href="#local-6989586621679436355"><span class="hs-identifier hs-var">srHt</span></a></span><span> </span><span class="annot"><span class="annottext">forall a. Num a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-operator hs-var">*</span></span><span> </span><span class="annot"><span class="annottext">Double
+</span><a href="#local-6989586621679436353"><span class="hs-identifier hs-var">y</span></a></span><span>
+</span><span id="line-70"></span><span>    </span><span class="annot"><span class="annottext">forall (m :: * -&gt; *) a. Monad m =&gt; a -&gt; m a
+</span><span class="hs-identifier hs-var">return</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Position -&gt; Position -&gt; Dimension -&gt; Dimension -&gt; Rectangle
+</span><span class="hs-identifier hs-var">Rectangle</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Position
+</span><a href="#local-6989586621679436358"><span class="hs-identifier hs-var">srX</span></a></span><span> </span><span class="annot"><span class="annottext">forall a. Num a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-operator hs-var">+</span></span><span> </span><span class="annot"><span class="annottext">forall a b. (RealFrac a, Integral b) =&gt; a -&gt; b
+</span><span class="hs-identifier hs-var">round</span></span><span> </span><span class="annot"><span class="annottext">Double
+</span><a href="#local-6989586621679436337"><span class="hs-identifier hs-var">realOffsetX</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Position
+</span><a href="#local-6989586621679436357"><span class="hs-identifier hs-var">srY</span></a></span><span> </span><span class="annot"><span class="annottext">forall a. Num a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-operator hs-var">+</span></span><span> </span><span class="annot"><span class="annottext">forall a b. (RealFrac a, Integral b) =&gt; a -&gt; b
+</span><span class="hs-identifier hs-var">round</span></span><span> </span><span class="annot"><span class="annottext">Double
+</span><a href="#local-6989586621679436333"><span class="hs-identifier hs-var">realOffsetY</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-71"></span><span>                        </span><span class="hs-special">(</span><span class="annot"><span class="annottext">forall a b. (RealFrac a, Integral b) =&gt; a -&gt; b
+</span><span class="hs-identifier hs-var">round</span></span><span> </span><span class="annot"><span class="annottext">Double
+</span><a href="#local-6989586621679436346"><span class="hs-identifier hs-var">realWh</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">forall a b. (RealFrac a, Integral b) =&gt; a -&gt; b
+</span><span class="hs-identifier hs-var">round</span></span><span> </span><span class="annot"><span class="annottext">Double
+</span><a href="#local-6989586621679436341"><span class="hs-identifier hs-var">realHt</span></a></span><span class="hs-special">)</span><span class="hs-special">)</span><span>
+</span><span id="line-72"></span><span>
+</span><span id="line-73"></span><span class="annot"><a href="XMonad.Util.PositionStore.html#posStoreMove"><span class="hs-identifier hs-type">posStoreMove</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><a href="XMonad.Util.PositionStore.html#PositionStore"><span class="hs-identifier hs-type">PositionStore</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Window</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Position</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Position</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Rectangle</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Rectangle</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="XMonad.Util.PositionStore.html#PositionStore"><span class="hs-identifier hs-type">PositionStore</span></a></span><span>
+</span><span id="line-74"></span><span id="posStoreMove"><span class="annot"><span class="annottext">posStoreMove :: PositionStore
+-&gt; Window
+-&gt; Position
+-&gt; Position
+-&gt; Rectangle
+-&gt; Rectangle
+-&gt; PositionStore
+</span><a href="XMonad.Util.PositionStore.html#posStoreMove"><span class="hs-identifier hs-var hs-var">posStoreMove</span></a></span></span><span> </span><span id="local-6989586621679436330"><span class="annot"><span class="annottext">PositionStore
+</span><a href="#local-6989586621679436330"><span class="hs-identifier hs-var">posStore</span></a></span></span><span> </span><span id="local-6989586621679436329"><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679436329"><span class="hs-identifier hs-var">w</span></a></span></span><span> </span><span id="local-6989586621679436328"><span class="annot"><span class="annottext">Position
+</span><a href="#local-6989586621679436328"><span class="hs-identifier hs-var">x</span></a></span></span><span> </span><span id="local-6989586621679436327"><span class="annot"><span class="annottext">Position
+</span><a href="#local-6989586621679436327"><span class="hs-identifier hs-var">y</span></a></span></span><span> </span><span id="local-6989586621679436326"><span class="annot"><span class="annottext">Rectangle
+</span><a href="#local-6989586621679436326"><span class="hs-identifier hs-var">oldSr</span></a></span></span><span> </span><span id="local-6989586621679436325"><span class="annot"><span class="annottext">Rectangle
+</span><a href="#local-6989586621679436325"><span class="hs-identifier hs-var">newSr</span></a></span></span><span> </span><span class="hs-glyph">=</span><span>
+</span><span id="line-75"></span><span>    </span><span class="hs-keyword">case</span><span> </span><span class="annot"><span class="annottext">PositionStore -&gt; Window -&gt; Rectangle -&gt; Maybe Rectangle
+</span><a href="XMonad.Util.PositionStore.html#posStoreQuery"><span class="hs-identifier hs-var">posStoreQuery</span></a></span><span> </span><span class="annot"><span class="annottext">PositionStore
+</span><a href="#local-6989586621679436330"><span class="hs-identifier hs-var">posStore</span></a></span><span> </span><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679436329"><span class="hs-identifier hs-var">w</span></a></span><span> </span><span class="annot"><span class="annottext">Rectangle
+</span><a href="#local-6989586621679436326"><span class="hs-identifier hs-var">oldSr</span></a></span><span> </span><span class="hs-keyword">of</span><span>
+</span><span id="line-76"></span><span>        </span><span class="annot"><span class="annottext">Maybe Rectangle
+</span><span class="hs-identifier hs-var">Nothing</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">PositionStore
+</span><a href="#local-6989586621679436330"><span class="hs-identifier hs-var">posStore</span></a></span><span>     </span><span class="hs-comment">-- not in store, can't move -&gt; do nothing</span><span>
+</span><span id="line-77"></span><span>        </span><span class="annot"><span class="hs-identifier hs-type">Just</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">Rectangle</span></span><span> </span><span class="annot"><span class="annottext">Position
+</span><span class="hs-identifier">_</span></span><span> </span><span class="annot"><span class="annottext">Position
+</span><span class="hs-identifier">_</span></span><span> </span><span id="local-6989586621679436324"><span class="annot"><span class="annottext">Dimension
+</span><a href="#local-6989586621679436324"><span class="hs-identifier hs-var">wh</span></a></span></span><span> </span><span id="local-6989586621679436323"><span class="annot"><span class="annottext">Dimension
+</span><a href="#local-6989586621679436323"><span class="hs-identifier hs-var">ht</span></a></span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">PositionStore -&gt; Window -&gt; Rectangle -&gt; Rectangle -&gt; PositionStore
+</span><a href="XMonad.Util.PositionStore.html#posStoreInsert"><span class="hs-identifier hs-var">posStoreInsert</span></a></span><span> </span><span class="annot"><span class="annottext">PositionStore
+</span><a href="#local-6989586621679436330"><span class="hs-identifier hs-var">posStore</span></a></span><span> </span><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679436329"><span class="hs-identifier hs-var">w</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Position -&gt; Position -&gt; Dimension -&gt; Dimension -&gt; Rectangle
+</span><span class="hs-identifier hs-var">Rectangle</span></span><span> </span><span class="annot"><span class="annottext">Position
+</span><a href="#local-6989586621679436328"><span class="hs-identifier hs-var">x</span></a></span><span> </span><span class="annot"><span class="annottext">Position
+</span><a href="#local-6989586621679436327"><span class="hs-identifier hs-var">y</span></a></span><span> </span><span class="annot"><span class="annottext">Dimension
+</span><a href="#local-6989586621679436324"><span class="hs-identifier hs-var">wh</span></a></span><span> </span><span class="annot"><span class="annottext">Dimension
+</span><a href="#local-6989586621679436323"><span class="hs-identifier hs-var">ht</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">Rectangle
+</span><a href="#local-6989586621679436325"><span class="hs-identifier hs-var">newSr</span></a></span><span>
+</span><span id="line-78"></span></pre></body></html>

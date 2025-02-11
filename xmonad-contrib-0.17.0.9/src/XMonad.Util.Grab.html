@@ -1,0 +1,396 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd"><html xmlns="http://www.w3.org/1999/xhtml"><head><link rel="stylesheet" type="text/css" href="style.css" /><script type="text/javascript" src="highlight.js"></script></head><body><pre><span class="hs-pragma">{-# LANGUAGE LambdaCase #-}</span><span>
+</span><span id="line-2"></span><span>
+</span><span id="line-3"></span><span class="hs-comment">--------------------------------------------------------------------------------</span><span>
+</span><span id="line-4"></span><span class="hs-comment">-- |</span><span>
+</span><span id="line-5"></span><span class="hs-comment">-- Module      :  XMonad.Util.Grab</span><span>
+</span><span id="line-6"></span><span class="hs-comment">-- Description :  Utilities for grabbing/ungrabbing keys.</span><span>
+</span><span id="line-7"></span><span class="hs-comment">-- Copyright   :  (c) 2018  L. S. Leary</span><span>
+</span><span id="line-8"></span><span class="hs-comment">-- License     :  BSD3-style (see LICENSE)</span><span>
+</span><span id="line-9"></span><span class="hs-comment">--</span><span>
+</span><span id="line-10"></span><span class="hs-comment">-- Maintainer  :  L. S. Leary</span><span>
+</span><span id="line-11"></span><span class="hs-comment">-- Stability   :  unstable</span><span>
+</span><span id="line-12"></span><span class="hs-comment">-- Portability :  unportable</span><span>
+</span><span id="line-13"></span><span class="hs-comment">--</span><span>
+</span><span id="line-14"></span><span class="hs-comment">-- This module should not be directly used by users. Its purpose is to</span><span>
+</span><span id="line-15"></span><span class="hs-comment">-- facilitate grabbing and ungrabbing keys.</span><span>
+</span><span id="line-16"></span><span class="hs-comment">--------------------------------------------------------------------------------</span><span>
+</span><span id="line-17"></span><span>
+</span><span id="line-18"></span><span class="hs-comment">-- --&lt; Imports &amp; Exports &gt;-- {{{</span><span>
+</span><span id="line-19"></span><span>
+</span><span id="line-20"></span><span class="hs-keyword">module</span><span> </span><span class="hs-identifier">XMonad.Util.Grab</span><span>
+</span><span id="line-21"></span><span>  </span><span class="hs-special">(</span><span>
+</span><span id="line-22"></span><span> </span><span class="annot"><span class="hs-comment">-- * Usage</span></span><span>
+</span><span id="line-23"></span><span> </span><span class="annot"><span class="hs-comment">-- $Usage</span></span><span>
+</span><span id="line-24"></span><span>    </span><span class="annot"><a href="XMonad.Util.Grab.html#grabKP"><span class="hs-identifier">grabKP</span></a></span><span>
+</span><span id="line-25"></span><span>  </span><span class="hs-special">,</span><span> </span><span class="annot"><a href="XMonad.Util.Grab.html#ungrabKP"><span class="hs-identifier">ungrabKP</span></a></span><span>
+</span><span id="line-26"></span><span>  </span><span class="hs-special">,</span><span> </span><span class="annot"><a href="XMonad.Util.Grab.html#grabUngrab"><span class="hs-identifier">grabUngrab</span></a></span><span>
+</span><span id="line-27"></span><span>  </span><span class="hs-special">,</span><span> </span><span class="annot"><a href="XMonad.Util.Grab.html#grab"><span class="hs-identifier">grab</span></a></span><span>
+</span><span id="line-28"></span><span>  </span><span class="hs-special">,</span><span> </span><span class="annot"><a href="XMonad.Util.Grab.html#customRegrabEvHook"><span class="hs-identifier">customRegrabEvHook</span></a></span><span>
+</span><span id="line-29"></span><span>  </span><span class="hs-special">)</span><span> </span><span class="hs-keyword">where</span><span>
+</span><span id="line-30"></span><span>
+</span><span id="line-31"></span><span class="hs-comment">-- core</span><span>
+</span><span id="line-32"></span><span class="hs-keyword">import</span><span>           </span><span class="annot"><span class="hs-identifier">XMonad</span></span><span>                         </span><span class="hs-keyword">hiding</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier">mkGrabs</span></span><span class="hs-special">)</span><span>
+</span><span id="line-33"></span><span>
+</span><span id="line-34"></span><span class="hs-keyword">import</span><span>           </span><span class="annot"><span class="hs-identifier">Control.Monad</span></span><span>                  </span><span class="hs-special">(</span><span> </span><span class="annot"><span class="hs-identifier">when</span></span><span> </span><span class="hs-special">)</span><span>
+</span><span id="line-35"></span><span class="hs-keyword">import</span><span>           </span><span class="annot"><span class="hs-identifier">Data.Bits</span></span><span>                      </span><span class="hs-special">(</span><span> </span><span class="annot"><span class="hs-identifier">setBit</span></span><span> </span><span class="hs-special">)</span><span>
+</span><span id="line-36"></span><span class="hs-keyword">import</span><span>           </span><span class="annot"><span class="hs-identifier">Data.Foldable</span></span><span>                  </span><span class="hs-special">(</span><span> </span><span class="annot"><span class="hs-identifier">traverse_</span></span><span> </span><span class="hs-special">)</span><span>
+</span><span id="line-37"></span><span class="hs-comment">-- base</span><span>
+</span><span id="line-38"></span><span class="hs-keyword">import</span><span> </span><span class="hs-keyword">qualified</span><span> </span><span class="annot"><span class="hs-identifier">Data.Map.Strict</span></span><span>               </span><span class="hs-keyword">as</span><span> </span><span class="annot"><span class="hs-identifier">M</span></span><span>
+</span><span id="line-39"></span><span class="hs-keyword">import</span><span>           </span><span class="annot"><span class="hs-identifier">Data.Semigroup</span></span><span>                 </span><span class="hs-special">(</span><span> </span><span class="annot"><span class="hs-identifier">All</span></span><span class="hs-special">(</span><span class="hs-glyph">..</span><span class="hs-special">)</span><span> </span><span class="hs-special">)</span><span>
+</span><span id="line-40"></span><span class="hs-keyword">import</span><span>           </span><span class="annot"><span class="hs-identifier">Data.Traversable</span></span><span>               </span><span class="hs-special">(</span><span> </span><span class="annot"><span class="hs-identifier">for</span></span><span> </span><span class="hs-special">)</span><span>
+</span><span id="line-41"></span><span>
+</span><span id="line-42"></span><span class="hs-comment">-- }}}</span><span>
+</span><span id="line-43"></span><span>
+</span><span id="line-44"></span><span class="hs-comment">-- --&lt; Usage &gt;-- {{{</span><span>
+</span><span id="line-45"></span><span>
+</span><span id="line-46"></span><span class="hs-comment">-- $Usage</span><span>
+</span><span id="line-47"></span><span class="hs-comment">--</span><span>
+</span><span id="line-48"></span><span class="hs-comment">-- This module should not be directly used by users. Its purpose is to</span><span>
+</span><span id="line-49"></span><span class="hs-comment">-- facilitate grabbing and ungrabbing keys.</span><span>
+</span><span id="line-50"></span><span>
+</span><span id="line-51"></span><span class="hs-comment">-- }}}</span><span>
+</span><span id="line-52"></span><span>
+</span><span id="line-53"></span><span class="hs-comment">-- --&lt; Public Utils &gt;-- {{{</span><span>
+</span><span id="line-54"></span><span>
+</span><span id="line-55"></span><span class="hs-comment">-- | A more convenient version of 'grabKey'.</span><span>
+</span><span id="line-56"></span><span class="annot"><a href="XMonad.Util.Grab.html#grabKP"><span class="hs-identifier hs-type">grabKP</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">KeyMask</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">KeyCode</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">X</span></span><span> </span><span class="hs-special">(</span><span class="hs-special">)</span><span>
+</span><span id="line-57"></span><span id="grabKP"><span class="annot"><span class="annottext">grabKP :: KeyMask -&gt; KeyCode -&gt; X ()
+</span><a href="XMonad.Util.Grab.html#grabKP"><span class="hs-identifier hs-var hs-var">grabKP</span></a></span></span><span> </span><span id="local-6989586621679386908"><span class="annot"><span class="annottext">KeyMask
+</span><a href="#local-6989586621679386908"><span class="hs-identifier hs-var">mdfr</span></a></span></span><span> </span><span id="local-6989586621679386907"><span class="annot"><span class="annottext">KeyCode
+</span><a href="#local-6989586621679386907"><span class="hs-identifier hs-var">kc</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-58"></span><span>  </span><span class="annot"><span class="hs-identifier hs-type">XConf</span></span><span> </span><span class="hs-special">{</span><span> </span><span class="annot"><span class="annottext">display :: XConf -&gt; Display
+</span><span class="hs-identifier hs-var">display</span></span><span> </span><span class="hs-glyph">=</span><span> </span><span id="local-6989586621679386904"><span class="annot"><span class="annottext">Display
+</span><a href="#local-6989586621679386904"><span class="hs-identifier hs-var">dpy</span></a></span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">theRoot :: XConf -&gt; KeySym
+</span><span class="hs-identifier hs-var">theRoot</span></span><span> </span><span class="hs-glyph">=</span><span> </span><span id="local-6989586621679386902"><span class="annot"><span class="annottext">KeySym
+</span><a href="#local-6989586621679386902"><span class="hs-identifier hs-var">rootw</span></a></span></span><span> </span><span class="hs-special">}</span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">X XConf
+forall r (m :: * -&gt; *). MonadReader r m =&gt; m r
+</span><span class="hs-identifier hs-var">ask</span></span><span>
+</span><span id="line-59"></span><span>  </span><span class="annot"><span class="annottext">IO () -&gt; X ()
+forall (m :: * -&gt; *) a. MonadIO m =&gt; IO a -&gt; m a
+</span><span class="hs-identifier hs-var">io</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Display
+-&gt; KeyCode -&gt; KeyMask -&gt; KeySym -&gt; Bool -&gt; CInt -&gt; CInt -&gt; IO ()
+</span><span class="hs-identifier hs-var">grabKey</span></span><span> </span><span class="annot"><span class="annottext">Display
+</span><a href="#local-6989586621679386904"><span class="hs-identifier hs-var">dpy</span></a></span><span> </span><span class="annot"><span class="annottext">KeyCode
+</span><a href="#local-6989586621679386907"><span class="hs-identifier hs-var">kc</span></a></span><span> </span><span class="annot"><span class="annottext">KeyMask
+</span><a href="#local-6989586621679386908"><span class="hs-identifier hs-var">mdfr</span></a></span><span> </span><span class="annot"><span class="annottext">KeySym
+</span><a href="#local-6989586621679386902"><span class="hs-identifier hs-var">rootw</span></a></span><span> </span><span class="annot"><span class="annottext">Bool
+</span><span class="hs-identifier hs-var">True</span></span><span> </span><span class="annot"><span class="annottext">CInt
+</span><span class="hs-identifier hs-var">grabModeAsync</span></span><span> </span><span class="annot"><span class="annottext">CInt
+</span><span class="hs-identifier hs-var">grabModeAsync</span></span><span class="hs-special">)</span><span>
+</span><span id="line-60"></span><span>
+</span><span id="line-61"></span><span class="hs-comment">-- | A more convenient version of 'ungrabKey'.</span><span>
+</span><span id="line-62"></span><span class="annot"><a href="XMonad.Util.Grab.html#ungrabKP"><span class="hs-identifier hs-type">ungrabKP</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">KeyMask</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">KeyCode</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">X</span></span><span> </span><span class="hs-special">(</span><span class="hs-special">)</span><span>
+</span><span id="line-63"></span><span id="ungrabKP"><span class="annot"><span class="annottext">ungrabKP :: KeyMask -&gt; KeyCode -&gt; X ()
+</span><a href="XMonad.Util.Grab.html#ungrabKP"><span class="hs-identifier hs-var hs-var">ungrabKP</span></a></span></span><span> </span><span id="local-6989586621679386897"><span class="annot"><span class="annottext">KeyMask
+</span><a href="#local-6989586621679386897"><span class="hs-identifier hs-var">mdfr</span></a></span></span><span> </span><span id="local-6989586621679386896"><span class="annot"><span class="annottext">KeyCode
+</span><a href="#local-6989586621679386896"><span class="hs-identifier hs-var">kc</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-64"></span><span>  </span><span class="annot"><span class="hs-identifier hs-type">XConf</span></span><span> </span><span class="hs-special">{</span><span> </span><span class="annot"><span class="annottext">display :: XConf -&gt; Display
+</span><span class="hs-identifier hs-var">display</span></span><span> </span><span class="hs-glyph">=</span><span> </span><span id="local-6989586621679386895"><span class="annot"><span class="annottext">Display
+</span><a href="#local-6989586621679386895"><span class="hs-identifier hs-var">dpy</span></a></span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">theRoot :: XConf -&gt; KeySym
+</span><span class="hs-identifier hs-var">theRoot</span></span><span> </span><span class="hs-glyph">=</span><span> </span><span id="local-6989586621679386894"><span class="annot"><span class="annottext">KeySym
+</span><a href="#local-6989586621679386894"><span class="hs-identifier hs-var">rootw</span></a></span></span><span> </span><span class="hs-special">}</span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">X XConf
+forall r (m :: * -&gt; *). MonadReader r m =&gt; m r
+</span><span class="hs-identifier hs-var">ask</span></span><span>
+</span><span id="line-65"></span><span>  </span><span class="annot"><span class="annottext">IO () -&gt; X ()
+forall (m :: * -&gt; *) a. MonadIO m =&gt; IO a -&gt; m a
+</span><span class="hs-identifier hs-var">io</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Display -&gt; KeyCode -&gt; KeyMask -&gt; KeySym -&gt; IO ()
+</span><span class="hs-identifier hs-var">ungrabKey</span></span><span> </span><span class="annot"><span class="annottext">Display
+</span><a href="#local-6989586621679386895"><span class="hs-identifier hs-var">dpy</span></a></span><span> </span><span class="annot"><span class="annottext">KeyCode
+</span><a href="#local-6989586621679386896"><span class="hs-identifier hs-var">kc</span></a></span><span> </span><span class="annot"><span class="annottext">KeyMask
+</span><a href="#local-6989586621679386897"><span class="hs-identifier hs-var">mdfr</span></a></span><span> </span><span class="annot"><span class="annottext">KeySym
+</span><a href="#local-6989586621679386894"><span class="hs-identifier hs-var">rootw</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-66"></span><span>
+</span><span id="line-67"></span><span class="hs-comment">-- | A convenience function to grab and ungrab keys</span><span>
+</span><span id="line-68"></span><span class="annot"><a href="XMonad.Util.Grab.html#grabUngrab"><span class="hs-identifier hs-type">grabUngrab</span></a></span><span>
+</span><span id="line-69"></span><span>  </span><span class="hs-glyph">::</span><span> </span><span class="hs-special">[</span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">KeyMask</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier hs-type">KeySym</span></span><span class="hs-special">)</span><span class="hs-special">]</span><span> </span><span class="hs-comment">-- ^  Keys to grab</span><span>
+</span><span id="line-70"></span><span>  </span><span class="hs-glyph">-&gt;</span><span> </span><span class="hs-special">[</span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">KeyMask</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier hs-type">KeySym</span></span><span class="hs-special">)</span><span class="hs-special">]</span><span> </span><span class="hs-comment">-- ^ Keys to ungrab</span><span>
+</span><span id="line-71"></span><span>  </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">X</span></span><span> </span><span class="hs-special">(</span><span class="hs-special">)</span><span>
+</span><span id="line-72"></span><span id="grabUngrab"><span class="annot"><span class="annottext">grabUngrab :: [(KeyMask, KeySym)] -&gt; [(KeyMask, KeySym)] -&gt; X ()
+</span><a href="XMonad.Util.Grab.html#grabUngrab"><span class="hs-identifier hs-var hs-var">grabUngrab</span></a></span></span><span> </span><span id="local-6989586621679386892"><span class="annot"><span class="annottext">[(KeyMask, KeySym)]
+</span><a href="#local-6989586621679386892"><span class="hs-identifier hs-var">gr</span></a></span></span><span> </span><span id="local-6989586621679386891"><span class="annot"><span class="annottext">[(KeyMask, KeySym)]
+</span><a href="#local-6989586621679386891"><span class="hs-identifier hs-var">ugr</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-73"></span><span>  </span><span id="local-6989586621679386890"><span class="annot"><span class="annottext">[(KeyMask, KeySym)] -&gt; [(KeyMask, KeyCode)]
+</span><a href="#local-6989586621679386890"><span class="hs-identifier hs-var">f</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">X ([(KeyMask, KeySym)] -&gt; [(KeyMask, KeyCode)])
+</span><a href="XMonad.Util.Grab.html#mkGrabs"><span class="hs-identifier hs-var">mkGrabs</span></a></span><span>
+</span><span id="line-74"></span><span>  </span><span class="annot"><span class="annottext">((KeyMask, KeyCode) -&gt; X ()) -&gt; [(KeyMask, KeyCode)] -&gt; X ()
+forall (t :: * -&gt; *) (f :: * -&gt; *) a b.
+(Foldable t, Applicative f) =&gt;
+(a -&gt; f b) -&gt; t a -&gt; f ()
+</span><span class="hs-identifier hs-var">traverse_</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">(KeyMask -&gt; KeyCode -&gt; X ()) -&gt; (KeyMask, KeyCode) -&gt; X ()
+forall a b c. (a -&gt; b -&gt; c) -&gt; (a, b) -&gt; c
+</span><span class="hs-identifier hs-var">uncurry</span></span><span> </span><span class="annot"><span class="annottext">KeyMask -&gt; KeyCode -&gt; X ()
+</span><a href="XMonad.Util.Grab.html#ungrabKP"><span class="hs-identifier hs-var">ungrabKP</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">[(KeyMask, KeySym)] -&gt; [(KeyMask, KeyCode)]
+</span><a href="#local-6989586621679386890"><span class="hs-identifier hs-var">f</span></a></span><span> </span><span class="annot"><span class="annottext">[(KeyMask, KeySym)]
+</span><a href="#local-6989586621679386891"><span class="hs-identifier hs-var">ugr</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-75"></span><span>  </span><span class="annot"><span class="annottext">((KeyMask, KeyCode) -&gt; X ()) -&gt; [(KeyMask, KeyCode)] -&gt; X ()
+forall (t :: * -&gt; *) (f :: * -&gt; *) a b.
+(Foldable t, Applicative f) =&gt;
+(a -&gt; f b) -&gt; t a -&gt; f ()
+</span><span class="hs-identifier hs-var">traverse_</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">(KeyMask -&gt; KeyCode -&gt; X ()) -&gt; (KeyMask, KeyCode) -&gt; X ()
+forall a b c. (a -&gt; b -&gt; c) -&gt; (a, b) -&gt; c
+</span><span class="hs-identifier hs-var">uncurry</span></span><span> </span><span class="annot"><span class="annottext">KeyMask -&gt; KeyCode -&gt; X ()
+</span><a href="XMonad.Util.Grab.html#grabKP"><span class="hs-identifier hs-var">grabKP</span></a></span><span class="hs-special">)</span><span>   </span><span class="hs-special">(</span><span class="annot"><span class="annottext">[(KeyMask, KeySym)] -&gt; [(KeyMask, KeyCode)]
+</span><a href="#local-6989586621679386890"><span class="hs-identifier hs-var">f</span></a></span><span> </span><span class="annot"><span class="annottext">[(KeyMask, KeySym)]
+</span><a href="#local-6989586621679386892"><span class="hs-identifier hs-var">gr</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-76"></span><span>
+</span><span id="line-77"></span><span class="hs-comment">-- | A convenience function to grab keys. This also ungrabs all</span><span>
+</span><span id="line-78"></span><span class="hs-comment">-- previously grabbed keys.</span><span>
+</span><span id="line-79"></span><span class="annot"><a href="XMonad.Util.Grab.html#grab"><span class="hs-identifier hs-type">grab</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="hs-special">[</span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">KeyMask</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier hs-type">KeySym</span></span><span class="hs-special">)</span><span class="hs-special">]</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">X</span></span><span> </span><span class="hs-special">(</span><span class="hs-special">)</span><span>
+</span><span id="line-80"></span><span id="grab"><span class="annot"><span class="annottext">grab :: [(KeyMask, KeySym)] -&gt; X ()
+</span><a href="XMonad.Util.Grab.html#grab"><span class="hs-identifier hs-var hs-var">grab</span></a></span></span><span> </span><span id="local-6989586621679386887"><span class="annot"><span class="annottext">[(KeyMask, KeySym)]
+</span><a href="#local-6989586621679386887"><span class="hs-identifier hs-var">ks</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-81"></span><span>  </span><span class="annot"><span class="hs-identifier hs-type">XConf</span></span><span> </span><span class="hs-special">{</span><span> </span><span class="annot"><span class="annottext">display :: XConf -&gt; Display
+</span><span class="hs-identifier hs-var">display</span></span><span> </span><span class="hs-glyph">=</span><span> </span><span id="local-6989586621679386886"><span class="annot"><span class="annottext">Display
+</span><a href="#local-6989586621679386886"><span class="hs-identifier hs-var">dpy</span></a></span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">theRoot :: XConf -&gt; KeySym
+</span><span class="hs-identifier hs-var">theRoot</span></span><span> </span><span class="hs-glyph">=</span><span> </span><span id="local-6989586621679386885"><span class="annot"><span class="annottext">KeySym
+</span><a href="#local-6989586621679386885"><span class="hs-identifier hs-var">rootw</span></a></span></span><span> </span><span class="hs-special">}</span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">X XConf
+forall r (m :: * -&gt; *). MonadReader r m =&gt; m r
+</span><span class="hs-identifier hs-var">ask</span></span><span>
+</span><span id="line-82"></span><span>  </span><span class="annot"><span class="annottext">IO () -&gt; X ()
+forall (m :: * -&gt; *) a. MonadIO m =&gt; IO a -&gt; m a
+</span><span class="hs-identifier hs-var">io</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Display -&gt; KeyCode -&gt; KeyMask -&gt; KeySym -&gt; IO ()
+</span><span class="hs-identifier hs-var">ungrabKey</span></span><span> </span><span class="annot"><span class="annottext">Display
+</span><a href="#local-6989586621679386886"><span class="hs-identifier hs-var">dpy</span></a></span><span> </span><span class="annot"><span class="annottext">KeyCode
+</span><span class="hs-identifier hs-var">anyKey</span></span><span> </span><span class="annot"><span class="annottext">KeyMask
+</span><span class="hs-identifier hs-var">anyModifier</span></span><span> </span><span class="annot"><span class="annottext">KeySym
+</span><a href="#local-6989586621679386885"><span class="hs-identifier hs-var">rootw</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-83"></span><span>  </span><span class="annot"><span class="annottext">[(KeyMask, KeySym)] -&gt; [(KeyMask, KeySym)] -&gt; X ()
+</span><a href="XMonad.Util.Grab.html#grabUngrab"><span class="hs-identifier hs-var">grabUngrab</span></a></span><span> </span><span class="annot"><span class="annottext">[(KeyMask, KeySym)]
+</span><a href="#local-6989586621679386887"><span class="hs-identifier hs-var">ks</span></a></span><span> </span><span class="hs-special">[</span><span class="hs-special">]</span><span>
+</span><span id="line-84"></span><span>
+</span><span id="line-85"></span><span class="hs-comment">-- | An event hook that runs a custom action to regrab the necessary keys.</span><span>
+</span><span id="line-86"></span><span class="annot"><a href="XMonad.Util.Grab.html#customRegrabEvHook"><span class="hs-identifier hs-type">customRegrabEvHook</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">X</span></span><span> </span><span class="hs-special">(</span><span class="hs-special">)</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Event</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">X</span></span><span> </span><span class="annot"><span class="hs-identifier hs-type">All</span></span><span>
+</span><span id="line-87"></span><span id="customRegrabEvHook"><span class="annot"><span class="annottext">customRegrabEvHook :: X () -&gt; Event -&gt; X All
+</span><a href="XMonad.Util.Grab.html#customRegrabEvHook"><span class="hs-identifier hs-var hs-var">customRegrabEvHook</span></a></span></span><span> </span><span id="local-6989586621679386882"><span class="annot"><span class="annottext">X ()
+</span><a href="#local-6989586621679386882"><span class="hs-identifier hs-var">regr</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-glyph">\</span><span class="hs-glyph">case</span><span>
+</span><span id="line-88"></span><span>  </span><span id="local-6989586621679386881"><span class="annot"><span class="annottext">e :: Event
+</span><a href="#local-6989586621679386881"><span class="hs-identifier hs-var">e</span></a></span></span><span class="hs-glyph">@</span><span class="annot"><span class="hs-identifier hs-type">MappingNotifyEvent</span></span><span class="hs-special">{</span><span class="hs-special">}</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-89"></span><span>    </span><span class="annot"><span class="annottext">IO () -&gt; X ()
+forall (m :: * -&gt; *) a. MonadIO m =&gt; IO a -&gt; m a
+</span><span class="hs-identifier hs-var">io</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Event -&gt; IO ()
+</span><span class="hs-identifier hs-var">refreshKeyboardMapping</span></span><span> </span><span class="annot"><span class="annottext">Event
+</span><a href="#local-6989586621679386881"><span class="hs-identifier hs-var">e</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-90"></span><span>    </span><span class="annot"><span class="annottext">Bool -&gt; X () -&gt; X ()
+forall (f :: * -&gt; *). Applicative f =&gt; Bool -&gt; f () -&gt; f ()
+</span><span class="hs-identifier hs-var">when</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Event -&gt; CInt
+</span><span class="hs-identifier hs-var hs-var">ev_request</span></span><span> </span><span class="annot"><span class="annottext">Event
+</span><a href="#local-6989586621679386881"><span class="hs-identifier hs-var">e</span></a></span><span> </span><span class="annot"><span class="annottext">CInt -&gt; [CInt] -&gt; Bool
+forall (t :: * -&gt; *) a. (Foldable t, Eq a) =&gt; a -&gt; t a -&gt; Bool
+</span><span class="hs-operator hs-var">`elem`</span></span><span> </span><span class="hs-special">[</span><span class="annot"><span class="annottext">CInt
+</span><span class="hs-identifier hs-var">mappingKeyboard</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">CInt
+</span><span class="hs-identifier hs-var">mappingModifier</span></span><span class="hs-special">]</span><span class="hs-special">)</span><span>
+</span><span id="line-91"></span><span>      </span><span class="annot"><span class="annottext">(X () -&gt; X ()) -&gt; X () -&gt; X ()
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span>  </span><span class="annot"><span class="annottext">X ()
+</span><a href="XMonad.Util.Grab.html#setNumlockMask"><span class="hs-identifier hs-var">setNumlockMask</span></a></span><span>
+</span><span id="line-92"></span><span>      </span><span class="annot"><span class="annottext">X () -&gt; X () -&gt; X ()
+forall (m :: * -&gt; *) a b. Monad m =&gt; m a -&gt; m b -&gt; m b
+</span><span class="hs-operator hs-var">&gt;&gt;</span></span><span> </span><span class="annot"><span class="annottext">X ()
+</span><a href="#local-6989586621679386882"><span class="hs-identifier hs-var">regr</span></a></span><span>
+</span><span id="line-93"></span><span>    </span><span class="annot"><span class="annottext">All -&gt; X All
+forall (f :: * -&gt; *) a. Applicative f =&gt; a -&gt; f a
+</span><span class="hs-identifier hs-var">pure</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Bool -&gt; All
+</span><span class="hs-identifier hs-var">All</span></span><span> </span><span class="annot"><span class="annottext">Bool
+</span><span class="hs-identifier hs-var">False</span></span><span class="hs-special">)</span><span>
+</span><span id="line-94"></span><span>  </span><span class="annot"><span class="annottext">Event
+</span><span class="hs-identifier">_</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">All -&gt; X All
+forall (f :: * -&gt; *) a. Applicative f =&gt; a -&gt; f a
+</span><span class="hs-identifier hs-var">pure</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Bool -&gt; All
+</span><span class="hs-identifier hs-var">All</span></span><span> </span><span class="annot"><span class="annottext">Bool
+</span><span class="hs-identifier hs-var">True</span></span><span class="hs-special">)</span><span>
+</span><span id="line-95"></span><span>
+</span><span id="line-96"></span><span class="hs-comment">-- }}}</span><span>
+</span><span id="line-97"></span><span>
+</span><span id="line-98"></span><span class="hs-comment">-- --&lt; Private Utils &gt;-- {{{</span><span>
+</span><span id="line-99"></span><span>
+</span><span id="line-100"></span><span class="hs-comment">-- | Private action shamelessly copied and restyled from XMonad.Main source.</span><span>
+</span><span id="line-101"></span><span class="annot"><a href="XMonad.Util.Grab.html#setNumlockMask"><span class="hs-identifier hs-type">setNumlockMask</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">X</span></span><span> </span><span class="hs-special">(</span><span class="hs-special">)</span><span>
+</span><span id="line-102"></span><span id="setNumlockMask"><span class="annot"><span class="annottext">setNumlockMask :: X ()
+</span><a href="XMonad.Util.Grab.html#setNumlockMask"><span class="hs-identifier hs-var hs-var">setNumlockMask</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">(Display -&gt; X ()) -&gt; X ()
+forall a. (Display -&gt; X a) -&gt; X a
+</span><span class="hs-identifier hs-var">withDisplay</span></span><span> </span><span class="annot"><span class="annottext">((Display -&gt; X ()) -&gt; X ()) -&gt; (Display -&gt; X ()) -&gt; X ()
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="hs-glyph">\</span><span id="local-6989586621679386871"><span class="annot"><span class="annottext">Display
+</span><a href="#local-6989586621679386871"><span class="hs-identifier hs-var">dpy</span></a></span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-103"></span><span>  </span><span id="local-6989586621679386870"><span class="annot"><span class="annottext">[(KeyMask, [KeyCode])]
+</span><a href="#local-6989586621679386870"><span class="hs-identifier hs-var">ms</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">IO [(KeyMask, [KeyCode])] -&gt; X [(KeyMask, [KeyCode])]
+forall (m :: * -&gt; *) a. MonadIO m =&gt; IO a -&gt; m a
+</span><span class="hs-identifier hs-var">io</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Display -&gt; IO [(KeyMask, [KeyCode])]
+</span><span class="hs-identifier hs-var">getModifierMapping</span></span><span> </span><span class="annot"><span class="annottext">Display
+</span><a href="#local-6989586621679386871"><span class="hs-identifier hs-var">dpy</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-104"></span><span>  </span><span id="local-6989586621679386868"><span class="annot"><span class="annottext">[KeyMask]
+</span><a href="#local-6989586621679386868"><span class="hs-identifier hs-var">xs</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">[X KeyMask] -&gt; X [KeyMask]
+forall (t :: * -&gt; *) (m :: * -&gt; *) a.
+(Traversable t, Monad m) =&gt;
+t (m a) -&gt; m (t a)
+</span><span class="hs-identifier hs-var">sequence</span></span><span>
+</span><span id="line-105"></span><span>    </span><span class="hs-special">[</span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-106"></span><span>        </span><span id="local-6989586621679386866"><span class="annot"><span class="annottext">KeySym
+</span><a href="#local-6989586621679386866"><span class="hs-identifier hs-var">ks</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">IO KeySym -&gt; X KeySym
+forall (m :: * -&gt; *) a. MonadIO m =&gt; IO a -&gt; m a
+</span><span class="hs-identifier hs-var">io</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Display -&gt; KeyCode -&gt; CInt -&gt; IO KeySym
+</span><span class="hs-identifier hs-var">keycodeToKeysym</span></span><span> </span><span class="annot"><span class="annottext">Display
+</span><a href="#local-6989586621679386871"><span class="hs-identifier hs-var">dpy</span></a></span><span> </span><span class="annot"><span class="annottext">KeyCode
+</span><a href="#local-6989586621679386864"><span class="hs-identifier hs-var">kc</span></a></span><span> </span><span class="annot"><span class="annottext">CInt
+</span><span class="hs-number">0</span></span><span class="hs-special">)</span><span>
+</span><span id="line-107"></span><span>        </span><span class="annot"><span class="annottext">KeyMask -&gt; X KeyMask
+forall (f :: * -&gt; *) a. Applicative f =&gt; a -&gt; f a
+</span><span class="hs-identifier hs-var">pure</span></span><span> </span><span class="annot"><span class="annottext">(KeyMask -&gt; X KeyMask) -&gt; KeyMask -&gt; X KeyMask
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="hs-keyword">if</span><span> </span><span class="annot"><span class="annottext">KeySym
+</span><a href="#local-6989586621679386866"><span class="hs-identifier hs-var">ks</span></a></span><span> </span><span class="annot"><span class="annottext">KeySym -&gt; KeySym -&gt; Bool
+forall a. Eq a =&gt; a -&gt; a -&gt; Bool
+</span><span class="hs-operator hs-var">==</span></span><span> </span><span class="annot"><span class="annottext">KeySym
+</span><span class="hs-identifier hs-var">xK_Num_Lock</span></span><span>
+</span><span id="line-108"></span><span>          </span><span class="hs-keyword">then</span><span> </span><span class="annot"><span class="annottext">KeyMask -&gt; Int -&gt; KeyMask
+forall a. Bits a =&gt; a -&gt; Int -&gt; a
+</span><span class="hs-identifier hs-var">setBit</span></span><span> </span><span class="annot"><span class="annottext">KeyMask
+</span><span class="hs-number">0</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">KeyMask -&gt; Int
+forall a b. (Integral a, Num b) =&gt; a -&gt; b
+</span><span class="hs-identifier hs-var">fromIntegral</span></span><span> </span><span class="annot"><span class="annottext">KeyMask
+</span><a href="#local-6989586621679386862"><span class="hs-identifier hs-var">m</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-109"></span><span>          </span><span class="hs-keyword">else</span><span> </span><span class="annot"><span class="annottext">KeyMask
+</span><span class="hs-number">0</span></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">KeyMask</span></span><span>
+</span><span id="line-110"></span><span>    </span><span class="hs-glyph">|</span><span> </span><span class="hs-special">(</span><span id="local-6989586621679386862"><span class="annot"><span class="annottext">KeyMask
+</span><a href="#local-6989586621679386862"><span class="hs-identifier hs-var">m</span></a></span></span><span class="hs-special">,</span><span> </span><span id="local-6989586621679386861"><span class="annot"><span class="annottext">[KeyCode]
+</span><a href="#local-6989586621679386861"><span class="hs-identifier hs-var">kcs</span></a></span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">[(KeyMask, [KeyCode])]
+</span><a href="#local-6989586621679386870"><span class="hs-identifier hs-var">ms</span></a></span><span>
+</span><span id="line-111"></span><span>    </span><span class="hs-special">,</span><span> </span><span id="local-6989586621679386864"><span class="annot"><span class="annottext">KeyCode
+</span><a href="#local-6989586621679386864"><span class="hs-identifier hs-var">kc</span></a></span></span><span>       </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">[KeyCode]
+</span><a href="#local-6989586621679386861"><span class="hs-identifier hs-var">kcs</span></a></span><span>
+</span><span id="line-112"></span><span>    </span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">KeyCode
+</span><a href="#local-6989586621679386864"><span class="hs-identifier hs-var">kc</span></a></span><span> </span><span class="annot"><span class="annottext">KeyCode -&gt; KeyCode -&gt; Bool
+forall a. Eq a =&gt; a -&gt; a -&gt; Bool
+</span><span class="hs-operator hs-var">/=</span></span><span> </span><span class="annot"><span class="annottext">KeyCode
+</span><span class="hs-number">0</span></span><span>
+</span><span id="line-113"></span><span>    </span><span class="hs-special">]</span><span>
+</span><span id="line-114"></span><span>  </span><span class="annot"><span class="annottext">(XState -&gt; XState) -&gt; X ()
+forall s (m :: * -&gt; *). MonadState s m =&gt; (s -&gt; s) -&gt; m ()
+</span><span class="hs-identifier hs-var">modify</span></span><span> </span><span class="annot"><span class="annottext">((XState -&gt; XState) -&gt; X ()) -&gt; (XState -&gt; XState) -&gt; X ()
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="hs-glyph">\</span><span id="local-6989586621679386858"><span class="annot"><span class="annottext">XState
+</span><a href="#local-6989586621679386858"><span class="hs-identifier hs-var">s</span></a></span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">XState
+</span><a href="#local-6989586621679386858"><span class="hs-identifier hs-var">s</span></a></span><span> </span><span class="hs-special">{</span><span> </span><span class="annot"><span class="annottext">numberlockMask :: KeyMask
+</span><span class="hs-identifier hs-var">numberlockMask</span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">(KeyMask -&gt; KeyMask -&gt; KeyMask) -&gt; KeyMask -&gt; [KeyMask] -&gt; KeyMask
+forall (t :: * -&gt; *) a b.
+Foldable t =&gt;
+(a -&gt; b -&gt; b) -&gt; b -&gt; t a -&gt; b
+</span><span class="hs-identifier hs-var">foldr</span></span><span> </span><span class="annot"><span class="annottext">KeyMask -&gt; KeyMask -&gt; KeyMask
+forall a. Bits a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-operator hs-var">(.|.)</span></span><span> </span><span class="annot"><span class="annottext">KeyMask
+</span><span class="hs-number">0</span></span><span> </span><span class="annot"><span class="annottext">[KeyMask]
+</span><a href="#local-6989586621679386868"><span class="hs-identifier hs-var">xs</span></a></span><span> </span><span class="hs-special">}</span><span>
+</span><span id="line-115"></span><span>
+</span><span id="line-116"></span><span class="hs-comment">-- | Private function shamelessly copied and refactored from XMonad.Main source.</span><span>
+</span><span id="line-117"></span><span class="annot"><a href="XMonad.Util.Grab.html#mkGrabs"><span class="hs-identifier hs-type">mkGrabs</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">X</span></span><span> </span><span class="hs-special">(</span><span class="hs-special">[</span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">KeyMask</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier hs-type">KeySym</span></span><span class="hs-special">)</span><span class="hs-special">]</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="hs-special">[</span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">KeyMask</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier hs-type">KeyCode</span></span><span class="hs-special">)</span><span class="hs-special">]</span><span class="hs-special">)</span><span>
+</span><span id="line-118"></span><span id="mkGrabs"><span class="annot"><span class="annottext">mkGrabs :: X ([(KeyMask, KeySym)] -&gt; [(KeyMask, KeyCode)])
+</span><a href="XMonad.Util.Grab.html#mkGrabs"><span class="hs-identifier hs-var hs-var">mkGrabs</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">(Display -&gt; X ([(KeyMask, KeySym)] -&gt; [(KeyMask, KeyCode)]))
+-&gt; X ([(KeyMask, KeySym)] -&gt; [(KeyMask, KeyCode)])
+forall a. (Display -&gt; X a) -&gt; X a
+</span><span class="hs-identifier hs-var">withDisplay</span></span><span> </span><span class="annot"><span class="annottext">((Display -&gt; X ([(KeyMask, KeySym)] -&gt; [(KeyMask, KeyCode)]))
+ -&gt; X ([(KeyMask, KeySym)] -&gt; [(KeyMask, KeyCode)]))
+-&gt; (Display -&gt; X ([(KeyMask, KeySym)] -&gt; [(KeyMask, KeyCode)]))
+-&gt; X ([(KeyMask, KeySym)] -&gt; [(KeyMask, KeyCode)])
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="hs-glyph">\</span><span id="local-6989586621679386854"><span class="annot"><span class="annottext">Display
+</span><a href="#local-6989586621679386854"><span class="hs-identifier hs-var">dpy</span></a></span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-119"></span><span>  </span><span class="hs-keyword">let</span><span> </span><span class="hs-special">(</span><span id="local-6989586621679386853"><span class="annot"><span class="annottext">CInt
+</span><a href="#local-6989586621679386853"><span class="hs-identifier hs-var">minCode</span></a></span></span><span class="hs-special">,</span><span> </span><span id="local-6989586621679386852"><span class="annot"><span class="annottext">CInt
+</span><a href="#local-6989586621679386852"><span class="hs-identifier hs-var">maxCode</span></a></span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Display -&gt; (CInt, CInt)
+</span><span class="hs-identifier hs-var">displayKeycodes</span></span><span> </span><span class="annot"><span class="annottext">Display
+</span><a href="#local-6989586621679386854"><span class="hs-identifier hs-var">dpy</span></a></span><span>
+</span><span id="line-120"></span><span>      </span><span id="local-6989586621679386843"><span class="annot"><span class="annottext">allCodes :: [KeyCode]
+</span><a href="#local-6989586621679386843"><span class="hs-identifier hs-var hs-var">allCodes</span></a></span></span><span>           </span><span class="hs-glyph">=</span><span> </span><span class="hs-special">[</span><span class="annot"><span class="annottext">CInt -&gt; KeyCode
+forall a b. (Integral a, Num b) =&gt; a -&gt; b
+</span><span class="hs-identifier hs-var">fromIntegral</span></span><span> </span><span class="annot"><span class="annottext">CInt
+</span><a href="#local-6989586621679386853"><span class="hs-identifier hs-var">minCode</span></a></span><span> </span><span class="hs-glyph">..</span><span> </span><span class="annot"><span class="annottext">CInt -&gt; KeyCode
+forall a b. (Integral a, Num b) =&gt; a -&gt; b
+</span><span class="hs-identifier hs-var">fromIntegral</span></span><span> </span><span class="annot"><span class="annottext">CInt
+</span><a href="#local-6989586621679386852"><span class="hs-identifier hs-var">maxCode</span></a></span><span class="hs-special">]</span><span>
+</span><span id="line-121"></span><span>  </span><span id="local-6989586621679386842"><span class="annot"><span class="annottext">[KeySym]
+</span><a href="#local-6989586621679386842"><span class="hs-identifier hs-var">syms</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">IO [KeySym] -&gt; X [KeySym]
+forall (m :: * -&gt; *) a. MonadIO m =&gt; IO a -&gt; m a
+</span><span class="hs-identifier hs-var">io</span></span><span> </span><span class="annot"><span class="annottext">(IO [KeySym] -&gt; X [KeySym])
+-&gt; ((KeyCode -&gt; IO KeySym) -&gt; IO [KeySym])
+-&gt; (KeyCode -&gt; IO KeySym)
+-&gt; X [KeySym]
+forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">[KeyCode] -&gt; (KeyCode -&gt; IO KeySym) -&gt; IO [KeySym]
+forall (t :: * -&gt; *) (f :: * -&gt; *) a b.
+(Traversable t, Applicative f) =&gt;
+t a -&gt; (a -&gt; f b) -&gt; f (t b)
+</span><span class="hs-identifier hs-var">for</span></span><span> </span><span class="annot"><span class="annottext">[KeyCode]
+</span><a href="#local-6989586621679386843"><span class="hs-identifier hs-var">allCodes</span></a></span><span> </span><span class="annot"><span class="annottext">((KeyCode -&gt; IO KeySym) -&gt; X [KeySym])
+-&gt; (KeyCode -&gt; IO KeySym) -&gt; X [KeySym]
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="hs-glyph">\</span><span id="local-6989586621679386840"><span class="annot"><span class="annottext">KeyCode
+</span><a href="#local-6989586621679386840"><span class="hs-identifier hs-var">code</span></a></span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">Display -&gt; KeyCode -&gt; CInt -&gt; IO KeySym
+</span><span class="hs-identifier hs-var">keycodeToKeysym</span></span><span> </span><span class="annot"><span class="annottext">Display
+</span><a href="#local-6989586621679386854"><span class="hs-identifier hs-var">dpy</span></a></span><span> </span><span class="annot"><span class="annottext">KeyCode
+</span><a href="#local-6989586621679386840"><span class="hs-identifier hs-var">code</span></a></span><span> </span><span class="annot"><span class="annottext">CInt
+</span><span class="hs-number">0</span></span><span>
+</span><span id="line-122"></span><span>  </span><span class="hs-keyword">let</span><span> </span><span id="local-6989586621679386834"><span class="annot"><span class="annottext">keysymMap :: Map KeySym [KeyCode]
+</span><a href="#local-6989586621679386834"><span class="hs-identifier hs-var hs-var">keysymMap</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">([KeyCode] -&gt; [KeyCode] -&gt; [KeyCode])
+-&gt; [(KeySym, [KeyCode])] -&gt; Map KeySym [KeyCode]
+forall k a. Ord k =&gt; (a -&gt; a -&gt; a) -&gt; [(k, a)] -&gt; Map k a
+</span><span class="hs-identifier hs-var">M.fromListWith</span></span><span> </span><span class="annot"><span class="annottext">[KeyCode] -&gt; [KeyCode] -&gt; [KeyCode]
+forall a. [a] -&gt; [a] -&gt; [a]
+</span><span class="hs-operator hs-var">(++)</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">[KeySym] -&gt; [[KeyCode]] -&gt; [(KeySym, [KeyCode])]
+forall a b. [a] -&gt; [b] -&gt; [(a, b)]
+</span><span class="hs-identifier hs-var">zip</span></span><span> </span><span class="annot"><span class="annottext">[KeySym]
+</span><a href="#local-6989586621679386842"><span class="hs-identifier hs-var">syms</span></a></span><span> </span><span class="annot"><span class="annottext">([[KeyCode]] -&gt; [(KeySym, [KeyCode])])
+-&gt; [[KeyCode]] -&gt; [(KeySym, [KeyCode])]
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">KeyCode -&gt; [KeyCode]
+forall (f :: * -&gt; *) a. Applicative f =&gt; a -&gt; f a
+</span><span class="hs-identifier hs-var">pure</span></span><span> </span><span class="annot"><span class="annottext">(KeyCode -&gt; [KeyCode]) -&gt; [KeyCode] -&gt; [[KeyCode]]
+forall (f :: * -&gt; *) a b. Functor f =&gt; (a -&gt; b) -&gt; f a -&gt; f b
+</span><span class="hs-operator hs-var">&lt;$&gt;</span></span><span> </span><span class="annot"><span class="annottext">[KeyCode]
+</span><a href="#local-6989586621679386843"><span class="hs-identifier hs-var">allCodes</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-123"></span><span>      </span><span id="local-6989586621679386830"><span class="annot"><span class="annottext">keysymToKeycodes :: KeySym -&gt; [KeyCode]
+</span><a href="#local-6989586621679386830"><span class="hs-identifier hs-var hs-var">keysymToKeycodes</span></a></span></span><span> </span><span id="local-6989586621679386829"><span class="annot"><span class="annottext">KeySym
+</span><a href="#local-6989586621679386829"><span class="hs-identifier hs-var">sym</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">[KeyCode] -&gt; KeySym -&gt; Map KeySym [KeyCode] -&gt; [KeyCode]
+forall k a. Ord k =&gt; a -&gt; k -&gt; Map k a -&gt; a
+</span><span class="hs-identifier hs-var">M.findWithDefault</span></span><span> </span><span class="hs-special">[</span><span class="hs-special">]</span><span> </span><span class="annot"><span class="annottext">KeySym
+</span><a href="#local-6989586621679386829"><span class="hs-identifier hs-var">sym</span></a></span><span> </span><span class="annot"><span class="annottext">Map KeySym [KeyCode]
+</span><a href="#local-6989586621679386834"><span class="hs-identifier hs-var">keysymMap</span></a></span><span>
+</span><span id="line-124"></span><span>  </span><span id="local-6989586621679386827"><span class="annot"><span class="annottext">[KeyMask]
+</span><a href="#local-6989586621679386827"><span class="hs-identifier hs-var">extraMods</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">X [KeyMask]
+</span><span class="hs-identifier hs-var">extraModifiers</span></span><span>
+</span><span id="line-125"></span><span>  </span><span class="annot"><span class="annottext">([(KeyMask, KeySym)] -&gt; [(KeyMask, KeyCode)])
+-&gt; X ([(KeyMask, KeySym)] -&gt; [(KeyMask, KeyCode)])
+forall (f :: * -&gt; *) a. Applicative f =&gt; a -&gt; f a
+</span><span class="hs-identifier hs-var">pure</span></span><span> </span><span class="annot"><span class="annottext">(([(KeyMask, KeySym)] -&gt; [(KeyMask, KeyCode)])
+ -&gt; X ([(KeyMask, KeySym)] -&gt; [(KeyMask, KeyCode)]))
+-&gt; ([(KeyMask, KeySym)] -&gt; [(KeyMask, KeyCode)])
+-&gt; X ([(KeyMask, KeySym)] -&gt; [(KeyMask, KeyCode)])
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="hs-glyph">\</span><span id="local-6989586621679386825"><span class="annot"><span class="annottext">[(KeyMask, KeySym)]
+</span><a href="#local-6989586621679386825"><span class="hs-identifier hs-var">ks</span></a></span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-126"></span><span>    </span><span class="hs-special">(</span><span id="local-6989586621679386824"><span class="annot"><span class="annottext">KeyMask
+</span><a href="#local-6989586621679386824"><span class="hs-identifier hs-var">mask</span></a></span></span><span class="hs-special">,</span><span> </span><span id="local-6989586621679386823"><span class="annot"><span class="annottext">KeySym
+</span><a href="#local-6989586621679386823"><span class="hs-identifier hs-var">sym</span></a></span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">[(KeyMask, KeySym)]
+</span><a href="#local-6989586621679386825"><span class="hs-identifier hs-var">ks</span></a></span><span>
+</span><span id="line-127"></span><span>    </span><span id="local-6989586621679386822"><span class="annot"><span class="annottext">KeyCode
+</span><a href="#local-6989586621679386822"><span class="hs-identifier hs-var">keycode</span></a></span></span><span>     </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">KeySym -&gt; [KeyCode]
+</span><a href="#local-6989586621679386830"><span class="hs-identifier hs-var">keysymToKeycodes</span></a></span><span> </span><span class="annot"><span class="annottext">KeySym
+</span><a href="#local-6989586621679386823"><span class="hs-identifier hs-var">sym</span></a></span><span>
+</span><span id="line-128"></span><span>    </span><span id="local-6989586621679386821"><span class="annot"><span class="annottext">KeyMask
+</span><a href="#local-6989586621679386821"><span class="hs-identifier hs-var">extraMod</span></a></span></span><span>    </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">[KeyMask]
+</span><a href="#local-6989586621679386827"><span class="hs-identifier hs-var">extraMods</span></a></span><span>
+</span><span id="line-129"></span><span>    </span><span class="annot"><span class="annottext">(KeyMask, KeyCode) -&gt; [(KeyMask, KeyCode)]
+forall (f :: * -&gt; *) a. Applicative f =&gt; a -&gt; f a
+</span><span class="hs-identifier hs-var">pure</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">KeyMask
+</span><a href="#local-6989586621679386824"><span class="hs-identifier hs-var">mask</span></a></span><span> </span><span class="annot"><span class="annottext">KeyMask -&gt; KeyMask -&gt; KeyMask
+forall a. Bits a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-operator hs-var">.|.</span></span><span> </span><span class="annot"><span class="annottext">KeyMask
+</span><a href="#local-6989586621679386821"><span class="hs-identifier hs-var">extraMod</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">KeyCode
+</span><a href="#local-6989586621679386822"><span class="hs-identifier hs-var">keycode</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-130"></span><span>
+</span><span id="line-131"></span><span class="hs-comment">-- }}}</span><span>
+</span><span id="line-132"></span><span>
+</span><span id="line-133"></span><span>
+</span><span id="line-134"></span><span class="hs-comment">-- NOTE: there is some duplication between this module and core. The</span><span>
+</span><span id="line-135"></span><span class="hs-comment">-- latter probably will never change, but this needs to be kept in sync</span><span>
+</span><span id="line-136"></span><span class="hs-comment">-- with any potential bugs that might arise.</span><span>
+</span><span id="line-137"></span></pre></body></html>
