@@ -1,0 +1,923 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd"><html xmlns="http://www.w3.org/1999/xhtml"><head><link rel="stylesheet" type="text/css" href="style.css" /><script type="text/javascript" src="highlight.js"></script></head><body><pre><span class="hs-pragma">{-# LANGUAGE GeneralizedNewtypeDeriving, FlexibleContexts #-}</span><span>
+</span><span id="line-2"></span><span>
+</span><span id="line-3"></span><span class="hs-comment">-----------------------------------------------------------------------------</span><span>
+</span><span id="line-4"></span><span class="hs-comment">-- |</span><span>
+</span><span id="line-5"></span><span class="hs-comment">-- Module      :  XMonad.Util.PureX</span><span>
+</span><span id="line-6"></span><span class="hs-comment">-- Description :  Composable @X@ actions.</span><span>
+</span><span id="line-7"></span><span class="hs-comment">-- Copyright   :  L. S. Leary 2018</span><span>
+</span><span id="line-8"></span><span class="hs-comment">-- License     :  BSD3-style (see LICENSE)</span><span>
+</span><span id="line-9"></span><span class="hs-comment">--</span><span>
+</span><span id="line-10"></span><span class="hs-comment">-- Maintainer  :  L. S. Leary</span><span>
+</span><span id="line-11"></span><span class="hs-comment">-- Stability   :  unstable</span><span>
+</span><span id="line-12"></span><span class="hs-comment">-- Portability :  not portable</span><span>
+</span><span id="line-13"></span><span class="hs-comment">--</span><span>
+</span><span id="line-14"></span><span class="hs-comment">-- Unlike the opaque @IO@ actions that @X@ actions can wrap, regular reads from</span><span>
+</span><span id="line-15"></span><span class="hs-comment">-- the 'XConf' and modifications to the 'XState' are fundamentally pure&#8212;contrary</span><span>
+</span><span id="line-16"></span><span class="hs-comment">-- to the current treatment of such actions in most xmonad code. Pure</span><span>
+</span><span id="line-17"></span><span class="hs-comment">-- modifications to the 'WindowSet' can be readily composed, but due to the need</span><span>
+</span><span id="line-18"></span><span class="hs-comment">-- for those modifications to be properly handled by 'windows', other pure</span><span>
+</span><span id="line-19"></span><span class="hs-comment">-- changes to the @XState@ cannot be interleaved with those changes to the</span><span>
+</span><span id="line-20"></span><span class="hs-comment">-- @WindowSet@ without superfluous refreshes, hence breaking composability.</span><span>
+</span><span id="line-21"></span><span class="hs-comment">--</span><span>
+</span><span id="line-22"></span><span class="hs-comment">-- This module aims to rectify that situation by drawing attention to it and</span><span>
+</span><span id="line-23"></span><span class="hs-comment">-- providing 'PureX': a pure type with the same monadic interface to state as</span><span>
+</span><span id="line-24"></span><span class="hs-comment">-- @X@. The 'XLike' typeclass enables writing actions generic over the two</span><span>
+</span><span id="line-25"></span><span class="hs-comment">-- monads; if pure, existing @X@ actions can be generalised with only a change</span><span>
+</span><span id="line-26"></span><span class="hs-comment">-- to the type signature. Various other utilities are provided, in particular</span><span>
+</span><span id="line-27"></span><span class="hs-comment">-- the 'defile' function which is needed by end-users.</span><span>
+</span><span id="line-28"></span><span class="hs-comment">--</span><span>
+</span><span id="line-29"></span><span class="hs-comment">-----------------------------------------------------------------------------</span><span>
+</span><span id="line-30"></span><span>
+</span><span id="line-31"></span><span class="hs-comment">-- --&lt; Imports &amp; Exports &gt;-- {{{</span><span>
+</span><span id="line-32"></span><span>
+</span><span id="line-33"></span><span class="hs-keyword">module</span><span> </span><span class="hs-identifier">XMonad.Util.PureX</span><span> </span><span class="hs-special">(</span><span>
+</span><span id="line-34"></span><span>  </span><span class="annot"><span class="hs-comment">-- * Usage</span></span><span>
+</span><span id="line-35"></span><span>  </span><span class="annot"><span class="hs-comment">-- $Usage</span></span><span>
+</span><span id="line-36"></span><span>  </span><span class="annot"><a href="XMonad.Util.PureX.html#PureX"><span class="hs-identifier">PureX</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><a href="XMonad.Util.PureX.html#XLike"><span class="hs-identifier">XLike</span></a></span><span class="hs-special">(</span><span class="hs-glyph">..</span><span class="hs-special">)</span><span class="hs-special">,</span><span> </span><span class="annot"><a href="XMonad.Util.PureX.html#defile"><span class="hs-identifier">defile</span></a></span><span class="hs-special">,</span><span>
+</span><span id="line-37"></span><span>  </span><span class="annot"><a href="XMonad.Util.PureX.html#windowBracket%27"><span class="hs-identifier">windowBracket'</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><a href="XMonad.Util.PureX.html#handlingRefresh"><span class="hs-identifier">handlingRefresh</span></a></span><span class="hs-special">,</span><span>
+</span><span id="line-38"></span><span>  </span><span class="annot"><a href="XMonad.Util.PureX.html#runPureX"><span class="hs-identifier">runPureX</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><a href="XMonad.Util.PureX.html#toXLike"><span class="hs-identifier">toXLike</span></a></span><span class="hs-special">,</span><span>
+</span><span id="line-39"></span><span>  </span><span class="annot"><span class="hs-comment">-- * Utility</span></span><span>
+</span><span id="line-40"></span><span>  </span><span class="annot"><span class="hs-comment">-- ** Generalised when* functions</span></span><span>
+</span><span id="line-41"></span><span>  </span><span class="annot"><a href="XMonad.Util.PureX.html#when%27"><span class="hs-identifier">when'</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><a href="XMonad.Util.PureX.html#whenM%27"><span class="hs-identifier">whenM'</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><a href="XMonad.Util.PureX.html#whenJust%27"><span class="hs-identifier">whenJust'</span></a></span><span class="hs-special">,</span><span>
+</span><span id="line-42"></span><span>  </span><span class="annot"><span class="hs-comment">-- ** Infix operators</span></span><span>
+</span><span id="line-43"></span><span>  </span><span class="annot"><a href="XMonad.Util.PureX.html#%3C%3F"><span class="hs-operator">(&lt;?)</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><a href="XMonad.Util.PureX.html#%26%3E"><span class="hs-operator">(&amp;&gt;)</span></a></span><span class="hs-special">,</span><span>
+</span><span id="line-44"></span><span>  </span><span class="annot"><span class="hs-comment">-- ** @WindowSet@ operations</span></span><span>
+</span><span id="line-45"></span><span>  </span><span class="annot"><a href="XMonad.Util.PureX.html#withWindowSet%27"><span class="hs-identifier">withWindowSet'</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><a href="XMonad.Util.PureX.html#withFocii"><span class="hs-identifier">withFocii</span></a></span><span class="hs-special">,</span><span>
+</span><span id="line-46"></span><span>  </span><span class="annot"><a href="XMonad.Util.PureX.html#modify%27%27"><span class="hs-identifier">modify''</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><a href="XMonad.Util.PureX.html#modifyWindowSet%27"><span class="hs-identifier">modifyWindowSet'</span></a></span><span class="hs-special">,</span><span>
+</span><span id="line-47"></span><span>  </span><span class="annot"><a href="XMonad.Util.PureX.html#getStack"><span class="hs-identifier">getStack</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><a href="XMonad.Util.PureX.html#putStack"><span class="hs-identifier">putStack</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><a href="XMonad.Util.PureX.html#peek"><span class="hs-identifier">peek</span></a></span><span class="hs-special">,</span><span>
+</span><span id="line-48"></span><span>  </span><span class="annot"><a href="XMonad.Util.PureX.html#focusWindow"><span class="hs-identifier">focusWindow</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><a href="XMonad.Util.PureX.html#focusNth"><span class="hs-identifier">focusNth</span></a></span><span class="hs-special">,</span><span>
+</span><span id="line-49"></span><span>  </span><span class="annot"><a href="XMonad.Util.PureX.html#view"><span class="hs-identifier">view</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><a href="XMonad.Util.PureX.html#greedyView"><span class="hs-identifier">greedyView</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><a href="XMonad.Util.PureX.html#invisiView"><span class="hs-identifier">invisiView</span></a></span><span class="hs-special">,</span><span>
+</span><span id="line-50"></span><span>  </span><span class="annot"><a href="XMonad.Util.PureX.html#shift"><span class="hs-identifier">shift</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><a href="XMonad.Util.PureX.html#shiftWin"><span class="hs-identifier">shiftWin</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><a href="XMonad.Util.PureX.html#curScreen"><span class="hs-identifier">curScreen</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><a href="XMonad.Util.PureX.html#curWorkspace"><span class="hs-identifier">curWorkspace</span></a></span><span class="hs-special">,</span><span>
+</span><span id="line-51"></span><span>  </span><span class="annot"><a href="XMonad.Util.PureX.html#curTag"><span class="hs-identifier">curTag</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><a href="XMonad.Util.PureX.html#curScreenId"><span class="hs-identifier">curScreenId</span></a></span><span class="hs-special">,</span><span>
+</span><span id="line-52"></span><span class="hs-special">)</span><span> </span><span class="hs-keyword">where</span><span>
+</span><span id="line-53"></span><span>
+</span><span id="line-54"></span><span class="hs-comment">-- xmonad</span><span>
+</span><span id="line-55"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><span class="hs-identifier">XMonad</span></span><span>
+</span><span id="line-56"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><a href="XMonad.Prelude.html"><span class="hs-identifier">XMonad.Prelude</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier">Any</span></span><span> </span><span class="hs-special">(</span><span class="hs-glyph">..</span><span class="hs-special">)</span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier">liftA2</span></span><span class="hs-special">)</span><span>
+</span><span id="line-57"></span><span class="hs-keyword">import</span><span> </span><span class="hs-keyword">qualified</span><span> </span><span class="annot"><span class="hs-identifier">XMonad.StackSet</span></span><span> </span><span class="hs-keyword">as</span><span> </span><span class="annot"><span class="hs-identifier">W</span></span><span>
+</span><span id="line-58"></span><span class="hs-keyword">import</span><span> </span><span class="hs-keyword">qualified</span><span> </span><span class="annot"><a href="XMonad.Actions.FocusNth.html"><span class="hs-identifier">XMonad.Actions.FocusNth</span></a></span><span>
+</span><span id="line-59"></span><span>
+</span><span id="line-60"></span><span class="hs-comment">-- mtl</span><span>
+</span><span id="line-61"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><span class="hs-identifier">Control.Monad.State</span></span><span>
+</span><span id="line-62"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><span class="hs-identifier">Control.Monad.Reader</span></span><span>
+</span><span id="line-63"></span><span>
+</span><span id="line-64"></span><span class="hs-comment">-- }}}</span><span>
+</span><span id="line-65"></span><span>
+</span><span id="line-66"></span><span class="hs-comment">-- --&lt; Usage &gt;-- {{{</span><span>
+</span><span id="line-67"></span><span>
+</span><span id="line-68"></span><span class="hs-comment">-- $Usage</span><span>
+</span><span id="line-69"></span><span class="hs-comment">--</span><span>
+</span><span id="line-70"></span><span class="hs-comment">-- The suggested pattern of usage for this module is to write composable, pure</span><span>
+</span><span id="line-71"></span><span class="hs-comment">-- actions as @XLike m =&gt; m Any@ or @PureX Any@ values, where the encapsulated</span><span>
+</span><span id="line-72"></span><span class="hs-comment">-- @Any@ value encodes whether or not a refresh is needed to properly institute</span><span>
+</span><span id="line-73"></span><span class="hs-comment">-- changes. These values can then be combined monoidally (i.e. with '&lt;&gt;' AKA</span><span>
+</span><span id="line-74"></span><span class="hs-comment">-- '&lt;+&gt;') or with operators such as '&lt;*', '*&gt;', '&lt;?' and '&amp;&gt;' to build seamless</span><span>
+</span><span id="line-75"></span><span class="hs-comment">-- new actions. The end user can run and handle the effects of the pure actions</span><span>
+</span><span id="line-76"></span><span class="hs-comment">-- in the @X@ monad by applying the @defile@ function, which you may want to</span><span>
+</span><span id="line-77"></span><span class="hs-comment">-- re-export. Alternatively, if an action does not make stackset changes that</span><span>
+</span><span id="line-78"></span><span class="hs-comment">-- need to be handled by @windows@, it can be written with as an</span><span>
+</span><span id="line-79"></span><span class="hs-comment">-- @XLike m =&gt; m ()@ and used directly.</span><span>
+</span><span id="line-80"></span><span class="hs-comment">--</span><span>
+</span><span id="line-81"></span><span class="hs-comment">-- Unfortunately since layouts must handle messages in the @X@ monad, this</span><span>
+</span><span id="line-82"></span><span class="hs-comment">-- approach does not quite apply to actions involving them. However a relatively</span><span>
+</span><span id="line-83"></span><span class="hs-comment">-- direct translation to impure actions is possible: you can write composable,</span><span>
+</span><span id="line-84"></span><span class="hs-comment">-- refresh-tracking actions as @X Any@ values, making sure to eschew</span><span>
+</span><span id="line-85"></span><span class="hs-comment">-- refresh-inducing functions like @windows@ and @sendMessage@ in favour of</span><span>
+</span><span id="line-86"></span><span class="hs-comment">-- 'modifyWindowSet' and utilities provided by &quot;XMonad.Actions.MessageFeedback&quot;.</span><span>
+</span><span id="line-87"></span><span class="hs-comment">-- The 'windowBracket_' function recently added to &quot;XMonad.Operations&quot; is the</span><span>
+</span><span id="line-88"></span><span class="hs-comment">-- impure analogue of @defile@. Note that @PureX Any@ actions can be composed</span><span>
+</span><span id="line-89"></span><span class="hs-comment">-- into impure ones after applying 'toX'; don't use @defile@ for this. E.g.</span><span>
+</span><span id="line-90"></span><span class="hs-comment">--</span><span>
+</span><span id="line-91"></span><span class="hs-comment">-- &gt; windowBracket_ (composableImpureAction &lt;&gt; toX composablePureAction)</span><span>
+</span><span id="line-92"></span><span class="hs-comment">--</span><span>
+</span><span id="line-93"></span><span class="hs-comment">-- Although both @X@ and @PureX@ have Monoid instances over monoidal values,</span><span>
+</span><span id="line-94"></span><span class="hs-comment">-- @(XLike m, Monoid a)@ is not enough to infer @Monoid (m a)@ (due to the</span><span>
+</span><span id="line-95"></span><span class="hs-comment">-- open-world assumption). Hence a @Monoid (m Any)@ constraint may need to be</span><span>
+</span><span id="line-96"></span><span class="hs-comment">-- used when working with @XLike m =&gt; m Any@ where no context is forcing @m@ to</span><span>
+</span><span id="line-97"></span><span class="hs-comment">-- unify with @X@ or @PureX@. This can also be avoided by working with</span><span>
+</span><span id="line-98"></span><span class="hs-comment">-- @PureX Any@ values and generalising them with 'toXLike' where necessary.</span><span>
+</span><span id="line-99"></span><span class="hs-comment">--</span><span>
+</span><span id="line-100"></span><span class="hs-comment">-- @PureX@ also enables a more monadic style when writing windowset operations;</span><span>
+</span><span id="line-101"></span><span class="hs-comment">-- see the implementation of the utilities in this module for examples.</span><span>
+</span><span id="line-102"></span><span class="hs-comment">-- For an example of a whole module written in terms of this one, see</span><span>
+</span><span id="line-103"></span><span class="hs-comment">-- &quot;XMonad.Hooks.RefocusLast&quot;.</span><span>
+</span><span id="line-104"></span><span class="hs-comment">--</span><span>
+</span><span id="line-105"></span><span>
+</span><span id="line-106"></span><span class="hs-comment">-- }}}</span><span>
+</span><span id="line-107"></span><span>
+</span><span id="line-108"></span><span class="hs-comment">-- --&lt; Core &gt;-- {{{</span><span>
+</span><span id="line-109"></span><span>
+</span><span id="line-110"></span><span class="hs-comment">-- | The @PureX@ newtype over @ReaderT XConf (State XState) a@.</span><span>
+</span><span id="line-111"></span><span class="hs-keyword">newtype</span><span> </span><span id="PureX"><span class="annot"><a href="XMonad.Util.PureX.html#PureX"><span class="hs-identifier hs-var">PureX</span></a></span></span><span> </span><span id="local-6989586621679375445"><span class="annot"><a href="#local-6989586621679375445"><span class="hs-identifier hs-type">a</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span id="PureX"><span class="annot"><a href="XMonad.Util.PureX.html#PureX"><span class="hs-identifier hs-var">PureX</span></a></span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">ReaderT</span></span><span> </span><span class="annot"><span class="hs-identifier hs-type">XConf</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">State</span></span><span> </span><span class="annot"><span class="hs-identifier hs-type">XState</span></span><span class="hs-special">)</span><span> </span><span class="annot"><a href="#local-6989586621679375445"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-112"></span><span>  </span><span class="hs-keyword">deriving</span><span> </span><span class="hs-special">(</span><span id="local-6989586621679375440"><span id="local-6989586621679375442"><span class="annot"><span class="annottext">a -&gt; PureX b -&gt; PureX a
+(a -&gt; b) -&gt; PureX a -&gt; PureX b
+(forall a b. (a -&gt; b) -&gt; PureX a -&gt; PureX b)
+-&gt; (forall a b. a -&gt; PureX b -&gt; PureX a) -&gt; Functor PureX
+forall a b. a -&gt; PureX b -&gt; PureX a
+forall a b. (a -&gt; b) -&gt; PureX a -&gt; PureX b
+forall (f :: * -&gt; *).
+(forall a b. (a -&gt; b) -&gt; f a -&gt; f b)
+-&gt; (forall a b. a -&gt; f b -&gt; f a) -&gt; Functor f
+&lt;$ :: a -&gt; PureX b -&gt; PureX a
+$c&lt;$ :: forall a b. a -&gt; PureX b -&gt; PureX a
+fmap :: (a -&gt; b) -&gt; PureX a -&gt; PureX b
+$cfmap :: forall a b. (a -&gt; b) -&gt; PureX a -&gt; PureX b
+</span><span class="hs-identifier hs-var hs-var hs-var hs-var hs-var hs-var">Functor</span></span></span></span><span class="hs-special">,</span><span> </span><span id="local-6989586621679375428"><span id="local-6989586621679375430"><span id="local-6989586621679375432"><span id="local-6989586621679375434"><span id="local-6989586621679375436"><span class="annot"><span class="annottext">Functor PureX
+a -&gt; PureX a
+Functor PureX
+-&gt; (forall a. a -&gt; PureX a)
+-&gt; (forall a b. PureX (a -&gt; b) -&gt; PureX a -&gt; PureX b)
+-&gt; (forall a b c. (a -&gt; b -&gt; c) -&gt; PureX a -&gt; PureX b -&gt; PureX c)
+-&gt; (forall a b. PureX a -&gt; PureX b -&gt; PureX b)
+-&gt; (forall a b. PureX a -&gt; PureX b -&gt; PureX a)
+-&gt; Applicative PureX
+PureX a -&gt; PureX b -&gt; PureX b
+PureX a -&gt; PureX b -&gt; PureX a
+PureX (a -&gt; b) -&gt; PureX a -&gt; PureX b
+(a -&gt; b -&gt; c) -&gt; PureX a -&gt; PureX b -&gt; PureX c
+forall a. a -&gt; PureX a
+forall a b. PureX a -&gt; PureX b -&gt; PureX a
+forall a b. PureX a -&gt; PureX b -&gt; PureX b
+forall a b. PureX (a -&gt; b) -&gt; PureX a -&gt; PureX b
+forall a b c. (a -&gt; b -&gt; c) -&gt; PureX a -&gt; PureX b -&gt; PureX c
+forall (f :: * -&gt; *).
+Functor f
+-&gt; (forall a. a -&gt; f a)
+-&gt; (forall a b. f (a -&gt; b) -&gt; f a -&gt; f b)
+-&gt; (forall a b c. (a -&gt; b -&gt; c) -&gt; f a -&gt; f b -&gt; f c)
+-&gt; (forall a b. f a -&gt; f b -&gt; f b)
+-&gt; (forall a b. f a -&gt; f b -&gt; f a)
+-&gt; Applicative f
+&lt;* :: PureX a -&gt; PureX b -&gt; PureX a
+$c&lt;* :: forall a b. PureX a -&gt; PureX b -&gt; PureX a
+*&gt; :: PureX a -&gt; PureX b -&gt; PureX b
+$c*&gt; :: forall a b. PureX a -&gt; PureX b -&gt; PureX b
+liftA2 :: (a -&gt; b -&gt; c) -&gt; PureX a -&gt; PureX b -&gt; PureX c
+$cliftA2 :: forall a b c. (a -&gt; b -&gt; c) -&gt; PureX a -&gt; PureX b -&gt; PureX c
+&lt;*&gt; :: PureX (a -&gt; b) -&gt; PureX a -&gt; PureX b
+$c&lt;*&gt; :: forall a b. PureX (a -&gt; b) -&gt; PureX a -&gt; PureX b
+pure :: a -&gt; PureX a
+$cpure :: forall a. a -&gt; PureX a
+$cp1Applicative :: Functor PureX
+</span><span class="hs-identifier hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var">Applicative</span></span></span></span></span></span></span><span class="hs-special">,</span><span> </span><span id="local-6989586621679375420"><span id="local-6989586621679375422"><span id="local-6989586621679375424"><span class="annot"><span class="annottext">Applicative PureX
+a -&gt; PureX a
+Applicative PureX
+-&gt; (forall a b. PureX a -&gt; (a -&gt; PureX b) -&gt; PureX b)
+-&gt; (forall a b. PureX a -&gt; PureX b -&gt; PureX b)
+-&gt; (forall a. a -&gt; PureX a)
+-&gt; Monad PureX
+PureX a -&gt; (a -&gt; PureX b) -&gt; PureX b
+PureX a -&gt; PureX b -&gt; PureX b
+forall a. a -&gt; PureX a
+forall a b. PureX a -&gt; PureX b -&gt; PureX b
+forall a b. PureX a -&gt; (a -&gt; PureX b) -&gt; PureX b
+forall (m :: * -&gt; *).
+Applicative m
+-&gt; (forall a b. m a -&gt; (a -&gt; m b) -&gt; m b)
+-&gt; (forall a b. m a -&gt; m b -&gt; m b)
+-&gt; (forall a. a -&gt; m a)
+-&gt; Monad m
+return :: a -&gt; PureX a
+$creturn :: forall a. a -&gt; PureX a
+&gt;&gt; :: PureX a -&gt; PureX b -&gt; PureX b
+$c&gt;&gt; :: forall a b. PureX a -&gt; PureX b -&gt; PureX b
+&gt;&gt;= :: PureX a -&gt; (a -&gt; PureX b) -&gt; PureX b
+$c&gt;&gt;= :: forall a b. PureX a -&gt; (a -&gt; PureX b) -&gt; PureX b
+$cp1Monad :: Applicative PureX
+</span><span class="hs-identifier hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var">Monad</span></span></span></span></span><span class="hs-special">,</span><span> </span><span id="local-6989586621679375412"><span id="local-6989586621679375414"><span id="local-6989586621679375416"><span class="annot"><span class="hs-identifier hs-type">MonadReader</span></span><span> </span><span class="annot"><span class="hs-identifier hs-type">XConf</span></span></span></span></span><span class="hs-special">,</span><span> </span><span id="local-6989586621679375404"><span id="local-6989586621679375406"><span id="local-6989586621679375408"><span class="annot"><span class="hs-identifier hs-type">MonadState</span></span><span> </span><span class="annot"><span class="hs-identifier hs-type">XState</span></span></span></span></span><span class="hs-special">)</span><span>
+</span><span id="line-113"></span><span>
+</span><span id="line-114"></span><span id="local-6989586621679375402"><span class="hs-keyword">instance</span><span> </span><span id="local-6989586621679375397"><span id="local-6989586621679375399"><span class="annot"><span class="hs-identifier hs-type">Semigroup</span></span><span> </span><span class="annot"><a href="#local-6989586621679375402"><span class="hs-identifier hs-type">a</span></a></span><span> </span><span class="hs-glyph">=&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Semigroup</span></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="XMonad.Util.PureX.html#PureX"><span class="hs-identifier hs-type">PureX</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679375402"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">)</span></span></span><span> </span><span class="hs-keyword">where</span><span>
+</span><span id="line-115"></span><span>  </span><span id="local-6989586621679375395"><span class="annot"><span class="annottext">&lt;&gt; :: PureX a -&gt; PureX a -&gt; PureX a
+</span><span class="hs-operator hs-var hs-var hs-var hs-var">(&lt;&gt;)</span></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">(a -&gt; a -&gt; a) -&gt; PureX a -&gt; PureX a -&gt; PureX a
+forall (f :: * -&gt; *) a b c.
+Applicative f =&gt;
+(a -&gt; b -&gt; c) -&gt; f a -&gt; f b -&gt; f c
+</span><span class="hs-identifier hs-var">liftA2</span></span><span> </span><span class="annot"><span class="annottext">a -&gt; a -&gt; a
+forall a. Semigroup a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-operator hs-var">(&lt;&gt;)</span></span></span><span>
+</span><span id="line-116"></span><span>
+</span><span id="line-117"></span><span id="local-6989586621679375394"><span class="hs-keyword">instance</span><span> </span><span id="local-6989586621679375389"><span class="annot"><span class="hs-identifier hs-type">Monoid</span></span><span> </span><span class="annot"><a href="#local-6989586621679375394"><span class="hs-identifier hs-type">a</span></a></span><span> </span><span class="hs-glyph">=&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Monoid</span></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="XMonad.Util.PureX.html#PureX"><span class="hs-identifier hs-type">PureX</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679375394"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">)</span></span><span> </span><span class="hs-keyword">where</span><span>
+</span><span id="line-118"></span><span>  </span><span id="local-6989586621679375387"><span class="annot"><span class="annottext">mappend :: PureX a -&gt; PureX a -&gt; PureX a
+</span><span class="hs-identifier hs-var hs-var hs-var hs-var">mappend</span></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">(a -&gt; a -&gt; a) -&gt; PureX a -&gt; PureX a -&gt; PureX a
+forall (f :: * -&gt; *) a b c.
+Applicative f =&gt;
+(a -&gt; b -&gt; c) -&gt; f a -&gt; f b -&gt; f c
+</span><span class="hs-identifier hs-var">liftA2</span></span><span> </span><span class="annot"><span class="annottext">a -&gt; a -&gt; a
+forall a. Monoid a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-identifier hs-var">mappend</span></span><span>
+</span><span id="line-119"></span><span>  </span><span id="local-6989586621679375386"><span class="annot"><span class="annottext">mempty :: PureX a
+</span><span class="hs-identifier hs-var hs-var hs-var hs-var">mempty</span></span></span><span>  </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">a -&gt; PureX a
+forall (m :: * -&gt; *) a. Monad m =&gt; a -&gt; m a
+</span><span class="hs-identifier hs-var">return</span></span><span> </span><span class="annot"><span class="annottext">a
+forall a. Monoid a =&gt; a
+</span><span class="hs-identifier hs-var">mempty</span></span></span><span>
+</span><span id="line-120"></span><span>
+</span><span id="line-121"></span><span class="hs-comment">-- | The @XLike@ typeclass over monads reading @XConf@ values and tracking</span><span>
+</span><span id="line-122"></span><span class="hs-comment">--   @XState@ state.</span><span>
+</span><span id="line-123"></span><span class="hs-keyword">class</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">MonadReader</span></span><span> </span><span class="annot"><span class="hs-identifier hs-type">XConf</span></span><span> </span><span class="annot"><a href="#local-6989586621679375658"><span class="hs-identifier hs-type">m</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier hs-type">MonadState</span></span><span> </span><span class="annot"><span class="hs-identifier hs-type">XState</span></span><span> </span><span class="annot"><a href="#local-6989586621679375658"><span class="hs-identifier hs-type">m</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=&gt;</span><span> </span><span id="XLike"><span class="annot"><a href="XMonad.Util.PureX.html#XLike"><span class="hs-identifier hs-var">XLike</span></a></span></span><span> </span><span id="local-6989586621679375658"><span class="annot"><a href="#local-6989586621679375658"><span class="hs-identifier hs-type">m</span></a></span></span><span> </span><span class="hs-keyword">where</span><span>
+</span><span id="line-124"></span><span>  </span><span id="local-6989586621679375660"><span id="toX"><span class="annot"><a href="XMonad.Util.PureX.html#toX"><span class="hs-identifier hs-type">toX</span></a></span></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><a href="#local-6989586621679375658"><span class="hs-identifier hs-type">m</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679375660"><span class="hs-identifier hs-type">a</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">X</span></span><span> </span><span class="annot"><a href="#local-6989586621679375660"><span class="hs-identifier hs-type">a</span></a></span></span><span>
+</span><span id="line-125"></span><span>
+</span><span id="line-126"></span><span class="hs-keyword">instance</span><span> </span><span class="annot"><a href="XMonad.Util.PureX.html#XLike"><span class="hs-identifier hs-type">XLike</span></a></span><span> </span><span class="annot"><span class="hs-identifier hs-type">X</span></span><span> </span><span class="hs-keyword">where</span><span>
+</span><span id="line-127"></span><span>  </span><span id="local-6989586621679375380"><span class="annot"><span class="annottext">toX :: X a -&gt; X a
+</span><a href="#local-6989586621679375380"><span class="hs-identifier hs-var hs-var hs-var hs-var">toX</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">X a -&gt; X a
+forall a. a -&gt; a
+</span><span class="hs-identifier hs-var">id</span></span><span>
+</span><span id="line-128"></span><span>
+</span><span id="line-129"></span><span class="hs-keyword">instance</span><span> </span><span class="annot"><a href="XMonad.Util.PureX.html#XLike"><span class="hs-identifier hs-type">XLike</span></a></span><span> </span><span class="annot"><a href="XMonad.Util.PureX.html#PureX"><span class="hs-identifier hs-type">PureX</span></a></span><span> </span><span class="hs-keyword">where</span><span>
+</span><span id="line-130"></span><span>  </span><span id="local-6989586621679375375"><span class="annot"><span class="annottext">toX :: PureX a -&gt; X a
+</span><a href="#local-6989586621679375375"><span class="hs-identifier hs-var hs-var hs-var hs-var">toX</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">PureX a -&gt; X a
+forall (m :: * -&gt; *) a. XLike m =&gt; PureX a -&gt; m a
+</span><a href="XMonad.Util.PureX.html#toXLike"><span class="hs-identifier hs-var">toXLike</span></a></span><span>
+</span><span id="line-131"></span><span>
+</span><span id="line-132"></span><span class="hs-comment">-- | Consume a @PureX a@.</span><span>
+</span><span id="line-133"></span><span id="local-6989586621679375639"><span class="annot"><a href="XMonad.Util.PureX.html#runPureX"><span class="hs-identifier hs-type">runPureX</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><a href="XMonad.Util.PureX.html#PureX"><span class="hs-identifier hs-type">PureX</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679375639"><span class="hs-identifier hs-type">a</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">XConf</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">XState</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="hs-special">(</span><span class="annot"><a href="#local-6989586621679375639"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier hs-type">XState</span></span><span class="hs-special">)</span></span><span>
+</span><span id="line-134"></span><span id="runPureX"><span class="annot"><span class="annottext">runPureX :: PureX a -&gt; XConf -&gt; XState -&gt; (a, XState)
+</span><a href="XMonad.Util.PureX.html#runPureX"><span class="hs-identifier hs-var hs-var">runPureX</span></a></span></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="XMonad.Util.PureX.html#PureX"><span class="hs-identifier hs-type">PureX</span></a></span><span> </span><span id="local-6989586621679375374"><span class="annot"><span class="annottext">ReaderT XConf (State XState) a
+</span><a href="#local-6989586621679375374"><span class="hs-identifier hs-var">m</span></a></span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">State XState a -&gt; XState -&gt; (a, XState)
+forall s a. State s a -&gt; s -&gt; (a, s)
+</span><span class="hs-identifier hs-var">runState</span></span><span> </span><span class="annot"><span class="annottext">(State XState a -&gt; XState -&gt; (a, XState))
+-&gt; (XConf -&gt; State XState a) -&gt; XConf -&gt; XState -&gt; (a, XState)
+forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">ReaderT XConf (State XState) a -&gt; XConf -&gt; State XState a
+forall r (m :: * -&gt; *) a. ReaderT r m a -&gt; r -&gt; m a
+</span><span class="hs-identifier hs-var hs-var">runReaderT</span></span><span> </span><span class="annot"><span class="annottext">ReaderT XConf (State XState) a
+</span><a href="#local-6989586621679375374"><span class="hs-identifier hs-var">m</span></a></span><span>
+</span><span id="line-135"></span><span>
+</span><span id="line-136"></span><span class="hs-comment">-- | Despite appearing less general, @PureX a@ is actually isomorphic to</span><span>
+</span><span id="line-137"></span><span class="hs-comment">--   @XLike m =&gt; m a@.</span><span>
+</span><span id="line-138"></span><span id="local-6989586621679375653"><span id="local-6989586621679375654"><span class="annot"><a href="XMonad.Util.PureX.html#toXLike"><span class="hs-identifier hs-type">toXLike</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><a href="XMonad.Util.PureX.html#XLike"><span class="hs-identifier hs-type">XLike</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679375654"><span class="hs-identifier hs-type">m</span></a></span><span> </span><span class="hs-glyph">=&gt;</span><span> </span><span class="annot"><a href="XMonad.Util.PureX.html#PureX"><span class="hs-identifier hs-type">PureX</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679375653"><span class="hs-identifier hs-type">a</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="#local-6989586621679375654"><span class="hs-identifier hs-type">m</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679375653"><span class="hs-identifier hs-type">a</span></a></span></span></span><span>
+</span><span id="line-139"></span><span id="toXLike"><span class="annot"><span class="annottext">toXLike :: PureX a -&gt; m a
+</span><a href="XMonad.Util.PureX.html#toXLike"><span class="hs-identifier hs-var hs-var">toXLike</span></a></span></span><span> </span><span id="local-6989586621679375370"><span class="annot"><span class="annottext">PureX a
+</span><a href="#local-6989586621679375370"><span class="hs-identifier hs-var">pa</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">(XState -&gt; (a, XState)) -&gt; m a
+forall s (m :: * -&gt; *) a. MonadState s m =&gt; (s -&gt; (a, s)) -&gt; m a
+</span><span class="hs-identifier hs-var">state</span></span><span> </span><span class="annot"><span class="annottext">((XState -&gt; (a, XState)) -&gt; m a)
+-&gt; (XConf -&gt; XState -&gt; (a, XState)) -&gt; XConf -&gt; m a
+forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">PureX a -&gt; XConf -&gt; XState -&gt; (a, XState)
+forall a. PureX a -&gt; XConf -&gt; XState -&gt; (a, XState)
+</span><a href="XMonad.Util.PureX.html#runPureX"><span class="hs-identifier hs-var">runPureX</span></a></span><span> </span><span class="annot"><span class="annottext">PureX a
+</span><a href="#local-6989586621679375370"><span class="hs-identifier hs-var">pa</span></a></span><span> </span><span class="annot"><span class="annottext">(XConf -&gt; m a) -&gt; m XConf -&gt; m a
+forall (m :: * -&gt; *) a b. Monad m =&gt; (a -&gt; m b) -&gt; m a -&gt; m b
+</span><span class="hs-operator hs-var">=&lt;&lt;</span></span><span> </span><span class="annot"><span class="annottext">m XConf
+forall r (m :: * -&gt; *). MonadReader r m =&gt; m r
+</span><span class="hs-identifier hs-var">ask</span></span><span>
+</span><span id="line-140"></span><span>
+</span><span id="line-141"></span><span class="hs-comment">-- | A generalisation of 'windowBracket'. Handles refreshing for an action that</span><span>
+</span><span id="line-142"></span><span class="hs-comment">--   __performs no refresh of its own__ but can indicate that it needs one</span><span>
+</span><span id="line-143"></span><span class="hs-comment">--   through a return value that's tested against the supplied predicate. The</span><span>
+</span><span id="line-144"></span><span class="hs-comment">--   action can interleave changes to the @WindowSet@ with @IO@ or changes to</span><span>
+</span><span id="line-145"></span><span class="hs-comment">--   the @XState@.</span><span>
+</span><span id="line-146"></span><span id="local-6989586621679375628"><span id="local-6989586621679375629"><span class="annot"><a href="XMonad.Util.PureX.html#windowBracket%27"><span class="hs-identifier hs-type">windowBracket'</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><a href="XMonad.Util.PureX.html#XLike"><span class="hs-identifier hs-type">XLike</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679375629"><span class="hs-identifier hs-type">m</span></a></span><span> </span><span class="hs-glyph">=&gt;</span><span> </span><span class="hs-special">(</span><span class="annot"><a href="#local-6989586621679375628"><span class="hs-identifier hs-type">a</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Bool</span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="#local-6989586621679375629"><span class="hs-identifier hs-type">m</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679375628"><span class="hs-identifier hs-type">a</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">X</span></span><span> </span><span class="annot"><a href="#local-6989586621679375628"><span class="hs-identifier hs-type">a</span></a></span></span></span><span>
+</span><span id="line-147"></span><span id="windowBracket%27"><span class="annot"><span class="annottext">windowBracket' :: (a -&gt; Bool) -&gt; m a -&gt; X a
+</span><a href="XMonad.Util.PureX.html#windowBracket%27"><span class="hs-identifier hs-var hs-var">windowBracket'</span></a></span></span><span> </span><span id="local-6989586621679375366"><span class="annot"><span class="annottext">a -&gt; Bool
+</span><a href="#local-6989586621679375366"><span class="hs-identifier hs-var">p</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">(a -&gt; Bool) -&gt; X a -&gt; X a
+forall a. (a -&gt; Bool) -&gt; X a -&gt; X a
+</span><span class="hs-identifier hs-var">windowBracket</span></span><span> </span><span class="annot"><span class="annottext">a -&gt; Bool
+</span><a href="#local-6989586621679375366"><span class="hs-identifier hs-var">p</span></a></span><span> </span><span class="annot"><span class="annottext">(X a -&gt; X a) -&gt; (m a -&gt; X a) -&gt; m a -&gt; X a
+forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">m a -&gt; X a
+forall (m :: * -&gt; *) a. XLike m =&gt; m a -&gt; X a
+</span><a href="XMonad.Util.PureX.html#toX"><span class="hs-identifier hs-var">toX</span></a></span><span>
+</span><span id="line-148"></span><span>
+</span><span id="line-149"></span><span class="hs-comment">-- | A version of @windowBracket'@ specialised to take a @PureX Any@ action and</span><span>
+</span><span id="line-150"></span><span class="hs-comment">--   handle windowset changes with a refresh when the @Any@ holds @True@.</span><span>
+</span><span id="line-151"></span><span class="hs-comment">--   Analogous to 'windowBracket_'. Don't bake this into your action; it's for</span><span>
+</span><span id="line-152"></span><span class="hs-comment">--   the end-user.</span><span>
+</span><span id="line-153"></span><span class="annot"><a href="XMonad.Util.PureX.html#defile"><span class="hs-identifier hs-type">defile</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><a href="XMonad.Util.PureX.html#PureX"><span class="hs-identifier hs-type">PureX</span></a></span><span> </span><span class="annot"><span class="hs-identifier hs-type">Any</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">X</span></span><span> </span><span class="hs-special">(</span><span class="hs-special">)</span><span>
+</span><span id="line-154"></span><span id="defile"><span class="annot"><span class="annottext">defile :: PureX Any -&gt; X ()
+</span><a href="XMonad.Util.PureX.html#defile"><span class="hs-identifier hs-var hs-var">defile</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">X Any -&gt; X ()
+forall (f :: * -&gt; *) a. Functor f =&gt; f a -&gt; f ()
+</span><span class="hs-identifier hs-var">void</span></span><span> </span><span class="annot"><span class="annottext">(X Any -&gt; X ()) -&gt; (PureX Any -&gt; X Any) -&gt; PureX Any -&gt; X ()
+forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">(Any -&gt; Bool) -&gt; PureX Any -&gt; X Any
+forall (m :: * -&gt; *) a. XLike m =&gt; (a -&gt; Bool) -&gt; m a -&gt; X a
+</span><a href="XMonad.Util.PureX.html#windowBracket%27"><span class="hs-identifier hs-var">windowBracket'</span></a></span><span> </span><span class="annot"><span class="annottext">Any -&gt; Bool
+</span><span class="hs-identifier hs-var hs-var">getAny</span></span><span>
+</span><span id="line-155"></span><span>
+</span><span id="line-156"></span><span class="hs-comment">-- | A version of @windowBracket@ specialised to take an @X ()@ action and</span><span>
+</span><span id="line-157"></span><span class="hs-comment">--   perform a refresh handling any changes it makes.</span><span>
+</span><span id="line-158"></span><span class="annot"><a href="XMonad.Util.PureX.html#handlingRefresh"><span class="hs-identifier hs-type">handlingRefresh</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">X</span></span><span> </span><span class="hs-special">(</span><span class="hs-special">)</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">X</span></span><span> </span><span class="hs-special">(</span><span class="hs-special">)</span><span>
+</span><span id="line-159"></span><span id="handlingRefresh"><span class="annot"><span class="annottext">handlingRefresh :: X () -&gt; X ()
+</span><a href="XMonad.Util.PureX.html#handlingRefresh"><span class="hs-identifier hs-var hs-var">handlingRefresh</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">(() -&gt; Bool) -&gt; X () -&gt; X ()
+forall a. (a -&gt; Bool) -&gt; X a -&gt; X a
+</span><span class="hs-identifier hs-var">windowBracket</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Bool -&gt; () -&gt; Bool
+forall a b. a -&gt; b -&gt; a
+</span><span class="hs-identifier hs-var">const</span></span><span> </span><span class="annot"><span class="annottext">Bool
+</span><span class="hs-identifier hs-var">True</span></span><span class="hs-special">)</span><span>
+</span><span id="line-160"></span><span>
+</span><span id="line-161"></span><span class="hs-comment">-- }}}</span><span>
+</span><span id="line-162"></span><span>
+</span><span id="line-163"></span><span class="hs-comment">-- --&lt; Utility &gt;-- {{{</span><span>
+</span><span id="line-164"></span><span>
+</span><span id="line-165"></span><span class="hs-comment">-- | A 'when' that accepts a monoidal return value.</span><span>
+</span><span id="line-166"></span><span id="local-6989586621679375617"><span id="local-6989586621679375618"><span class="annot"><a href="XMonad.Util.PureX.html#when%27"><span class="hs-identifier hs-type">when'</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">Monad</span></span><span> </span><span class="annot"><a href="#local-6989586621679375618"><span class="hs-identifier hs-type">m</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Monoid</span></span><span> </span><span class="annot"><a href="#local-6989586621679375617"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Bool</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="#local-6989586621679375618"><span class="hs-identifier hs-type">m</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679375617"><span class="hs-identifier hs-type">a</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="#local-6989586621679375618"><span class="hs-identifier hs-type">m</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679375617"><span class="hs-identifier hs-type">a</span></a></span></span></span><span>
+</span><span id="line-167"></span><span id="when%27"><span class="annot"><span class="annottext">when' :: Bool -&gt; m a -&gt; m a
+</span><a href="XMonad.Util.PureX.html#when%27"><span class="hs-identifier hs-var hs-var">when'</span></a></span></span><span> </span><span id="local-6989586621679375361"><span class="annot"><span class="annottext">Bool
+</span><a href="#local-6989586621679375361"><span class="hs-identifier hs-var">b</span></a></span></span><span> </span><span id="local-6989586621679375360"><span class="annot"><span class="annottext">m a
+</span><a href="#local-6989586621679375360"><span class="hs-identifier hs-var">ma</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-keyword">if</span><span> </span><span class="annot"><span class="annottext">Bool
+</span><a href="#local-6989586621679375361"><span class="hs-identifier hs-var">b</span></a></span><span> </span><span class="hs-keyword">then</span><span> </span><span class="annot"><span class="annottext">m a
+</span><a href="#local-6989586621679375360"><span class="hs-identifier hs-var">ma</span></a></span><span> </span><span class="hs-keyword">else</span><span> </span><span class="annot"><span class="annottext">a -&gt; m a
+forall (m :: * -&gt; *) a. Monad m =&gt; a -&gt; m a
+</span><span class="hs-identifier hs-var">return</span></span><span> </span><span class="annot"><span class="annottext">a
+forall a. Monoid a =&gt; a
+</span><span class="hs-identifier hs-var">mempty</span></span><span>
+</span><span id="line-168"></span><span>
+</span><span id="line-169"></span><span class="hs-comment">-- | A @whenX@/@whenM@ that accepts a monoidal return value.</span><span>
+</span><span id="line-170"></span><span id="local-6989586621679375358"><span id="local-6989586621679375359"><span class="annot"><a href="XMonad.Util.PureX.html#whenM%27"><span class="hs-identifier hs-type">whenM'</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">Monad</span></span><span> </span><span class="annot"><a href="#local-6989586621679375359"><span class="hs-identifier hs-type">m</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Monoid</span></span><span> </span><span class="annot"><a href="#local-6989586621679375358"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=&gt;</span><span> </span><span class="annot"><a href="#local-6989586621679375359"><span class="hs-identifier hs-type">m</span></a></span><span> </span><span class="annot"><span class="hs-identifier hs-type">Bool</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="#local-6989586621679375359"><span class="hs-identifier hs-type">m</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679375358"><span class="hs-identifier hs-type">a</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="#local-6989586621679375359"><span class="hs-identifier hs-type">m</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679375358"><span class="hs-identifier hs-type">a</span></a></span></span></span><span>
+</span><span id="line-171"></span><span id="whenM%27"><span class="annot"><span class="annottext">whenM' :: m Bool -&gt; m a -&gt; m a
+</span><a href="XMonad.Util.PureX.html#whenM%27"><span class="hs-identifier hs-var hs-var">whenM'</span></a></span></span><span> </span><span id="local-6989586621679375357"><span class="annot"><span class="annottext">m Bool
+</span><a href="#local-6989586621679375357"><span class="hs-identifier hs-var">mb</span></a></span></span><span> </span><span id="local-6989586621679375356"><span class="annot"><span class="annottext">m a
+</span><a href="#local-6989586621679375356"><span class="hs-identifier hs-var">m</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">(m a -&gt; m a) -&gt; m a -&gt; m a
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">m a
+</span><a href="#local-6989586621679375356"><span class="hs-identifier hs-var">m</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">((m a -&gt; m a) -&gt; m a) -&gt; (Bool -&gt; m a -&gt; m a) -&gt; Bool -&gt; m a
+forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">Bool -&gt; m a -&gt; m a
+forall (m :: * -&gt; *) a. (Monad m, Monoid a) =&gt; Bool -&gt; m a -&gt; m a
+</span><a href="XMonad.Util.PureX.html#when%27"><span class="hs-identifier hs-var">when'</span></a></span><span> </span><span class="annot"><span class="annottext">(Bool -&gt; m a) -&gt; m Bool -&gt; m a
+forall (m :: * -&gt; *) a b. Monad m =&gt; (a -&gt; m b) -&gt; m a -&gt; m b
+</span><span class="hs-operator hs-var">=&lt;&lt;</span></span><span> </span><span class="annot"><span class="annottext">m Bool
+</span><a href="#local-6989586621679375357"><span class="hs-identifier hs-var">mb</span></a></span><span>
+</span><span id="line-172"></span><span>
+</span><span id="line-173"></span><span class="hs-comment">-- | A 'whenJust' that accepts a monoidal return value.</span><span>
+</span><span id="line-174"></span><span id="local-6989586621679375591"><span id="local-6989586621679375592"><span id="local-6989586621679375593"><span class="annot"><a href="XMonad.Util.PureX.html#whenJust%27"><span class="hs-identifier hs-type">whenJust'</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">Monad</span></span><span> </span><span class="annot"><a href="#local-6989586621679375593"><span class="hs-identifier hs-type">m</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Monoid</span></span><span> </span><span class="annot"><a href="#local-6989586621679375592"><span class="hs-identifier hs-type">b</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Maybe</span></span><span> </span><span class="annot"><a href="#local-6989586621679375591"><span class="hs-identifier hs-type">a</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="hs-special">(</span><span class="annot"><a href="#local-6989586621679375591"><span class="hs-identifier hs-type">a</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="#local-6989586621679375593"><span class="hs-identifier hs-type">m</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679375592"><span class="hs-identifier hs-type">b</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="#local-6989586621679375593"><span class="hs-identifier hs-type">m</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679375592"><span class="hs-identifier hs-type">b</span></a></span></span></span></span><span>
+</span><span id="line-175"></span><span id="whenJust%27"><span class="annot"><span class="annottext">whenJust' :: Maybe a -&gt; (a -&gt; m b) -&gt; m b
+</span><a href="XMonad.Util.PureX.html#whenJust%27"><span class="hs-identifier hs-var hs-var">whenJust'</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">((a -&gt; m b) -&gt; Maybe a -&gt; m b) -&gt; Maybe a -&gt; (a -&gt; m b) -&gt; m b
+forall a b c. (a -&gt; b -&gt; c) -&gt; b -&gt; a -&gt; c
+</span><span class="hs-identifier hs-var">flip</span></span><span> </span><span class="annot"><span class="annottext">(((a -&gt; m b) -&gt; Maybe a -&gt; m b) -&gt; Maybe a -&gt; (a -&gt; m b) -&gt; m b)
+-&gt; ((a -&gt; m b) -&gt; Maybe a -&gt; m b) -&gt; Maybe a -&gt; (a -&gt; m b) -&gt; m b
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">m b -&gt; (a -&gt; m b) -&gt; Maybe a -&gt; m b
+forall b a. b -&gt; (a -&gt; b) -&gt; Maybe a -&gt; b
+</span><span class="hs-identifier hs-var">maybe</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">b -&gt; m b
+forall (m :: * -&gt; *) a. Monad m =&gt; a -&gt; m a
+</span><span class="hs-identifier hs-var">return</span></span><span> </span><span class="annot"><span class="annottext">b
+forall a. Monoid a =&gt; a
+</span><span class="hs-identifier hs-var">mempty</span></span><span class="hs-special">)</span><span>
+</span><span id="line-176"></span><span>
+</span><span id="line-177"></span><span class="hs-comment">-- | Akin to @&lt;*@. Discarding the wrapped value in the second argument either</span><span>
+</span><span id="line-178"></span><span class="hs-comment">--   way, keep its effects iff the first argument returns @Any True@.</span><span>
+</span><span id="line-179"></span><span id="local-6989586621679375352"><span id="local-6989586621679375353"><span class="annot"><a href="XMonad.Util.PureX.html#%3C%3F"><span class="hs-operator hs-type">(&lt;?)</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Monad</span></span><span> </span><span class="annot"><a href="#local-6989586621679375353"><span class="hs-identifier hs-type">m</span></a></span><span> </span><span class="hs-glyph">=&gt;</span><span> </span><span class="annot"><a href="#local-6989586621679375353"><span class="hs-identifier hs-type">m</span></a></span><span> </span><span class="annot"><span class="hs-identifier hs-type">Any</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="#local-6989586621679375353"><span class="hs-identifier hs-type">m</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679375352"><span class="hs-identifier hs-type">a</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="#local-6989586621679375353"><span class="hs-identifier hs-type">m</span></a></span><span> </span><span class="annot"><span class="hs-identifier hs-type">Any</span></span></span></span><span>
+</span><span id="line-180"></span><span id="local-6989586621679375351"><span class="annot"><span class="annottext">m Any
+</span><a href="#local-6989586621679375351"><span class="hs-identifier hs-var">ifthis</span></a></span></span><span> </span><span id="%3C%3F"><span class="annot"><span class="annottext">&lt;? :: m Any -&gt; m a -&gt; m Any
+</span><a href="XMonad.Util.PureX.html#%3C%3F"><span class="hs-operator hs-var hs-var">&lt;?</span></a></span></span><span> </span><span id="local-6989586621679375350"><span class="annot"><span class="annottext">m a
+</span><a href="#local-6989586621679375350"><span class="hs-identifier hs-var">thenthis</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-181"></span><span>  </span><span class="annot"><span class="hs-identifier hs-type">Any</span></span><span> </span><span id="local-6989586621679375348"><span class="annot"><span class="annottext">Bool
+</span><a href="#local-6989586621679375348"><span class="hs-identifier hs-var">b</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">m Any
+</span><a href="#local-6989586621679375351"><span class="hs-identifier hs-var">ifthis</span></a></span><span>
+</span><span id="line-182"></span><span>  </span><span class="annot"><span class="annottext">Bool -&gt; m Any -&gt; m Any
+forall (m :: * -&gt; *) a. (Monad m, Monoid a) =&gt; Bool -&gt; m a -&gt; m a
+</span><a href="XMonad.Util.PureX.html#when%27"><span class="hs-identifier hs-var">when'</span></a></span><span> </span><span class="annot"><span class="annottext">Bool
+</span><a href="#local-6989586621679375348"><span class="hs-identifier hs-var">b</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Bool -&gt; Any
+</span><span class="hs-identifier hs-var">Any</span></span><span> </span><span class="annot"><span class="annottext">Bool
+</span><a href="#local-6989586621679375348"><span class="hs-identifier hs-var">b</span></a></span><span> </span><span class="annot"><span class="annottext">Any -&gt; m a -&gt; m Any
+forall (f :: * -&gt; *) a b. Functor f =&gt; a -&gt; f b -&gt; f a
+</span><span class="hs-operator hs-var">&lt;$</span></span><span> </span><span class="annot"><span class="annottext">m a
+</span><a href="#local-6989586621679375350"><span class="hs-identifier hs-var">thenthis</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-183"></span><span class="hs-keyword">infixl</span><span> </span><span class="hs-number">4</span><span> </span><span class="annot"><a href="XMonad.Util.PureX.html#%3C%3F"><span class="hs-operator hs-type">&lt;?</span></a></span><span>
+</span><span id="line-184"></span><span>
+</span><span id="line-185"></span><span class="hs-comment">-- | Akin to a low precedence @&lt;&gt;@. Combines applicative effects left-to-right</span><span>
+</span><span id="line-186"></span><span class="hs-comment">--   and wrapped @Bool@s with @&amp;&amp;@ (instead of @||@).</span><span>
+</span><span id="line-187"></span><span id="local-6989586621679375346"><span class="annot"><a href="XMonad.Util.PureX.html#%26%3E"><span class="hs-operator hs-type">(&amp;&gt;)</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Applicative</span></span><span> </span><span class="annot"><a href="#local-6989586621679375346"><span class="hs-identifier hs-type">f</span></a></span><span> </span><span class="hs-glyph">=&gt;</span><span> </span><span class="annot"><a href="#local-6989586621679375346"><span class="hs-identifier hs-type">f</span></a></span><span> </span><span class="annot"><span class="hs-identifier hs-type">Any</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="#local-6989586621679375346"><span class="hs-identifier hs-type">f</span></a></span><span> </span><span class="annot"><span class="hs-identifier hs-type">Any</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="#local-6989586621679375346"><span class="hs-identifier hs-type">f</span></a></span><span> </span><span class="annot"><span class="hs-identifier hs-type">Any</span></span></span><span>
+</span><span id="line-188"></span><span id="%26%3E"><span class="annot"><span class="annottext">&amp;&gt; :: f Any -&gt; f Any -&gt; f Any
+</span><a href="XMonad.Util.PureX.html#%26%3E"><span class="hs-operator hs-var hs-var">(&amp;&gt;)</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">(Any -&gt; Any -&gt; Any) -&gt; f Any -&gt; f Any -&gt; f Any
+forall (f :: * -&gt; *) a b c.
+Applicative f =&gt;
+(a -&gt; b -&gt; c) -&gt; f a -&gt; f b -&gt; f c
+</span><span class="hs-identifier hs-var">liftA2</span></span><span> </span><span class="annot"><span class="annottext">((Any -&gt; Any -&gt; Any) -&gt; f Any -&gt; f Any -&gt; f Any)
+-&gt; (Any -&gt; Any -&gt; Any) -&gt; f Any -&gt; f Any -&gt; f Any
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="hs-glyph">\</span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">Any</span></span><span> </span><span id="local-6989586621679375345"><span class="annot"><span class="annottext">Bool
+</span><a href="#local-6989586621679375345"><span class="hs-identifier hs-var">b1</span></a></span></span><span class="hs-special">)</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">Any</span></span><span> </span><span id="local-6989586621679375344"><span class="annot"><span class="annottext">Bool
+</span><a href="#local-6989586621679375344"><span class="hs-identifier hs-var">b2</span></a></span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">Bool -&gt; Any
+</span><span class="hs-identifier hs-var">Any</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Bool
+</span><a href="#local-6989586621679375345"><span class="hs-identifier hs-var">b1</span></a></span><span> </span><span class="annot"><span class="annottext">Bool -&gt; Bool -&gt; Bool
+</span><span class="hs-operator hs-var">&amp;&amp;</span></span><span> </span><span class="annot"><span class="annottext">Bool
+</span><a href="#local-6989586621679375344"><span class="hs-identifier hs-var">b2</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-189"></span><span class="hs-keyword">infixl</span><span> </span><span class="hs-number">1</span><span> </span><span class="annot"><a href="XMonad.Util.PureX.html#%26%3E"><span class="hs-operator hs-type">&amp;&gt;</span></a></span><span>
+</span><span id="line-190"></span><span>
+</span><span id="line-191"></span><span class="hs-comment">-- | A generalisation of 'withWindowSet'.</span><span>
+</span><span id="line-192"></span><span id="local-6989586621679375553"><span id="local-6989586621679375554"><span class="annot"><a href="XMonad.Util.PureX.html#withWindowSet%27"><span class="hs-identifier hs-type">withWindowSet'</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><a href="XMonad.Util.PureX.html#XLike"><span class="hs-identifier hs-type">XLike</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679375554"><span class="hs-identifier hs-type">m</span></a></span><span> </span><span class="hs-glyph">=&gt;</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">WindowSet</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="#local-6989586621679375554"><span class="hs-identifier hs-type">m</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679375553"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="#local-6989586621679375554"><span class="hs-identifier hs-type">m</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679375553"><span class="hs-identifier hs-type">a</span></a></span></span></span><span>
+</span><span id="line-193"></span><span id="withWindowSet%27"><span class="annot"><span class="annottext">withWindowSet' :: (WindowSet -&gt; m a) -&gt; m a
+</span><a href="XMonad.Util.PureX.html#withWindowSet%27"><span class="hs-identifier hs-var hs-var">withWindowSet'</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">(WindowSet -&gt; m a) -&gt; m WindowSet -&gt; m a
+forall (m :: * -&gt; *) a b. Monad m =&gt; (a -&gt; m b) -&gt; m a -&gt; m b
+</span><span class="hs-operator hs-var">=&lt;&lt;</span></span><span> </span><span class="annot"><span class="annottext">(XState -&gt; WindowSet) -&gt; m WindowSet
+forall s (m :: * -&gt; *) a. MonadState s m =&gt; (s -&gt; a) -&gt; m a
+</span><span class="hs-identifier hs-var">gets</span></span><span> </span><span class="annot"><span class="annottext">XState -&gt; WindowSet
+</span><span class="hs-identifier hs-var hs-var">windowset</span></span><span class="hs-special">)</span><span>
+</span><span id="line-194"></span><span>
+</span><span id="line-195"></span><span class="hs-comment">-- | If there is a current tag and a focused window, perform an operation with</span><span>
+</span><span id="line-196"></span><span class="hs-comment">--   them, otherwise return mempty.</span><span>
+</span><span id="line-197"></span><span id="local-6989586621679375501"><span id="local-6989586621679375502"><span class="annot"><a href="XMonad.Util.PureX.html#withFocii"><span class="hs-identifier hs-type">withFocii</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="hs-special">(</span><span class="annot"><a href="XMonad.Util.PureX.html#XLike"><span class="hs-identifier hs-type">XLike</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679375502"><span class="hs-identifier hs-type">m</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Monoid</span></span><span> </span><span class="annot"><a href="#local-6989586621679375501"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=&gt;</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">WorkspaceId</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Window</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="#local-6989586621679375502"><span class="hs-identifier hs-type">m</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679375501"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="#local-6989586621679375502"><span class="hs-identifier hs-type">m</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679375501"><span class="hs-identifier hs-type">a</span></a></span></span></span><span>
+</span><span id="line-198"></span><span id="withFocii"><span class="annot"><span class="annottext">withFocii :: (WorkspaceId -&gt; Window -&gt; m a) -&gt; m a
+</span><a href="XMonad.Util.PureX.html#withFocii"><span class="hs-identifier hs-var hs-var">withFocii</span></a></span></span><span> </span><span id="local-6989586621679375340"><span class="annot"><span class="annottext">WorkspaceId -&gt; Window -&gt; m a
+</span><a href="#local-6989586621679375340"><span class="hs-identifier hs-var">f</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">m (m a) -&gt; m a
+forall (m :: * -&gt; *) a. Monad m =&gt; m (m a) -&gt; m a
+</span><span class="hs-identifier hs-var">join</span></span><span> </span><span class="annot"><span class="annottext">(m (m a) -&gt; m a) -&gt; m (m a) -&gt; m a
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Maybe Window -&gt; (Window -&gt; m a) -&gt; m a
+forall (m :: * -&gt; *) b a.
+(Monad m, Monoid b) =&gt;
+Maybe a -&gt; (a -&gt; m b) -&gt; m b
+</span><a href="XMonad.Util.PureX.html#whenJust%27"><span class="hs-identifier hs-var">whenJust'</span></a></span><span> </span><span class="annot"><span class="annottext">(Maybe Window -&gt; (Window -&gt; m a) -&gt; m a)
+-&gt; m (Maybe Window) -&gt; m ((Window -&gt; m a) -&gt; m a)
+forall (f :: * -&gt; *) a b. Functor f =&gt; (a -&gt; b) -&gt; f a -&gt; f b
+</span><span class="hs-operator hs-var">&lt;$&gt;</span></span><span> </span><span class="annot"><span class="annottext">m (Maybe Window)
+forall (m :: * -&gt; *). XLike m =&gt; m (Maybe Window)
+</span><a href="XMonad.Util.PureX.html#peek"><span class="hs-identifier hs-var">peek</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">m ((Window -&gt; m a) -&gt; m a) -&gt; m (Window -&gt; m a) -&gt; m (m a)
+forall (f :: * -&gt; *) a b. Applicative f =&gt; f (a -&gt; b) -&gt; f a -&gt; f b
+</span><span class="hs-operator hs-var">&lt;*&gt;</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">WorkspaceId -&gt; Window -&gt; m a
+</span><a href="#local-6989586621679375340"><span class="hs-identifier hs-var">f</span></a></span><span> </span><span class="annot"><span class="annottext">(WorkspaceId -&gt; Window -&gt; m a)
+-&gt; m WorkspaceId -&gt; m (Window -&gt; m a)
+forall (f :: * -&gt; *) a b. Functor f =&gt; (a -&gt; b) -&gt; f a -&gt; f b
+</span><span class="hs-operator hs-var">&lt;$&gt;</span></span><span> </span><span class="annot"><span class="annottext">m WorkspaceId
+forall (m :: * -&gt; *). XLike m =&gt; m WorkspaceId
+</span><a href="XMonad.Util.PureX.html#curTag"><span class="hs-identifier hs-var">curTag</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-199"></span><span>
+</span><span id="line-200"></span><span class="hs-comment">-- | A generalisation of 'modifyWindowSet'.</span><span>
+</span><span id="line-201"></span><span id="local-6989586621679375561"><span class="annot"><a href="XMonad.Util.PureX.html#modifyWindowSet%27"><span class="hs-identifier hs-type">modifyWindowSet'</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><a href="XMonad.Util.PureX.html#XLike"><span class="hs-identifier hs-type">XLike</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679375561"><span class="hs-identifier hs-type">m</span></a></span><span> </span><span class="hs-glyph">=&gt;</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">WindowSet</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">WindowSet</span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="#local-6989586621679375561"><span class="hs-identifier hs-type">m</span></a></span><span> </span><span class="hs-special">(</span><span class="hs-special">)</span></span><span>
+</span><span id="line-202"></span><span id="modifyWindowSet%27"><span class="annot"><span class="annottext">modifyWindowSet' :: (WindowSet -&gt; WindowSet) -&gt; m ()
+</span><a href="XMonad.Util.PureX.html#modifyWindowSet%27"><span class="hs-identifier hs-var hs-var">modifyWindowSet'</span></a></span></span><span> </span><span id="local-6989586621679375338"><span class="annot"><span class="annottext">WindowSet -&gt; WindowSet
+</span><a href="#local-6989586621679375338"><span class="hs-identifier hs-var">f</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">(XState -&gt; XState) -&gt; m ()
+forall s (m :: * -&gt; *). MonadState s m =&gt; (s -&gt; s) -&gt; m ()
+</span><span class="hs-identifier hs-var">modify</span></span><span> </span><span class="annot"><span class="annottext">((XState -&gt; XState) -&gt; m ()) -&gt; (XState -&gt; XState) -&gt; m ()
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="hs-glyph">\</span><span id="local-6989586621679375336"><span class="annot"><span class="annottext">XState
+</span><a href="#local-6989586621679375336"><span class="hs-identifier hs-var">xs</span></a></span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">XState
+</span><a href="#local-6989586621679375336"><span class="hs-identifier hs-var">xs</span></a></span><span> </span><span class="hs-special">{</span><span> </span><span class="annot"><span class="annottext">windowset :: WindowSet
+</span><span class="hs-identifier hs-var">windowset</span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">WindowSet -&gt; WindowSet
+</span><a href="#local-6989586621679375338"><span class="hs-identifier hs-var">f</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">XState -&gt; WindowSet
+</span><span class="hs-identifier hs-var hs-var">windowset</span></span><span> </span><span class="annot"><span class="annottext">XState
+</span><a href="#local-6989586621679375336"><span class="hs-identifier hs-var">xs</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-special">}</span><span>
+</span><span id="line-203"></span><span>
+</span><span id="line-204"></span><span class="hs-comment">-- | A variant of @W.modify@ and @W.modify'@ handling the @Nothing@ and @Just@</span><span>
+</span><span id="line-205"></span><span class="hs-comment">--   cases uniformly.</span><span>
+</span><span id="line-206"></span><span id="local-6989586621679375556"><span id="local-6989586621679375557"><span id="local-6989586621679375558"><span id="local-6989586621679375559"><span id="local-6989586621679375560"><span class="annot"><a href="XMonad.Util.PureX.html#modify%27%27"><span class="hs-identifier hs-type">modify''</span></a></span><span>
+</span><span id="line-207"></span><span>  </span><span class="hs-glyph">::</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">Maybe</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">W.Stack</span></span><span> </span><span class="annot"><a href="#local-6989586621679375560"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Maybe</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">W.Stack</span></span><span> </span><span class="annot"><a href="#local-6989586621679375560"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">)</span><span class="hs-special">)</span><span>
+</span><span id="line-208"></span><span>  </span><span class="hs-glyph">-&gt;</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">W.StackSet</span></span><span> </span><span class="annot"><a href="#local-6989586621679375559"><span class="hs-identifier hs-type">i</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679375558"><span class="hs-identifier hs-type">l</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679375560"><span class="hs-identifier hs-type">a</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679375557"><span class="hs-identifier hs-type">s</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679375556"><span class="hs-identifier hs-type">sd</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">W.StackSet</span></span><span> </span><span class="annot"><a href="#local-6989586621679375559"><span class="hs-identifier hs-type">i</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679375558"><span class="hs-identifier hs-type">l</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679375560"><span class="hs-identifier hs-type">a</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679375557"><span class="hs-identifier hs-type">s</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679375556"><span class="hs-identifier hs-type">sd</span></a></span><span class="hs-special">)</span></span></span></span></span></span><span>
+</span><span id="line-209"></span><span id="modify%27%27"><span class="annot"><span class="annottext">modify'' :: (Maybe (Stack a) -&gt; Maybe (Stack a))
+-&gt; StackSet i l a s sd -&gt; StackSet i l a s sd
+</span><a href="XMonad.Util.PureX.html#modify%27%27"><span class="hs-identifier hs-var hs-var">modify''</span></a></span></span><span> </span><span id="local-6989586621679375335"><span class="annot"><span class="annottext">Maybe (Stack a) -&gt; Maybe (Stack a)
+</span><a href="#local-6989586621679375335"><span class="hs-identifier hs-var">f</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Maybe (Stack a)
+-&gt; (Stack a -&gt; Maybe (Stack a))
+-&gt; StackSet i l a s sd
+-&gt; StackSet i l a s sd
+forall a i l s sd.
+Maybe (Stack a)
+-&gt; (Stack a -&gt; Maybe (Stack a))
+-&gt; StackSet i l a s sd
+-&gt; StackSet i l a s sd
+</span><span class="hs-identifier hs-var">W.modify</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Maybe (Stack a) -&gt; Maybe (Stack a)
+</span><a href="#local-6989586621679375335"><span class="hs-identifier hs-var">f</span></a></span><span> </span><span class="annot"><span class="annottext">Maybe (Stack a)
+forall a. Maybe a
+</span><span class="hs-identifier hs-var">Nothing</span></span><span class="hs-special">)</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Maybe (Stack a) -&gt; Maybe (Stack a)
+</span><a href="#local-6989586621679375335"><span class="hs-identifier hs-var">f</span></a></span><span> </span><span class="annot"><span class="annottext">(Maybe (Stack a) -&gt; Maybe (Stack a))
+-&gt; (Stack a -&gt; Maybe (Stack a)) -&gt; Stack a -&gt; Maybe (Stack a)
+forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">Stack a -&gt; Maybe (Stack a)
+forall a. a -&gt; Maybe a
+</span><span class="hs-identifier hs-var">Just</span></span><span class="hs-special">)</span><span>
+</span><span id="line-210"></span><span>
+</span><span id="line-211"></span><span class="hs-comment">-- | Get the stack from the current workspace.</span><span>
+</span><span id="line-212"></span><span id="local-6989586621679375333"><span class="annot"><a href="XMonad.Util.PureX.html#getStack"><span class="hs-identifier hs-type">getStack</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><a href="XMonad.Util.PureX.html#XLike"><span class="hs-identifier hs-type">XLike</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679375333"><span class="hs-identifier hs-type">m</span></a></span><span> </span><span class="hs-glyph">=&gt;</span><span> </span><span class="annot"><a href="#local-6989586621679375333"><span class="hs-identifier hs-type">m</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">Maybe</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">W.Stack</span></span><span> </span><span class="annot"><span class="hs-identifier hs-type">Window</span></span><span class="hs-special">)</span><span class="hs-special">)</span></span><span>
+</span><span id="line-213"></span><span id="getStack"><span class="annot"><span class="annottext">getStack :: m (Maybe (Stack Window))
+</span><a href="XMonad.Util.PureX.html#getStack"><span class="hs-identifier hs-var hs-var">getStack</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Workspace WorkspaceId (Layout Window) Window
+-&gt; Maybe (Stack Window)
+forall i l a. Workspace i l a -&gt; Maybe (Stack a)
+</span><span class="hs-identifier hs-var hs-var">W.stack</span></span><span> </span><span class="annot"><span class="annottext">(Workspace WorkspaceId (Layout Window) Window
+ -&gt; Maybe (Stack Window))
+-&gt; m (Workspace WorkspaceId (Layout Window) Window)
+-&gt; m (Maybe (Stack Window))
+forall (f :: * -&gt; *) a b. Functor f =&gt; (a -&gt; b) -&gt; f a -&gt; f b
+</span><span class="hs-operator hs-var">&lt;$&gt;</span></span><span> </span><span class="annot"><span class="annottext">m (Workspace WorkspaceId (Layout Window) Window)
+forall (m :: * -&gt; *).
+XLike m =&gt;
+m (Workspace WorkspaceId (Layout Window) Window)
+</span><a href="XMonad.Util.PureX.html#curWorkspace"><span class="hs-identifier hs-var">curWorkspace</span></a></span><span>
+</span><span id="line-214"></span><span>
+</span><span id="line-215"></span><span class="hs-comment">-- | Set the stack on the current workspace.</span><span>
+</span><span id="line-216"></span><span id="local-6989586621679375331"><span class="annot"><a href="XMonad.Util.PureX.html#putStack"><span class="hs-identifier hs-type">putStack</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><a href="XMonad.Util.PureX.html#XLike"><span class="hs-identifier hs-type">XLike</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679375331"><span class="hs-identifier hs-type">m</span></a></span><span> </span><span class="hs-glyph">=&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Maybe</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">W.Stack</span></span><span> </span><span class="annot"><span class="hs-identifier hs-type">Window</span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="#local-6989586621679375331"><span class="hs-identifier hs-type">m</span></a></span><span> </span><span class="hs-special">(</span><span class="hs-special">)</span></span><span>
+</span><span id="line-217"></span><span id="putStack"><span class="annot"><span class="annottext">putStack :: Maybe (Stack Window) -&gt; m ()
+</span><a href="XMonad.Util.PureX.html#putStack"><span class="hs-identifier hs-var hs-var">putStack</span></a></span></span><span> </span><span id="local-6989586621679375330"><span class="annot"><span class="annottext">Maybe (Stack Window)
+</span><a href="#local-6989586621679375330"><span class="hs-identifier hs-var">mst</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">(WindowSet -&gt; WindowSet) -&gt; m ()
+forall (m :: * -&gt; *). XLike m =&gt; (WindowSet -&gt; WindowSet) -&gt; m ()
+</span><a href="XMonad.Util.PureX.html#modifyWindowSet%27"><span class="hs-identifier hs-var">modifyWindowSet'</span></a></span><span> </span><span class="annot"><span class="annottext">((WindowSet -&gt; WindowSet) -&gt; m ())
+-&gt; ((Maybe (Stack Window) -&gt; Maybe (Stack Window))
+    -&gt; WindowSet -&gt; WindowSet)
+-&gt; (Maybe (Stack Window) -&gt; Maybe (Stack Window))
+-&gt; m ()
+forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">(Maybe (Stack Window) -&gt; Maybe (Stack Window))
+-&gt; WindowSet -&gt; WindowSet
+forall a i l s sd.
+(Maybe (Stack a) -&gt; Maybe (Stack a))
+-&gt; StackSet i l a s sd -&gt; StackSet i l a s sd
+</span><a href="XMonad.Util.PureX.html#modify%27%27"><span class="hs-identifier hs-var">modify''</span></a></span><span> </span><span class="annot"><span class="annottext">((Maybe (Stack Window) -&gt; Maybe (Stack Window)) -&gt; m ())
+-&gt; (Maybe (Stack Window) -&gt; Maybe (Stack Window)) -&gt; m ()
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">Maybe (Stack Window)
+-&gt; Maybe (Stack Window) -&gt; Maybe (Stack Window)
+forall a b. a -&gt; b -&gt; a
+</span><span class="hs-identifier hs-var">const</span></span><span> </span><span class="annot"><span class="annottext">Maybe (Stack Window)
+</span><a href="#local-6989586621679375330"><span class="hs-identifier hs-var">mst</span></a></span><span>
+</span><span id="line-218"></span><span>
+</span><span id="line-219"></span><span class="hs-comment">-- | Get the focused window if there is one.</span><span>
+</span><span id="line-220"></span><span id="local-6989586621679375587"><span class="annot"><a href="XMonad.Util.PureX.html#peek"><span class="hs-identifier hs-type">peek</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><a href="XMonad.Util.PureX.html#XLike"><span class="hs-identifier hs-type">XLike</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679375587"><span class="hs-identifier hs-type">m</span></a></span><span> </span><span class="hs-glyph">=&gt;</span><span> </span><span class="annot"><a href="#local-6989586621679375587"><span class="hs-identifier hs-type">m</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">Maybe</span></span><span> </span><span class="annot"><span class="hs-identifier hs-type">Window</span></span><span class="hs-special">)</span></span><span>
+</span><span id="line-221"></span><span id="peek"><span class="annot"><span class="annottext">peek :: m (Maybe Window)
+</span><a href="XMonad.Util.PureX.html#peek"><span class="hs-identifier hs-var hs-var">peek</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">(WindowSet -&gt; m (Maybe Window)) -&gt; m (Maybe Window)
+forall (m :: * -&gt; *) a. XLike m =&gt; (WindowSet -&gt; m a) -&gt; m a
+</span><a href="XMonad.Util.PureX.html#withWindowSet%27"><span class="hs-identifier hs-var">withWindowSet'</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Maybe Window -&gt; m (Maybe Window)
+forall (m :: * -&gt; *) a. Monad m =&gt; a -&gt; m a
+</span><span class="hs-identifier hs-var">return</span></span><span> </span><span class="annot"><span class="annottext">(Maybe Window -&gt; m (Maybe Window))
+-&gt; (WindowSet -&gt; Maybe Window) -&gt; WindowSet -&gt; m (Maybe Window)
+forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">WindowSet -&gt; Maybe Window
+forall i l a s sd. StackSet i l a s sd -&gt; Maybe a
+</span><span class="hs-identifier hs-var">W.peek</span></span><span class="hs-special">)</span><span>
+</span><span id="line-222"></span><span>
+</span><span id="line-223"></span><span class="hs-comment">-- | Get the current screen.</span><span>
+</span><span id="line-224"></span><span id="local-6989586621679375532"><span class="annot"><a href="XMonad.Util.PureX.html#curScreen"><span class="hs-identifier hs-type">curScreen</span></a></span><span>
+</span><span id="line-225"></span><span>  </span><span class="hs-glyph">::</span><span> </span><span class="annot"><a href="XMonad.Util.PureX.html#XLike"><span class="hs-identifier hs-type">XLike</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679375532"><span class="hs-identifier hs-type">m</span></a></span><span>
+</span><span id="line-226"></span><span>  </span><span class="hs-glyph">=&gt;</span><span> </span><span class="annot"><a href="#local-6989586621679375532"><span class="hs-identifier hs-type">m</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">W.Screen</span></span><span> </span><span class="annot"><span class="hs-identifier hs-type">WorkspaceId</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">Layout</span></span><span> </span><span class="annot"><span class="hs-identifier hs-type">Window</span></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Window</span></span><span> </span><span class="annot"><span class="hs-identifier hs-type">ScreenId</span></span><span> </span><span class="annot"><span class="hs-identifier hs-type">ScreenDetail</span></span><span class="hs-special">)</span></span><span>
+</span><span id="line-227"></span><span id="curScreen"><span class="annot"><span class="annottext">curScreen :: m (Screen WorkspaceId (Layout Window) Window ScreenId ScreenDetail)
+</span><a href="XMonad.Util.PureX.html#curScreen"><span class="hs-identifier hs-var hs-var">curScreen</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">(WindowSet
+ -&gt; m (Screen
+         WorkspaceId (Layout Window) Window ScreenId ScreenDetail))
+-&gt; m (Screen
+        WorkspaceId (Layout Window) Window ScreenId ScreenDetail)
+forall (m :: * -&gt; *) a. XLike m =&gt; (WindowSet -&gt; m a) -&gt; m a
+</span><a href="XMonad.Util.PureX.html#withWindowSet%27"><span class="hs-identifier hs-var">withWindowSet'</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Screen WorkspaceId (Layout Window) Window ScreenId ScreenDetail
+-&gt; m (Screen
+        WorkspaceId (Layout Window) Window ScreenId ScreenDetail)
+forall (m :: * -&gt; *) a. Monad m =&gt; a -&gt; m a
+</span><span class="hs-identifier hs-var">return</span></span><span> </span><span class="annot"><span class="annottext">(Screen WorkspaceId (Layout Window) Window ScreenId ScreenDetail
+ -&gt; m (Screen
+         WorkspaceId (Layout Window) Window ScreenId ScreenDetail))
+-&gt; (WindowSet
+    -&gt; Screen WorkspaceId (Layout Window) Window ScreenId ScreenDetail)
+-&gt; WindowSet
+-&gt; m (Screen
+        WorkspaceId (Layout Window) Window ScreenId ScreenDetail)
+forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">WindowSet
+-&gt; Screen WorkspaceId (Layout Window) Window ScreenId ScreenDetail
+forall i l a sid sd. StackSet i l a sid sd -&gt; Screen i l a sid sd
+</span><span class="hs-identifier hs-var hs-var">W.current</span></span><span class="hs-special">)</span><span>
+</span><span id="line-228"></span><span>
+</span><span id="line-229"></span><span class="hs-comment">-- | Get the current workspace.</span><span>
+</span><span id="line-230"></span><span id="local-6989586621679375563"><span class="annot"><a href="XMonad.Util.PureX.html#curWorkspace"><span class="hs-identifier hs-type">curWorkspace</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><a href="XMonad.Util.PureX.html#XLike"><span class="hs-identifier hs-type">XLike</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679375563"><span class="hs-identifier hs-type">m</span></a></span><span> </span><span class="hs-glyph">=&gt;</span><span> </span><span class="annot"><a href="#local-6989586621679375563"><span class="hs-identifier hs-type">m</span></a></span><span> </span><span class="annot"><span class="hs-identifier hs-type">WindowSpace</span></span></span><span>
+</span><span id="line-231"></span><span id="curWorkspace"><span class="annot"><span class="annottext">curWorkspace :: m (Workspace WorkspaceId (Layout Window) Window)
+</span><a href="XMonad.Util.PureX.html#curWorkspace"><span class="hs-identifier hs-var hs-var">curWorkspace</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Screen WorkspaceId (Layout Window) Window ScreenId ScreenDetail
+-&gt; Workspace WorkspaceId (Layout Window) Window
+forall i l a sid sd. Screen i l a sid sd -&gt; Workspace i l a
+</span><span class="hs-identifier hs-var hs-var">W.workspace</span></span><span> </span><span class="annot"><span class="annottext">(Screen WorkspaceId (Layout Window) Window ScreenId ScreenDetail
+ -&gt; Workspace WorkspaceId (Layout Window) Window)
+-&gt; m (Screen
+        WorkspaceId (Layout Window) Window ScreenId ScreenDetail)
+-&gt; m (Workspace WorkspaceId (Layout Window) Window)
+forall (f :: * -&gt; *) a b. Functor f =&gt; (a -&gt; b) -&gt; f a -&gt; f b
+</span><span class="hs-operator hs-var">&lt;$&gt;</span></span><span> </span><span class="annot"><span class="annottext">m (Screen WorkspaceId (Layout Window) Window ScreenId ScreenDetail)
+forall (m :: * -&gt; *).
+XLike m =&gt;
+m (Screen WorkspaceId (Layout Window) Window ScreenId ScreenDetail)
+</span><a href="XMonad.Util.PureX.html#curScreen"><span class="hs-identifier hs-var">curScreen</span></a></span><span>
+</span><span id="line-232"></span><span>
+</span><span id="line-233"></span><span class="hs-comment">-- | Get the current tag.</span><span>
+</span><span id="line-234"></span><span id="local-6989586621679375586"><span class="annot"><a href="XMonad.Util.PureX.html#curTag"><span class="hs-identifier hs-type">curTag</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><a href="XMonad.Util.PureX.html#XLike"><span class="hs-identifier hs-type">XLike</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679375586"><span class="hs-identifier hs-type">m</span></a></span><span> </span><span class="hs-glyph">=&gt;</span><span> </span><span class="annot"><a href="#local-6989586621679375586"><span class="hs-identifier hs-type">m</span></a></span><span> </span><span class="annot"><span class="hs-identifier hs-type">WorkspaceId</span></span></span><span>
+</span><span id="line-235"></span><span id="curTag"><span class="annot"><span class="annottext">curTag :: m WorkspaceId
+</span><a href="XMonad.Util.PureX.html#curTag"><span class="hs-identifier hs-var hs-var">curTag</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Workspace WorkspaceId (Layout Window) Window -&gt; WorkspaceId
+forall i l a. Workspace i l a -&gt; i
+</span><span class="hs-identifier hs-var hs-var">W.tag</span></span><span> </span><span class="annot"><span class="annottext">(Workspace WorkspaceId (Layout Window) Window -&gt; WorkspaceId)
+-&gt; m (Workspace WorkspaceId (Layout Window) Window)
+-&gt; m WorkspaceId
+forall (f :: * -&gt; *) a b. Functor f =&gt; (a -&gt; b) -&gt; f a -&gt; f b
+</span><span class="hs-operator hs-var">&lt;$&gt;</span></span><span> </span><span class="annot"><span class="annottext">m (Workspace WorkspaceId (Layout Window) Window)
+forall (m :: * -&gt; *).
+XLike m =&gt;
+m (Workspace WorkspaceId (Layout Window) Window)
+</span><a href="XMonad.Util.PureX.html#curWorkspace"><span class="hs-identifier hs-var">curWorkspace</span></a></span><span>
+</span><span id="line-236"></span><span>
+</span><span id="line-237"></span><span class="hs-comment">-- | Get the current @ScreenId@.</span><span>
+</span><span id="line-238"></span><span id="local-6989586621679375324"><span class="annot"><a href="XMonad.Util.PureX.html#curScreenId"><span class="hs-identifier hs-type">curScreenId</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><a href="XMonad.Util.PureX.html#XLike"><span class="hs-identifier hs-type">XLike</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679375324"><span class="hs-identifier hs-type">m</span></a></span><span> </span><span class="hs-glyph">=&gt;</span><span> </span><span class="annot"><a href="#local-6989586621679375324"><span class="hs-identifier hs-type">m</span></a></span><span> </span><span class="annot"><span class="hs-identifier hs-type">ScreenId</span></span></span><span>
+</span><span id="line-239"></span><span id="curScreenId"><span class="annot"><span class="annottext">curScreenId :: m ScreenId
+</span><a href="XMonad.Util.PureX.html#curScreenId"><span class="hs-identifier hs-var hs-var">curScreenId</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Screen WorkspaceId (Layout Window) Window ScreenId ScreenDetail
+-&gt; ScreenId
+forall i l a sid sd. Screen i l a sid sd -&gt; sid
+</span><span class="hs-identifier hs-var hs-var">W.screen</span></span><span> </span><span class="annot"><span class="annottext">(Screen WorkspaceId (Layout Window) Window ScreenId ScreenDetail
+ -&gt; ScreenId)
+-&gt; m (Screen
+        WorkspaceId (Layout Window) Window ScreenId ScreenDetail)
+-&gt; m ScreenId
+forall (f :: * -&gt; *) a b. Functor f =&gt; (a -&gt; b) -&gt; f a -&gt; f b
+</span><span class="hs-operator hs-var">&lt;$&gt;</span></span><span> </span><span class="annot"><span class="annottext">m (Screen WorkspaceId (Layout Window) Window ScreenId ScreenDetail)
+forall (m :: * -&gt; *).
+XLike m =&gt;
+m (Screen WorkspaceId (Layout Window) Window ScreenId ScreenDetail)
+</span><a href="XMonad.Util.PureX.html#curScreen"><span class="hs-identifier hs-var">curScreen</span></a></span><span>
+</span><span id="line-240"></span><span>
+</span><span id="line-241"></span><span class="hs-comment">-- | Internal. Refresh-tracking logic of view operations.</span><span>
+</span><span id="line-242"></span><span id="local-6989586621679375518"><span class="annot"><a href="XMonad.Util.PureX.html#viewWith"><span class="hs-identifier hs-type">viewWith</span></a></span><span>
+</span><span id="line-243"></span><span>  </span><span class="hs-glyph">::</span><span> </span><span class="annot"><a href="XMonad.Util.PureX.html#XLike"><span class="hs-identifier hs-type">XLike</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679375518"><span class="hs-identifier hs-type">m</span></a></span><span> </span><span class="hs-glyph">=&gt;</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">WorkspaceId</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">WindowSet</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">WindowSet</span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">WorkspaceId</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="#local-6989586621679375518"><span class="hs-identifier hs-type">m</span></a></span><span> </span><span class="annot"><span class="hs-identifier hs-type">Any</span></span></span><span>
+</span><span id="line-244"></span><span id="viewWith"><span class="annot"><span class="annottext">viewWith :: (WorkspaceId -&gt; WindowSet -&gt; WindowSet) -&gt; WorkspaceId -&gt; m Any
+</span><a href="XMonad.Util.PureX.html#viewWith"><span class="hs-identifier hs-var hs-var">viewWith</span></a></span></span><span> </span><span id="local-6989586621679375321"><span class="annot"><span class="annottext">WorkspaceId -&gt; WindowSet -&gt; WindowSet
+</span><a href="#local-6989586621679375321"><span class="hs-identifier hs-var">viewer</span></a></span></span><span> </span><span id="local-6989586621679375320"><span class="annot"><span class="annottext">WorkspaceId
+</span><a href="#local-6989586621679375320"><span class="hs-identifier hs-var">tag</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-245"></span><span>  </span><span id="local-6989586621679375319"><span class="annot"><span class="annottext">WorkspaceId
+</span><a href="#local-6989586621679375319"><span class="hs-identifier hs-var">itag</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">m WorkspaceId
+forall (m :: * -&gt; *). XLike m =&gt; m WorkspaceId
+</span><a href="XMonad.Util.PureX.html#curTag"><span class="hs-identifier hs-var">curTag</span></a></span><span>
+</span><span id="line-246"></span><span>  </span><span class="annot"><span class="annottext">Bool -&gt; m Any -&gt; m Any
+forall (m :: * -&gt; *) a. (Monad m, Monoid a) =&gt; Bool -&gt; m a -&gt; m a
+</span><a href="XMonad.Util.PureX.html#when%27"><span class="hs-identifier hs-var">when'</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">WorkspaceId
+</span><a href="#local-6989586621679375320"><span class="hs-identifier hs-var">tag</span></a></span><span> </span><span class="annot"><span class="annottext">WorkspaceId -&gt; WorkspaceId -&gt; Bool
+forall a. Eq a =&gt; a -&gt; a -&gt; Bool
+</span><span class="hs-operator hs-var">/=</span></span><span> </span><span class="annot"><span class="annottext">WorkspaceId
+</span><a href="#local-6989586621679375319"><span class="hs-identifier hs-var">itag</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">(m Any -&gt; m Any) -&gt; m Any -&gt; m Any
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-247"></span><span>    </span><span class="annot"><span class="annottext">(WindowSet -&gt; WindowSet) -&gt; m ()
+forall (m :: * -&gt; *). XLike m =&gt; (WindowSet -&gt; WindowSet) -&gt; m ()
+</span><a href="XMonad.Util.PureX.html#modifyWindowSet%27"><span class="hs-identifier hs-var">modifyWindowSet'</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">WorkspaceId -&gt; WindowSet -&gt; WindowSet
+</span><a href="#local-6989586621679375321"><span class="hs-identifier hs-var">viewer</span></a></span><span> </span><span class="annot"><span class="annottext">WorkspaceId
+</span><a href="#local-6989586621679375320"><span class="hs-identifier hs-var">tag</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-248"></span><span>    </span><span class="annot"><span class="annottext">Bool -&gt; Any
+</span><span class="hs-identifier hs-var">Any</span></span><span> </span><span class="annot"><span class="annottext">(Bool -&gt; Any) -&gt; (WorkspaceId -&gt; Bool) -&gt; WorkspaceId -&gt; Any
+forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">WorkspaceId
+</span><a href="#local-6989586621679375320"><span class="hs-identifier hs-var">tag</span></a></span><span> </span><span class="annot"><span class="annottext">WorkspaceId -&gt; WorkspaceId -&gt; Bool
+forall a. Eq a =&gt; a -&gt; a -&gt; Bool
+</span><span class="hs-operator hs-var">==</span></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">(WorkspaceId -&gt; Any) -&gt; m WorkspaceId -&gt; m Any
+forall (f :: * -&gt; *) a b. Functor f =&gt; (a -&gt; b) -&gt; f a -&gt; f b
+</span><span class="hs-operator hs-var">&lt;$&gt;</span></span><span> </span><span class="annot"><span class="annottext">m WorkspaceId
+forall (m :: * -&gt; *). XLike m =&gt; m WorkspaceId
+</span><a href="XMonad.Util.PureX.html#curTag"><span class="hs-identifier hs-var">curTag</span></a></span><span>
+</span><span id="line-249"></span><span>
+</span><span id="line-250"></span><span class="hs-comment">-- | A version of @W.view@ that tracks the need to refresh.</span><span>
+</span><span id="line-251"></span><span id="local-6989586621679375317"><span class="annot"><a href="XMonad.Util.PureX.html#view"><span class="hs-identifier hs-type">view</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><a href="XMonad.Util.PureX.html#XLike"><span class="hs-identifier hs-type">XLike</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679375317"><span class="hs-identifier hs-type">m</span></a></span><span> </span><span class="hs-glyph">=&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">WorkspaceId</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="#local-6989586621679375317"><span class="hs-identifier hs-type">m</span></a></span><span> </span><span class="annot"><span class="hs-identifier hs-type">Any</span></span></span><span>
+</span><span id="line-252"></span><span id="view"><span class="annot"><span class="annottext">view :: WorkspaceId -&gt; m Any
+</span><a href="XMonad.Util.PureX.html#view"><span class="hs-identifier hs-var hs-var">view</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">(WorkspaceId -&gt; WindowSet -&gt; WindowSet) -&gt; WorkspaceId -&gt; m Any
+forall (m :: * -&gt; *).
+XLike m =&gt;
+(WorkspaceId -&gt; WindowSet -&gt; WindowSet) -&gt; WorkspaceId -&gt; m Any
+</span><a href="XMonad.Util.PureX.html#viewWith"><span class="hs-identifier hs-var">viewWith</span></a></span><span> </span><span class="annot"><span class="annottext">WorkspaceId -&gt; WindowSet -&gt; WindowSet
+forall s i l a sd.
+(Eq s, Eq i) =&gt;
+i -&gt; StackSet i l a s sd -&gt; StackSet i l a s sd
+</span><span class="hs-identifier hs-var">W.view</span></span><span>
+</span><span id="line-253"></span><span>
+</span><span id="line-254"></span><span class="hs-comment">-- | A version of @W.greedyView@ that tracks the need to refresh.</span><span>
+</span><span id="line-255"></span><span id="local-6989586621679375315"><span class="annot"><a href="XMonad.Util.PureX.html#greedyView"><span class="hs-identifier hs-type">greedyView</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><a href="XMonad.Util.PureX.html#XLike"><span class="hs-identifier hs-type">XLike</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679375315"><span class="hs-identifier hs-type">m</span></a></span><span> </span><span class="hs-glyph">=&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">WorkspaceId</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="#local-6989586621679375315"><span class="hs-identifier hs-type">m</span></a></span><span> </span><span class="annot"><span class="hs-identifier hs-type">Any</span></span></span><span>
+</span><span id="line-256"></span><span id="greedyView"><span class="annot"><span class="annottext">greedyView :: WorkspaceId -&gt; m Any
+</span><a href="XMonad.Util.PureX.html#greedyView"><span class="hs-identifier hs-var hs-var">greedyView</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">(WorkspaceId -&gt; WindowSet -&gt; WindowSet) -&gt; WorkspaceId -&gt; m Any
+forall (m :: * -&gt; *).
+XLike m =&gt;
+(WorkspaceId -&gt; WindowSet -&gt; WindowSet) -&gt; WorkspaceId -&gt; m Any
+</span><a href="XMonad.Util.PureX.html#viewWith"><span class="hs-identifier hs-var">viewWith</span></a></span><span> </span><span class="annot"><span class="annottext">WorkspaceId -&gt; WindowSet -&gt; WindowSet
+forall s i l a sd.
+(Eq s, Eq i) =&gt;
+i -&gt; StackSet i l a s sd -&gt; StackSet i l a s sd
+</span><span class="hs-identifier hs-var">W.greedyView</span></span><span>
+</span><span id="line-257"></span><span>
+</span><span id="line-258"></span><span class="hs-comment">-- | View a workspace if it's not visible. An alternative to @view@ and</span><span>
+</span><span id="line-259"></span><span class="hs-comment">--   @greedyView@ that&#8212;rather than changing the current screen or affecting</span><span>
+</span><span id="line-260"></span><span class="hs-comment">--   another&#8212;opts not to act.</span><span>
+</span><span id="line-261"></span><span id="local-6989586621679375313"><span class="annot"><a href="XMonad.Util.PureX.html#invisiView"><span class="hs-identifier hs-type">invisiView</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><a href="XMonad.Util.PureX.html#XLike"><span class="hs-identifier hs-type">XLike</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679375313"><span class="hs-identifier hs-type">m</span></a></span><span> </span><span class="hs-glyph">=&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">WorkspaceId</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="#local-6989586621679375313"><span class="hs-identifier hs-type">m</span></a></span><span> </span><span class="annot"><span class="hs-identifier hs-type">Any</span></span></span><span>
+</span><span id="line-262"></span><span id="invisiView"><span class="annot"><span class="annottext">invisiView :: WorkspaceId -&gt; m Any
+</span><a href="XMonad.Util.PureX.html#invisiView"><span class="hs-identifier hs-var hs-var">invisiView</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">(WorkspaceId -&gt; WindowSet -&gt; WindowSet) -&gt; WorkspaceId -&gt; m Any
+forall (m :: * -&gt; *).
+XLike m =&gt;
+(WorkspaceId -&gt; WindowSet -&gt; WindowSet) -&gt; WorkspaceId -&gt; m Any
+</span><a href="XMonad.Util.PureX.html#viewWith"><span class="hs-identifier hs-var">viewWith</span></a></span><span> </span><span class="annot"><span class="annottext">((WorkspaceId -&gt; WindowSet -&gt; WindowSet) -&gt; WorkspaceId -&gt; m Any)
+-&gt; (WorkspaceId -&gt; WindowSet -&gt; WindowSet) -&gt; WorkspaceId -&gt; m Any
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="hs-glyph">\</span><span id="local-6989586621679375312"><span class="annot"><span class="annottext">WorkspaceId
+</span><a href="#local-6989586621679375312"><span class="hs-identifier hs-var">tag</span></a></span></span><span> </span><span id="local-6989586621679375311"><span class="annot"><span class="annottext">WindowSet
+</span><a href="#local-6989586621679375311"><span class="hs-identifier hs-var">ws</span></a></span></span><span> </span><span class="hs-glyph">-&gt;</span><span>
+</span><span id="line-263"></span><span>  </span><span class="hs-keyword">if</span><span>   </span><span class="annot"><span class="annottext">WorkspaceId
+</span><a href="#local-6989586621679375312"><span class="hs-identifier hs-var">tag</span></a></span><span> </span><span class="annot"><span class="annottext">WorkspaceId -&gt; [WorkspaceId] -&gt; Bool
+forall (t :: * -&gt; *) a. (Foldable t, Eq a) =&gt; a -&gt; t a -&gt; Bool
+</span><span class="hs-operator hs-var">`elem`</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Workspace WorkspaceId (Layout Window) Window -&gt; WorkspaceId
+forall i l a. Workspace i l a -&gt; i
+</span><span class="hs-identifier hs-var hs-var">W.tag</span></span><span> </span><span class="annot"><span class="annottext">(Workspace WorkspaceId (Layout Window) Window -&gt; WorkspaceId)
+-&gt; (Screen WorkspaceId (Layout Window) Window ScreenId ScreenDetail
+    -&gt; Workspace WorkspaceId (Layout Window) Window)
+-&gt; Screen WorkspaceId (Layout Window) Window ScreenId ScreenDetail
+-&gt; WorkspaceId
+forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">Screen WorkspaceId (Layout Window) Window ScreenId ScreenDetail
+-&gt; Workspace WorkspaceId (Layout Window) Window
+forall i l a sid sd. Screen i l a sid sd -&gt; Workspace i l a
+</span><span class="hs-identifier hs-var hs-var">W.workspace</span></span><span> </span><span class="annot"><span class="annottext">(Screen WorkspaceId (Layout Window) Window ScreenId ScreenDetail
+ -&gt; WorkspaceId)
+-&gt; [Screen
+      WorkspaceId (Layout Window) Window ScreenId ScreenDetail]
+-&gt; [WorkspaceId]
+forall (f :: * -&gt; *) a b. Functor f =&gt; (a -&gt; b) -&gt; f a -&gt; f b
+</span><span class="hs-operator hs-var">&lt;$&gt;</span></span><span> </span><span class="annot"><span class="annottext">WindowSet
+-&gt; Screen WorkspaceId (Layout Window) Window ScreenId ScreenDetail
+forall i l a sid sd. StackSet i l a sid sd -&gt; Screen i l a sid sd
+</span><span class="hs-identifier hs-var hs-var">W.current</span></span><span> </span><span class="annot"><span class="annottext">WindowSet
+</span><a href="#local-6989586621679375311"><span class="hs-identifier hs-var">ws</span></a></span><span> </span><span class="annot"><span class="annottext">Screen WorkspaceId (Layout Window) Window ScreenId ScreenDetail
+-&gt; [Screen
+      WorkspaceId (Layout Window) Window ScreenId ScreenDetail]
+-&gt; [Screen
+      WorkspaceId (Layout Window) Window ScreenId ScreenDetail]
+forall a. a -&gt; [a] -&gt; [a]
+</span><span class="hs-glyph hs-var">:</span></span><span> </span><span class="annot"><span class="annottext">WindowSet
+-&gt; [Screen
+      WorkspaceId (Layout Window) Window ScreenId ScreenDetail]
+forall i l a sid sd. StackSet i l a sid sd -&gt; [Screen i l a sid sd]
+</span><span class="hs-identifier hs-var hs-var">W.visible</span></span><span> </span><span class="annot"><span class="annottext">WindowSet
+</span><a href="#local-6989586621679375311"><span class="hs-identifier hs-var">ws</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-264"></span><span>  </span><span class="hs-keyword">then</span><span> </span><span class="annot"><span class="annottext">WorkspaceId -&gt; WindowSet -&gt; WindowSet
+forall s i l a sd.
+(Eq s, Eq i) =&gt;
+i -&gt; StackSet i l a s sd -&gt; StackSet i l a s sd
+</span><span class="hs-identifier hs-var">W.view</span></span><span> </span><span class="annot"><span class="annottext">WorkspaceId
+</span><a href="#local-6989586621679375312"><span class="hs-identifier hs-var">tag</span></a></span><span> </span><span class="annot"><span class="annottext">WindowSet
+</span><a href="#local-6989586621679375311"><span class="hs-identifier hs-var">ws</span></a></span><span>
+</span><span id="line-265"></span><span>  </span><span class="hs-keyword">else</span><span> </span><span class="annot"><span class="annottext">WindowSet
+</span><a href="#local-6989586621679375311"><span class="hs-identifier hs-var">ws</span></a></span><span>
+</span><span id="line-266"></span><span>
+</span><span id="line-267"></span><span class="hs-comment">-- | A refresh-tracking version of @W.Shift@.</span><span>
+</span><span id="line-268"></span><span id="local-6989586621679375308"><span class="annot"><a href="XMonad.Util.PureX.html#shift"><span class="hs-identifier hs-type">shift</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><a href="XMonad.Util.PureX.html#XLike"><span class="hs-identifier hs-type">XLike</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679375308"><span class="hs-identifier hs-type">m</span></a></span><span> </span><span class="hs-glyph">=&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">WorkspaceId</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="#local-6989586621679375308"><span class="hs-identifier hs-type">m</span></a></span><span> </span><span class="annot"><span class="hs-identifier hs-type">Any</span></span></span><span>
+</span><span id="line-269"></span><span id="shift"><span class="annot"><span class="annottext">shift :: WorkspaceId -&gt; m Any
+</span><a href="XMonad.Util.PureX.html#shift"><span class="hs-identifier hs-var hs-var">shift</span></a></span></span><span> </span><span id="local-6989586621679375307"><span class="annot"><span class="annottext">WorkspaceId
+</span><a href="#local-6989586621679375307"><span class="hs-identifier hs-var">tag</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">(WorkspaceId -&gt; Window -&gt; m Any) -&gt; m Any
+forall (m :: * -&gt; *) a.
+(XLike m, Monoid a) =&gt;
+(WorkspaceId -&gt; Window -&gt; m a) -&gt; m a
+</span><a href="XMonad.Util.PureX.html#withFocii"><span class="hs-identifier hs-var">withFocii</span></a></span><span> </span><span class="annot"><span class="annottext">((WorkspaceId -&gt; Window -&gt; m Any) -&gt; m Any)
+-&gt; (WorkspaceId -&gt; Window -&gt; m Any) -&gt; m Any
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="hs-glyph">\</span><span id="local-6989586621679375306"><span class="annot"><span class="annottext">WorkspaceId
+</span><a href="#local-6989586621679375306"><span class="hs-identifier hs-var">ctag</span></a></span></span><span> </span><span id="local-6989586621679375305"><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679375305"><span class="hs-identifier hs-var">fw</span></a></span></span><span> </span><span class="hs-glyph">-&gt;</span><span>
+</span><span id="line-270"></span><span>  </span><span class="annot"><span class="annottext">Bool -&gt; m Any -&gt; m Any
+forall (m :: * -&gt; *) a. (Monad m, Monoid a) =&gt; Bool -&gt; m a -&gt; m a
+</span><a href="XMonad.Util.PureX.html#when%27"><span class="hs-identifier hs-var">when'</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">WorkspaceId
+</span><a href="#local-6989586621679375307"><span class="hs-identifier hs-var">tag</span></a></span><span> </span><span class="annot"><span class="annottext">WorkspaceId -&gt; WorkspaceId -&gt; Bool
+forall a. Eq a =&gt; a -&gt; a -&gt; Bool
+</span><span class="hs-operator hs-var">/=</span></span><span> </span><span class="annot"><span class="annottext">WorkspaceId
+</span><a href="#local-6989586621679375306"><span class="hs-identifier hs-var">ctag</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">(m Any -&gt; m Any) -&gt; m Any -&gt; m Any
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-271"></span><span>    </span><span class="annot"><span class="annottext">(WindowSet -&gt; WindowSet) -&gt; m ()
+forall (m :: * -&gt; *). XLike m =&gt; (WindowSet -&gt; WindowSet) -&gt; m ()
+</span><a href="XMonad.Util.PureX.html#modifyWindowSet%27"><span class="hs-identifier hs-var">modifyWindowSet'</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">WorkspaceId -&gt; Window -&gt; WindowSet -&gt; WindowSet
+forall a s i l sd.
+(Ord a, Eq s, Eq i) =&gt;
+i -&gt; a -&gt; StackSet i l a s sd -&gt; StackSet i l a s sd
+</span><span class="hs-identifier hs-var">W.shiftWin</span></span><span> </span><span class="annot"><span class="annottext">WorkspaceId
+</span><a href="#local-6989586621679375307"><span class="hs-identifier hs-var">tag</span></a></span><span> </span><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679375305"><span class="hs-identifier hs-var">fw</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-272"></span><span>    </span><span id="local-6989586621679375303"><span class="annot"><span class="annottext">Maybe Window
+</span><a href="#local-6989586621679375303"><span class="hs-identifier hs-var">mfw'</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">m (Maybe Window)
+forall (m :: * -&gt; *). XLike m =&gt; m (Maybe Window)
+</span><a href="XMonad.Util.PureX.html#peek"><span class="hs-identifier hs-var">peek</span></a></span><span>
+</span><span id="line-273"></span><span>    </span><span class="annot"><span class="annottext">Any -&gt; m Any
+forall (m :: * -&gt; *) a. Monad m =&gt; a -&gt; m a
+</span><span class="hs-identifier hs-var">return</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Bool -&gt; Any
+</span><span class="hs-identifier hs-var">Any</span></span><span> </span><span class="annot"><span class="annottext">(Bool -&gt; Any) -&gt; Bool -&gt; Any
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">Window -&gt; Maybe Window
+forall a. a -&gt; Maybe a
+</span><span class="hs-identifier hs-var">Just</span></span><span> </span><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679375305"><span class="hs-identifier hs-var">fw</span></a></span><span> </span><span class="annot"><span class="annottext">Maybe Window -&gt; Maybe Window -&gt; Bool
+forall a. Eq a =&gt; a -&gt; a -&gt; Bool
+</span><span class="hs-operator hs-var">/=</span></span><span> </span><span class="annot"><span class="annottext">Maybe Window
+</span><a href="#local-6989586621679375303"><span class="hs-identifier hs-var">mfw'</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-274"></span><span>
+</span><span id="line-275"></span><span class="hs-comment">-- | A refresh tracking version of @W.shiftWin@.</span><span>
+</span><span id="line-276"></span><span id="local-6989586621679375302"><span class="annot"><a href="XMonad.Util.PureX.html#shiftWin"><span class="hs-identifier hs-type">shiftWin</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><a href="XMonad.Util.PureX.html#XLike"><span class="hs-identifier hs-type">XLike</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679375302"><span class="hs-identifier hs-type">m</span></a></span><span> </span><span class="hs-glyph">=&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">WorkspaceId</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Window</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="#local-6989586621679375302"><span class="hs-identifier hs-type">m</span></a></span><span> </span><span class="annot"><span class="hs-identifier hs-type">Any</span></span></span><span>
+</span><span id="line-277"></span><span id="shiftWin"><span class="annot"><span class="annottext">shiftWin :: WorkspaceId -&gt; Window -&gt; m Any
+</span><a href="XMonad.Util.PureX.html#shiftWin"><span class="hs-identifier hs-var hs-var">shiftWin</span></a></span></span><span> </span><span id="local-6989586621679375301"><span class="annot"><span class="annottext">WorkspaceId
+</span><a href="#local-6989586621679375301"><span class="hs-identifier hs-var">tag</span></a></span></span><span> </span><span id="local-6989586621679375300"><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679375300"><span class="hs-identifier hs-var">w</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-278"></span><span>  </span><span id="local-6989586621679375299"><span class="annot"><span class="annottext">Maybe WorkspaceId
+</span><a href="#local-6989586621679375299"><span class="hs-identifier hs-var">mtag</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">(XState -&gt; Maybe WorkspaceId) -&gt; m (Maybe WorkspaceId)
+forall s (m :: * -&gt; *) a. MonadState s m =&gt; (s -&gt; a) -&gt; m a
+</span><span class="hs-identifier hs-var">gets</span></span><span> </span><span class="annot"><span class="annottext">((XState -&gt; Maybe WorkspaceId) -&gt; m (Maybe WorkspaceId))
+-&gt; (XState -&gt; Maybe WorkspaceId) -&gt; m (Maybe WorkspaceId)
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">Window -&gt; WindowSet -&gt; Maybe WorkspaceId
+forall a i l s sd. Eq a =&gt; a -&gt; StackSet i l a s sd -&gt; Maybe i
+</span><span class="hs-identifier hs-var">W.findTag</span></span><span> </span><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679375300"><span class="hs-identifier hs-var">w</span></a></span><span> </span><span class="annot"><span class="annottext">(WindowSet -&gt; Maybe WorkspaceId)
+-&gt; (XState -&gt; WindowSet) -&gt; XState -&gt; Maybe WorkspaceId
+forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">XState -&gt; WindowSet
+</span><span class="hs-identifier hs-var hs-var">windowset</span></span><span>
+</span><span id="line-279"></span><span>  </span><span class="annot"><span class="annottext">Maybe WorkspaceId -&gt; (WorkspaceId -&gt; m Any) -&gt; m Any
+forall (m :: * -&gt; *) b a.
+(Monad m, Monoid b) =&gt;
+Maybe a -&gt; (a -&gt; m b) -&gt; m b
+</span><a href="XMonad.Util.PureX.html#whenJust%27"><span class="hs-identifier hs-var">whenJust'</span></a></span><span> </span><span class="annot"><span class="annottext">Maybe WorkspaceId
+</span><a href="#local-6989586621679375299"><span class="hs-identifier hs-var">mtag</span></a></span><span> </span><span class="annot"><span class="annottext">((WorkspaceId -&gt; m Any) -&gt; m Any)
+-&gt; (WorkspaceId -&gt; m Any) -&gt; m Any
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="hs-glyph">\</span><span id="local-6989586621679375297"><span class="annot"><span class="annottext">WorkspaceId
+</span><a href="#local-6989586621679375297"><span class="hs-identifier hs-var">wtag</span></a></span></span><span> </span><span class="hs-glyph">-&gt;</span><span>
+</span><span id="line-280"></span><span>    </span><span class="annot"><span class="annottext">Bool -&gt; m Any -&gt; m Any
+forall (m :: * -&gt; *) a. (Monad m, Monoid a) =&gt; Bool -&gt; m a -&gt; m a
+</span><a href="XMonad.Util.PureX.html#when%27"><span class="hs-identifier hs-var">when'</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">WorkspaceId
+</span><a href="#local-6989586621679375301"><span class="hs-identifier hs-var">tag</span></a></span><span> </span><span class="annot"><span class="annottext">WorkspaceId -&gt; WorkspaceId -&gt; Bool
+forall a. Eq a =&gt; a -&gt; a -&gt; Bool
+</span><span class="hs-operator hs-var">/=</span></span><span> </span><span class="annot"><span class="annottext">WorkspaceId
+</span><a href="#local-6989586621679375297"><span class="hs-identifier hs-var">wtag</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">(m Any -&gt; m Any) -&gt; m Any -&gt; m Any
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-281"></span><span>      </span><span class="annot"><span class="annottext">(WindowSet -&gt; WindowSet) -&gt; m ()
+forall (m :: * -&gt; *). XLike m =&gt; (WindowSet -&gt; WindowSet) -&gt; m ()
+</span><a href="XMonad.Util.PureX.html#modifyWindowSet%27"><span class="hs-identifier hs-var">modifyWindowSet'</span></a></span><span> </span><span class="annot"><span class="annottext">((WindowSet -&gt; WindowSet) -&gt; m ())
+-&gt; (WindowSet -&gt; WindowSet) -&gt; m ()
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">WorkspaceId -&gt; Window -&gt; WindowSet -&gt; WindowSet
+forall a s i l sd.
+(Ord a, Eq s, Eq i) =&gt;
+i -&gt; a -&gt; StackSet i l a s sd -&gt; StackSet i l a s sd
+</span><span class="hs-identifier hs-var">W.shiftWin</span></span><span> </span><span class="annot"><span class="annottext">WorkspaceId
+</span><a href="#local-6989586621679375301"><span class="hs-identifier hs-var">tag</span></a></span><span> </span><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679375300"><span class="hs-identifier hs-var">w</span></a></span><span>
+</span><span id="line-282"></span><span>      </span><span id="local-6989586621679375296"><span class="annot"><span class="annottext">Maybe WorkspaceId
+</span><a href="#local-6989586621679375296"><span class="hs-identifier hs-var">ntag</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">(XState -&gt; Maybe WorkspaceId) -&gt; m (Maybe WorkspaceId)
+forall s (m :: * -&gt; *) a. MonadState s m =&gt; (s -&gt; a) -&gt; m a
+</span><span class="hs-identifier hs-var">gets</span></span><span> </span><span class="annot"><span class="annottext">((XState -&gt; Maybe WorkspaceId) -&gt; m (Maybe WorkspaceId))
+-&gt; (XState -&gt; Maybe WorkspaceId) -&gt; m (Maybe WorkspaceId)
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">Window -&gt; WindowSet -&gt; Maybe WorkspaceId
+forall a i l s sd. Eq a =&gt; a -&gt; StackSet i l a s sd -&gt; Maybe i
+</span><span class="hs-identifier hs-var">W.findTag</span></span><span> </span><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679375300"><span class="hs-identifier hs-var">w</span></a></span><span> </span><span class="annot"><span class="annottext">(WindowSet -&gt; Maybe WorkspaceId)
+-&gt; (XState -&gt; WindowSet) -&gt; XState -&gt; Maybe WorkspaceId
+forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">XState -&gt; WindowSet
+</span><span class="hs-identifier hs-var hs-var">windowset</span></span><span>
+</span><span id="line-283"></span><span>      </span><span class="annot"><span class="annottext">Any -&gt; m Any
+forall (m :: * -&gt; *) a. Monad m =&gt; a -&gt; m a
+</span><span class="hs-identifier hs-var">return</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Bool -&gt; Any
+</span><span class="hs-identifier hs-var">Any</span></span><span> </span><span class="annot"><span class="annottext">(Bool -&gt; Any) -&gt; Bool -&gt; Any
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">Maybe WorkspaceId
+</span><a href="#local-6989586621679375299"><span class="hs-identifier hs-var">mtag</span></a></span><span> </span><span class="annot"><span class="annottext">Maybe WorkspaceId -&gt; Maybe WorkspaceId -&gt; Bool
+forall a. Eq a =&gt; a -&gt; a -&gt; Bool
+</span><span class="hs-operator hs-var">/=</span></span><span> </span><span class="annot"><span class="annottext">Maybe WorkspaceId
+</span><a href="#local-6989586621679375296"><span class="hs-identifier hs-var">ntag</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-284"></span><span>
+</span><span id="line-285"></span><span class="hs-comment">-- | Internal. Refresh-tracking logic of focus operations.</span><span>
+</span><span id="line-286"></span><span id="local-6989586621679375487"><span class="annot"><a href="XMonad.Util.PureX.html#focusWith"><span class="hs-identifier hs-type">focusWith</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><a href="XMonad.Util.PureX.html#XLike"><span class="hs-identifier hs-type">XLike</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679375487"><span class="hs-identifier hs-type">m</span></a></span><span> </span><span class="hs-glyph">=&gt;</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">WindowSet</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">WindowSet</span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="#local-6989586621679375487"><span class="hs-identifier hs-type">m</span></a></span><span> </span><span class="annot"><span class="hs-identifier hs-type">Any</span></span></span><span>
+</span><span id="line-287"></span><span id="focusWith"><span class="annot"><span class="annottext">focusWith :: (WindowSet -&gt; WindowSet) -&gt; m Any
+</span><a href="XMonad.Util.PureX.html#focusWith"><span class="hs-identifier hs-var hs-var">focusWith</span></a></span></span><span> </span><span id="local-6989586621679375294"><span class="annot"><span class="annottext">WindowSet -&gt; WindowSet
+</span><a href="#local-6989586621679375294"><span class="hs-identifier hs-var">focuser</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-288"></span><span>    </span><span id="local-6989586621679375293"><span class="annot"><span class="annottext">Maybe Window
+</span><a href="#local-6989586621679375293"><span class="hs-identifier hs-var">old</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">m (Maybe Window)
+forall (m :: * -&gt; *). XLike m =&gt; m (Maybe Window)
+</span><a href="XMonad.Util.PureX.html#peek"><span class="hs-identifier hs-var">peek</span></a></span><span>
+</span><span id="line-289"></span><span>    </span><span class="annot"><span class="annottext">(WindowSet -&gt; WindowSet) -&gt; m ()
+forall (m :: * -&gt; *). XLike m =&gt; (WindowSet -&gt; WindowSet) -&gt; m ()
+</span><a href="XMonad.Util.PureX.html#modifyWindowSet%27"><span class="hs-identifier hs-var">modifyWindowSet'</span></a></span><span> </span><span class="annot"><span class="annottext">WindowSet -&gt; WindowSet
+</span><a href="#local-6989586621679375294"><span class="hs-identifier hs-var">focuser</span></a></span><span>
+</span><span id="line-290"></span><span>    </span><span id="local-6989586621679375292"><span class="annot"><span class="annottext">Maybe Window
+</span><a href="#local-6989586621679375292"><span class="hs-identifier hs-var">new</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">m (Maybe Window)
+forall (m :: * -&gt; *). XLike m =&gt; m (Maybe Window)
+</span><a href="XMonad.Util.PureX.html#peek"><span class="hs-identifier hs-var">peek</span></a></span><span>
+</span><span id="line-291"></span><span>    </span><span class="annot"><span class="annottext">Any -&gt; m Any
+forall (m :: * -&gt; *) a. Monad m =&gt; a -&gt; m a
+</span><span class="hs-identifier hs-var">return</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Bool -&gt; Any
+</span><span class="hs-identifier hs-var">Any</span></span><span> </span><span class="annot"><span class="annottext">(Bool -&gt; Any) -&gt; Bool -&gt; Any
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">Maybe Window
+</span><a href="#local-6989586621679375293"><span class="hs-identifier hs-var">old</span></a></span><span> </span><span class="annot"><span class="annottext">Maybe Window -&gt; Maybe Window -&gt; Bool
+forall a. Eq a =&gt; a -&gt; a -&gt; Bool
+</span><span class="hs-operator hs-var">/=</span></span><span> </span><span class="annot"><span class="annottext">Maybe Window
+</span><a href="#local-6989586621679375292"><span class="hs-identifier hs-var">new</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-292"></span><span>
+</span><span id="line-293"></span><span class="hs-comment">-- | A refresh-tracking version of @W.focusWindow@.</span><span>
+</span><span id="line-294"></span><span id="local-6989586621679375291"><span class="annot"><a href="XMonad.Util.PureX.html#focusWindow"><span class="hs-identifier hs-type">focusWindow</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><a href="XMonad.Util.PureX.html#XLike"><span class="hs-identifier hs-type">XLike</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679375291"><span class="hs-identifier hs-type">m</span></a></span><span> </span><span class="hs-glyph">=&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Window</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="#local-6989586621679375291"><span class="hs-identifier hs-type">m</span></a></span><span> </span><span class="annot"><span class="hs-identifier hs-type">Any</span></span></span><span>
+</span><span id="line-295"></span><span id="focusWindow"><span class="annot"><span class="annottext">focusWindow :: Window -&gt; m Any
+</span><a href="XMonad.Util.PureX.html#focusWindow"><span class="hs-identifier hs-var hs-var">focusWindow</span></a></span></span><span> </span><span id="local-6989586621679375290"><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679375290"><span class="hs-identifier hs-var">w</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">(WindowSet -&gt; WindowSet) -&gt; m Any
+forall (m :: * -&gt; *). XLike m =&gt; (WindowSet -&gt; WindowSet) -&gt; m Any
+</span><a href="XMonad.Util.PureX.html#focusWith"><span class="hs-identifier hs-var">focusWith</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Window -&gt; WindowSet -&gt; WindowSet
+forall s a i l sd.
+(Eq s, Eq a, Eq i) =&gt;
+a -&gt; StackSet i l a s sd -&gt; StackSet i l a s sd
+</span><span class="hs-identifier hs-var">W.focusWindow</span></span><span> </span><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679375290"><span class="hs-identifier hs-var">w</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-296"></span><span>
+</span><span id="line-297"></span><span class="hs-comment">-- | A refresh-tracking version of @XMonad.Actions.FocusNth.focusNth@.</span><span>
+</span><span id="line-298"></span><span id="local-6989586621679375288"><span class="annot"><a href="XMonad.Util.PureX.html#focusNth"><span class="hs-identifier hs-type">focusNth</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><a href="XMonad.Util.PureX.html#XLike"><span class="hs-identifier hs-type">XLike</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679375288"><span class="hs-identifier hs-type">m</span></a></span><span> </span><span class="hs-glyph">=&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Int</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="#local-6989586621679375288"><span class="hs-identifier hs-type">m</span></a></span><span> </span><span class="annot"><span class="hs-identifier hs-type">Any</span></span></span><span>
+</span><span id="line-299"></span><span id="focusNth"><span class="annot"><span class="annottext">focusNth :: Int -&gt; m Any
+</span><a href="XMonad.Util.PureX.html#focusNth"><span class="hs-identifier hs-var hs-var">focusNth</span></a></span></span><span> </span><span id="local-6989586621679375287"><span class="annot"><span class="annottext">Int
+</span><a href="#local-6989586621679375287"><span class="hs-identifier hs-var">i</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">(WindowSet -&gt; WindowSet) -&gt; m Any
+forall (m :: * -&gt; *). XLike m =&gt; (WindowSet -&gt; WindowSet) -&gt; m Any
+</span><a href="XMonad.Util.PureX.html#focusWith"><span class="hs-identifier hs-var">focusWith</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">(Stack Window -&gt; Stack Window) -&gt; WindowSet -&gt; WindowSet
+forall a i l s sd.
+(Stack a -&gt; Stack a) -&gt; StackSet i l a s sd -&gt; StackSet i l a s sd
+</span><span class="hs-identifier hs-var">W.modify'</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Int -&gt; Stack Window -&gt; Stack Window
+forall a. Int -&gt; Stack a -&gt; Stack a
+</span><a href="XMonad.Actions.FocusNth.html#focusNth%27"><span class="hs-identifier hs-var">XMonad.Actions.FocusNth.focusNth'</span></a></span><span> </span><span class="annot"><span class="annottext">Int
+</span><a href="#local-6989586621679375287"><span class="hs-identifier hs-var">i</span></a></span><span class="hs-special">)</span><span class="hs-special">)</span><span>
+</span><span id="line-300"></span><span>
+</span><span id="line-301"></span><span class="hs-comment">-- }}}</span><span>
+</span><span id="line-302"></span></pre></body></html>

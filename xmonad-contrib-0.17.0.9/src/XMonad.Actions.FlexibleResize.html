@@ -1,0 +1,364 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd"><html xmlns="http://www.w3.org/1999/xhtml"><head><link rel="stylesheet" type="text/css" href="style.css" /><script type="text/javascript" src="highlight.js"></script></head><body><pre><span class="hs-comment">-----------------------------------------------------------------------------</span><span>
+</span><span id="line-2"></span><span class="hs-comment">-- |</span><span>
+</span><span id="line-3"></span><span class="hs-comment">-- Module      :  XMonad.Actions.FlexibleResize</span><span>
+</span><span id="line-4"></span><span class="hs-comment">-- Description :  Resize floating windows from any corner.</span><span>
+</span><span id="line-5"></span><span class="hs-comment">-- Copyright   :  (c) Lukas Mai</span><span>
+</span><span id="line-6"></span><span class="hs-comment">-- License     :  BSD3-style (see LICENSE)</span><span>
+</span><span id="line-7"></span><span class="hs-comment">--</span><span>
+</span><span id="line-8"></span><span class="hs-comment">-- Maintainer  :  &lt;l.mai@web.de&gt;</span><span>
+</span><span id="line-9"></span><span class="hs-comment">-- Stability   :  unstable</span><span>
+</span><span id="line-10"></span><span class="hs-comment">-- Portability :  unportable</span><span>
+</span><span id="line-11"></span><span class="hs-comment">--</span><span>
+</span><span id="line-12"></span><span class="hs-comment">-- Resize floating windows from any corner.</span><span>
+</span><span id="line-13"></span><span class="hs-comment">--</span><span>
+</span><span id="line-14"></span><span class="hs-comment">-----------------------------------------------------------------------------</span><span>
+</span><span id="line-15"></span><span>
+</span><span id="line-16"></span><span class="hs-keyword">module</span><span> </span><span class="hs-identifier">XMonad.Actions.FlexibleResize</span><span> </span><span class="hs-special">(</span><span>
+</span><span id="line-17"></span><span>        </span><span class="annot"><span class="hs-comment">-- * Usage</span></span><span>
+</span><span id="line-18"></span><span>        </span><span class="annot"><span class="hs-comment">-- $usage</span></span><span>
+</span><span id="line-19"></span><span>        </span><span class="annot"><a href="XMonad.Actions.FlexibleResize.html#mouseResizeWindow"><span class="hs-identifier">XMonad.Actions.FlexibleResize.mouseResizeWindow</span></a></span><span class="hs-special">,</span><span>
+</span><span id="line-20"></span><span>        </span><span class="annot"><a href="XMonad.Actions.FlexibleResize.html#mouseResizeEdgeWindow"><span class="hs-identifier">XMonad.Actions.FlexibleResize.mouseResizeEdgeWindow</span></a></span><span>
+</span><span id="line-21"></span><span class="hs-special">)</span><span> </span><span class="hs-keyword">where</span><span>
+</span><span id="line-22"></span><span>
+</span><span id="line-23"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><span class="hs-identifier">XMonad</span></span><span>
+</span><span id="line-24"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><a href="XMonad.Prelude.html"><span class="hs-identifier">XMonad.Prelude</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="XMonad.Prelude.html#fi"><span class="hs-identifier">fi</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-25"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><span class="hs-identifier">Foreign.C.Types</span></span><span>
+</span><span id="line-26"></span><span>
+</span><span id="line-27"></span><span class="hs-comment">-- $usage</span><span>
+</span><span id="line-28"></span><span class="hs-comment">-- To use, first import this module into your @~\/.xmonad\/xmonad.hs@ file:</span><span>
+</span><span id="line-29"></span><span class="hs-comment">--</span><span>
+</span><span id="line-30"></span><span class="hs-comment">-- &gt; import qualified XMonad.Actions.FlexibleResize as Flex</span><span>
+</span><span id="line-31"></span><span class="hs-comment">--</span><span>
+</span><span id="line-32"></span><span class="hs-comment">-- Then add an appropriate mouse binding:</span><span>
+</span><span id="line-33"></span><span class="hs-comment">--</span><span>
+</span><span id="line-34"></span><span class="hs-comment">-- &gt;     , ((modm, button3), (\w -&gt; focus w &gt;&gt; Flex.mouseResizeWindow w))</span><span>
+</span><span id="line-35"></span><span class="hs-comment">--</span><span>
+</span><span id="line-36"></span><span class="hs-comment">-- For detailed instructions on editing your mouse bindings, see</span><span>
+</span><span id="line-37"></span><span class="hs-comment">-- &quot;XMonad.Doc.Extending#Editing_mouse_bindings&quot;.</span><span>
+</span><span id="line-38"></span><span>
+</span><span id="line-39"></span><span class="hs-comment">-- | Resize a floating window from whichever corner the mouse is</span><span>
+</span><span id="line-40"></span><span class="hs-comment">--   closest to.</span><span>
+</span><span id="line-41"></span><span class="annot"><a href="XMonad.Actions.FlexibleResize.html#mouseResizeWindow"><span class="hs-identifier hs-type">mouseResizeWindow</span></a></span><span>
+</span><span id="line-42"></span><span>  </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Window</span></span><span> </span><span class="hs-comment">-- ^ The window to resize.</span><span>
+</span><span id="line-43"></span><span>  </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">X</span></span><span> </span><span class="hs-special">(</span><span class="hs-special">)</span><span>
+</span><span id="line-44"></span><span id="mouseResizeWindow"><span class="annot"><span class="annottext">mouseResizeWindow :: Window -&gt; X ()
+</span><a href="XMonad.Actions.FlexibleResize.html#mouseResizeWindow"><span class="hs-identifier hs-var hs-var">mouseResizeWindow</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Rational -&gt; Window -&gt; X ()
+</span><a href="XMonad.Actions.FlexibleResize.html#mouseResizeEdgeWindow"><span class="hs-identifier hs-var">mouseResizeEdgeWindow</span></a></span><span> </span><span class="annot"><span class="annottext">Rational
+</span><span class="hs-number">0</span></span><span>
+</span><span id="line-45"></span><span>
+</span><span id="line-46"></span><span>
+</span><span id="line-47"></span><span class="hs-comment">-- | Resize a floating window from whichever corner or edge the mouse is</span><span>
+</span><span id="line-48"></span><span class="hs-comment">--   closest to.</span><span>
+</span><span id="line-49"></span><span class="annot"><a href="XMonad.Actions.FlexibleResize.html#mouseResizeEdgeWindow"><span class="hs-identifier hs-type">mouseResizeEdgeWindow</span></a></span><span>
+</span><span id="line-50"></span><span>  </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Rational</span></span><span> </span><span class="hs-comment">-- ^ The size of the area where only one edge is resized.</span><span>
+</span><span id="line-51"></span><span>  </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Window</span></span><span>   </span><span class="hs-comment">-- ^ The window to resize.</span><span>
+</span><span id="line-52"></span><span>  </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">X</span></span><span> </span><span class="hs-special">(</span><span class="hs-special">)</span><span>
+</span><span id="line-53"></span><span id="mouseResizeEdgeWindow"><span class="annot"><span class="annottext">mouseResizeEdgeWindow :: Rational -&gt; Window -&gt; X ()
+</span><a href="XMonad.Actions.FlexibleResize.html#mouseResizeEdgeWindow"><span class="hs-identifier hs-var hs-var">mouseResizeEdgeWindow</span></a></span></span><span> </span><span id="local-6989586621679382123"><span class="annot"><span class="annottext">Rational
+</span><a href="#local-6989586621679382123"><span class="hs-identifier hs-var">edge</span></a></span></span><span> </span><span id="local-6989586621679382122"><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679382122"><span class="hs-identifier hs-var">w</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">X Bool -&gt; X () -&gt; X ()
+</span><span class="hs-identifier hs-var">whenX</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Window -&gt; X Bool
+</span><span class="hs-identifier hs-var">isClient</span></span><span> </span><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679382122"><span class="hs-identifier hs-var">w</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">(X () -&gt; X ()) -&gt; X () -&gt; X ()
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">(Display -&gt; X ()) -&gt; X ()
+forall a. (Display -&gt; X a) -&gt; X a
+</span><span class="hs-identifier hs-var">withDisplay</span></span><span> </span><span class="annot"><span class="annottext">((Display -&gt; X ()) -&gt; X ()) -&gt; (Display -&gt; X ()) -&gt; X ()
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="hs-glyph">\</span><span id="local-6989586621679382118"><span class="annot"><span class="annottext">Display
+</span><a href="#local-6989586621679382118"><span class="hs-identifier hs-var">d</span></a></span></span><span> </span><span class="hs-glyph">-&gt;</span><span>
+</span><span id="line-54"></span><span>  </span><span class="annot"><span class="annottext">Display -&gt; Window -&gt; (WindowAttributes -&gt; X ()) -&gt; X ()
+</span><span class="hs-identifier hs-var">withWindowAttributes</span></span><span> </span><span class="annot"><span class="annottext">Display
+</span><a href="#local-6989586621679382118"><span class="hs-identifier hs-var">d</span></a></span><span> </span><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679382122"><span class="hs-identifier hs-var">w</span></a></span><span> </span><span class="annot"><span class="annottext">((WindowAttributes -&gt; X ()) -&gt; X ())
+-&gt; (WindowAttributes -&gt; X ()) -&gt; X ()
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="hs-glyph">\</span><span id="local-6989586621679382116"><span class="annot"><span class="annottext">WindowAttributes
+</span><a href="#local-6989586621679382116"><span class="hs-identifier hs-var">wa</span></a></span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-55"></span><span>    </span><span id="local-6989586621679382115"><span class="annot"><span class="annottext">SizeHints
+</span><a href="#local-6989586621679382115"><span class="hs-identifier hs-var">sh</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">IO SizeHints -&gt; X SizeHints
+forall (m :: * -&gt; *) a. MonadIO m =&gt; IO a -&gt; m a
+</span><span class="hs-identifier hs-var">io</span></span><span> </span><span class="annot"><span class="annottext">(IO SizeHints -&gt; X SizeHints) -&gt; IO SizeHints -&gt; X SizeHints
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">Display -&gt; Window -&gt; IO SizeHints
+</span><span class="hs-identifier hs-var">getWMNormalHints</span></span><span> </span><span class="annot"><span class="annottext">Display
+</span><a href="#local-6989586621679382118"><span class="hs-identifier hs-var">d</span></a></span><span> </span><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679382122"><span class="hs-identifier hs-var">w</span></a></span><span>
+</span><span id="line-56"></span><span>    </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Bool
+</span><span class="hs-identifier">_</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">Window
+</span><span class="hs-identifier">_</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">Window
+</span><span class="hs-identifier">_</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">CInt
+</span><span class="hs-identifier">_</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">CInt
+</span><span class="hs-identifier">_</span></span><span class="hs-special">,</span><span> </span><span id="local-6989586621679382112"><span class="annot"><span class="annottext">CInt
+</span><a href="#local-6989586621679382112"><span class="hs-identifier hs-var">ix</span></a></span></span><span class="hs-special">,</span><span> </span><span id="local-6989586621679382111"><span class="annot"><span class="annottext">CInt
+</span><a href="#local-6989586621679382111"><span class="hs-identifier hs-var">iy</span></a></span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">Modifier
+</span><span class="hs-identifier">_</span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">IO (Bool, Window, Window, CInt, CInt, CInt, CInt, Modifier)
+-&gt; X (Bool, Window, Window, CInt, CInt, CInt, CInt, Modifier)
+forall (m :: * -&gt; *) a. MonadIO m =&gt; IO a -&gt; m a
+</span><span class="hs-identifier hs-var">io</span></span><span> </span><span class="annot"><span class="annottext">(IO (Bool, Window, Window, CInt, CInt, CInt, CInt, Modifier)
+ -&gt; X (Bool, Window, Window, CInt, CInt, CInt, CInt, Modifier))
+-&gt; IO (Bool, Window, Window, CInt, CInt, CInt, CInt, Modifier)
+-&gt; X (Bool, Window, Window, CInt, CInt, CInt, CInt, Modifier)
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">Display
+-&gt; Window
+-&gt; IO (Bool, Window, Window, CInt, CInt, CInt, CInt, Modifier)
+</span><span class="hs-identifier hs-var">queryPointer</span></span><span> </span><span class="annot"><span class="annottext">Display
+</span><a href="#local-6989586621679382118"><span class="hs-identifier hs-var">d</span></a></span><span> </span><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679382122"><span class="hs-identifier hs-var">w</span></a></span><span>
+</span><span id="line-57"></span><span>    </span><span class="hs-keyword">let</span><span>
+</span><span id="line-58"></span><span>        </span><span id="local-6989586621679382106"><span class="annot"><span class="annottext">pos_x :: Position
+</span><a href="#local-6989586621679382106"><span class="hs-identifier hs-var hs-var">pos_x</span></a></span></span><span>  </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">CInt -&gt; Position
+forall a b. (Integral a, Num b) =&gt; a -&gt; b
+</span><a href="XMonad.Prelude.html#fi"><span class="hs-identifier hs-var">fi</span></a></span><span> </span><span class="annot"><span class="annottext">(CInt -&gt; Position) -&gt; CInt -&gt; Position
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">WindowAttributes -&gt; CInt
+</span><span class="hs-identifier hs-var hs-var">wa_x</span></span><span> </span><span class="annot"><span class="annottext">WindowAttributes
+</span><a href="#local-6989586621679382116"><span class="hs-identifier hs-var">wa</span></a></span><span>
+</span><span id="line-59"></span><span>        </span><span id="local-6989586621679382102"><span class="annot"><span class="annottext">pos_y :: Position
+</span><a href="#local-6989586621679382102"><span class="hs-identifier hs-var hs-var">pos_y</span></a></span></span><span>  </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">CInt -&gt; Position
+forall a b. (Integral a, Num b) =&gt; a -&gt; b
+</span><a href="XMonad.Prelude.html#fi"><span class="hs-identifier hs-var">fi</span></a></span><span> </span><span class="annot"><span class="annottext">(CInt -&gt; Position) -&gt; CInt -&gt; Position
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">WindowAttributes -&gt; CInt
+</span><span class="hs-identifier hs-var hs-var">wa_y</span></span><span> </span><span class="annot"><span class="annottext">WindowAttributes
+</span><a href="#local-6989586621679382116"><span class="hs-identifier hs-var">wa</span></a></span><span>
+</span><span id="line-60"></span><span>        </span><span id="local-6989586621679382098"><span class="annot"><span class="annottext">width :: Position
+</span><a href="#local-6989586621679382098"><span class="hs-identifier hs-var hs-var">width</span></a></span></span><span>  </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">CInt -&gt; Position
+forall a b. (Integral a, Num b) =&gt; a -&gt; b
+</span><a href="XMonad.Prelude.html#fi"><span class="hs-identifier hs-var">fi</span></a></span><span> </span><span class="annot"><span class="annottext">(CInt -&gt; Position) -&gt; CInt -&gt; Position
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">WindowAttributes -&gt; CInt
+</span><span class="hs-identifier hs-var hs-var">wa_width</span></span><span> </span><span class="annot"><span class="annottext">WindowAttributes
+</span><a href="#local-6989586621679382116"><span class="hs-identifier hs-var">wa</span></a></span><span>
+</span><span id="line-61"></span><span>        </span><span id="local-6989586621679382094"><span class="annot"><span class="annottext">height :: Position
+</span><a href="#local-6989586621679382094"><span class="hs-identifier hs-var hs-var">height</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">CInt -&gt; Position
+forall a b. (Integral a, Num b) =&gt; a -&gt; b
+</span><a href="XMonad.Prelude.html#fi"><span class="hs-identifier hs-var">fi</span></a></span><span> </span><span class="annot"><span class="annottext">(CInt -&gt; Position) -&gt; CInt -&gt; Position
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">WindowAttributes -&gt; CInt
+</span><span class="hs-identifier hs-var hs-var">wa_height</span></span><span> </span><span class="annot"><span class="annottext">WindowAttributes
+</span><a href="#local-6989586621679382116"><span class="hs-identifier hs-var">wa</span></a></span><span>
+</span><span id="line-62"></span><span>        </span><span id="local-6989586621679382092"><span class="annot"><span class="annottext">west :: Maybe Bool
+</span><a href="#local-6989586621679382092"><span class="hs-identifier hs-var hs-var">west</span></a></span></span><span>  </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">CInt -&gt; Position -&gt; Maybe Bool
+</span><a href="#local-6989586621679382091"><span class="hs-identifier hs-var">findPos</span></a></span><span> </span><span class="annot"><span class="annottext">CInt
+</span><a href="#local-6989586621679382112"><span class="hs-identifier hs-var">ix</span></a></span><span> </span><span class="annot"><span class="annottext">Position
+</span><a href="#local-6989586621679382098"><span class="hs-identifier hs-var">width</span></a></span><span>
+</span><span id="line-63"></span><span>        </span><span id="local-6989586621679382090"><span class="annot"><span class="annottext">north :: Maybe Bool
+</span><a href="#local-6989586621679382090"><span class="hs-identifier hs-var hs-var">north</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">CInt -&gt; Position -&gt; Maybe Bool
+</span><a href="#local-6989586621679382091"><span class="hs-identifier hs-var">findPos</span></a></span><span> </span><span class="annot"><span class="annottext">CInt
+</span><a href="#local-6989586621679382111"><span class="hs-identifier hs-var">iy</span></a></span><span> </span><span class="annot"><span class="annottext">Position
+</span><a href="#local-6989586621679382094"><span class="hs-identifier hs-var">height</span></a></span><span>
+</span><span id="line-64"></span><span>        </span><span class="hs-special">(</span><span id="local-6989586621679382089"><span class="annot"><span class="annottext">Position
+</span><a href="#local-6989586621679382089"><span class="hs-identifier hs-var">cx</span></a></span></span><span class="hs-special">,</span><span> </span><span id="local-6989586621679382088"><span class="annot"><span class="annottext">Dimension -&gt; Position
+</span><a href="#local-6989586621679382088"><span class="hs-identifier hs-var">fx</span></a></span></span><span class="hs-special">,</span><span> </span><span id="local-6989586621679382087"><span class="annot"><span class="annottext">Position -&gt; Dimension
+</span><a href="#local-6989586621679382087"><span class="hs-identifier hs-var">gx</span></a></span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Maybe Bool
+-&gt; Position
+-&gt; Position
+-&gt; (Position, Dimension -&gt; Position, Position -&gt; Dimension)
+</span><a href="#local-6989586621679382086"><span class="hs-identifier hs-var">mkSel</span></a></span><span> </span><span class="annot"><span class="annottext">Maybe Bool
+</span><a href="#local-6989586621679382092"><span class="hs-identifier hs-var">west</span></a></span><span>  </span><span class="annot"><span class="annottext">Position
+</span><a href="#local-6989586621679382098"><span class="hs-identifier hs-var">width</span></a></span><span>  </span><span class="annot"><span class="annottext">Position
+</span><a href="#local-6989586621679382106"><span class="hs-identifier hs-var">pos_x</span></a></span><span>
+</span><span id="line-65"></span><span>        </span><span class="hs-special">(</span><span id="local-6989586621679382085"><span class="annot"><span class="annottext">Position
+</span><a href="#local-6989586621679382085"><span class="hs-identifier hs-var">cy</span></a></span></span><span class="hs-special">,</span><span> </span><span id="local-6989586621679382084"><span class="annot"><span class="annottext">Dimension -&gt; Position
+</span><a href="#local-6989586621679382084"><span class="hs-identifier hs-var">fy</span></a></span></span><span class="hs-special">,</span><span> </span><span id="local-6989586621679382083"><span class="annot"><span class="annottext">Position -&gt; Dimension
+</span><a href="#local-6989586621679382083"><span class="hs-identifier hs-var">gy</span></a></span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Maybe Bool
+-&gt; Position
+-&gt; Position
+-&gt; (Position, Dimension -&gt; Position, Position -&gt; Dimension)
+</span><a href="#local-6989586621679382086"><span class="hs-identifier hs-var">mkSel</span></a></span><span> </span><span class="annot"><span class="annottext">Maybe Bool
+</span><a href="#local-6989586621679382090"><span class="hs-identifier hs-var">north</span></a></span><span> </span><span class="annot"><span class="annottext">Position
+</span><a href="#local-6989586621679382094"><span class="hs-identifier hs-var">height</span></a></span><span> </span><span class="annot"><span class="annottext">Position
+</span><a href="#local-6989586621679382102"><span class="hs-identifier hs-var">pos_y</span></a></span><span>
+</span><span id="line-66"></span><span>    </span><span class="annot"><span class="annottext">IO () -&gt; X ()
+forall (m :: * -&gt; *) a. MonadIO m =&gt; IO a -&gt; m a
+</span><span class="hs-identifier hs-var">io</span></span><span> </span><span class="annot"><span class="annottext">(IO () -&gt; X ()) -&gt; IO () -&gt; X ()
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">Display
+-&gt; Window
+-&gt; Window
+-&gt; Position
+-&gt; Position
+-&gt; Dimension
+-&gt; Dimension
+-&gt; Position
+-&gt; Position
+-&gt; IO ()
+</span><span class="hs-identifier hs-var">warpPointer</span></span><span> </span><span class="annot"><span class="annottext">Display
+</span><a href="#local-6989586621679382118"><span class="hs-identifier hs-var">d</span></a></span><span> </span><span class="annot"><span class="annottext">Window
+</span><span class="hs-identifier hs-var">none</span></span><span> </span><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679382122"><span class="hs-identifier hs-var">w</span></a></span><span> </span><span class="annot"><span class="annottext">Position
+</span><span class="hs-number">0</span></span><span> </span><span class="annot"><span class="annottext">Position
+</span><span class="hs-number">0</span></span><span> </span><span class="annot"><span class="annottext">Dimension
+</span><span class="hs-number">0</span></span><span> </span><span class="annot"><span class="annottext">Dimension
+</span><span class="hs-number">0</span></span><span> </span><span class="annot"><span class="annottext">Position
+</span><a href="#local-6989586621679382089"><span class="hs-identifier hs-var">cx</span></a></span><span> </span><span class="annot"><span class="annottext">Position
+</span><a href="#local-6989586621679382085"><span class="hs-identifier hs-var">cy</span></a></span><span>
+</span><span id="line-67"></span><span>    </span><span class="annot"><span class="annottext">(Position -&gt; Position -&gt; X ()) -&gt; X () -&gt; X ()
+</span><span class="hs-identifier hs-var">mouseDrag</span></span><span> </span><span class="hs-special">(</span><span class="hs-glyph">\</span><span id="local-6989586621679382079"><span class="annot"><span class="annottext">Position
+</span><a href="#local-6989586621679382079"><span class="hs-identifier hs-var">ex</span></a></span></span><span> </span><span id="local-6989586621679382078"><span class="annot"><span class="annottext">Position
+</span><a href="#local-6989586621679382078"><span class="hs-identifier hs-var">ey</span></a></span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="hs-keyword">do</span><span> </span><span class="hs-keyword">let</span><span> </span><span class="hs-special">(</span><span id="local-6989586621679382076"><span class="annot"><span class="annottext">Dimension
+</span><a href="#local-6989586621679382076"><span class="hs-identifier hs-var">nw</span></a></span></span><span class="hs-special">,</span><span id="local-6989586621679382075"><span class="annot"><span class="annottext">Dimension
+</span><a href="#local-6989586621679382075"><span class="hs-identifier hs-var">nh</span></a></span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">SizeHints -&gt; (Dimension, Dimension) -&gt; (Dimension, Dimension)
+forall a.
+Integral a =&gt;
+SizeHints -&gt; (a, a) -&gt; (Dimension, Dimension)
+</span><span class="hs-identifier hs-var">applySizeHintsContents</span></span><span> </span><span class="annot"><span class="annottext">SizeHints
+</span><a href="#local-6989586621679382115"><span class="hs-identifier hs-var">sh</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Position -&gt; Dimension
+</span><a href="#local-6989586621679382087"><span class="hs-identifier hs-var">gx</span></a></span><span> </span><span class="annot"><span class="annottext">Position
+</span><a href="#local-6989586621679382079"><span class="hs-identifier hs-var">ex</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">Position -&gt; Dimension
+</span><a href="#local-6989586621679382083"><span class="hs-identifier hs-var">gy</span></a></span><span> </span><span class="annot"><span class="annottext">Position
+</span><a href="#local-6989586621679382078"><span class="hs-identifier hs-var">ey</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-68"></span><span>                            </span><span class="annot"><span class="annottext">IO () -&gt; X ()
+forall (m :: * -&gt; *) a. MonadIO m =&gt; IO a -&gt; m a
+</span><span class="hs-identifier hs-var">io</span></span><span> </span><span class="annot"><span class="annottext">(IO () -&gt; X ()) -&gt; IO () -&gt; X ()
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">Display
+-&gt; Window
+-&gt; Position
+-&gt; Position
+-&gt; Dimension
+-&gt; Dimension
+-&gt; IO ()
+</span><span class="hs-identifier hs-var">moveResizeWindow</span></span><span> </span><span class="annot"><span class="annottext">Display
+</span><a href="#local-6989586621679382118"><span class="hs-identifier hs-var">d</span></a></span><span> </span><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679382122"><span class="hs-identifier hs-var">w</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Dimension -&gt; Position
+</span><a href="#local-6989586621679382088"><span class="hs-identifier hs-var">fx</span></a></span><span> </span><span class="annot"><span class="annottext">Dimension
+</span><a href="#local-6989586621679382076"><span class="hs-identifier hs-var">nw</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Dimension -&gt; Position
+</span><a href="#local-6989586621679382084"><span class="hs-identifier hs-var">fy</span></a></span><span> </span><span class="annot"><span class="annottext">Dimension
+</span><a href="#local-6989586621679382075"><span class="hs-identifier hs-var">nh</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">Dimension
+</span><a href="#local-6989586621679382076"><span class="hs-identifier hs-var">nw</span></a></span><span> </span><span class="annot"><span class="annottext">Dimension
+</span><a href="#local-6989586621679382075"><span class="hs-identifier hs-var">nh</span></a></span><span>
+</span><span id="line-69"></span><span>                            </span><span class="annot"><span class="annottext">Window -&gt; X ()
+</span><span class="hs-identifier hs-var">float</span></span><span> </span><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679382122"><span class="hs-identifier hs-var">w</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-70"></span><span>              </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Window -&gt; X ()
+</span><span class="hs-identifier hs-var">float</span></span><span> </span><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679382122"><span class="hs-identifier hs-var">w</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-71"></span><span>    </span><span class="hs-keyword">where</span><span>
+</span><span id="line-72"></span><span>    </span><span class="annot"><a href="#local-6989586621679382091"><span class="hs-identifier hs-type">findPos</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">CInt</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Position</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Maybe</span></span><span> </span><span class="annot"><span class="hs-identifier hs-type">Bool</span></span><span>
+</span><span id="line-73"></span><span>    </span><span id="local-6989586621679382091"><span class="annot"><span class="annottext">findPos :: CInt -&gt; Position -&gt; Maybe Bool
+</span><a href="#local-6989586621679382091"><span class="hs-identifier hs-var hs-var">findPos</span></a></span></span><span> </span><span id="local-6989586621679382071"><span class="annot"><span class="annottext">CInt
+</span><a href="#local-6989586621679382071"><span class="hs-identifier hs-var">m</span></a></span></span><span> </span><span id="local-6989586621679382070"><span class="annot"><span class="annottext">Position
+</span><a href="#local-6989586621679382070"><span class="hs-identifier hs-var">s</span></a></span></span><span>
+</span><span id="line-74"></span><span>      </span><span class="hs-glyph">|</span><span> </span><span class="annot"><span class="annottext">Rational
+</span><a href="#local-6989586621679382069"><span class="hs-identifier hs-var">p</span></a></span><span> </span><span class="annot"><span class="annottext">Rational -&gt; Rational -&gt; Bool
+forall a. Ord a =&gt; a -&gt; a -&gt; Bool
+</span><span class="hs-operator hs-var">&lt;</span></span><span> </span><span class="annot"><span class="annottext">Rational
+</span><span class="hs-number">0.5</span></span><span> </span><span class="annot"><span class="annottext">Rational -&gt; Rational -&gt; Rational
+forall a. Num a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-glyph hs-var">-</span></span><span> </span><span class="annot"><span class="annottext">Rational
+</span><a href="#local-6989586621679382123"><span class="hs-identifier hs-var">edge</span></a></span><span class="annot"><span class="annottext">Rational -&gt; Rational -&gt; Rational
+forall a. Fractional a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-operator hs-var">/</span></span><span class="annot"><span class="annottext">Rational
+</span><span class="hs-number">2</span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Bool -&gt; Maybe Bool
+forall a. a -&gt; Maybe a
+</span><span class="hs-identifier hs-var">Just</span></span><span> </span><span class="annot"><span class="annottext">Bool
+</span><span class="hs-identifier hs-var">True</span></span><span>
+</span><span id="line-75"></span><span>      </span><span class="hs-glyph">|</span><span> </span><span class="annot"><span class="annottext">Rational
+</span><a href="#local-6989586621679382069"><span class="hs-identifier hs-var">p</span></a></span><span> </span><span class="annot"><span class="annottext">Rational -&gt; Rational -&gt; Bool
+forall a. Ord a =&gt; a -&gt; a -&gt; Bool
+</span><span class="hs-operator hs-var">&lt;</span></span><span> </span><span class="annot"><span class="annottext">Rational
+</span><span class="hs-number">0.5</span></span><span> </span><span class="annot"><span class="annottext">Rational -&gt; Rational -&gt; Rational
+forall a. Num a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-operator hs-var">+</span></span><span> </span><span class="annot"><span class="annottext">Rational
+</span><a href="#local-6989586621679382123"><span class="hs-identifier hs-var">edge</span></a></span><span class="annot"><span class="annottext">Rational -&gt; Rational -&gt; Rational
+forall a. Fractional a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-operator hs-var">/</span></span><span class="annot"><span class="annottext">Rational
+</span><span class="hs-number">2</span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Maybe Bool
+forall a. Maybe a
+</span><span class="hs-identifier hs-var">Nothing</span></span><span>
+</span><span id="line-76"></span><span>      </span><span class="hs-glyph">|</span><span> </span><span class="annot"><span class="annottext">Bool
+</span><span class="hs-identifier hs-var">otherwise</span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Bool -&gt; Maybe Bool
+forall a. a -&gt; Maybe a
+</span><span class="hs-identifier hs-var">Just</span></span><span> </span><span class="annot"><span class="annottext">Bool
+</span><span class="hs-identifier hs-var">False</span></span><span>
+</span><span id="line-77"></span><span>      </span><span class="hs-keyword">where</span><span>
+</span><span id="line-78"></span><span>          </span><span id="local-6989586621679382069"><span class="annot"><span class="annottext">p :: Rational
+</span><a href="#local-6989586621679382069"><span class="hs-identifier hs-var hs-var">p</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">CInt -&gt; Rational
+forall a b. (Integral a, Num b) =&gt; a -&gt; b
+</span><a href="XMonad.Prelude.html#fi"><span class="hs-identifier hs-var">fi</span></a></span><span> </span><span class="annot"><span class="annottext">CInt
+</span><a href="#local-6989586621679382071"><span class="hs-identifier hs-var">m</span></a></span><span> </span><span class="annot"><span class="annottext">Rational -&gt; Rational -&gt; Rational
+forall a. Fractional a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-operator hs-var">/</span></span><span> </span><span class="annot"><span class="annottext">Position -&gt; Rational
+forall a b. (Integral a, Num b) =&gt; a -&gt; b
+</span><a href="XMonad.Prelude.html#fi"><span class="hs-identifier hs-var">fi</span></a></span><span> </span><span class="annot"><span class="annottext">Position
+</span><a href="#local-6989586621679382070"><span class="hs-identifier hs-var">s</span></a></span><span>
+</span><span id="line-79"></span><span>    </span><span class="annot"><a href="#local-6989586621679382086"><span class="hs-identifier hs-type">mkSel</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Maybe</span></span><span> </span><span class="annot"><span class="hs-identifier hs-type">Bool</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Position</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Position</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">Position</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Dimension</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Position</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Position</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Dimension</span></span><span class="hs-special">)</span><span>
+</span><span id="line-80"></span><span>    </span><span id="local-6989586621679382086"><span class="annot"><span class="annottext">mkSel :: Maybe Bool
+-&gt; Position
+-&gt; Position
+-&gt; (Position, Dimension -&gt; Position, Position -&gt; Dimension)
+</span><a href="#local-6989586621679382086"><span class="hs-identifier hs-var hs-var">mkSel</span></a></span></span><span> </span><span id="local-6989586621679382060"><span class="annot"><span class="annottext">Maybe Bool
+</span><a href="#local-6989586621679382060"><span class="hs-identifier hs-var">b</span></a></span></span><span> </span><span id="local-6989586621679382059"><span class="annot"><span class="annottext">Position
+</span><a href="#local-6989586621679382059"><span class="hs-identifier hs-var">k</span></a></span></span><span> </span><span id="local-6989586621679382058"><span class="annot"><span class="annottext">Position
+</span><a href="#local-6989586621679382058"><span class="hs-identifier hs-var">p</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-keyword">case</span><span> </span><span class="annot"><span class="annottext">Maybe Bool
+</span><a href="#local-6989586621679382060"><span class="hs-identifier hs-var">b</span></a></span><span> </span><span class="hs-keyword">of</span><span>
+</span><span id="line-81"></span><span>                      </span><span class="annot"><span class="hs-identifier hs-type">Just</span></span><span> </span><span class="annot"><span class="annottext">Bool
+</span><span class="hs-identifier hs-var">True</span></span><span> </span><span class="hs-glyph">-&gt;</span><span>  </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Position
+</span><span class="hs-number">0</span></span><span class="hs-special">,</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Position -&gt; Position
+forall a b. (Integral a, Num b) =&gt; a -&gt; b
+</span><a href="XMonad.Prelude.html#fi"><span class="hs-identifier hs-var">fi</span></a></span><span> </span><span class="annot"><span class="annottext">Position
+</span><a href="#local-6989586621679382059"><span class="hs-identifier hs-var">k</span></a></span><span> </span><span class="annot"><span class="annottext">Position -&gt; Position -&gt; Position
+forall a. Num a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-operator hs-var">+</span></span><span> </span><span class="annot"><span class="annottext">Position -&gt; Position
+forall a b. (Integral a, Num b) =&gt; a -&gt; b
+</span><a href="XMonad.Prelude.html#fi"><span class="hs-identifier hs-var">fi</span></a></span><span> </span><span class="annot"><span class="annottext">Position
+</span><a href="#local-6989586621679382058"><span class="hs-identifier hs-var">p</span></a></span><span> </span><span class="annot"><span class="annottext">Position -&gt; Position -&gt; Position
+forall a. Num a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-glyph hs-var">-</span></span><span class="hs-special">)</span><span class="annot"><span class="annottext">(Position -&gt; Position)
+-&gt; (Dimension -&gt; Position) -&gt; Dimension -&gt; Position
+forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span class="annot"><span class="annottext">Dimension -&gt; Position
+forall a b. (Integral a, Num b) =&gt; a -&gt; b
+</span><a href="XMonad.Prelude.html#fi"><span class="hs-identifier hs-var">fi</span></a></span><span class="hs-special">,</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Position -&gt; Dimension
+forall a b. (Integral a, Num b) =&gt; a -&gt; b
+</span><a href="XMonad.Prelude.html#fi"><span class="hs-identifier hs-var">fi</span></a></span><span> </span><span class="annot"><span class="annottext">Position
+</span><a href="#local-6989586621679382059"><span class="hs-identifier hs-var">k</span></a></span><span> </span><span class="annot"><span class="annottext">Dimension -&gt; Dimension -&gt; Dimension
+forall a. Num a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-operator hs-var">+</span></span><span> </span><span class="annot"><span class="annottext">Position -&gt; Dimension
+forall a b. (Integral a, Num b) =&gt; a -&gt; b
+</span><a href="XMonad.Prelude.html#fi"><span class="hs-identifier hs-var">fi</span></a></span><span> </span><span class="annot"><span class="annottext">Position
+</span><a href="#local-6989586621679382058"><span class="hs-identifier hs-var">p</span></a></span><span> </span><span class="annot"><span class="annottext">Dimension -&gt; Dimension -&gt; Dimension
+forall a. Num a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-glyph hs-var">-</span></span><span class="hs-special">)</span><span class="annot"><span class="annottext">(Dimension -&gt; Dimension)
+-&gt; (Position -&gt; Dimension) -&gt; Position -&gt; Dimension
+forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span class="annot"><span class="annottext">Position -&gt; Dimension
+forall a b. (Integral a, Num b) =&gt; a -&gt; b
+</span><a href="XMonad.Prelude.html#fi"><span class="hs-identifier hs-var">fi</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-82"></span><span>                      </span><span class="annot"><span class="annottext">Maybe Bool
+</span><span class="hs-identifier hs-var">Nothing</span></span><span> </span><span class="hs-glyph">-&gt;</span><span>    </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Position
+</span><a href="#local-6989586621679382059"><span class="hs-identifier hs-var">k</span></a></span><span> </span><span class="annot"><span class="annottext">Position -&gt; Position -&gt; Position
+forall a. Integral a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-operator hs-var">`div`</span></span><span> </span><span class="annot"><span class="annottext">Position
+</span><span class="hs-number">2</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">Position -&gt; Dimension -&gt; Position
+forall a b. a -&gt; b -&gt; a
+</span><span class="hs-identifier hs-var">const</span></span><span> </span><span class="annot"><span class="annottext">Position
+</span><a href="#local-6989586621679382058"><span class="hs-identifier hs-var">p</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">Dimension -&gt; Position -&gt; Dimension
+forall a b. a -&gt; b -&gt; a
+</span><span class="hs-identifier hs-var">const</span></span><span> </span><span class="annot"><span class="annottext">(Dimension -&gt; Position -&gt; Dimension)
+-&gt; Dimension -&gt; Position -&gt; Dimension
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">Position -&gt; Dimension
+forall a b. (Integral a, Num b) =&gt; a -&gt; b
+</span><a href="XMonad.Prelude.html#fi"><span class="hs-identifier hs-var">fi</span></a></span><span> </span><span class="annot"><span class="annottext">Position
+</span><a href="#local-6989586621679382059"><span class="hs-identifier hs-var">k</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-83"></span><span>                      </span><span class="annot"><span class="hs-identifier hs-type">Just</span></span><span> </span><span class="annot"><span class="annottext">Bool
+</span><span class="hs-identifier hs-var">False</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Position
+</span><a href="#local-6989586621679382059"><span class="hs-identifier hs-var">k</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">Position -&gt; Dimension -&gt; Position
+forall a b. a -&gt; b -&gt; a
+</span><span class="hs-identifier hs-var">const</span></span><span> </span><span class="annot"><span class="annottext">Position
+</span><a href="#local-6989586621679382058"><span class="hs-identifier hs-var">p</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">Dimension -&gt; Dimension -&gt; Dimension
+forall a. Num a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-identifier hs-var">subtract</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Position -&gt; Dimension
+forall a b. (Integral a, Num b) =&gt; a -&gt; b
+</span><a href="XMonad.Prelude.html#fi"><span class="hs-identifier hs-var">fi</span></a></span><span> </span><span class="annot"><span class="annottext">Position
+</span><a href="#local-6989586621679382058"><span class="hs-identifier hs-var">p</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">(Dimension -&gt; Dimension)
+-&gt; (Position -&gt; Dimension) -&gt; Position -&gt; Dimension
+forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">Position -&gt; Dimension
+forall a b. (Integral a, Num b) =&gt; a -&gt; b
+</span><a href="XMonad.Prelude.html#fi"><span class="hs-identifier hs-var">fi</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-84"></span></pre></body></html>

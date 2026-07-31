@@ -1,0 +1,195 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd"><html xmlns="http://www.w3.org/1999/xhtml"><head><link rel="stylesheet" type="text/css" href="style.css" /><script type="text/javascript" src="highlight.js"></script></head><body><pre><span class="hs-comment">-----------------------------------------------------------------------------</span><span>
+</span><span id="line-2"></span><span class="hs-comment">-- |</span><span>
+</span><span id="line-3"></span><span class="hs-comment">-- Module      :  XMonad.Hooks.Qubes</span><span>
+</span><span id="line-4"></span><span class="hs-comment">-- Description :  Use Qubes OS label colours for window borders.</span><span>
+</span><span id="line-5"></span><span class="hs-comment">-- Copyright   :  (c) Roland C. Dowdeswell &lt;elric@imrryr.org&gt;</span><span>
+</span><span id="line-6"></span><span class="hs-comment">-- License     :  BSD3-style (see LICENSE)</span><span>
+</span><span id="line-7"></span><span class="hs-comment">--</span><span>
+</span><span id="line-8"></span><span class="hs-comment">-- Maintainer  :  Roland C. Dowdeswell &lt;elric@imrryr.org&gt;</span><span>
+</span><span id="line-9"></span><span class="hs-comment">-- Stability   :  unstable</span><span>
+</span><span id="line-10"></span><span class="hs-comment">-- Portability :  unportable</span><span>
+</span><span id="line-11"></span><span class="hs-comment">--</span><span>
+</span><span id="line-12"></span><span class="hs-comment">-- Refresh window borders from the @_QUBES_LABEL_COLOR@ property set by</span><span>
+</span><span id="line-13"></span><span class="hs-comment">-- Qubes OS so focused and unfocused windows match their qube label.</span><span>
+</span><span id="line-14"></span><span class="hs-comment">--</span><span>
+</span><span id="line-15"></span><span class="hs-comment">-----------------------------------------------------------------------------</span><span>
+</span><span id="line-16"></span><span class="hs-keyword">module</span><span> </span><span class="hs-identifier">XMonad.Hooks.Qubes</span><span>
+</span><span id="line-17"></span><span>    </span><span class="hs-special">(</span><span> </span><span class="annot"><span class="hs-comment">-- * Usage</span></span><span>
+</span><span id="line-18"></span><span>      </span><span class="annot"><span class="hs-comment">-- $usage</span></span><span>
+</span><span id="line-19"></span><span>      </span><span class="annot"><a href="XMonad.Hooks.Qubes.html#qubesLogHook"><span class="hs-identifier">qubesLogHook</span></a></span><span>
+</span><span id="line-20"></span><span>    </span><span class="hs-special">)</span><span> </span><span class="hs-keyword">where</span><span>
+</span><span id="line-21"></span><span>
+</span><span id="line-22"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><span class="hs-identifier">Data.Bits</span></span><span>
+</span><span id="line-23"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><span class="hs-identifier">Foreign.C.Types</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier">CLong</span></span><span class="hs-special">)</span><span>
+</span><span id="line-24"></span><span>
+</span><span id="line-25"></span><span class="hs-keyword">import</span><span>           </span><span class="annot"><span class="hs-identifier">XMonad</span></span><span>
+</span><span id="line-26"></span><span class="hs-keyword">import</span><span> </span><span class="hs-keyword">qualified</span><span> </span><span class="annot"><span class="hs-identifier">XMonad.StackSet</span></span><span> </span><span class="hs-keyword">as</span><span> </span><span class="annot"><span class="hs-identifier">W</span></span><span>
+</span><span id="line-27"></span><span>
+</span><span id="line-28"></span><span class="hs-comment">-- $usage</span><span>
+</span><span id="line-29"></span><span class="hs-comment">-- You can use this module with the following in your @xmonad.hs@:</span><span>
+</span><span id="line-30"></span><span class="hs-comment">--</span><span>
+</span><span id="line-31"></span><span class="hs-comment">-- &gt; import XMonad</span><span>
+</span><span id="line-32"></span><span class="hs-comment">-- &gt; import XMonad.Hooks.Qubes</span><span>
+</span><span id="line-33"></span><span class="hs-comment">-- &gt;</span><span>
+</span><span id="line-34"></span><span class="hs-comment">-- &gt; main = xmonad def</span><span>
+</span><span id="line-35"></span><span class="hs-comment">-- &gt;     { logHook = qubesLogHook</span><span>
+</span><span id="line-36"></span><span class="hs-comment">-- &gt;     }</span><span>
+</span><span id="line-37"></span><span>
+</span><span id="line-38"></span><span class="hs-comment">-- | Refresh visible window borders using their Qubes label colours.</span><span>
+</span><span id="line-39"></span><span class="annot"><a href="XMonad.Hooks.Qubes.html#qubesLogHook"><span class="hs-identifier hs-type">qubesLogHook</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">X</span></span><span> </span><span class="hs-special">(</span><span class="hs-special">)</span><span>
+</span><span id="line-40"></span><span id="qubesLogHook"><span class="annot"><span class="annottext">qubesLogHook :: X ()
+</span><a href="XMonad.Hooks.Qubes.html#qubesLogHook"><span class="hs-identifier hs-var hs-var">qubesLogHook</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">forall a. (WindowSet -&gt; X a) -&gt; X a
+</span><span class="hs-identifier hs-var">withWindowSet</span></span><span> </span><span class="annot"><span class="annottext">forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="hs-glyph">\</span><span id="local-6989586621679407207"><span class="annot"><span class="annottext">WindowSet
+</span><a href="#local-6989586621679407207"><span class="hs-identifier hs-var">s</span></a></span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">forall a. (Display -&gt; X a) -&gt; X a
+</span><span class="hs-identifier hs-var">withDisplay</span></span><span> </span><span class="annot"><span class="annottext">forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="hs-glyph">\</span><span id="local-6989586621679407205"><span class="annot"><span class="annottext">Display
+</span><a href="#local-6989586621679407205"><span class="hs-identifier hs-var">d</span></a></span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-41"></span><span>    </span><span class="hs-keyword">let</span><span> </span><span id="local-6989586621679407203"><span class="annot"><span class="annottext">visibleWins :: [Pixel]
+</span><a href="#local-6989586621679407203"><span class="hs-identifier hs-var hs-var">visibleWins</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">forall a. Maybe (Stack a) -&gt; [a]
+</span><span class="hs-identifier hs-var">W.integrate'</span></span><span> </span><span class="annot"><span class="annottext">forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">forall i l a. Workspace i l a -&gt; Maybe (Stack a)
+</span><span class="hs-identifier hs-var">W.stack</span></span><span> </span><span class="annot"><span class="annottext">forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">forall i l a sid sd. Screen i l a sid sd -&gt; Workspace i l a
+</span><span class="hs-identifier hs-var">W.workspace</span></span><span> </span><span class="annot"><span class="annottext">forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">forall i l a sid sd. StackSet i l a sid sd -&gt; Screen i l a sid sd
+</span><span class="hs-identifier hs-var">W.current</span></span><span> </span><span class="annot"><span class="annottext">forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">WindowSet
+</span><a href="#local-6989586621679407207"><span class="hs-identifier hs-var">s</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-42"></span><span>                   </span><span class="annot"><span class="annottext">forall a. [a] -&gt; [a] -&gt; [a]
+</span><span class="hs-operator hs-var">++</span></span><span> </span><span class="annot"><span class="annottext">forall (t :: * -&gt; *) a b. Foldable t =&gt; (a -&gt; [b]) -&gt; t a -&gt; [b]
+</span><span class="hs-identifier hs-var">concatMap</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">forall a. Maybe (Stack a) -&gt; [a]
+</span><span class="hs-identifier hs-var">W.integrate'</span></span><span> </span><span class="annot"><span class="annottext">forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">forall i l a. Workspace i l a -&gt; Maybe (Stack a)
+</span><span class="hs-identifier hs-var">W.stack</span></span><span> </span><span class="annot"><span class="annottext">forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">forall i l a sid sd. Screen i l a sid sd -&gt; Workspace i l a
+</span><span class="hs-identifier hs-var">W.workspace</span></span><span class="hs-special">)</span><span>
+</span><span id="line-43"></span><span>                                </span><span class="hs-special">(</span><span class="annot"><span class="annottext">forall i l a sid sd. StackSet i l a sid sd -&gt; [Screen i l a sid sd]
+</span><span class="hs-identifier hs-var">W.visible</span></span><span> </span><span class="annot"><span class="annottext">WindowSet
+</span><a href="#local-6989586621679407207"><span class="hs-identifier hs-var">s</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-44"></span><span>        </span><span id="local-6989586621679407195"><span class="annot"><span class="annottext">focused :: Maybe Pixel
+</span><a href="#local-6989586621679407195"><span class="hs-identifier hs-var hs-var">focused</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">forall i l a s sd. StackSet i l a s sd -&gt; Maybe a
+</span><span class="hs-identifier hs-var">W.peek</span></span><span> </span><span class="annot"><span class="annottext">WindowSet
+</span><a href="#local-6989586621679407207"><span class="hs-identifier hs-var">s</span></a></span><span>
+</span><span id="line-45"></span><span>    </span><span class="annot"><span class="annottext">forall (t :: * -&gt; *) (m :: * -&gt; *) a b.
+(Foldable t, Monad m) =&gt;
+(a -&gt; m b) -&gt; t a -&gt; m ()
+</span><span class="hs-identifier hs-var">mapM_</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Display -&gt; Maybe Pixel -&gt; Pixel -&gt; X ()
+</span><a href="XMonad.Hooks.Qubes.html#setQubesBorder"><span class="hs-identifier hs-var">setQubesBorder</span></a></span><span> </span><span class="annot"><span class="annottext">Display
+</span><a href="#local-6989586621679407205"><span class="hs-identifier hs-var">d</span></a></span><span> </span><span class="annot"><span class="annottext">Maybe Pixel
+</span><a href="#local-6989586621679407195"><span class="hs-identifier hs-var">focused</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">[Pixel]
+</span><a href="#local-6989586621679407203"><span class="hs-identifier hs-var">visibleWins</span></a></span><span>
+</span><span id="line-46"></span><span>
+</span><span id="line-47"></span><span class="annot"><a href="XMonad.Hooks.Qubes.html#setQubesBorder"><span class="hs-identifier hs-type">setQubesBorder</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Display</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Maybe</span></span><span> </span><span class="annot"><span class="hs-identifier hs-type">Window</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Window</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">X</span></span><span> </span><span class="hs-special">(</span><span class="hs-special">)</span><span>
+</span><span id="line-48"></span><span id="setQubesBorder"><span class="annot"><span class="annottext">setQubesBorder :: Display -&gt; Maybe Pixel -&gt; Pixel -&gt; X ()
+</span><a href="XMonad.Hooks.Qubes.html#setQubesBorder"><span class="hs-identifier hs-var hs-var">setQubesBorder</span></a></span></span><span> </span><span id="local-6989586621679407190"><span class="annot"><span class="annottext">Display
+</span><a href="#local-6989586621679407190"><span class="hs-identifier hs-var">d</span></a></span></span><span> </span><span id="local-6989586621679407189"><span class="annot"><span class="annottext">Maybe Pixel
+</span><a href="#local-6989586621679407189"><span class="hs-identifier hs-var">focused</span></a></span></span><span> </span><span id="local-6989586621679407188"><span class="annot"><span class="annottext">Pixel
+</span><a href="#local-6989586621679407188"><span class="hs-identifier hs-var">w</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-49"></span><span>    </span><span id="local-6989586621679407187"><span class="annot"><span class="annottext">Maybe [CLong]
+</span><a href="#local-6989586621679407187"><span class="hs-identifier hs-var">s</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">Display -&gt; Pixel -&gt; WorkspaceId -&gt; X (Maybe [CLong])
+</span><a href="XMonad.Hooks.Qubes.html#getCardinalProperty"><span class="hs-identifier hs-var">getCardinalProperty</span></a></span><span> </span><span class="annot"><span class="annottext">Display
+</span><a href="#local-6989586621679407190"><span class="hs-identifier hs-var">d</span></a></span><span> </span><span class="annot"><span class="annottext">Pixel
+</span><a href="#local-6989586621679407188"><span class="hs-identifier hs-var">w</span></a></span><span> </span><span class="annot"><span class="annottext">WorkspaceId
+</span><span class="hs-string">&quot;_QUBES_LABEL_COLOR&quot;</span></span><span>
+</span><span id="line-50"></span><span>    </span><span class="hs-keyword">let</span><span> </span><span id="local-6989586621679407185"><span class="annot"><span class="annottext">border :: Pixel
+</span><a href="#local-6989586621679407185"><span class="hs-identifier hs-var hs-var">border</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Maybe [CLong] -&gt; Maybe Pixel -&gt; Pixel -&gt; Pixel
+</span><a href="XMonad.Hooks.Qubes.html#qubesBorderColour"><span class="hs-identifier hs-var">qubesBorderColour</span></a></span><span> </span><span class="annot"><span class="annottext">Maybe [CLong]
+</span><a href="#local-6989586621679407187"><span class="hs-identifier hs-var">s</span></a></span><span> </span><span class="annot"><span class="annottext">Maybe Pixel
+</span><a href="#local-6989586621679407189"><span class="hs-identifier hs-var">focused</span></a></span><span> </span><span class="annot"><span class="annottext">Pixel
+</span><a href="#local-6989586621679407188"><span class="hs-identifier hs-var">w</span></a></span><span>
+</span><span id="line-51"></span><span>    </span><span class="annot"><span class="annottext">forall (m :: * -&gt; *) a. MonadIO m =&gt; IO a -&gt; m a
+</span><span class="hs-identifier hs-var">io</span></span><span> </span><span class="annot"><span class="annottext">forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">Display -&gt; Pixel -&gt; Pixel -&gt; IO ()
+</span><span class="hs-identifier hs-var">setWindowBorder</span></span><span> </span><span class="annot"><span class="annottext">Display
+</span><a href="#local-6989586621679407190"><span class="hs-identifier hs-var">d</span></a></span><span> </span><span class="annot"><span class="annottext">Pixel
+</span><a href="#local-6989586621679407188"><span class="hs-identifier hs-var">w</span></a></span><span> </span><span class="annot"><span class="annottext">Pixel
+</span><a href="#local-6989586621679407185"><span class="hs-identifier hs-var">border</span></a></span><span>
+</span><span id="line-52"></span><span>
+</span><span id="line-53"></span><span class="annot"><a href="XMonad.Hooks.Qubes.html#qubesBorderColour"><span class="hs-identifier hs-type">qubesBorderColour</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Maybe</span></span><span> </span><span class="hs-special">[</span><span class="annot"><span class="hs-identifier hs-type">CLong</span></span><span class="hs-special">]</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Maybe</span></span><span> </span><span class="annot"><span class="hs-identifier hs-type">Window</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Window</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Pixel</span></span><span>
+</span><span id="line-54"></span><span id="qubesBorderColour"><span class="annot"><span class="annottext">qubesBorderColour :: Maybe [CLong] -&gt; Maybe Pixel -&gt; Pixel -&gt; Pixel
+</span><a href="XMonad.Hooks.Qubes.html#qubesBorderColour"><span class="hs-identifier hs-var hs-var">qubesBorderColour</span></a></span></span><span> </span><span id="local-6989586621679407181"><span class="annot"><span class="annottext">Maybe [CLong]
+</span><a href="#local-6989586621679407181"><span class="hs-identifier hs-var">s</span></a></span></span><span> </span><span id="local-6989586621679407180"><span class="annot"><span class="annottext">Maybe Pixel
+</span><a href="#local-6989586621679407180"><span class="hs-identifier hs-var">focused</span></a></span></span><span> </span><span id="local-6989586621679407179"><span class="annot"><span class="annottext">Pixel
+</span><a href="#local-6989586621679407179"><span class="hs-identifier hs-var">w</span></a></span></span><span> </span><span class="hs-glyph">=</span><span>
+</span><span id="line-55"></span><span>    </span><span class="annot"><span class="annottext">Maybe [CLong] -&gt; EventType -&gt; Pixel
+</span><a href="XMonad.Hooks.Qubes.html#getColour"><span class="hs-identifier hs-var">getColour</span></a></span><span> </span><span class="annot"><span class="annottext">Maybe [CLong]
+</span><a href="#local-6989586621679407181"><span class="hs-identifier hs-var">s</span></a></span><span> </span><span class="hs-special">(</span><span class="hs-keyword">if</span><span> </span><span class="annot"><span class="annottext">forall a. a -&gt; Maybe a
+</span><span class="hs-identifier hs-var">Just</span></span><span> </span><span class="annot"><span class="annottext">Pixel
+</span><a href="#local-6989586621679407179"><span class="hs-identifier hs-var">w</span></a></span><span> </span><span class="annot"><span class="annottext">forall a. Eq a =&gt; a -&gt; a -&gt; Bool
+</span><span class="hs-operator hs-var">==</span></span><span> </span><span class="annot"><span class="annottext">Maybe Pixel
+</span><a href="#local-6989586621679407180"><span class="hs-identifier hs-var">focused</span></a></span><span> </span><span class="hs-keyword">then</span><span> </span><span class="annot"><span class="annottext">EventType
+</span><span class="hs-identifier hs-var">focusIn</span></span><span> </span><span class="hs-keyword">else</span><span> </span><span class="annot"><span class="annottext">EventType
+</span><span class="hs-identifier hs-var">focusOut</span></span><span class="hs-special">)</span><span>
+</span><span id="line-56"></span><span>
+</span><span id="line-57"></span><span class="annot"><a href="XMonad.Hooks.Qubes.html#fadeByte"><span class="hs-identifier hs-type">fadeByte</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Int</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Pixel</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Pixel</span></span><span>
+</span><span id="line-58"></span><span id="fadeByte"><span class="annot"><span class="annottext">fadeByte :: Int -&gt; Pixel -&gt; Pixel
+</span><a href="XMonad.Hooks.Qubes.html#fadeByte"><span class="hs-identifier hs-var hs-var">fadeByte</span></a></span></span><span> </span><span id="local-6989586621679407174"><span class="annot"><span class="annottext">Int
+</span><a href="#local-6989586621679407174"><span class="hs-identifier hs-var">sw</span></a></span></span><span> </span><span id="local-6989586621679407173"><span class="annot"><span class="annottext">Pixel
+</span><a href="#local-6989586621679407173"><span class="hs-identifier hs-var">c</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Pixel
+</span><span class="hs-number">0x7f</span></span><span> </span><span class="annot"><span class="annottext">forall a. Bits a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-operator hs-var">.&amp;.</span></span><span> </span><span class="annot"><span class="annottext">Pixel
+</span><a href="#local-6989586621679407173"><span class="hs-identifier hs-var">c</span></a></span><span> </span><span class="annot"><span class="annottext">forall a. Bits a =&gt; a -&gt; Int -&gt; a
+</span><span class="hs-operator hs-var">`shiftR`</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Int
+</span><a href="#local-6989586621679407174"><span class="hs-identifier hs-var">sw</span></a></span><span> </span><span class="annot"><span class="annottext">forall a. Num a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-operator hs-var">+</span></span><span> </span><span class="annot"><span class="annottext">Int
+</span><span class="hs-number">1</span></span><span class="hs-special">)</span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">forall a. Bits a =&gt; a -&gt; Int -&gt; a
+</span><span class="hs-operator hs-var">`shiftL`</span></span><span> </span><span class="annot"><span class="annottext">Int
+</span><a href="#local-6989586621679407174"><span class="hs-identifier hs-var">sw</span></a></span><span>
+</span><span id="line-59"></span><span>
+</span><span id="line-60"></span><span class="annot"><a href="XMonad.Hooks.Qubes.html#fadeColour"><span class="hs-identifier hs-type">fadeColour</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">EventType</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Pixel</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Pixel</span></span><span>
+</span><span id="line-61"></span><span id="fadeColour"><span class="annot"><span class="annottext">fadeColour :: EventType -&gt; Pixel -&gt; Pixel
+</span><a href="XMonad.Hooks.Qubes.html#fadeColour"><span class="hs-identifier hs-var hs-var">fadeColour</span></a></span></span><span> </span><span id="local-6989586621679407167"><span class="annot"><span class="annottext">EventType
+</span><a href="#local-6989586621679407167"><span class="hs-identifier hs-var">f</span></a></span></span><span> </span><span id="local-6989586621679407166"><span class="annot"><span class="annottext">Pixel
+</span><a href="#local-6989586621679407166"><span class="hs-identifier hs-var">c</span></a></span></span><span>
+</span><span id="line-62"></span><span>    </span><span class="hs-glyph">|</span><span> </span><span class="annot"><span class="annottext">EventType
+</span><a href="#local-6989586621679407167"><span class="hs-identifier hs-var">f</span></a></span><span> </span><span class="annot"><span class="annottext">forall a. Eq a =&gt; a -&gt; a -&gt; Bool
+</span><span class="hs-operator hs-var">==</span></span><span> </span><span class="annot"><span class="annottext">EventType
+</span><span class="hs-identifier hs-var">focusIn</span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Pixel
+</span><a href="#local-6989586621679407166"><span class="hs-identifier hs-var">c</span></a></span><span>
+</span><span id="line-63"></span><span>    </span><span class="hs-glyph">|</span><span> </span><span class="annot"><span class="annottext">Bool
+</span><span class="hs-identifier hs-var">otherwise</span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Int -&gt; Pixel -&gt; Pixel
+</span><a href="XMonad.Hooks.Qubes.html#fadeByte"><span class="hs-identifier hs-var">fadeByte</span></a></span><span> </span><span class="annot"><span class="annottext">Int
+</span><span class="hs-number">16</span></span><span> </span><span class="annot"><span class="annottext">Pixel
+</span><a href="#local-6989586621679407166"><span class="hs-identifier hs-var">c</span></a></span><span> </span><span class="annot"><span class="annottext">forall a. Bits a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-operator hs-var">.|.</span></span><span> </span><span class="annot"><span class="annottext">Int -&gt; Pixel -&gt; Pixel
+</span><a href="XMonad.Hooks.Qubes.html#fadeByte"><span class="hs-identifier hs-var">fadeByte</span></a></span><span> </span><span class="annot"><span class="annottext">Int
+</span><span class="hs-number">8</span></span><span> </span><span class="annot"><span class="annottext">Pixel
+</span><a href="#local-6989586621679407166"><span class="hs-identifier hs-var">c</span></a></span><span> </span><span class="annot"><span class="annottext">forall a. Bits a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-operator hs-var">.|.</span></span><span> </span><span class="annot"><span class="annottext">Int -&gt; Pixel -&gt; Pixel
+</span><a href="XMonad.Hooks.Qubes.html#fadeByte"><span class="hs-identifier hs-var">fadeByte</span></a></span><span> </span><span class="annot"><span class="annottext">Int
+</span><span class="hs-number">0</span></span><span> </span><span class="annot"><span class="annottext">Pixel
+</span><a href="#local-6989586621679407166"><span class="hs-identifier hs-var">c</span></a></span><span>
+</span><span id="line-64"></span><span>
+</span><span id="line-65"></span><span class="annot"><a href="XMonad.Hooks.Qubes.html#getColour"><span class="hs-identifier hs-type">getColour</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Maybe</span></span><span> </span><span class="hs-special">[</span><span class="annot"><span class="hs-identifier hs-type">CLong</span></span><span class="hs-special">]</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">EventType</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Pixel</span></span><span>
+</span><span id="line-66"></span><span id="getColour"><span class="annot"><span class="annottext">getColour :: Maybe [CLong] -&gt; EventType -&gt; Pixel
+</span><a href="XMonad.Hooks.Qubes.html#getColour"><span class="hs-identifier hs-var hs-var">getColour</span></a></span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">Just</span></span><span> </span><span class="hs-special">[</span><span id="local-6989586621679407164"><span class="annot"><span class="annottext">CLong
+</span><a href="#local-6989586621679407164"><span class="hs-identifier hs-var">s</span></a></span></span><span class="hs-special">]</span><span class="hs-special">)</span><span> </span><span id="local-6989586621679407163"><span class="annot"><span class="annottext">EventType
+</span><a href="#local-6989586621679407163"><span class="hs-identifier hs-var">f</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">EventType -&gt; Pixel -&gt; Pixel
+</span><a href="XMonad.Hooks.Qubes.html#fadeColour"><span class="hs-identifier hs-var">fadeColour</span></a></span><span> </span><span class="annot"><span class="annottext">EventType
+</span><a href="#local-6989586621679407163"><span class="hs-identifier hs-var">f</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">forall a b. (Integral a, Num b) =&gt; a -&gt; b
+</span><span class="hs-identifier hs-var">fromIntegral</span></span><span> </span><span class="annot"><span class="annottext">CLong
+</span><a href="#local-6989586621679407164"><span class="hs-identifier hs-var">s</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-67"></span><span class="annot"><a href="XMonad.Hooks.Qubes.html#getColour"><span class="hs-identifier hs-var">getColour</span></a></span><span> </span><span class="annot"><span class="annottext">Maybe [CLong]
+</span><span class="hs-identifier">_</span></span><span> </span><span class="annot"><span class="annottext">EventType
+</span><span class="hs-identifier">_</span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Pixel
+</span><span class="hs-number">0x000000</span></span><span>
+</span><span id="line-68"></span><span>
+</span><span id="line-69"></span><span class="annot"><a href="XMonad.Hooks.Qubes.html#getCardinalProperty"><span class="hs-identifier hs-type">getCardinalProperty</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Display</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Window</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">String</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">X</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">Maybe</span></span><span> </span><span class="hs-special">[</span><span class="annot"><span class="hs-identifier hs-type">CLong</span></span><span class="hs-special">]</span><span class="hs-special">)</span><span>
+</span><span id="line-70"></span><span id="getCardinalProperty"><span class="annot"><span class="annottext">getCardinalProperty :: Display -&gt; Pixel -&gt; WorkspaceId -&gt; X (Maybe [CLong])
+</span><a href="XMonad.Hooks.Qubes.html#getCardinalProperty"><span class="hs-identifier hs-var hs-var">getCardinalProperty</span></a></span></span><span> </span><span id="local-6989586621679407162"><span class="annot"><span class="annottext">Display
+</span><a href="#local-6989586621679407162"><span class="hs-identifier hs-var">d</span></a></span></span><span> </span><span id="local-6989586621679407161"><span class="annot"><span class="annottext">Pixel
+</span><a href="#local-6989586621679407161"><span class="hs-identifier hs-var">w</span></a></span></span><span> </span><span id="local-6989586621679407160"><span class="annot"><span class="annottext">WorkspaceId
+</span><a href="#local-6989586621679407160"><span class="hs-identifier hs-var">p</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-71"></span><span>    </span><span id="local-6989586621679407159"><span class="annot"><span class="annottext">Pixel
+</span><a href="#local-6989586621679407159"><span class="hs-identifier hs-var">a</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">WorkspaceId -&gt; X Pixel
+</span><span class="hs-identifier hs-var">getAtom</span></span><span> </span><span class="annot"><span class="annottext">WorkspaceId
+</span><a href="#local-6989586621679407160"><span class="hs-identifier hs-var">p</span></a></span><span>
+</span><span id="line-72"></span><span>    </span><span class="annot"><span class="annottext">forall (m :: * -&gt; *) a. MonadIO m =&gt; IO a -&gt; m a
+</span><span class="hs-identifier hs-var">io</span></span><span> </span><span class="annot"><span class="annottext">forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">Display -&gt; Pixel -&gt; Pixel -&gt; IO (Maybe [CLong])
+</span><span class="hs-identifier hs-var">getWindowProperty32</span></span><span> </span><span class="annot"><span class="annottext">Display
+</span><a href="#local-6989586621679407162"><span class="hs-identifier hs-var">d</span></a></span><span> </span><span class="annot"><span class="annottext">Pixel
+</span><a href="#local-6989586621679407159"><span class="hs-identifier hs-var">a</span></a></span><span> </span><span class="annot"><span class="annottext">Pixel
+</span><a href="#local-6989586621679407161"><span class="hs-identifier hs-var">w</span></a></span><span>
+</span><span id="line-73"></span></pre></body></html>

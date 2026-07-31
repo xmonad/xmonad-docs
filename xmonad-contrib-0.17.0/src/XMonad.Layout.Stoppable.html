@@ -1,0 +1,362 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd"><html xmlns="http://www.w3.org/1999/xhtml"><head><link rel="stylesheet" type="text/css" href="style.css" /><script type="text/javascript" src="highlight.js"></script></head><body><pre><span class="hs-pragma">{-# LANGUAGE MultiParamTypeClasses, TypeSynonymInstances #-}</span><span>
+</span><span id="line-2"></span><span class="hs-pragma">{-# LANGUAGE PatternGuards #-}</span><span>
+</span><span id="line-3"></span><span class="hs-comment">-----------------------------------------------------------------------------</span><span>
+</span><span id="line-4"></span><span class="hs-comment">-- |</span><span>
+</span><span id="line-5"></span><span class="hs-comment">-- Module      :  XMonad.Layout.Stoppable</span><span>
+</span><span id="line-6"></span><span class="hs-comment">-- Description :  A layout modifier to stop all non-visible processes.</span><span>
+</span><span id="line-7"></span><span class="hs-comment">-- Copyright   :  (c) Anton Vorontsov &lt;anton@enomsg.org&gt; 2014</span><span>
+</span><span id="line-8"></span><span class="hs-comment">-- License     :  BSD-style (as xmonad)</span><span>
+</span><span id="line-9"></span><span class="hs-comment">--</span><span>
+</span><span id="line-10"></span><span class="hs-comment">-- Maintainer  :  Anton Vorontsov &lt;anton@enomsg.org&gt;</span><span>
+</span><span id="line-11"></span><span class="hs-comment">-- Stability   :  unstable</span><span>
+</span><span id="line-12"></span><span class="hs-comment">-- Portability :  unportable</span><span>
+</span><span id="line-13"></span><span class="hs-comment">--</span><span>
+</span><span id="line-14"></span><span class="hs-comment">-- This module implements a special kind of layout modifier, which when</span><span>
+</span><span id="line-15"></span><span class="hs-comment">-- applied to a layout, causes xmonad to stop all non-visible processes.</span><span>
+</span><span id="line-16"></span><span class="hs-comment">-- In a way, this is a sledge-hammer for applications that drain power.</span><span>
+</span><span id="line-17"></span><span class="hs-comment">-- For example, given a web browser on a stoppable workspace, once the</span><span>
+</span><span id="line-18"></span><span class="hs-comment">-- workspace is hidden the web browser will be stopped.</span><span>
+</span><span id="line-19"></span><span class="hs-comment">--</span><span>
+</span><span id="line-20"></span><span class="hs-comment">-- Note that the stopped application won't be able to communicate with X11</span><span>
+</span><span id="line-21"></span><span class="hs-comment">-- clipboard. For this, the module actually stops applications after a</span><span>
+</span><span id="line-22"></span><span class="hs-comment">-- certain delay, giving a chance for a user to complete copy-paste</span><span>
+</span><span id="line-23"></span><span class="hs-comment">-- sequence. By default, the delay equals to 15 seconds, it is</span><span>
+</span><span id="line-24"></span><span class="hs-comment">-- configurable via 'Stoppable' constructor.</span><span>
+</span><span id="line-25"></span><span class="hs-comment">--</span><span>
+</span><span id="line-26"></span><span class="hs-comment">-- The stoppable modifier prepends a mark (by default equals to</span><span>
+</span><span id="line-27"></span><span class="hs-comment">-- \&quot;Stoppable\&quot;) to the layout description (alternatively, you can choose</span><span>
+</span><span id="line-28"></span><span class="hs-comment">-- your own mark and use it with 'Stoppable' constructor). The stoppable</span><span>
+</span><span id="line-29"></span><span class="hs-comment">-- layout (identified by a mark) spans to multiple workspaces, letting you</span><span>
+</span><span id="line-30"></span><span class="hs-comment">-- to create groups of stoppable workspaces that only stop processes when</span><span>
+</span><span id="line-31"></span><span class="hs-comment">-- none of the workspaces are visible, and conversely, unfreezing all</span><span>
+</span><span id="line-32"></span><span class="hs-comment">-- processes even if one of the stoppable workspaces are visible.</span><span>
+</span><span id="line-33"></span><span class="hs-comment">--</span><span>
+</span><span id="line-34"></span><span class="hs-comment">-- To stop the process we use signals, which works for most cases. For</span><span>
+</span><span id="line-35"></span><span class="hs-comment">-- processes that tinker with signal handling (debuggers), another</span><span>
+</span><span id="line-36"></span><span class="hs-comment">-- (Linux-centric) approach may be used. See</span><span>
+</span><span id="line-37"></span><span class="hs-comment">-- &lt;https://www.kernel.org/doc/Documentation/cgroups/freezer-subsystem.txt&gt;</span><span>
+</span><span id="line-38"></span><span class="hs-comment">--</span><span>
+</span><span id="line-39"></span><span class="hs-comment">-- * Note</span><span>
+</span><span id="line-40"></span><span class="hs-comment">-- This module doesn't work on programs that do fancy things with processes</span><span>
+</span><span id="line-41"></span><span class="hs-comment">-- (such as Chromium) and programs that do not set _NET_WM_PID.</span><span>
+</span><span id="line-42"></span><span class="hs-comment">-----------------------------------------------------------------------------</span><span>
+</span><span id="line-43"></span><span>
+</span><span id="line-44"></span><span class="hs-keyword">module</span><span> </span><span class="hs-identifier">XMonad.Layout.Stoppable</span><span>
+</span><span id="line-45"></span><span>    </span><span class="hs-special">(</span><span> </span><span class="annot"><span class="hs-comment">-- $usage</span></span><span>
+</span><span id="line-46"></span><span>      </span><span class="annot"><a href="XMonad.Layout.Stoppable.html#Stoppable"><span class="hs-identifier">Stoppable</span></a></span><span class="hs-special">(</span><span class="hs-glyph">..</span><span class="hs-special">)</span><span>
+</span><span id="line-47"></span><span>    </span><span class="hs-special">,</span><span> </span><span class="annot"><a href="XMonad.Layout.Stoppable.html#stoppable"><span class="hs-identifier">stoppable</span></a></span><span>
+</span><span id="line-48"></span><span>    </span><span class="hs-special">)</span><span> </span><span class="hs-keyword">where</span><span>
+</span><span id="line-49"></span><span>
+</span><span id="line-50"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><span class="hs-identifier">XMonad</span></span><span>
+</span><span id="line-51"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><a href="XMonad.Prelude.html"><span class="hs-identifier">XMonad.Prelude</span></a></span><span>
+</span><span id="line-52"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><a href="XMonad.Actions.WithAll.html"><span class="hs-identifier">XMonad.Actions.WithAll</span></a></span><span>
+</span><span id="line-53"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><a href="XMonad.Util.WindowProperties.html"><span class="hs-identifier">XMonad.Util.WindowProperties</span></a></span><span>
+</span><span id="line-54"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><a href="XMonad.Util.RemoteWindows.html"><span class="hs-identifier">XMonad.Util.RemoteWindows</span></a></span><span>
+</span><span id="line-55"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><a href="XMonad.Util.Timer.html"><span class="hs-identifier">XMonad.Util.Timer</span></a></span><span>
+</span><span id="line-56"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><span class="hs-identifier">XMonad.StackSet</span></span><span> </span><span class="hs-keyword">hiding</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier">filter</span></span><span class="hs-special">)</span><span>
+</span><span id="line-57"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><a href="XMonad.Layout.LayoutModifier.html"><span class="hs-identifier">XMonad.Layout.LayoutModifier</span></a></span><span>
+</span><span id="line-58"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><span class="hs-identifier">System.Posix.Signals</span></span><span>
+</span><span id="line-59"></span><span>
+</span><span id="line-60"></span><span class="hs-comment">-- $usage</span><span>
+</span><span id="line-61"></span><span class="hs-comment">-- You can use this module with the following in your @~\/.xmonad\/xmonad.hs@:</span><span>
+</span><span id="line-62"></span><span class="hs-comment">--</span><span>
+</span><span id="line-63"></span><span class="hs-comment">-- &gt; import XMonad</span><span>
+</span><span id="line-64"></span><span class="hs-comment">-- &gt; import XMonad.Layout.Stoppable</span><span>
+</span><span id="line-65"></span><span class="hs-comment">-- &gt;</span><span>
+</span><span id="line-66"></span><span class="hs-comment">-- &gt; main = xmonad def</span><span>
+</span><span id="line-67"></span><span class="hs-comment">-- &gt;    { layoutHook = layoutHook def ||| stoppable (layoutHook def) }</span><span>
+</span><span id="line-68"></span><span class="hs-comment">--</span><span>
+</span><span id="line-69"></span><span class="hs-comment">-- Note that the module has to distinguish between local and remote</span><span>
+</span><span id="line-70"></span><span class="hs-comment">-- proccesses, which means that it needs to know the hostname, so it looks</span><span>
+</span><span id="line-71"></span><span class="hs-comment">-- for environment variables (e.g. HOST).</span><span>
+</span><span id="line-72"></span><span class="hs-comment">--</span><span>
+</span><span id="line-73"></span><span class="hs-comment">-- Environment variables will work for most cases, but won't work if the</span><span>
+</span><span id="line-74"></span><span class="hs-comment">-- hostname changes. To cover dynamic hostnames case, in addition to</span><span>
+</span><span id="line-75"></span><span class="hs-comment">-- layoutHook you have to provide manageHook from</span><span>
+</span><span id="line-76"></span><span class="hs-comment">-- &quot;XMonad.Util.RemoteWindows&quot; module.</span><span>
+</span><span id="line-77"></span><span class="hs-comment">--</span><span>
+</span><span id="line-78"></span><span class="hs-comment">-- For more detailed instructions on editing the layoutHook see:</span><span>
+</span><span id="line-79"></span><span class="hs-comment">--</span><span>
+</span><span id="line-80"></span><span class="hs-comment">-- &quot;XMonad.Doc.Extending#Editing_the_layout_hook&quot;</span><span>
+</span><span id="line-81"></span><span>
+</span><span id="line-82"></span><span class="annot"><a href="XMonad.Layout.Stoppable.html#signalWindow"><span class="hs-identifier hs-type">signalWindow</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Signal</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Window</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">X</span></span><span> </span><span class="hs-special">(</span><span class="hs-special">)</span><span>
+</span><span id="line-83"></span><span id="signalWindow"><span class="annot"><span class="annottext">signalWindow :: Signal -&gt; Window -&gt; X ()
+</span><a href="XMonad.Layout.Stoppable.html#signalWindow"><span class="hs-identifier hs-var hs-var">signalWindow</span></a></span></span><span> </span><span id="local-6989586621679393566"><span class="annot"><span class="annottext">Signal
+</span><a href="#local-6989586621679393566"><span class="hs-identifier hs-var">s</span></a></span></span><span> </span><span id="local-6989586621679393565"><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679393565"><span class="hs-identifier hs-var">w</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-84"></span><span>    </span><span id="local-6989586621679393564"><span class="annot"><span class="annottext">Maybe [CLong]
+</span><a href="#local-6989586621679393564"><span class="hs-identifier hs-var">pid</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">String -&gt; Window -&gt; X (Maybe [CLong])
+</span><a href="XMonad.Util.WindowProperties.html#getProp32s"><span class="hs-identifier hs-var">getProp32s</span></a></span><span> </span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot;_NET_WM_PID&quot;</span></span><span> </span><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679393565"><span class="hs-identifier hs-var">w</span></a></span><span>
+</span><span id="line-85"></span><span>    </span><span class="annot"><span class="annottext">IO () -&gt; X ()
+forall (m :: * -&gt; *) a. MonadIO m =&gt; IO a -&gt; m a
+</span><span class="hs-identifier hs-var">io</span></span><span> </span><span class="annot"><span class="annottext">(IO () -&gt; X ()) -&gt; IO () -&gt; X ()
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Signal -&gt; ProcessID -&gt; IO ()
+</span><span class="hs-identifier hs-var">signalProcess</span></span><span> </span><span class="annot"><span class="annottext">Signal
+</span><a href="#local-6989586621679393566"><span class="hs-identifier hs-var">s</span></a></span><span> </span><span class="annot"><span class="annottext">(ProcessID -&gt; IO ()) -&gt; (CLong -&gt; ProcessID) -&gt; CLong -&gt; IO ()
+forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">CLong -&gt; ProcessID
+forall a b. (Integral a, Num b) =&gt; a -&gt; b
+</span><span class="hs-identifier hs-var">fromIntegral</span></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">(CLong -&gt; IO ()) -&gt; [CLong] -&gt; IO ()
+forall (t :: * -&gt; *) (m :: * -&gt; *) a b.
+(Foldable t, Monad m) =&gt;
+(a -&gt; m b) -&gt; t a -&gt; m ()
+</span><span class="hs-operator hs-var">`mapM_`</span></span><span> </span><span class="annot"><span class="annottext">[CLong] -&gt; Maybe [CLong] -&gt; [CLong]
+forall a. a -&gt; Maybe a -&gt; a
+</span><span class="hs-identifier hs-var">fromMaybe</span></span><span> </span><span class="hs-special">[</span><span class="hs-special">]</span><span> </span><span class="annot"><span class="annottext">Maybe [CLong]
+</span><a href="#local-6989586621679393564"><span class="hs-identifier hs-var">pid</span></a></span><span>
+</span><span id="line-86"></span><span>
+</span><span id="line-87"></span><span class="annot"><a href="XMonad.Layout.Stoppable.html#signalLocalWindow"><span class="hs-identifier hs-type">signalLocalWindow</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Signal</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Window</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">X</span></span><span> </span><span class="hs-special">(</span><span class="hs-special">)</span><span>
+</span><span id="line-88"></span><span id="signalLocalWindow"><span class="annot"><span class="annottext">signalLocalWindow :: Signal -&gt; Window -&gt; X ()
+</span><a href="XMonad.Layout.Stoppable.html#signalLocalWindow"><span class="hs-identifier hs-var hs-var">signalLocalWindow</span></a></span></span><span> </span><span id="local-6989586621679393556"><span class="annot"><span class="annottext">Signal
+</span><a href="#local-6989586621679393556"><span class="hs-identifier hs-var">s</span></a></span></span><span> </span><span id="local-6989586621679393555"><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679393555"><span class="hs-identifier hs-var">w</span></a></span></span><span>  </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Window -&gt; X Bool
+</span><a href="XMonad.Util.RemoteWindows.html#isLocalWindow"><span class="hs-identifier hs-var">isLocalWindow</span></a></span><span> </span><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679393555"><span class="hs-identifier hs-var">w</span></a></span><span> </span><span class="annot"><span class="annottext">X Bool -&gt; (Bool -&gt; X ()) -&gt; X ()
+forall (m :: * -&gt; *) a b. Monad m =&gt; m a -&gt; (a -&gt; m b) -&gt; m b
+</span><span class="hs-operator hs-var">&gt;&gt;=</span></span><span> </span><span class="annot"><span class="annottext">(Bool -&gt; X () -&gt; X ()) -&gt; X () -&gt; Bool -&gt; X ()
+forall a b c. (a -&gt; b -&gt; c) -&gt; b -&gt; a -&gt; c
+</span><span class="hs-identifier hs-var">flip</span></span><span> </span><span class="annot"><span class="annottext">Bool -&gt; X () -&gt; X ()
+forall (f :: * -&gt; *). Applicative f =&gt; Bool -&gt; f () -&gt; f ()
+</span><span class="hs-identifier hs-var">when</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Signal -&gt; Window -&gt; X ()
+</span><a href="XMonad.Layout.Stoppable.html#signalWindow"><span class="hs-identifier hs-var">signalWindow</span></a></span><span> </span><span class="annot"><span class="annottext">Signal
+</span><a href="#local-6989586621679393556"><span class="hs-identifier hs-var">s</span></a></span><span> </span><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679393555"><span class="hs-identifier hs-var">w</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-89"></span><span>
+</span><span id="line-90"></span><span id="local-6989586621679393641"><span id="local-6989586621679393642"><span id="local-6989586621679393643"><span class="annot"><a href="XMonad.Layout.Stoppable.html#withAllOn"><span class="hs-identifier hs-type">withAllOn</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="hs-special">(</span><span class="annot"><a href="#local-6989586621679393643"><span class="hs-identifier hs-type">a</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">X</span></span><span> </span><span class="hs-special">(</span><span class="hs-special">)</span><span class="hs-special">)</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Workspace</span></span><span> </span><span class="annot"><a href="#local-6989586621679393642"><span class="hs-identifier hs-type">i</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679393641"><span class="hs-identifier hs-type">l</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679393643"><span class="hs-identifier hs-type">a</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">X</span></span><span> </span><span class="hs-special">(</span><span class="hs-special">)</span></span></span></span><span>
+</span><span id="line-91"></span><span id="withAllOn"><span class="annot"><span class="annottext">withAllOn :: (a -&gt; X ()) -&gt; Workspace i l a -&gt; X ()
+</span><a href="XMonad.Layout.Stoppable.html#withAllOn"><span class="hs-identifier hs-var hs-var">withAllOn</span></a></span></span><span> </span><span id="local-6989586621679393550"><span class="annot"><span class="annottext">a -&gt; X ()
+</span><a href="#local-6989586621679393550"><span class="hs-identifier hs-var">f</span></a></span></span><span> </span><span id="local-6989586621679393549"><span class="annot"><span class="annottext">Workspace i l a
+</span><a href="#local-6989586621679393549"><span class="hs-identifier hs-var">wspc</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">a -&gt; X ()
+</span><a href="#local-6989586621679393550"><span class="hs-identifier hs-var">f</span></a></span><span> </span><span class="annot"><span class="annottext">(a -&gt; X ()) -&gt; [a] -&gt; X ()
+forall (t :: * -&gt; *) (m :: * -&gt; *) a b.
+(Foldable t, Monad m) =&gt;
+(a -&gt; m b) -&gt; t a -&gt; m ()
+</span><span class="hs-operator hs-var">`mapM_`</span></span><span> </span><span class="annot"><span class="annottext">Maybe (Stack a) -&gt; [a]
+forall a. Maybe (Stack a) -&gt; [a]
+</span><span class="hs-identifier hs-var">integrate'</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Workspace i l a -&gt; Maybe (Stack a)
+forall i l a. Workspace i l a -&gt; Maybe (Stack a)
+</span><span class="hs-identifier hs-var hs-var">stack</span></span><span> </span><span class="annot"><span class="annottext">Workspace i l a
+</span><a href="#local-6989586621679393549"><span class="hs-identifier hs-var">wspc</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-92"></span><span>
+</span><span id="line-93"></span><span id="local-6989586621679393630"><span id="local-6989586621679393631"><span id="local-6989586621679393632"><span class="annot"><a href="XMonad.Layout.Stoppable.html#withAllFiltered"><span class="hs-identifier hs-type">withAllFiltered</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">Workspace</span></span><span> </span><span class="annot"><a href="#local-6989586621679393632"><span class="hs-identifier hs-type">i</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679393631"><span class="hs-identifier hs-type">l</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679393630"><span class="hs-identifier hs-type">a</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Bool</span></span><span class="hs-special">)</span><span>
+</span><span id="line-94"></span><span>                </span><span class="hs-glyph">-&gt;</span><span> </span><span class="hs-special">[</span><span class="annot"><span class="hs-identifier hs-type">Workspace</span></span><span> </span><span class="annot"><a href="#local-6989586621679393632"><span class="hs-identifier hs-type">i</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679393631"><span class="hs-identifier hs-type">l</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679393630"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">]</span><span>
+</span><span id="line-95"></span><span>                </span><span class="hs-glyph">-&gt;</span><span> </span><span class="hs-special">(</span><span class="annot"><a href="#local-6989586621679393630"><span class="hs-identifier hs-type">a</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">X</span></span><span> </span><span class="hs-special">(</span><span class="hs-special">)</span><span class="hs-special">)</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">X</span></span><span> </span><span class="hs-special">(</span><span class="hs-special">)</span></span></span></span><span>
+</span><span id="line-96"></span><span id="withAllFiltered"><span class="annot"><span class="annottext">withAllFiltered :: (Workspace i l a -&gt; Bool)
+-&gt; [Workspace i l a] -&gt; (a -&gt; X ()) -&gt; X ()
+</span><a href="XMonad.Layout.Stoppable.html#withAllFiltered"><span class="hs-identifier hs-var hs-var">withAllFiltered</span></a></span></span><span> </span><span id="local-6989586621679393545"><span class="annot"><span class="annottext">Workspace i l a -&gt; Bool
+</span><a href="#local-6989586621679393545"><span class="hs-identifier hs-var">p</span></a></span></span><span> </span><span id="local-6989586621679393544"><span class="annot"><span class="annottext">[Workspace i l a]
+</span><a href="#local-6989586621679393544"><span class="hs-identifier hs-var">wspcs</span></a></span></span><span> </span><span id="local-6989586621679393543"><span class="annot"><span class="annottext">a -&gt; X ()
+</span><a href="#local-6989586621679393543"><span class="hs-identifier hs-var">f</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">(a -&gt; X ()) -&gt; Workspace i l a -&gt; X ()
+forall a i l. (a -&gt; X ()) -&gt; Workspace i l a -&gt; X ()
+</span><a href="XMonad.Layout.Stoppable.html#withAllOn"><span class="hs-identifier hs-var">withAllOn</span></a></span><span> </span><span class="annot"><span class="annottext">a -&gt; X ()
+</span><a href="#local-6989586621679393543"><span class="hs-identifier hs-var">f</span></a></span><span> </span><span class="annot"><span class="annottext">(Workspace i l a -&gt; X ()) -&gt; [Workspace i l a] -&gt; X ()
+forall (t :: * -&gt; *) (m :: * -&gt; *) a b.
+(Foldable t, Monad m) =&gt;
+(a -&gt; m b) -&gt; t a -&gt; m ()
+</span><span class="hs-operator hs-var">`mapM_`</span></span><span> </span><span class="annot"><span class="annottext">(Workspace i l a -&gt; Bool) -&gt; [Workspace i l a] -&gt; [Workspace i l a]
+forall a. (a -&gt; Bool) -&gt; [a] -&gt; [a]
+</span><span class="hs-identifier hs-var">filter</span></span><span> </span><span class="annot"><span class="annottext">Workspace i l a -&gt; Bool
+</span><a href="#local-6989586621679393545"><span class="hs-identifier hs-var">p</span></a></span><span> </span><span class="annot"><span class="annottext">[Workspace i l a]
+</span><a href="#local-6989586621679393544"><span class="hs-identifier hs-var">wspcs</span></a></span><span>
+</span><span id="line-97"></span><span>
+</span><span id="line-98"></span><span class="annot"><a href="XMonad.Layout.Stoppable.html#sigStoppableWorkspacesHook"><span class="hs-identifier hs-type">sigStoppableWorkspacesHook</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">String</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">X</span></span><span> </span><span class="hs-special">(</span><span class="hs-special">)</span><span>
+</span><span id="line-99"></span><span id="sigStoppableWorkspacesHook"><span class="annot"><span class="annottext">sigStoppableWorkspacesHook :: String -&gt; X ()
+</span><a href="XMonad.Layout.Stoppable.html#sigStoppableWorkspacesHook"><span class="hs-identifier hs-var hs-var">sigStoppableWorkspacesHook</span></a></span></span><span> </span><span id="local-6989586621679393541"><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679393541"><span class="hs-identifier hs-var">k</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-100"></span><span>    </span><span id="local-6989586621679393540"><span class="annot"><span class="annottext">WindowSet
+</span><a href="#local-6989586621679393540"><span class="hs-identifier hs-var">ws</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">(XState -&gt; WindowSet) -&gt; X WindowSet
+forall s (m :: * -&gt; *) a. MonadState s m =&gt; (s -&gt; a) -&gt; m a
+</span><span class="hs-identifier hs-var">gets</span></span><span> </span><span class="annot"><span class="annottext">XState -&gt; WindowSet
+</span><span class="hs-identifier hs-var hs-var">windowset</span></span><span>
+</span><span id="line-101"></span><span>    </span><span class="annot"><span class="annottext">(Workspace String (Layout Window) Window -&gt; Bool)
+-&gt; [Workspace String (Layout Window) Window]
+-&gt; (Window -&gt; X ())
+-&gt; X ()
+forall i l a.
+(Workspace i l a -&gt; Bool)
+-&gt; [Workspace i l a] -&gt; (a -&gt; X ()) -&gt; X ()
+</span><a href="XMonad.Layout.Stoppable.html#withAllFiltered"><span class="hs-identifier hs-var">withAllFiltered</span></a></span><span> </span><span class="annot"><span class="annottext">Workspace String (Layout Window) Window -&gt; Bool
+forall (layout :: * -&gt; *) a i a.
+LayoutClass layout a =&gt;
+Workspace i (layout a) a -&gt; Bool
+</span><a href="#local-6989586621679393537"><span class="hs-identifier hs-var">isStoppable</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">WindowSet -&gt; [Workspace String (Layout Window) Window]
+forall i l a sid sd. StackSet i l a sid sd -&gt; [Workspace i l a]
+</span><span class="hs-identifier hs-var hs-var">hidden</span></span><span> </span><span class="annot"><span class="annottext">WindowSet
+</span><a href="#local-6989586621679393540"><span class="hs-identifier hs-var">ws</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Signal -&gt; Window -&gt; X ()
+</span><a href="XMonad.Layout.Stoppable.html#signalLocalWindow"><span class="hs-identifier hs-var">signalLocalWindow</span></a></span><span> </span><span class="annot"><span class="annottext">Signal
+</span><span class="hs-identifier hs-var">sigSTOP</span></span><span class="hs-special">)</span><span>
+</span><span id="line-102"></span><span>  </span><span class="hs-keyword">where</span><span>
+</span><span id="line-103"></span><span>    </span><span id="local-6989586621679393537"><span class="annot"><span class="annottext">isStoppable :: Workspace i (layout a) a -&gt; Bool
+</span><a href="#local-6989586621679393537"><span class="hs-identifier hs-var hs-var">isStoppable</span></a></span></span><span> </span><span id="local-6989586621679393534"><span class="annot"><span class="annottext">Workspace i (layout a) a
+</span><a href="#local-6989586621679393534"><span class="hs-identifier hs-var">ws</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679393541"><span class="hs-identifier hs-var">k</span></a></span><span> </span><span class="annot"><span class="annottext">String -&gt; [String] -&gt; Bool
+forall (t :: * -&gt; *) a. (Foldable t, Eq a) =&gt; a -&gt; t a -&gt; Bool
+</span><span class="hs-operator hs-var">`elem`</span></span><span> </span><span class="annot"><span class="annottext">String -&gt; [String]
+</span><span class="hs-identifier hs-var">words</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">layout a -&gt; String
+forall (layout :: * -&gt; *) a.
+LayoutClass layout a =&gt;
+layout a -&gt; String
+</span><span class="hs-identifier hs-var">description</span></span><span> </span><span class="annot"><span class="annottext">(layout a -&gt; String) -&gt; layout a -&gt; String
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">Workspace i (layout a) a -&gt; layout a
+forall i l a. Workspace i l a -&gt; l
+</span><span class="hs-identifier hs-var hs-var">layout</span></span><span> </span><span class="annot"><span class="annottext">Workspace i (layout a) a
+</span><a href="#local-6989586621679393534"><span class="hs-identifier hs-var">ws</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-104"></span><span>
+</span><span id="line-105"></span><span class="hs-comment">-- | Data type for ModifiedLayout. The constructor lets you to specify a</span><span>
+</span><span id="line-106"></span><span class="hs-comment">-- custom mark/description modifier and a delay. You can also use</span><span>
+</span><span id="line-107"></span><span class="hs-comment">-- 'stoppable' helper function.</span><span>
+</span><span id="line-108"></span><span class="hs-keyword">data</span><span> </span><span id="Stoppable"><span class="annot"><a href="XMonad.Layout.Stoppable.html#Stoppable"><span class="hs-identifier hs-var">Stoppable</span></a></span></span><span> </span><span id="local-6989586621679393579"><span class="annot"><a href="#local-6989586621679393579"><span class="hs-identifier hs-type">a</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span id="Stoppable"><span class="annot"><a href="XMonad.Layout.Stoppable.html#Stoppable"><span class="hs-identifier hs-var">Stoppable</span></a></span></span><span>
+</span><span id="line-109"></span><span>    </span><span class="hs-special">{</span><span> </span><span id="mark"><span class="annot"><span class="annottext">Stoppable a -&gt; String
+</span><a href="XMonad.Layout.Stoppable.html#mark"><span class="hs-identifier hs-var hs-var">mark</span></a></span></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">String</span></span><span>
+</span><span id="line-110"></span><span>    </span><span class="hs-special">,</span><span> </span><span id="delay"><span class="annot"><span class="annottext">Stoppable a -&gt; Rational
+</span><a href="XMonad.Layout.Stoppable.html#delay"><span class="hs-identifier hs-var hs-var">delay</span></a></span></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Rational</span></span><span>
+</span><span id="line-111"></span><span>    </span><span class="hs-special">,</span><span> </span><span id="timer"><span class="annot"><span class="annottext">Stoppable a -&gt; Maybe TimerId
+</span><a href="XMonad.Layout.Stoppable.html#timer"><span class="hs-identifier hs-var hs-var">timer</span></a></span></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Maybe</span></span><span> </span><span class="annot"><a href="XMonad.Util.Timer.html#TimerId"><span class="hs-identifier hs-type">TimerId</span></a></span><span>
+</span><span id="line-112"></span><span>    </span><span class="hs-special">}</span><span> </span><span class="hs-keyword">deriving</span><span> </span><span class="hs-special">(</span><span id="local-6989586621679393520"><span id="local-6989586621679393522"><span id="local-6989586621679393524"><span class="annot"><span class="annottext">TimerId -&gt; Stoppable a -&gt; ShowS
+[Stoppable a] -&gt; ShowS
+Stoppable a -&gt; String
+(TimerId -&gt; Stoppable a -&gt; ShowS)
+-&gt; (Stoppable a -&gt; String)
+-&gt; ([Stoppable a] -&gt; ShowS)
+-&gt; Show (Stoppable a)
+forall a. TimerId -&gt; Stoppable a -&gt; ShowS
+forall a. [Stoppable a] -&gt; ShowS
+forall a. Stoppable a -&gt; String
+forall a.
+(TimerId -&gt; a -&gt; ShowS)
+-&gt; (a -&gt; String) -&gt; ([a] -&gt; ShowS) -&gt; Show a
+showList :: [Stoppable a] -&gt; ShowS
+$cshowList :: forall a. [Stoppable a] -&gt; ShowS
+show :: Stoppable a -&gt; String
+$cshow :: forall a. Stoppable a -&gt; String
+showsPrec :: TimerId -&gt; Stoppable a -&gt; ShowS
+$cshowsPrec :: forall a. TimerId -&gt; Stoppable a -&gt; ShowS
+</span><span class="hs-identifier hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var">Show</span></span></span></span></span><span class="hs-special">,</span><span id="local-6989586621679393511"><span id="local-6989586621679393513"><span id="local-6989586621679393515"><span id="local-6989586621679393517"><span class="annot"><span class="annottext">ReadPrec [Stoppable a]
+ReadPrec (Stoppable a)
+TimerId -&gt; ReadS (Stoppable a)
+ReadS [Stoppable a]
+(TimerId -&gt; ReadS (Stoppable a))
+-&gt; ReadS [Stoppable a]
+-&gt; ReadPrec (Stoppable a)
+-&gt; ReadPrec [Stoppable a]
+-&gt; Read (Stoppable a)
+forall a. ReadPrec [Stoppable a]
+forall a. ReadPrec (Stoppable a)
+forall a. TimerId -&gt; ReadS (Stoppable a)
+forall a. ReadS [Stoppable a]
+forall a.
+(TimerId -&gt; ReadS a)
+-&gt; ReadS [a] -&gt; ReadPrec a -&gt; ReadPrec [a] -&gt; Read a
+readListPrec :: ReadPrec [Stoppable a]
+$creadListPrec :: forall a. ReadPrec [Stoppable a]
+readPrec :: ReadPrec (Stoppable a)
+$creadPrec :: forall a. ReadPrec (Stoppable a)
+readList :: ReadS [Stoppable a]
+$creadList :: forall a. ReadS [Stoppable a]
+readsPrec :: TimerId -&gt; ReadS (Stoppable a)
+$creadsPrec :: forall a. TimerId -&gt; ReadS (Stoppable a)
+</span><span class="hs-identifier hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var">Read</span></span></span></span></span></span><span class="hs-special">)</span><span>
+</span><span id="line-113"></span><span>
+</span><span id="line-114"></span><span class="hs-keyword">instance</span><span> </span><span id="local-6989586621679393489"><span id="local-6989586621679393492"><span id="local-6989586621679393495"><span id="local-6989586621679393497"><span id="local-6989586621679393499"><span id="local-6989586621679393501"><span id="local-6989586621679393504"><span id="local-6989586621679393506"><span class="annot"><a href="XMonad.Layout.LayoutModifier.html#LayoutModifier"><span class="hs-identifier hs-type">LayoutModifier</span></a></span><span> </span><span class="annot"><a href="XMonad.Layout.Stoppable.html#Stoppable"><span class="hs-identifier hs-type">Stoppable</span></a></span><span> </span><span class="annot"><span class="hs-identifier hs-type">Window</span></span></span></span></span></span></span></span></span></span><span> </span><span class="hs-keyword">where</span><span>
+</span><span id="line-115"></span><span>    </span><span id="local-6989586621679393487"><span class="annot"><span class="annottext">modifierDescription :: Stoppable Window -&gt; String
+</span><a href="XMonad.Layout.LayoutModifier.html#modifierDescription"><span class="hs-identifier hs-var hs-var hs-var hs-var">modifierDescription</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Stoppable Window -&gt; String
+forall a. Stoppable a -&gt; String
+</span><a href="XMonad.Layout.Stoppable.html#mark"><span class="hs-identifier hs-var hs-var">mark</span></a></span><span>
+</span><span id="line-116"></span><span>
+</span><span id="line-117"></span><span>    </span><span id="local-6989586621679393485"><span class="annot"><span class="annottext">hook :: Stoppable Window -&gt; X ()
+</span><a href="XMonad.Layout.LayoutModifier.html#hook"><span class="hs-identifier hs-var hs-var hs-var hs-var">hook</span></a></span></span><span> </span><span class="annot"><span class="annottext">Stoppable Window
+</span><span class="hs-identifier">_</span></span><span>   </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">(Window -&gt; X ()) -&gt; X ()
+</span><a href="XMonad.Actions.WithAll.html#withAll"><span class="hs-identifier hs-var">withAll</span></a></span><span> </span><span class="annot"><span class="annottext">((Window -&gt; X ()) -&gt; X ()) -&gt; (Window -&gt; X ()) -&gt; X ()
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">Signal -&gt; Window -&gt; X ()
+</span><a href="XMonad.Layout.Stoppable.html#signalLocalWindow"><span class="hs-identifier hs-var">signalLocalWindow</span></a></span><span> </span><span class="annot"><span class="annottext">Signal
+</span><span class="hs-identifier hs-var">sigCONT</span></span><span>
+</span><span id="line-118"></span><span>
+</span><span id="line-119"></span><span>    </span><span id="local-6989586621679393481"><span class="annot"><span class="annottext">handleMess :: Stoppable Window -&gt; SomeMessage -&gt; X (Maybe (Stoppable Window))
+</span><a href="XMonad.Layout.LayoutModifier.html#handleMess"><span class="hs-identifier hs-var hs-var hs-var hs-var">handleMess</span></a></span></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="XMonad.Layout.Stoppable.html#Stoppable"><span class="hs-identifier hs-type">Stoppable</span></a></span><span> </span><span id="local-6989586621679393479"><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679393479"><span class="hs-identifier hs-var">m</span></a></span></span><span> </span><span class="annot"><span class="annottext">Rational
+</span><span class="hs-identifier">_</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">Just</span></span><span> </span><span id="local-6989586621679393478"><span class="annot"><span class="annottext">TimerId
+</span><a href="#local-6989586621679393478"><span class="hs-identifier hs-var">tid</span></a></span></span><span class="hs-special">)</span><span class="hs-special">)</span><span> </span><span id="local-6989586621679393477"><span class="annot"><span class="annottext">SomeMessage
+</span><a href="#local-6989586621679393477"><span class="hs-identifier hs-var">msg</span></a></span></span><span>
+</span><span id="line-120"></span><span>        </span><span class="hs-glyph">|</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Just</span></span><span> </span><span id="local-6989586621679393476"><span class="annot"><span class="annottext">Event
+</span><a href="#local-6989586621679393476"><span class="hs-identifier hs-var">ev</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">SomeMessage -&gt; Maybe Event
+forall m. Message m =&gt; SomeMessage -&gt; Maybe m
+</span><span class="hs-identifier hs-var">fromMessage</span></span><span> </span><span class="annot"><span class="annottext">SomeMessage
+</span><a href="#local-6989586621679393477"><span class="hs-identifier hs-var">msg</span></a></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">TimerId
+-&gt; Event
+-&gt; X (Maybe (Stoppable Window))
+-&gt; X (Maybe (Stoppable Window))
+forall a. TimerId -&gt; Event -&gt; X (Maybe a) -&gt; X (Maybe a)
+</span><a href="XMonad.Util.Timer.html#handleTimer"><span class="hs-identifier hs-var">handleTimer</span></a></span><span> </span><span class="annot"><span class="annottext">TimerId
+</span><a href="#local-6989586621679393478"><span class="hs-identifier hs-var">tid</span></a></span><span> </span><span class="annot"><span class="annottext">Event
+</span><a href="#local-6989586621679393476"><span class="hs-identifier hs-var">ev</span></a></span><span> </span><span class="annot"><span class="annottext">X (Maybe (Stoppable Window))
+forall a. X (Maybe a)
+</span><a href="#local-6989586621679393473"><span class="hs-identifier hs-var">run</span></a></span><span>
+</span><span id="line-121"></span><span>          </span><span class="hs-keyword">where</span><span> </span><span id="local-6989586621679393473"><span class="annot"><span class="annottext">run :: X (Maybe a)
+</span><a href="#local-6989586621679393473"><span class="hs-identifier hs-var hs-var">run</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">String -&gt; X ()
+</span><a href="XMonad.Layout.Stoppable.html#sigStoppableWorkspacesHook"><span class="hs-identifier hs-var">sigStoppableWorkspacesHook</span></a></span><span> </span><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679393479"><span class="hs-identifier hs-var">m</span></a></span><span> </span><span class="annot"><span class="annottext">X () -&gt; X (Maybe a) -&gt; X (Maybe a)
+forall (m :: * -&gt; *) a b. Monad m =&gt; m a -&gt; m b -&gt; m b
+</span><span class="hs-operator hs-var">&gt;&gt;</span></span><span> </span><span class="annot"><span class="annottext">Maybe a -&gt; X (Maybe a)
+forall (m :: * -&gt; *) a. Monad m =&gt; a -&gt; m a
+</span><span class="hs-identifier hs-var">return</span></span><span> </span><span class="annot"><span class="annottext">Maybe a
+forall a. Maybe a
+</span><span class="hs-identifier hs-var">Nothing</span></span><span>
+</span><span id="line-122"></span><span>    </span><span class="annot"><a href="XMonad.Layout.LayoutModifier.html#handleMess"><span class="hs-identifier hs-var">handleMess</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="XMonad.Layout.Stoppable.html#Stoppable"><span class="hs-identifier hs-type">Stoppable</span></a></span><span> </span><span id="local-6989586621679393472"><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679393472"><span class="hs-identifier hs-var">m</span></a></span></span><span> </span><span id="local-6989586621679393471"><span class="annot"><span class="annottext">Rational
+</span><a href="#local-6989586621679393471"><span class="hs-identifier hs-var">d</span></a></span></span><span> </span><span class="annot"><span class="annottext">Maybe TimerId
+</span><span class="hs-identifier">_</span></span><span class="hs-special">)</span><span> </span><span id="local-6989586621679393470"><span class="annot"><span class="annottext">SomeMessage
+</span><a href="#local-6989586621679393470"><span class="hs-identifier hs-var">msg</span></a></span></span><span>
+</span><span id="line-123"></span><span>        </span><span class="hs-glyph">|</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Just</span></span><span> </span><span class="annot"><span class="annottext">LayoutMessages
+</span><span class="hs-identifier hs-var">Hide</span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">SomeMessage -&gt; Maybe LayoutMessages
+forall m. Message m =&gt; SomeMessage -&gt; Maybe m
+</span><span class="hs-identifier hs-var">fromMessage</span></span><span> </span><span class="annot"><span class="annottext">SomeMessage
+</span><a href="#local-6989586621679393470"><span class="hs-identifier hs-var">msg</span></a></span><span> </span><span class="hs-glyph">=</span><span>
+</span><span id="line-124"></span><span>            </span><span class="annot"><span class="annottext">Stoppable Window -&gt; Maybe (Stoppable Window)
+forall a. a -&gt; Maybe a
+</span><span class="hs-identifier hs-var">Just</span></span><span> </span><span class="annot"><span class="annottext">(Stoppable Window -&gt; Maybe (Stoppable Window))
+-&gt; (TimerId -&gt; Stoppable Window)
+-&gt; TimerId
+-&gt; Maybe (Stoppable Window)
+forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">String -&gt; Rational -&gt; Maybe TimerId -&gt; Stoppable Window
+forall a. String -&gt; Rational -&gt; Maybe TimerId -&gt; Stoppable a
+</span><a href="XMonad.Layout.Stoppable.html#Stoppable"><span class="hs-identifier hs-var">Stoppable</span></a></span><span> </span><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679393472"><span class="hs-identifier hs-var">m</span></a></span><span> </span><span class="annot"><span class="annottext">Rational
+</span><a href="#local-6989586621679393471"><span class="hs-identifier hs-var">d</span></a></span><span> </span><span class="annot"><span class="annottext">(Maybe TimerId -&gt; Stoppable Window)
+-&gt; (TimerId -&gt; Maybe TimerId) -&gt; TimerId -&gt; Stoppable Window
+forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">TimerId -&gt; Maybe TimerId
+forall a. a -&gt; Maybe a
+</span><span class="hs-identifier hs-var">Just</span></span><span> </span><span class="annot"><span class="annottext">(TimerId -&gt; Maybe (Stoppable Window))
+-&gt; X TimerId -&gt; X (Maybe (Stoppable Window))
+forall (f :: * -&gt; *) a b. Functor f =&gt; (a -&gt; b) -&gt; f a -&gt; f b
+</span><span class="hs-operator hs-var">&lt;$&gt;</span></span><span> </span><span class="annot"><span class="annottext">Rational -&gt; X TimerId
+</span><a href="XMonad.Util.Timer.html#startTimer"><span class="hs-identifier hs-var">startTimer</span></a></span><span> </span><span class="annot"><span class="annottext">Rational
+</span><a href="#local-6989586621679393471"><span class="hs-identifier hs-var">d</span></a></span><span>
+</span><span id="line-125"></span><span>        </span><span class="hs-glyph">|</span><span> </span><span class="annot"><span class="annottext">Bool
+</span><span class="hs-identifier hs-var">otherwise</span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Maybe (Stoppable Window) -&gt; X (Maybe (Stoppable Window))
+forall (m :: * -&gt; *) a. Monad m =&gt; a -&gt; m a
+</span><span class="hs-identifier hs-var">return</span></span><span> </span><span class="annot"><span class="annottext">Maybe (Stoppable Window)
+forall a. Maybe a
+</span><span class="hs-identifier hs-var">Nothing</span></span><span>
+</span><span id="line-126"></span><span>
+</span><span id="line-127"></span><span class="hs-comment">-- | Convert a layout to a stoppable layout using the default mark</span><span>
+</span><span id="line-128"></span><span class="hs-comment">-- (\&quot;Stoppable\&quot;) and a delay of 15 seconds.</span><span>
+</span><span id="line-129"></span><span id="local-6989586621679393465"><span id="local-6989586621679393466"><span class="annot"><a href="XMonad.Layout.Stoppable.html#stoppable"><span class="hs-identifier hs-type">stoppable</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><a href="#local-6989586621679393466"><span class="hs-identifier hs-type">l</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679393465"><span class="hs-identifier hs-type">a</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="XMonad.Layout.LayoutModifier.html#ModifiedLayout"><span class="hs-identifier hs-type">ModifiedLayout</span></a></span><span> </span><span class="annot"><a href="XMonad.Layout.Stoppable.html#Stoppable"><span class="hs-identifier hs-type">Stoppable</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679393466"><span class="hs-identifier hs-type">l</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679393465"><span class="hs-identifier hs-type">a</span></a></span></span></span><span>
+</span><span id="line-130"></span><span id="stoppable"><span class="annot"><span class="annottext">stoppable :: l a -&gt; ModifiedLayout Stoppable l a
+</span><a href="XMonad.Layout.Stoppable.html#stoppable"><span class="hs-identifier hs-var hs-var">stoppable</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Stoppable a -&gt; l a -&gt; ModifiedLayout Stoppable l a
+forall (m :: * -&gt; *) (l :: * -&gt; *) a.
+m a -&gt; l a -&gt; ModifiedLayout m l a
+</span><a href="XMonad.Layout.LayoutModifier.html#ModifiedLayout"><span class="hs-identifier hs-var">ModifiedLayout</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">String -&gt; Rational -&gt; Maybe TimerId -&gt; Stoppable a
+forall a. String -&gt; Rational -&gt; Maybe TimerId -&gt; Stoppable a
+</span><a href="XMonad.Layout.Stoppable.html#Stoppable"><span class="hs-identifier hs-var">Stoppable</span></a></span><span> </span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot;Stoppable&quot;</span></span><span> </span><span class="annot"><span class="annottext">Rational
+</span><span class="hs-number">15</span></span><span> </span><span class="annot"><span class="annottext">Maybe TimerId
+forall a. Maybe a
+</span><span class="hs-identifier hs-var">Nothing</span></span><span class="hs-special">)</span><span>
+</span><span id="line-131"></span></pre></body></html>

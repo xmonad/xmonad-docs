@@ -1,0 +1,325 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd"><html xmlns="http://www.w3.org/1999/xhtml"><head><link rel="stylesheet" type="text/css" href="style.css" /><script type="text/javascript" src="highlight.js"></script></head><body><pre><span class="hs-pragma">{-# LANGUAGE FlexibleInstances, FlexibleContexts, MultiParamTypeClasses #-}</span><span>
+</span><span id="line-2"></span><span class="hs-pragma">{-# LANGUAGE PatternSynonyms #-}</span><span>
+</span><span id="line-3"></span><span>
+</span><span id="line-4"></span><span class="hs-comment">--------------------------------------------------------------------------------</span><span>
+</span><span id="line-5"></span><span class="hs-comment">-- |</span><span>
+</span><span id="line-6"></span><span class="hs-comment">-- Module      :  XMonad.Layout.StateFull</span><span>
+</span><span id="line-7"></span><span class="hs-comment">-- Description :  The StateFull Layout &amp; FocusTracking Layout Transformer</span><span>
+</span><span id="line-8"></span><span class="hs-comment">-- Copyright   :  (c) 2018  L. S. Leary</span><span>
+</span><span id="line-9"></span><span class="hs-comment">-- License     :  BSD3-style (see LICENSE)</span><span>
+</span><span id="line-10"></span><span class="hs-comment">--</span><span>
+</span><span id="line-11"></span><span class="hs-comment">-- Maintainer  :  L. S. Leary</span><span>
+</span><span id="line-12"></span><span class="hs-comment">-- Stability   :  unstable</span><span>
+</span><span id="line-13"></span><span class="hs-comment">-- Portability :  unportable</span><span>
+</span><span id="line-14"></span><span class="hs-comment">--</span><span>
+</span><span id="line-15"></span><span class="hs-comment">-- Provides StateFull: a stateful form of Full that does not misbehave when</span><span>
+</span><span id="line-16"></span><span class="hs-comment">-- floats are focused, and the FocusTracking layout transformer by means of</span><span>
+</span><span id="line-17"></span><span class="hs-comment">-- which StateFull is implemented. FocusTracking simply holds onto the last</span><span>
+</span><span id="line-18"></span><span class="hs-comment">-- true focus it was given and continues to use it as the focus for the</span><span>
+</span><span id="line-19"></span><span class="hs-comment">-- transformed layout until it sees another. It can be used to improve the</span><span>
+</span><span id="line-20"></span><span class="hs-comment">-- behaviour of a child layout that has not been given the focused window.</span><span>
+</span><span id="line-21"></span><span class="hs-comment">--------------------------------------------------------------------------------</span><span>
+</span><span id="line-22"></span><span>
+</span><span id="line-23"></span><span class="hs-keyword">module</span><span> </span><span class="hs-identifier">XMonad.Layout.StateFull</span><span> </span><span class="hs-special">(</span><span>
+</span><span id="line-24"></span><span>  </span><span class="annot"><span class="hs-comment">-- * Usage</span></span><span>
+</span><span id="line-25"></span><span>  </span><span class="annot"><span class="hs-comment">-- $Usage</span></span><span>
+</span><span id="line-26"></span><span>  </span><span class="hs-keyword">pattern</span><span> </span><span class="annot"><a href="XMonad.Layout.StateFull.html#StateFull"><span class="hs-identifier">StateFull</span></a></span><span class="hs-special">,</span><span>
+</span><span id="line-27"></span><span>  </span><span class="annot"><a href="XMonad.Layout.StateFull.html#StateFull"><span class="hs-identifier">StateFull</span></a></span><span class="hs-special">,</span><span>
+</span><span id="line-28"></span><span>  </span><span class="annot"><a href="XMonad.Layout.StateFull.html#FocusTracking"><span class="hs-identifier">FocusTracking</span></a></span><span class="hs-special">(</span><span class="hs-glyph">..</span><span class="hs-special">)</span><span class="hs-special">,</span><span>
+</span><span id="line-29"></span><span>  </span><span class="annot"><a href="XMonad.Layout.StateFull.html#focusTracking"><span class="hs-identifier">focusTracking</span></a></span><span>
+</span><span id="line-30"></span><span class="hs-special">)</span><span> </span><span class="hs-keyword">where</span><span>
+</span><span id="line-31"></span><span>
+</span><span id="line-32"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><span class="hs-identifier">XMonad</span></span><span> </span><span class="hs-keyword">hiding</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-operator">(&lt;&amp;&amp;&gt;)</span></span><span class="hs-special">)</span><span>
+</span><span id="line-33"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><a href="XMonad.Prelude.html"><span class="hs-identifier">XMonad.Prelude</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier">fromMaybe</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-operator">(&lt;|&gt;)</span></span><span class="hs-special">)</span><span>
+</span><span id="line-34"></span><span class="hs-keyword">import</span><span> </span><span class="hs-keyword">qualified</span><span> </span><span class="annot"><span class="hs-identifier">XMonad.StackSet</span></span><span> </span><span class="hs-keyword">as</span><span> </span><span class="annot"><span class="hs-identifier">W</span></span><span>
+</span><span id="line-35"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><a href="XMonad.Util.Stack.html"><span class="hs-identifier">XMonad.Util.Stack</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="XMonad.Util.Stack.html#findZ"><span class="hs-identifier">findZ</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-36"></span><span>
+</span><span id="line-37"></span><span class="hs-comment">-- $Usage</span><span>
+</span><span id="line-38"></span><span class="hs-comment">--</span><span>
+</span><span id="line-39"></span><span class="hs-comment">-- To use it, first you need to:</span><span>
+</span><span id="line-40"></span><span class="hs-comment">--</span><span>
+</span><span id="line-41"></span><span class="hs-comment">-- &gt; import XMonad.Layout.StateFull</span><span>
+</span><span id="line-42"></span><span class="hs-comment">--</span><span>
+</span><span id="line-43"></span><span class="hs-comment">-- Then to toggle your tiled layout with @StateFull@, you can do:</span><span>
+</span><span id="line-44"></span><span class="hs-comment">--</span><span>
+</span><span id="line-45"></span><span class="hs-comment">-- &gt; main = xmonad def { layoutHook = someTiledLayout ||| StateFull }</span><span>
+</span><span id="line-46"></span><span class="hs-comment">--</span><span>
+</span><span id="line-47"></span><span class="hs-comment">-- Or, some child layout that depends on focus information can be made to fall</span><span>
+</span><span id="line-48"></span><span class="hs-comment">-- back on the last focus it had:</span><span>
+</span><span id="line-49"></span><span class="hs-comment">--</span><span>
+</span><span id="line-50"></span><span class="hs-comment">-- &gt; main = xmonad def</span><span>
+</span><span id="line-51"></span><span class="hs-comment">-- &gt;  { layoutHook = someParentLayoutWith aChild (focusTracking anotherChild) }</span><span>
+</span><span id="line-52"></span><span>
+</span><span id="line-53"></span><span class="hs-comment">-- | The @FocusTracking@ data type for which the @LayoutClass@ instance is</span><span>
+</span><span id="line-54"></span><span class="hs-comment">--   provided.</span><span>
+</span><span id="line-55"></span><span class="hs-keyword">data</span><span> </span><span id="FocusTracking"><span class="annot"><a href="XMonad.Layout.StateFull.html#FocusTracking"><span class="hs-identifier hs-var">FocusTracking</span></a></span></span><span> </span><span id="local-6989586621679382289"><span class="annot"><a href="#local-6989586621679382289"><span class="hs-identifier hs-type">l</span></a></span></span><span> </span><span id="local-6989586621679382290"><span class="annot"><a href="#local-6989586621679382290"><span class="hs-identifier hs-type">a</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span id="FocusTracking"><span class="annot"><a href="XMonad.Layout.StateFull.html#FocusTracking"><span class="hs-identifier hs-var">FocusTracking</span></a></span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">Maybe</span></span><span> </span><span class="annot"><a href="#local-6989586621679382290"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-special">(</span><span class="annot"><a href="#local-6989586621679382289"><span class="hs-identifier hs-type">l</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679382290"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-56"></span><span>  </span><span class="hs-keyword">deriving</span><span> </span><span class="hs-special">(</span><span id="local-6989586621679382215"><span id="local-6989586621679382217"><span id="local-6989586621679382219"><span class="annot"><span class="annottext">Int -&gt; FocusTracking l a -&gt; ShowS
+[FocusTracking l a] -&gt; ShowS
+FocusTracking l a -&gt; String
+(Int -&gt; FocusTracking l a -&gt; ShowS)
+-&gt; (FocusTracking l a -&gt; String)
+-&gt; ([FocusTracking l a] -&gt; ShowS)
+-&gt; Show (FocusTracking l a)
+forall a.
+(Int -&gt; a -&gt; ShowS) -&gt; (a -&gt; String) -&gt; ([a] -&gt; ShowS) -&gt; Show a
+forall (l :: * -&gt; *) a.
+(Show a, Show (l a)) =&gt;
+Int -&gt; FocusTracking l a -&gt; ShowS
+forall (l :: * -&gt; *) a.
+(Show a, Show (l a)) =&gt;
+[FocusTracking l a] -&gt; ShowS
+forall (l :: * -&gt; *) a.
+(Show a, Show (l a)) =&gt;
+FocusTracking l a -&gt; String
+showList :: [FocusTracking l a] -&gt; ShowS
+$cshowList :: forall (l :: * -&gt; *) a.
+(Show a, Show (l a)) =&gt;
+[FocusTracking l a] -&gt; ShowS
+show :: FocusTracking l a -&gt; String
+$cshow :: forall (l :: * -&gt; *) a.
+(Show a, Show (l a)) =&gt;
+FocusTracking l a -&gt; String
+showsPrec :: Int -&gt; FocusTracking l a -&gt; ShowS
+$cshowsPrec :: forall (l :: * -&gt; *) a.
+(Show a, Show (l a)) =&gt;
+Int -&gt; FocusTracking l a -&gt; ShowS
+</span><span class="hs-identifier hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var">Show</span></span></span></span></span><span class="hs-special">,</span><span> </span><span id="local-6989586621679382206"><span id="local-6989586621679382208"><span id="local-6989586621679382210"><span id="local-6989586621679382212"><span class="annot"><span class="annottext">ReadPrec [FocusTracking l a]
+ReadPrec (FocusTracking l a)
+Int -&gt; ReadS (FocusTracking l a)
+ReadS [FocusTracking l a]
+(Int -&gt; ReadS (FocusTracking l a))
+-&gt; ReadS [FocusTracking l a]
+-&gt; ReadPrec (FocusTracking l a)
+-&gt; ReadPrec [FocusTracking l a]
+-&gt; Read (FocusTracking l a)
+forall a.
+(Int -&gt; ReadS a)
+-&gt; ReadS [a] -&gt; ReadPrec a -&gt; ReadPrec [a] -&gt; Read a
+forall (l :: * -&gt; *) a.
+(Read a, Read (l a)) =&gt;
+ReadPrec [FocusTracking l a]
+forall (l :: * -&gt; *) a.
+(Read a, Read (l a)) =&gt;
+ReadPrec (FocusTracking l a)
+forall (l :: * -&gt; *) a.
+(Read a, Read (l a)) =&gt;
+Int -&gt; ReadS (FocusTracking l a)
+forall (l :: * -&gt; *) a.
+(Read a, Read (l a)) =&gt;
+ReadS [FocusTracking l a]
+readListPrec :: ReadPrec [FocusTracking l a]
+$creadListPrec :: forall (l :: * -&gt; *) a.
+(Read a, Read (l a)) =&gt;
+ReadPrec [FocusTracking l a]
+readPrec :: ReadPrec (FocusTracking l a)
+$creadPrec :: forall (l :: * -&gt; *) a.
+(Read a, Read (l a)) =&gt;
+ReadPrec (FocusTracking l a)
+readList :: ReadS [FocusTracking l a]
+$creadList :: forall (l :: * -&gt; *) a.
+(Read a, Read (l a)) =&gt;
+ReadS [FocusTracking l a]
+readsPrec :: Int -&gt; ReadS (FocusTracking l a)
+$creadsPrec :: forall (l :: * -&gt; *) a.
+(Read a, Read (l a)) =&gt;
+Int -&gt; ReadS (FocusTracking l a)
+</span><span class="hs-identifier hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var">Read</span></span></span></span></span></span><span class="hs-special">)</span><span>
+</span><span id="line-57"></span><span>
+</span><span id="line-58"></span><span class="hs-comment">-- | Transform a layout into one that remembers and uses its last focus.</span><span>
+</span><span id="line-59"></span><span id="local-6989586621679382203"><span id="local-6989586621679382204"><span class="annot"><a href="XMonad.Layout.StateFull.html#focusTracking"><span class="hs-identifier hs-type">focusTracking</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><a href="#local-6989586621679382204"><span class="hs-identifier hs-type">l</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679382203"><span class="hs-identifier hs-type">a</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="XMonad.Layout.StateFull.html#FocusTracking"><span class="hs-identifier hs-type">FocusTracking</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679382204"><span class="hs-identifier hs-type">l</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679382203"><span class="hs-identifier hs-type">a</span></a></span></span></span><span>
+</span><span id="line-60"></span><span id="focusTracking"><span class="annot"><span class="annottext">focusTracking :: l a -&gt; FocusTracking l a
+</span><a href="XMonad.Layout.StateFull.html#focusTracking"><span class="hs-identifier hs-var hs-var">focusTracking</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Maybe a -&gt; l a -&gt; FocusTracking l a
+forall (l :: * -&gt; *) a. Maybe a -&gt; l a -&gt; FocusTracking l a
+</span><a href="XMonad.Layout.StateFull.html#FocusTracking"><span class="hs-identifier hs-var">FocusTracking</span></a></span><span> </span><span class="annot"><span class="annottext">Maybe a
+forall a. Maybe a
+</span><span class="hs-identifier hs-var">Nothing</span></span><span>
+</span><span id="line-61"></span><span>
+</span><span id="line-62"></span><span class="hs-comment">-- | A type synonym to match the @StateFull@ pattern synonym.</span><span>
+</span><span id="line-63"></span><span class="hs-keyword">type</span><span> </span><span id="StateFull"><span class="annot"><a href="XMonad.Layout.StateFull.html#StateFull"><span class="hs-identifier hs-var">StateFull</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><a href="XMonad.Layout.StateFull.html#FocusTracking"><span class="hs-identifier hs-type">FocusTracking</span></a></span><span> </span><span class="annot"><span class="hs-identifier hs-type">Full</span></span><span>
+</span><span id="line-64"></span><span>
+</span><span id="line-65"></span><span class="hs-comment">-- | A pattern synonym for the primary use case of the @FocusTracking@</span><span>
+</span><span id="line-66"></span><span class="hs-comment">--   transformer; using @Full@.</span><span>
+</span><span id="line-67"></span><span id="local-6989586621679382285"><span class="hs-keyword">pattern</span><span> </span><span class="annot"><a href="XMonad.Layout.StateFull.html#StateFull"><span class="hs-identifier hs-type">StateFull</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><a href="XMonad.Layout.StateFull.html#FocusTracking"><span class="hs-identifier hs-type">FocusTracking</span></a></span><span> </span><span class="annot"><span class="hs-identifier hs-type">Full</span></span><span> </span><span class="annot"><a href="#local-6989586621679382285"><span class="hs-identifier hs-type">a</span></a></span></span><span>
+</span><span id="line-68"></span><span class="hs-keyword">pattern</span><span> </span><span id="%24bStateFull"><span id="%24mStateFull"><span id="StateFull"><span class="annot"><span class="annottext">$bStateFull :: FocusTracking Full a
+$mStateFull :: forall r a.
+FocusTracking Full a -&gt; (Void# -&gt; r) -&gt; (Void# -&gt; r) -&gt; r
+</span><a href="XMonad.Layout.StateFull.html#%24bStateFull"><span class="hs-identifier hs-var hs-var hs-var">StateFull</span></a></span></span></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><a href="XMonad.Layout.StateFull.html#FocusTracking"><span class="hs-identifier hs-type">FocusTracking</span></a></span><span> </span><span class="annot"><span class="hs-identifier hs-type">Nothing</span></span><span> </span><span class="annot"><span class="hs-identifier hs-type">Full</span></span><span>
+</span><span id="line-69"></span><span>
+</span><span id="line-70"></span><span id="local-6989586621679382199"><span class="hs-keyword">instance</span><span> </span><span id="local-6989586621679382187"><span id="local-6989586621679382190"><span id="local-6989586621679382192"><span id="local-6989586621679382194"><span class="annot"><span class="hs-identifier hs-type">LayoutClass</span></span><span> </span><span class="annot"><a href="#local-6989586621679382199"><span class="hs-identifier hs-type">l</span></a></span><span> </span><span class="annot"><span class="hs-identifier hs-type">Window</span></span><span> </span><span class="hs-glyph">=&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">LayoutClass</span></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="XMonad.Layout.StateFull.html#FocusTracking"><span class="hs-identifier hs-type">FocusTracking</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679382199"><span class="hs-identifier hs-type">l</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Window</span></span></span></span></span></span><span> </span><span class="hs-keyword">where</span><span>
+</span><span id="line-71"></span><span>
+</span><span id="line-72"></span><span>  </span><span id="local-6989586621679382184"><span class="annot"><span class="annottext">description :: FocusTracking l Window -&gt; String
+</span><span class="hs-identifier hs-var hs-var hs-var hs-var">description</span></span></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="XMonad.Layout.StateFull.html#FocusTracking"><span class="hs-identifier hs-type">FocusTracking</span></a></span><span> </span><span class="annot"><span class="annottext">Maybe Window
+</span><span class="hs-identifier">_</span></span><span> </span><span id="local-6989586621679382182"><span class="annot"><span class="annottext">l Window
+</span><a href="#local-6989586621679382182"><span class="hs-identifier hs-var">child</span></a></span></span><span class="hs-special">)</span><span>
+</span><span id="line-73"></span><span>    </span><span class="hs-glyph">|</span><span> </span><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679382181"><span class="hs-identifier hs-var">chDesc</span></a></span><span> </span><span class="annot"><span class="annottext">String -&gt; String -&gt; Bool
+forall a. Eq a =&gt; a -&gt; a -&gt; Bool
+</span><span class="hs-operator hs-var">==</span></span><span> </span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot;Full&quot;</span></span><span>  </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot;StateFull&quot;</span></span><span>
+</span><span id="line-74"></span><span>    </span><span class="hs-glyph">|</span><span> </span><span class="annot"><span class="annottext">Char
+</span><span class="hs-char">' '</span></span><span> </span><span class="annot"><span class="annottext">Char -&gt; String -&gt; Bool
+forall (t :: * -&gt; *) a. (Foldable t, Eq a) =&gt; a -&gt; t a -&gt; Bool
+</span><span class="hs-operator hs-var">`elem`</span></span><span> </span><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679382181"><span class="hs-identifier hs-var">chDesc</span></a></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot;FocusTracking (&quot;</span></span><span> </span><span class="annot"><span class="annottext">String -&gt; ShowS
+forall a. [a] -&gt; [a] -&gt; [a]
+</span><span class="hs-operator hs-var">++</span></span><span> </span><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679382181"><span class="hs-identifier hs-var">chDesc</span></a></span><span> </span><span class="annot"><span class="annottext">String -&gt; ShowS
+forall a. [a] -&gt; [a] -&gt; [a]
+</span><span class="hs-operator hs-var">++</span></span><span> </span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot;)&quot;</span></span><span>
+</span><span id="line-75"></span><span>    </span><span class="hs-glyph">|</span><span> </span><span class="annot"><span class="annottext">Bool
+</span><span class="hs-identifier hs-var">otherwise</span></span><span>           </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot;FocusTracking &quot;</span></span><span> </span><span class="annot"><span class="annottext">String -&gt; ShowS
+forall a. [a] -&gt; [a] -&gt; [a]
+</span><span class="hs-operator hs-var">++</span></span><span> </span><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679382181"><span class="hs-identifier hs-var">chDesc</span></a></span><span>
+</span><span id="line-76"></span><span>    </span><span class="hs-keyword">where</span><span> </span><span id="local-6989586621679382181"><span class="annot"><span class="annottext">chDesc :: String
+</span><a href="#local-6989586621679382181"><span class="hs-identifier hs-var hs-var">chDesc</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">l Window -&gt; String
+forall (layout :: * -&gt; *) a.
+LayoutClass layout a =&gt;
+layout a -&gt; String
+</span><span class="hs-identifier hs-var">description</span></span><span> </span><span class="annot"><span class="annottext">l Window
+</span><a href="#local-6989586621679382182"><span class="hs-identifier hs-var">child</span></a></span><span>
+</span><span id="line-77"></span><span>
+</span><span id="line-78"></span><span>  </span><span id="local-6989586621679382179"><span class="annot"><span class="annottext">runLayout :: Workspace String (FocusTracking l Window) Window
+-&gt; Rectangle
+-&gt; X ([(Window, Rectangle)], Maybe (FocusTracking l Window))
+</span><span class="hs-identifier hs-var hs-var hs-var hs-var">runLayout</span></span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">W.Workspace</span></span><span> </span><span id="local-6989586621679382176"><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679382176"><span class="hs-identifier hs-var">i</span></a></span></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="XMonad.Layout.StateFull.html#FocusTracking"><span class="hs-identifier hs-type">FocusTracking</span></a></span><span> </span><span id="local-6989586621679382175"><span class="annot"><span class="annottext">Maybe Window
+</span><a href="#local-6989586621679382175"><span class="hs-identifier hs-var">mOldFoc</span></a></span></span><span> </span><span id="local-6989586621679382174"><span class="annot"><span class="annottext">l Window
+</span><a href="#local-6989586621679382174"><span class="hs-identifier hs-var">childL</span></a></span></span><span class="hs-special">)</span><span> </span><span id="local-6989586621679382173"><span class="annot"><span class="annottext">Maybe (Stack Window)
+</span><a href="#local-6989586621679382173"><span class="hs-identifier hs-var">mSt</span></a></span></span><span class="hs-special">)</span><span> </span><span id="local-6989586621679382172"><span class="annot"><span class="annottext">Rectangle
+</span><a href="#local-6989586621679382172"><span class="hs-identifier hs-var">sr</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-79"></span><span>
+</span><span id="line-80"></span><span>    </span><span id="local-6989586621679382171"><span class="annot"><span class="annottext">Maybe Window
+</span><a href="#local-6989586621679382171"><span class="hs-identifier hs-var">mRealFoc</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">(XState -&gt; Maybe Window) -&gt; X (Maybe Window)
+forall s (m :: * -&gt; *) a. MonadState s m =&gt; (s -&gt; a) -&gt; m a
+</span><span class="hs-identifier hs-var">gets</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">StackSet String (Layout Window) Window ScreenId ScreenDetail
+-&gt; Maybe Window
+forall i l a s sd. StackSet i l a s sd -&gt; Maybe a
+</span><span class="hs-identifier hs-var">W.peek</span></span><span> </span><span class="annot"><span class="annottext">(StackSet String (Layout Window) Window ScreenId ScreenDetail
+ -&gt; Maybe Window)
+-&gt; (XState
+    -&gt; StackSet String (Layout Window) Window ScreenId ScreenDetail)
+-&gt; XState
+-&gt; Maybe Window
+forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">XState
+-&gt; StackSet String (Layout Window) Window ScreenId ScreenDetail
+</span><span class="hs-identifier hs-var hs-var">windowset</span></span><span class="hs-special">)</span><span>
+</span><span id="line-81"></span><span>    </span><span class="hs-keyword">let</span><span> </span><span id="local-6989586621679382166"><span class="annot"><span class="annottext">mGivenFoc :: Maybe Window
+</span><a href="#local-6989586621679382166"><span class="hs-identifier hs-var hs-var">mGivenFoc</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Stack Window -&gt; Window
+forall a. Stack a -&gt; a
+</span><span class="hs-identifier hs-var hs-var">W.focus</span></span><span> </span><span class="annot"><span class="annottext">(Stack Window -&gt; Window) -&gt; Maybe (Stack Window) -&gt; Maybe Window
+forall (f :: * -&gt; *) a b. Functor f =&gt; (a -&gt; b) -&gt; f a -&gt; f b
+</span><span class="hs-operator hs-var">&lt;$&gt;</span></span><span> </span><span class="annot"><span class="annottext">Maybe (Stack Window)
+</span><a href="#local-6989586621679382173"><span class="hs-identifier hs-var">mSt</span></a></span><span>
+</span><span id="line-82"></span><span>        </span><span id="local-6989586621679382163"><span class="annot"><span class="annottext">passedMSt :: Maybe (Stack Window)
+</span><a href="#local-6989586621679382163"><span class="hs-identifier hs-var hs-var">passedMSt</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-keyword">if</span><span> </span><span class="annot"><span class="annottext">Maybe Window
+</span><a href="#local-6989586621679382171"><span class="hs-identifier hs-var">mRealFoc</span></a></span><span> </span><span class="annot"><span class="annottext">Maybe Window -&gt; Maybe Window -&gt; Bool
+forall a. Eq a =&gt; a -&gt; a -&gt; Bool
+</span><span class="hs-operator hs-var">==</span></span><span> </span><span class="annot"><span class="annottext">Maybe Window
+</span><a href="#local-6989586621679382166"><span class="hs-identifier hs-var">mGivenFoc</span></a></span><span> </span><span class="hs-keyword">then</span><span> </span><span class="annot"><span class="annottext">Maybe (Stack Window)
+</span><a href="#local-6989586621679382173"><span class="hs-identifier hs-var">mSt</span></a></span><span>
+</span><span id="line-83"></span><span>                    </span><span class="hs-keyword">else</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Maybe Window
+</span><a href="#local-6989586621679382175"><span class="hs-identifier hs-var">mOldFoc</span></a></span><span> </span><span class="annot"><span class="annottext">Maybe Window
+-&gt; (Window -&gt; Maybe (Stack Window)) -&gt; Maybe (Stack Window)
+forall (m :: * -&gt; *) a b. Monad m =&gt; m a -&gt; (a -&gt; m b) -&gt; m b
+</span><span class="hs-operator hs-var">&gt;&gt;=</span></span><span> </span><span class="hs-glyph">\</span><span id="local-6989586621679382162"><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679382162"><span class="hs-identifier hs-var">oF</span></a></span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">(Window -&gt; Bool) -&gt; Maybe (Stack Window) -&gt; Maybe (Stack Window)
+forall a. (a -&gt; Bool) -&gt; Zipper a -&gt; Zipper a
+</span><a href="XMonad.Util.Stack.html#findZ"><span class="hs-identifier hs-var">findZ</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Window -&gt; Window -&gt; Bool
+forall a. Eq a =&gt; a -&gt; a -&gt; Bool
+</span><span class="hs-operator hs-var">==</span></span><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679382162"><span class="hs-identifier hs-var">oF</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">Maybe (Stack Window)
+</span><a href="#local-6989586621679382173"><span class="hs-identifier hs-var">mSt</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">Maybe (Stack Window)
+-&gt; Maybe (Stack Window) -&gt; Maybe (Stack Window)
+forall (f :: * -&gt; *) a. Alternative f =&gt; f a -&gt; f a -&gt; f a
+</span><span class="hs-operator hs-var">&lt;|&gt;</span></span><span> </span><span class="annot"><span class="annottext">Maybe (Stack Window)
+</span><a href="#local-6989586621679382173"><span class="hs-identifier hs-var">mSt</span></a></span><span>
+</span><span id="line-84"></span><span>
+</span><span id="line-85"></span><span>    </span><span class="hs-special">(</span><span id="local-6989586621679382161"><span class="annot"><span class="annottext">[(Window, Rectangle)]
+</span><a href="#local-6989586621679382161"><span class="hs-identifier hs-var">wrs</span></a></span></span><span class="hs-special">,</span><span> </span><span id="local-6989586621679382160"><span class="annot"><span class="annottext">Maybe (l Window)
+</span><a href="#local-6989586621679382160"><span class="hs-identifier hs-var">mChildL'</span></a></span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">Workspace String (l Window) Window
+-&gt; Rectangle -&gt; X ([(Window, Rectangle)], Maybe (l Window))
+forall (layout :: * -&gt; *) a.
+LayoutClass layout a =&gt;
+Workspace String (layout a) a
+-&gt; Rectangle -&gt; X ([(a, Rectangle)], Maybe (layout a))
+</span><span class="hs-identifier hs-var">runLayout</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">String
+-&gt; l Window
+-&gt; Maybe (Stack Window)
+-&gt; Workspace String (l Window) Window
+forall i l a. i -&gt; l -&gt; Maybe (Stack a) -&gt; Workspace i l a
+</span><span class="hs-identifier hs-var">W.Workspace</span></span><span> </span><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679382176"><span class="hs-identifier hs-var">i</span></a></span><span> </span><span class="annot"><span class="annottext">l Window
+</span><a href="#local-6989586621679382174"><span class="hs-identifier hs-var">childL</span></a></span><span> </span><span class="annot"><span class="annottext">Maybe (Stack Window)
+</span><a href="#local-6989586621679382163"><span class="hs-identifier hs-var">passedMSt</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">Rectangle
+</span><a href="#local-6989586621679382172"><span class="hs-identifier hs-var">sr</span></a></span><span>
+</span><span id="line-86"></span><span>    </span><span class="hs-keyword">let</span><span> </span><span id="local-6989586621679382159"><span class="annot"><span class="annottext">newFT :: Maybe (FocusTracking l Window)
+</span><a href="#local-6989586621679382159"><span class="hs-identifier hs-var hs-var">newFT</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-keyword">if</span><span> </span><span class="annot"><span class="annottext">Maybe Window
+</span><a href="#local-6989586621679382171"><span class="hs-identifier hs-var">mRealFoc</span></a></span><span> </span><span class="annot"><span class="annottext">Maybe Window -&gt; Maybe Window -&gt; Bool
+forall a. Eq a =&gt; a -&gt; a -&gt; Bool
+</span><span class="hs-operator hs-var">/=</span></span><span> </span><span class="annot"><span class="annottext">Maybe Window
+</span><a href="#local-6989586621679382166"><span class="hs-identifier hs-var">mGivenFoc</span></a></span><span> </span><span class="hs-keyword">then</span><span> </span><span class="annot"><span class="annottext">Maybe Window -&gt; l Window -&gt; FocusTracking l Window
+forall (l :: * -&gt; *) a. Maybe a -&gt; l a -&gt; FocusTracking l a
+</span><a href="XMonad.Layout.StateFull.html#FocusTracking"><span class="hs-identifier hs-var">FocusTracking</span></a></span><span> </span><span class="annot"><span class="annottext">Maybe Window
+</span><a href="#local-6989586621679382175"><span class="hs-identifier hs-var">mOldFoc</span></a></span><span> </span><span class="annot"><span class="annottext">(l Window -&gt; FocusTracking l Window)
+-&gt; Maybe (l Window) -&gt; Maybe (FocusTracking l Window)
+forall (f :: * -&gt; *) a b. Functor f =&gt; (a -&gt; b) -&gt; f a -&gt; f b
+</span><span class="hs-operator hs-var">&lt;$&gt;</span></span><span> </span><span class="annot"><span class="annottext">Maybe (l Window)
+</span><a href="#local-6989586621679382160"><span class="hs-identifier hs-var">mChildL'</span></a></span><span>
+</span><span id="line-87"></span><span>                </span><span class="hs-keyword">else</span><span> </span><span class="annot"><span class="annottext">FocusTracking l Window -&gt; Maybe (FocusTracking l Window)
+forall a. a -&gt; Maybe a
+</span><span class="hs-identifier hs-var">Just</span></span><span> </span><span class="annot"><span class="annottext">(FocusTracking l Window -&gt; Maybe (FocusTracking l Window))
+-&gt; FocusTracking l Window -&gt; Maybe (FocusTracking l Window)
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">Maybe Window -&gt; l Window -&gt; FocusTracking l Window
+forall (l :: * -&gt; *) a. Maybe a -&gt; l a -&gt; FocusTracking l a
+</span><a href="XMonad.Layout.StateFull.html#FocusTracking"><span class="hs-identifier hs-var">FocusTracking</span></a></span><span> </span><span class="annot"><span class="annottext">Maybe Window
+</span><a href="#local-6989586621679382166"><span class="hs-identifier hs-var">mGivenFoc</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">l Window -&gt; Maybe (l Window) -&gt; l Window
+forall a. a -&gt; Maybe a -&gt; a
+</span><span class="hs-identifier hs-var">fromMaybe</span></span><span> </span><span class="annot"><span class="annottext">l Window
+</span><a href="#local-6989586621679382174"><span class="hs-identifier hs-var">childL</span></a></span><span> </span><span class="annot"><span class="annottext">Maybe (l Window)
+</span><a href="#local-6989586621679382160"><span class="hs-identifier hs-var">mChildL'</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-88"></span><span>
+</span><span id="line-89"></span><span>    </span><span class="annot"><span class="annottext">([(Window, Rectangle)], Maybe (FocusTracking l Window))
+-&gt; X ([(Window, Rectangle)], Maybe (FocusTracking l Window))
+forall (m :: * -&gt; *) a. Monad m =&gt; a -&gt; m a
+</span><span class="hs-identifier hs-var">return</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">[(Window, Rectangle)]
+</span><a href="#local-6989586621679382161"><span class="hs-identifier hs-var">wrs</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">Maybe (FocusTracking l Window)
+</span><a href="#local-6989586621679382159"><span class="hs-identifier hs-var">newFT</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-90"></span><span>
+</span><span id="line-91"></span><span>  </span><span id="local-6989586621679382157"><span class="annot"><span class="annottext">handleMessage :: FocusTracking l Window
+-&gt; SomeMessage -&gt; X (Maybe (FocusTracking l Window))
+</span><span class="hs-identifier hs-var hs-var hs-var hs-var">handleMessage</span></span></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="XMonad.Layout.StateFull.html#FocusTracking"><span class="hs-identifier hs-type">FocusTracking</span></a></span><span> </span><span id="local-6989586621679382155"><span class="annot"><span class="annottext">Maybe Window
+</span><a href="#local-6989586621679382155"><span class="hs-identifier hs-var">mf</span></a></span></span><span> </span><span id="local-6989586621679382154"><span class="annot"><span class="annottext">l Window
+</span><a href="#local-6989586621679382154"><span class="hs-identifier hs-var">childLayout</span></a></span></span><span class="hs-special">)</span><span> </span><span id="local-6989586621679382153"><span class="annot"><span class="annottext">SomeMessage
+</span><a href="#local-6989586621679382153"><span class="hs-identifier hs-var">m</span></a></span></span><span> </span><span class="hs-glyph">=</span><span>
+</span><span id="line-92"></span><span>    </span><span class="hs-special">(</span><span class="annot"><span class="annottext">(Maybe (l Window) -&gt; Maybe (FocusTracking l Window))
+-&gt; X (Maybe (l Window)) -&gt; X (Maybe (FocusTracking l Window))
+forall (f :: * -&gt; *) a b. Functor f =&gt; (a -&gt; b) -&gt; f a -&gt; f b
+</span><span class="hs-identifier hs-var">fmap</span></span><span> </span><span class="annot"><span class="annottext">((Maybe (l Window) -&gt; Maybe (FocusTracking l Window))
+ -&gt; X (Maybe (l Window)) -&gt; X (Maybe (FocusTracking l Window)))
+-&gt; ((l Window -&gt; FocusTracking l Window)
+    -&gt; Maybe (l Window) -&gt; Maybe (FocusTracking l Window))
+-&gt; (l Window -&gt; FocusTracking l Window)
+-&gt; X (Maybe (l Window))
+-&gt; X (Maybe (FocusTracking l Window))
+forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">(l Window -&gt; FocusTracking l Window)
+-&gt; Maybe (l Window) -&gt; Maybe (FocusTracking l Window)
+forall (f :: * -&gt; *) a b. Functor f =&gt; (a -&gt; b) -&gt; f a -&gt; f b
+</span><span class="hs-identifier hs-var">fmap</span></span><span class="hs-special">)</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Maybe Window -&gt; l Window -&gt; FocusTracking l Window
+forall (l :: * -&gt; *) a. Maybe a -&gt; l a -&gt; FocusTracking l a
+</span><a href="XMonad.Layout.StateFull.html#FocusTracking"><span class="hs-identifier hs-var">FocusTracking</span></a></span><span> </span><span class="annot"><span class="annottext">Maybe Window
+</span><a href="#local-6989586621679382155"><span class="hs-identifier hs-var">mf</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">l Window -&gt; SomeMessage -&gt; X (Maybe (l Window))
+forall (layout :: * -&gt; *) a.
+LayoutClass layout a =&gt;
+layout a -&gt; SomeMessage -&gt; X (Maybe (layout a))
+</span><span class="hs-identifier hs-var">handleMessage</span></span><span> </span><span class="annot"><span class="annottext">l Window
+</span><a href="#local-6989586621679382154"><span class="hs-identifier hs-var">childLayout</span></a></span><span> </span><span class="annot"><span class="annottext">SomeMessage
+</span><a href="#local-6989586621679382153"><span class="hs-identifier hs-var">m</span></a></span><span class="hs-special">)</span></span><span>
+</span><span id="line-93"></span></pre></body></html>

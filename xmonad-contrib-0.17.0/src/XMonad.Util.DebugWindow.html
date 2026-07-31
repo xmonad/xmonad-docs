@@ -1,0 +1,902 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd"><html xmlns="http://www.w3.org/1999/xhtml"><head><link rel="stylesheet" type="text/css" href="style.css" /><script type="text/javascript" src="highlight.js"></script></head><body><pre><span class="hs-comment">-----------------------------------------------------------------------------</span><span>
+</span><span id="line-2"></span><span class="hs-comment">-- |</span><span>
+</span><span id="line-3"></span><span class="hs-comment">-- Module      :  XMonad.Util.DebugWindow</span><span>
+</span><span id="line-4"></span><span class="hs-comment">-- Description :  Dump window information for diagnostic\/debugging purposes.</span><span>
+</span><span id="line-5"></span><span class="hs-comment">-- Copyright   :  (c) Brandon S Allbery KF8NH, 2014</span><span>
+</span><span id="line-6"></span><span class="hs-comment">-- License     :  BSD3-style (see LICENSE)</span><span>
+</span><span id="line-7"></span><span class="hs-comment">--</span><span>
+</span><span id="line-8"></span><span class="hs-comment">-- Maintainer  :  allbery.b@gmail.com</span><span>
+</span><span id="line-9"></span><span class="hs-comment">-- Stability   :  unstable</span><span>
+</span><span id="line-10"></span><span class="hs-comment">-- Portability :  not portable</span><span>
+</span><span id="line-11"></span><span class="hs-comment">--</span><span>
+</span><span id="line-12"></span><span class="hs-comment">-- Module to dump window information for diagnostic/debugging purposes. See</span><span>
+</span><span id="line-13"></span><span class="hs-comment">-- &quot;XMonad.Hooks.DebugEvents&quot; and &quot;XMonad.Hooks.DebugStack&quot; for practical uses.</span><span>
+</span><span id="line-14"></span><span class="hs-comment">--</span><span>
+</span><span id="line-15"></span><span class="hs-comment">-----------------------------------------------------------------------------</span><span>
+</span><span id="line-16"></span><span>
+</span><span id="line-17"></span><span class="hs-keyword">module</span><span> </span><span class="hs-identifier">XMonad.Util.DebugWindow</span><span> </span><span class="hs-special">(</span><span class="annot"><a href="XMonad.Util.DebugWindow.html#debugWindow"><span class="hs-identifier">debugWindow</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-keyword">where</span><span>
+</span><span id="line-18"></span><span>
+</span><span id="line-19"></span><span class="hs-keyword">import</span><span>           </span><span class="annot"><span class="hs-identifier">Prelude</span></span><span>
+</span><span id="line-20"></span><span>
+</span><span id="line-21"></span><span class="hs-keyword">import</span><span>           </span><span class="annot"><span class="hs-identifier">XMonad</span></span><span>
+</span><span id="line-22"></span><span class="hs-keyword">import</span><span>           </span><span class="annot"><a href="XMonad.Prelude.html"><span class="hs-identifier">XMonad.Prelude</span></a></span><span>
+</span><span id="line-23"></span><span>
+</span><span id="line-24"></span><span class="hs-keyword">import</span><span>           </span><span class="annot"><span class="hs-identifier">Codec.Binary.UTF8.String</span></span><span>        </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier">decodeString</span></span><span class="hs-special">)</span><span>
+</span><span id="line-25"></span><span class="hs-keyword">import</span><span>           </span><span class="annot"><span class="hs-identifier">Control.Exception</span></span><span>                                     </span><span class="hs-keyword">as</span><span> </span><span class="annot"><span class="hs-identifier">E</span></span><span>
+</span><span id="line-26"></span><span class="hs-keyword">import</span><span>           </span><span class="annot"><span class="hs-identifier">Foreign</span></span><span>
+</span><span id="line-27"></span><span class="hs-keyword">import</span><span>           </span><span class="annot"><span class="hs-identifier">Foreign.C.String</span></span><span>
+</span><span id="line-28"></span><span class="hs-keyword">import</span><span>           </span><span class="annot"><span class="hs-identifier">Numeric</span></span><span>                         </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier">showHex</span></span><span class="hs-special">)</span><span>
+</span><span id="line-29"></span><span class="hs-keyword">import</span><span>           </span><span class="annot"><span class="hs-identifier">System.Exit</span></span><span>
+</span><span id="line-30"></span><span>
+</span><span id="line-31"></span><span class="hs-comment">-- | Output a window by ID in hex, decimal, its ICCCM resource name and class,</span><span>
+</span><span id="line-32"></span><span class="hs-comment">--   and its title if available.  Also indicate override_redirect with an</span><span>
+</span><span id="line-33"></span><span class="hs-comment">--   exclamation mark, and wrap in brackets if it is unmapped or withdrawn.</span><span>
+</span><span id="line-34"></span><span class="annot"><a href="XMonad.Util.DebugWindow.html#debugWindow"><span class="hs-identifier hs-type">debugWindow</span></a></span><span>   </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Window</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">X</span></span><span> </span><span class="annot"><span class="hs-identifier hs-type">String</span></span><span>
+</span><span id="line-35"></span><span id="debugWindow"><span class="annot"><span class="annottext">debugWindow :: Window -&gt; X String
+</span><a href="XMonad.Util.DebugWindow.html#debugWindow"><span class="hs-identifier hs-var hs-var">debugWindow</span></a></span></span><span> </span><span class="annot"><span class="annottext">Window
+</span><span class="hs-number">0</span></span><span> </span><span class="hs-glyph">=</span><span>  </span><span class="annot"><span class="annottext">String -&gt; X String
+forall (m :: * -&gt; *) a. Monad m =&gt; a -&gt; m a
+</span><span class="hs-identifier hs-var">return</span></span><span> </span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot;-no window-&quot;</span></span><span>
+</span><span id="line-36"></span><span class="annot"><a href="XMonad.Util.DebugWindow.html#debugWindow"><span class="hs-identifier hs-var">debugWindow</span></a></span><span> </span><span id="local-6989586621679369852"><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679369852"><span class="hs-identifier hs-var">w</span></a></span></span><span> </span><span class="hs-glyph">=</span><span>  </span><span class="hs-keyword">do</span><span>
+</span><span id="line-37"></span><span>  </span><span class="hs-keyword">let</span><span> </span><span id="local-6989586621679369851"><span class="annot"><span class="annottext">wx :: String
+</span><a href="#local-6989586621679369851"><span class="hs-identifier hs-var hs-var">wx</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Int -&gt; Char -&gt; String -&gt; String
+</span><a href="XMonad.Util.DebugWindow.html#pad"><span class="hs-identifier hs-var">pad</span></a></span><span> </span><span class="annot"><span class="annottext">Int
+</span><span class="hs-number">8</span></span><span> </span><span class="annot"><span class="annottext">Char
+</span><span class="hs-char">'0'</span></span><span> </span><span class="annot"><span class="annottext">(String -&gt; String) -&gt; String -&gt; String
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">Window -&gt; String -&gt; String
+forall a. (Integral a, Show a) =&gt; a -&gt; String -&gt; String
+</span><span class="hs-identifier hs-var">showHex</span></span><span> </span><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679369852"><span class="hs-identifier hs-var">w</span></a></span><span> </span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot;&quot;</span></span><span>
+</span><span id="line-38"></span><span>  </span><span id="local-6989586621679369849"><span class="annot"><span class="annottext">Maybe WindowAttributes
+</span><a href="#local-6989586621679369849"><span class="hs-identifier hs-var">w'</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">(Display -&gt; X (Maybe WindowAttributes))
+-&gt; X (Maybe WindowAttributes)
+forall a. (Display -&gt; X a) -&gt; X a
+</span><span class="hs-identifier hs-var">withDisplay</span></span><span> </span><span class="annot"><span class="annottext">((Display -&gt; X (Maybe WindowAttributes))
+ -&gt; X (Maybe WindowAttributes))
+-&gt; (Display -&gt; X (Maybe WindowAttributes))
+-&gt; X (Maybe WindowAttributes)
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="hs-glyph">\</span><span id="local-6989586621679369847"><span class="annot"><span class="annottext">Display
+</span><a href="#local-6989586621679369847"><span class="hs-identifier hs-var">d</span></a></span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">IO (Maybe WindowAttributes) -&gt; X (Maybe WindowAttributes)
+forall (m :: * -&gt; *) a. MonadIO m =&gt; IO a -&gt; m a
+</span><span class="hs-identifier hs-var">io</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Display -&gt; Window -&gt; IO (Maybe WindowAttributes)
+</span><a href="XMonad.Util.DebugWindow.html#safeGetWindowAttributes"><span class="hs-identifier hs-var">safeGetWindowAttributes</span></a></span><span> </span><span class="annot"><span class="annottext">Display
+</span><a href="#local-6989586621679369847"><span class="hs-identifier hs-var">d</span></a></span><span> </span><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679369852"><span class="hs-identifier hs-var">w</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-39"></span><span>  </span><span class="hs-keyword">case</span><span> </span><span class="annot"><span class="annottext">Maybe WindowAttributes
+</span><a href="#local-6989586621679369849"><span class="hs-identifier hs-var">w'</span></a></span><span> </span><span class="hs-keyword">of</span><span>
+</span><span id="line-40"></span><span>    </span><span class="annot"><span class="annottext">Maybe WindowAttributes
+</span><span class="hs-identifier hs-var">Nothing</span></span><span>                                   </span><span class="hs-glyph">-&gt;</span><span>
+</span><span id="line-41"></span><span>      </span><span class="annot"><span class="annottext">String -&gt; X String
+forall (m :: * -&gt; *) a. Monad m =&gt; a -&gt; m a
+</span><span class="hs-identifier hs-var">return</span></span><span> </span><span class="annot"><span class="annottext">(String -&gt; X String) -&gt; String -&gt; X String
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot;(deleted window &quot;</span></span><span> </span><span class="annot"><span class="annottext">String -&gt; String -&gt; String
+forall a. [a] -&gt; [a] -&gt; [a]
+</span><span class="hs-operator hs-var">++</span></span><span> </span><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679369851"><span class="hs-identifier hs-var">wx</span></a></span><span> </span><span class="annot"><span class="annottext">String -&gt; String -&gt; String
+forall a. [a] -&gt; [a] -&gt; [a]
+</span><span class="hs-operator hs-var">++</span></span><span> </span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot;)&quot;</span></span><span>
+</span><span id="line-42"></span><span>    </span><span class="annot"><span class="hs-identifier hs-type">Just</span></span><span> </span><span class="annot"><span class="hs-identifier hs-type">WindowAttributes</span></span><span>
+</span><span id="line-43"></span><span>      </span><span class="hs-special">{</span><span> </span><span class="annot"><span class="annottext">wa_x :: WindowAttributes -&gt; CInt
+</span><span class="hs-identifier hs-var">wa_x</span></span><span>                 </span><span class="hs-glyph">=</span><span> </span><span id="local-6989586621679369842"><span class="annot"><span class="annottext">CInt
+</span><a href="#local-6989586621679369842"><span class="hs-identifier hs-var">x</span></a></span></span><span>
+</span><span id="line-44"></span><span>      </span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">wa_y :: WindowAttributes -&gt; CInt
+</span><span class="hs-identifier hs-var">wa_y</span></span><span>                 </span><span class="hs-glyph">=</span><span> </span><span id="local-6989586621679369840"><span class="annot"><span class="annottext">CInt
+</span><a href="#local-6989586621679369840"><span class="hs-identifier hs-var">y</span></a></span></span><span>
+</span><span id="line-45"></span><span>      </span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">wa_width :: WindowAttributes -&gt; CInt
+</span><span class="hs-identifier hs-var">wa_width</span></span><span>             </span><span class="hs-glyph">=</span><span> </span><span id="local-6989586621679369838"><span class="annot"><span class="annottext">CInt
+</span><a href="#local-6989586621679369838"><span class="hs-identifier hs-var">wid</span></a></span></span><span>
+</span><span id="line-46"></span><span>      </span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">wa_height :: WindowAttributes -&gt; CInt
+</span><span class="hs-identifier hs-var">wa_height</span></span><span>            </span><span class="hs-glyph">=</span><span> </span><span id="local-6989586621679369836"><span class="annot"><span class="annottext">CInt
+</span><a href="#local-6989586621679369836"><span class="hs-identifier hs-var">ht</span></a></span></span><span>
+</span><span id="line-47"></span><span>      </span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">wa_border_width :: WindowAttributes -&gt; CInt
+</span><span class="hs-identifier hs-var">wa_border_width</span></span><span>      </span><span class="hs-glyph">=</span><span> </span><span id="local-6989586621679369834"><span class="annot"><span class="annottext">CInt
+</span><a href="#local-6989586621679369834"><span class="hs-identifier hs-var">bw</span></a></span></span><span>
+</span><span id="line-48"></span><span>      </span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">wa_map_state :: WindowAttributes -&gt; CInt
+</span><span class="hs-identifier hs-var">wa_map_state</span></span><span>         </span><span class="hs-glyph">=</span><span> </span><span id="local-6989586621679369832"><span class="annot"><span class="annottext">CInt
+</span><a href="#local-6989586621679369832"><span class="hs-identifier hs-var">m</span></a></span></span><span>
+</span><span id="line-49"></span><span>      </span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">wa_override_redirect :: WindowAttributes -&gt; Bool
+</span><span class="hs-identifier hs-var">wa_override_redirect</span></span><span> </span><span class="hs-glyph">=</span><span> </span><span id="local-6989586621679369830"><span class="annot"><span class="annottext">Bool
+</span><a href="#local-6989586621679369830"><span class="hs-identifier hs-var">o</span></a></span></span><span>
+</span><span id="line-50"></span><span>      </span><span class="hs-special">}</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-51"></span><span>      </span><span id="local-6989586621679369829"><span class="annot"><span class="annottext">Maybe [CChar]
+</span><a href="#local-6989586621679369829"><span class="hs-identifier hs-var">c'</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">(Display -&gt; X (Maybe [CChar])) -&gt; X (Maybe [CChar])
+forall a. (Display -&gt; X a) -&gt; X a
+</span><span class="hs-identifier hs-var">withDisplay</span></span><span> </span><span class="annot"><span class="annottext">((Display -&gt; X (Maybe [CChar])) -&gt; X (Maybe [CChar]))
+-&gt; (Display -&gt; X (Maybe [CChar])) -&gt; X (Maybe [CChar])
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="hs-glyph">\</span><span id="local-6989586621679369828"><span class="annot"><span class="annottext">Display
+</span><a href="#local-6989586621679369828"><span class="hs-identifier hs-var">d</span></a></span></span><span> </span><span class="hs-glyph">-&gt;</span><span>
+</span><span id="line-52"></span><span>            </span><span class="annot"><span class="annottext">IO (Maybe [CChar]) -&gt; X (Maybe [CChar])
+forall (m :: * -&gt; *) a. MonadIO m =&gt; IO a -&gt; m a
+</span><span class="hs-identifier hs-var">io</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Display -&gt; Window -&gt; Window -&gt; IO (Maybe [CChar])
+</span><span class="hs-identifier hs-var">getWindowProperty8</span></span><span> </span><span class="annot"><span class="annottext">Display
+</span><a href="#local-6989586621679369828"><span class="hs-identifier hs-var">d</span></a></span><span> </span><span class="annot"><span class="annottext">Window
+</span><span class="hs-identifier hs-var">wM_CLASS</span></span><span> </span><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679369852"><span class="hs-identifier hs-var">w</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-53"></span><span>      </span><span class="hs-keyword">let</span><span> </span><span id="local-6989586621679369825"><span class="annot"><span class="annottext">c :: String
+</span><a href="#local-6989586621679369825"><span class="hs-identifier hs-var hs-var">c</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-keyword">case</span><span> </span><span class="annot"><span class="annottext">Maybe [CChar]
+</span><a href="#local-6989586621679369829"><span class="hs-identifier hs-var">c'</span></a></span><span> </span><span class="hs-keyword">of</span><span>
+</span><span id="line-54"></span><span>                </span><span class="annot"><span class="annottext">Maybe [CChar]
+</span><span class="hs-identifier hs-var">Nothing</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot;&quot;</span></span><span>
+</span><span id="line-55"></span><span>                </span><span class="annot"><span class="hs-identifier hs-type">Just</span></span><span> </span><span id="local-6989586621679369824"><span class="annot"><span class="annottext">[CChar]
+</span><a href="#local-6989586621679369824"><span class="hs-identifier hs-var">c''</span></a></span></span><span>  </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">String -&gt; [String] -&gt; String
+forall a. [a] -&gt; [[a]] -&gt; [a]
+</span><span class="hs-identifier hs-var">intercalate</span></span><span> </span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot;/&quot;</span></span><span> </span><span class="annot"><span class="annottext">([String] -&gt; String) -&gt; [String] -&gt; String
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span>
+</span><span id="line-56"></span><span>                             </span><span class="annot"><span class="annottext">((String -&gt; Maybe (String, String)) -&gt; String -&gt; [String])
+-&gt; String -&gt; (String -&gt; Maybe (String, String)) -&gt; [String]
+forall a b c. (a -&gt; b -&gt; c) -&gt; b -&gt; a -&gt; c
+</span><span class="hs-identifier hs-var">flip</span></span><span> </span><span class="annot"><span class="annottext">(String -&gt; Maybe (String, String)) -&gt; String -&gt; [String]
+forall b a. (b -&gt; Maybe (a, b)) -&gt; b -&gt; [a]
+</span><span class="hs-identifier hs-var">unfoldr</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">(CChar -&gt; Char) -&gt; [CChar] -&gt; String
+forall a b. (a -&gt; b) -&gt; [a] -&gt; [b]
+</span><span class="hs-identifier hs-var">map</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Int -&gt; Char
+forall a. Enum a =&gt; Int -&gt; a
+</span><span class="hs-identifier hs-var">toEnum</span></span><span> </span><span class="annot"><span class="annottext">(Int -&gt; Char) -&gt; (CChar -&gt; Int) -&gt; CChar -&gt; Char
+forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">CChar -&gt; Int
+forall a. Enum a =&gt; a -&gt; Int
+</span><span class="hs-identifier hs-var">fromEnum</span></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">[CChar]
+</span><a href="#local-6989586621679369824"><span class="hs-identifier hs-var">c''</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">((String -&gt; Maybe (String, String)) -&gt; [String])
+-&gt; (String -&gt; Maybe (String, String)) -&gt; [String]
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span>
+</span><span id="line-57"></span><span>                             </span><span class="hs-glyph">\</span><span id="local-6989586621679369817"><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679369817"><span class="hs-identifier hs-var">s</span></a></span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="hs-keyword">if</span><span> </span><span class="annot"><span class="annottext">String -&gt; Bool
+forall (t :: * -&gt; *) a. Foldable t =&gt; t a -&gt; Bool
+</span><span class="hs-identifier hs-var">null</span></span><span> </span><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679369817"><span class="hs-identifier hs-var">s</span></a></span><span>
+</span><span id="line-58"></span><span>                                     </span><span class="hs-keyword">then</span><span> </span><span class="annot"><span class="annottext">Maybe (String, String)
+forall a. Maybe a
+</span><span class="hs-identifier hs-var">Nothing</span></span><span>
+</span><span id="line-59"></span><span>                                     </span><span class="hs-keyword">else</span><span> </span><span class="hs-keyword">let</span><span> </span><span class="hs-special">(</span><span id="local-6989586621679369815"><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679369815"><span class="hs-identifier hs-var">w''</span></a></span></span><span class="hs-special">,</span><span id="local-6989586621679369814"><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679369814"><span class="hs-identifier hs-var">s''</span></a></span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">(Char -&gt; Bool) -&gt; String -&gt; (String, String)
+forall a. (a -&gt; Bool) -&gt; [a] -&gt; ([a], [a])
+</span><span class="hs-identifier hs-var">break</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Char -&gt; Char -&gt; Bool
+forall a. Eq a =&gt; a -&gt; a -&gt; Bool
+</span><span class="hs-operator hs-var">==</span></span><span> </span><span class="annot"><span class="annottext">Char
+</span><span class="hs-char">'\NUL'</span></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679369817"><span class="hs-identifier hs-var">s</span></a></span><span>
+</span><span id="line-60"></span><span>                                              </span><span id="local-6989586621679369812"><span class="annot"><span class="annottext">s' :: String
+</span><a href="#local-6989586621679369812"><span class="hs-identifier hs-var hs-var">s'</span></a></span></span><span>      </span><span class="hs-glyph">=</span><span> </span><span class="hs-keyword">if</span><span> </span><span class="annot"><span class="annottext">String -&gt; Bool
+forall (t :: * -&gt; *) a. Foldable t =&gt; t a -&gt; Bool
+</span><span class="hs-identifier hs-var">null</span></span><span> </span><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679369814"><span class="hs-identifier hs-var">s''</span></a></span><span>
+</span><span id="line-61"></span><span>                                                          </span><span class="hs-keyword">then</span><span> </span><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679369814"><span class="hs-identifier hs-var">s''</span></a></span><span>
+</span><span id="line-62"></span><span>                                                          </span><span class="hs-keyword">else</span><span> </span><span class="annot"><span class="annottext">String -&gt; String
+forall a. [a] -&gt; [a]
+</span><span class="hs-identifier hs-var">tail</span></span><span> </span><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679369814"><span class="hs-identifier hs-var">s''</span></a></span><span>
+</span><span id="line-63"></span><span>                                          </span><span class="hs-keyword">in</span><span> </span><span class="annot"><span class="annottext">(String, String) -&gt; Maybe (String, String)
+forall a. a -&gt; Maybe a
+</span><span class="hs-identifier hs-var">Just</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679369815"><span class="hs-identifier hs-var">w''</span></a></span><span class="hs-special">,</span><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679369812"><span class="hs-identifier hs-var">s'</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-64"></span><span>      </span><span id="local-6989586621679369810"><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679369810"><span class="hs-identifier hs-var">t</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">X String -&gt; X String -&gt; X String
+forall a. X a -&gt; X a -&gt; X a
+</span><a href="XMonad.Util.DebugWindow.html#catchX%27"><span class="hs-identifier hs-var">catchX'</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">String -&gt; String
+</span><a href="XMonad.Util.DebugWindow.html#wrap"><span class="hs-identifier hs-var">wrap</span></a></span><span> </span><span class="annot"><span class="annottext">(String -&gt; String) -&gt; X String -&gt; X String
+forall (f :: * -&gt; *) a b. Functor f =&gt; (a -&gt; b) -&gt; f a -&gt; f b
+</span><span class="hs-operator hs-var">&lt;$&gt;</span></span><span> </span><span class="annot"><span class="annottext">String -&gt; Window -&gt; X String
+</span><a href="XMonad.Util.DebugWindow.html#getEWMHTitle"><span class="hs-identifier hs-var">getEWMHTitle</span></a></span><span>  </span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot;VISIBLE&quot;</span></span><span> </span><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679369852"><span class="hs-identifier hs-var">w</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">(X String -&gt; X String) -&gt; X String -&gt; X String
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span>
+</span><span id="line-65"></span><span>           </span><span class="annot"><span class="annottext">X String -&gt; X String -&gt; X String
+forall a. X a -&gt; X a -&gt; X a
+</span><a href="XMonad.Util.DebugWindow.html#catchX%27"><span class="hs-identifier hs-var">catchX'</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">String -&gt; String
+</span><a href="XMonad.Util.DebugWindow.html#wrap"><span class="hs-identifier hs-var">wrap</span></a></span><span> </span><span class="annot"><span class="annottext">(String -&gt; String) -&gt; X String -&gt; X String
+forall (f :: * -&gt; *) a b. Functor f =&gt; (a -&gt; b) -&gt; f a -&gt; f b
+</span><span class="hs-operator hs-var">&lt;$&gt;</span></span><span> </span><span class="annot"><span class="annottext">String -&gt; Window -&gt; X String
+</span><a href="XMonad.Util.DebugWindow.html#getEWMHTitle"><span class="hs-identifier hs-var">getEWMHTitle</span></a></span><span>  </span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot;&quot;</span></span><span>        </span><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679369852"><span class="hs-identifier hs-var">w</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">(X String -&gt; X String) -&gt; X String -&gt; X String
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span>
+</span><span id="line-66"></span><span>           </span><span class="annot"><span class="annottext">X String -&gt; X String -&gt; X String
+forall a. X a -&gt; X a -&gt; X a
+</span><a href="XMonad.Util.DebugWindow.html#catchX%27"><span class="hs-identifier hs-var">catchX'</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">String -&gt; String
+</span><a href="XMonad.Util.DebugWindow.html#wrap"><span class="hs-identifier hs-var">wrap</span></a></span><span> </span><span class="annot"><span class="annottext">(String -&gt; String) -&gt; X String -&gt; X String
+forall (f :: * -&gt; *) a b. Functor f =&gt; (a -&gt; b) -&gt; f a -&gt; f b
+</span><span class="hs-operator hs-var">&lt;$&gt;</span></span><span> </span><span class="annot"><span class="annottext">Window -&gt; X String
+</span><a href="XMonad.Util.DebugWindow.html#getICCCMTitle"><span class="hs-identifier hs-var">getICCCMTitle</span></a></span><span>           </span><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679369852"><span class="hs-identifier hs-var">w</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">(X String -&gt; X String) -&gt; X String -&gt; X String
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span>
+</span><span id="line-67"></span><span>           </span><span class="annot"><span class="annottext">String -&gt; X String
+forall (m :: * -&gt; *) a. Monad m =&gt; a -&gt; m a
+</span><span class="hs-identifier hs-var">return</span></span><span> </span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot;&quot;</span></span><span>
+</span><span id="line-68"></span><span>      </span><span id="local-6989586621679369804"><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679369804"><span class="hs-identifier hs-var">h'</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">Window -&gt; X String
+</span><a href="XMonad.Util.DebugWindow.html#getMachine"><span class="hs-identifier hs-var">getMachine</span></a></span><span> </span><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679369852"><span class="hs-identifier hs-var">w</span></a></span><span>
+</span><span id="line-69"></span><span>      </span><span class="hs-keyword">let</span><span> </span><span id="local-6989586621679369802"><span class="annot"><span class="annottext">h :: String
+</span><a href="#local-6989586621679369802"><span class="hs-identifier hs-var hs-var">h</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-keyword">if</span><span> </span><span class="annot"><span class="annottext">String -&gt; Bool
+forall (t :: * -&gt; *) a. Foldable t =&gt; t a -&gt; Bool
+</span><span class="hs-identifier hs-var">null</span></span><span> </span><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679369804"><span class="hs-identifier hs-var">h'</span></a></span><span> </span><span class="hs-keyword">then</span><span> </span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot;&quot;</span></span><span> </span><span class="hs-keyword">else</span><span> </span><span class="annot"><span class="annottext">Char
+</span><span class="hs-char">'@'</span></span><span class="annot"><span class="annottext">Char -&gt; String -&gt; String
+forall a. a -&gt; [a] -&gt; [a]
+</span><span class="hs-glyph hs-var">:</span></span><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679369804"><span class="hs-identifier hs-var">h'</span></a></span><span>
+</span><span id="line-70"></span><span>      </span><span class="hs-comment">-- if it has WM_COMMAND use it, else use the appName</span><span>
+</span><span id="line-71"></span><span>      </span><span class="hs-comment">-- NB. modern stuff often does not set WM_COMMAND since it's only ICCCM required and not some</span><span>
+</span><span id="line-72"></span><span>      </span><span class="hs-comment">-- horrible gnome/freedesktop session manager thing like Wayland intended. How helpful of them.</span><span>
+</span><span id="line-73"></span><span>      </span><span id="local-6989586621679369801"><span class="annot"><span class="annottext">[String]
+</span><a href="#local-6989586621679369801"><span class="hs-identifier hs-var">p'</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">(Display -&gt; X [String]) -&gt; X [String]
+forall a. (Display -&gt; X a) -&gt; X a
+</span><span class="hs-identifier hs-var">withDisplay</span></span><span> </span><span class="annot"><span class="annottext">((Display -&gt; X [String]) -&gt; X [String])
+-&gt; (Display -&gt; X [String]) -&gt; X [String]
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="hs-glyph">\</span><span id="local-6989586621679369800"><span class="annot"><span class="annottext">Display
+</span><a href="#local-6989586621679369800"><span class="hs-identifier hs-var">d</span></a></span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">Display -&gt; Window -&gt; X [String]
+</span><a href="XMonad.Util.DebugWindow.html#safeGetCommand"><span class="hs-identifier hs-var">safeGetCommand</span></a></span><span> </span><span class="annot"><span class="annottext">Display
+</span><a href="#local-6989586621679369800"><span class="hs-identifier hs-var">d</span></a></span><span> </span><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679369852"><span class="hs-identifier hs-var">w</span></a></span><span>
+</span><span id="line-74"></span><span>      </span><span class="hs-keyword">let</span><span> </span><span id="local-6989586621679369798"><span class="annot"><span class="annottext">p :: String
+</span><a href="#local-6989586621679369798"><span class="hs-identifier hs-var hs-var">p</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-keyword">if</span><span> </span><span class="annot"><span class="annottext">[String] -&gt; Bool
+forall (t :: * -&gt; *) a. Foldable t =&gt; t a -&gt; Bool
+</span><span class="hs-identifier hs-var">null</span></span><span> </span><span class="annot"><span class="annottext">[String]
+</span><a href="#local-6989586621679369801"><span class="hs-identifier hs-var">p'</span></a></span><span> </span><span class="hs-keyword">then</span><span> </span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot;&quot;</span></span><span> </span><span class="hs-keyword">else</span><span> </span><span class="annot"><span class="annottext">String -&gt; String
+</span><a href="XMonad.Util.DebugWindow.html#wrap"><span class="hs-identifier hs-var">wrap</span></a></span><span> </span><span class="annot"><span class="annottext">(String -&gt; String) -&gt; String -&gt; String
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">[String] -&gt; String
+</span><span class="hs-identifier hs-var">unwords</span></span><span> </span><span class="annot"><span class="annottext">[String]
+</span><a href="#local-6989586621679369801"><span class="hs-identifier hs-var">p'</span></a></span><span>
+</span><span id="line-75"></span><span>      </span><span id="local-6989586621679369796"><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679369796"><span class="hs-identifier hs-var">nWP</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">String -&gt; X Window
+</span><span class="hs-identifier hs-var">getAtom</span></span><span> </span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot;_NET_WM_PID&quot;</span></span><span>
+</span><span id="line-76"></span><span>      </span><span id="local-6989586621679369794"><span class="annot"><span class="annottext">Maybe [CLong]
+</span><a href="#local-6989586621679369794"><span class="hs-identifier hs-var">pid'</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">(Display -&gt; X (Maybe [CLong])) -&gt; X (Maybe [CLong])
+forall a. (Display -&gt; X a) -&gt; X a
+</span><span class="hs-identifier hs-var">withDisplay</span></span><span> </span><span class="annot"><span class="annottext">((Display -&gt; X (Maybe [CLong])) -&gt; X (Maybe [CLong]))
+-&gt; (Display -&gt; X (Maybe [CLong])) -&gt; X (Maybe [CLong])
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="hs-glyph">\</span><span id="local-6989586621679369793"><span class="annot"><span class="annottext">Display
+</span><a href="#local-6989586621679369793"><span class="hs-identifier hs-var">d</span></a></span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">IO (Maybe [CLong]) -&gt; X (Maybe [CLong])
+forall (m :: * -&gt; *) a. MonadIO m =&gt; IO a -&gt; m a
+</span><span class="hs-identifier hs-var">io</span></span><span> </span><span class="annot"><span class="annottext">(IO (Maybe [CLong]) -&gt; X (Maybe [CLong]))
+-&gt; IO (Maybe [CLong]) -&gt; X (Maybe [CLong])
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">Display -&gt; Window -&gt; Window -&gt; IO (Maybe [CLong])
+</span><span class="hs-identifier hs-var">getWindowProperty32</span></span><span> </span><span class="annot"><span class="annottext">Display
+</span><a href="#local-6989586621679369793"><span class="hs-identifier hs-var">d</span></a></span><span> </span><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679369796"><span class="hs-identifier hs-var">nWP</span></a></span><span> </span><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679369852"><span class="hs-identifier hs-var">w</span></a></span><span>
+</span><span id="line-77"></span><span>      </span><span class="hs-keyword">let</span><span> </span><span id="local-6989586621679369791"><span class="annot"><span class="annottext">pid :: String
+</span><a href="#local-6989586621679369791"><span class="hs-identifier hs-var hs-var">pid</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-keyword">case</span><span> </span><span class="annot"><span class="annottext">Maybe [CLong]
+</span><a href="#local-6989586621679369794"><span class="hs-identifier hs-var">pid'</span></a></span><span> </span><span class="hs-keyword">of</span><span>
+</span><span id="line-78"></span><span>                  </span><span class="annot"><span class="hs-identifier hs-type">Just</span></span><span> </span><span class="hs-special">[</span><span id="local-6989586621679369790"><span class="annot"><span class="annottext">CLong
+</span><a href="#local-6989586621679369790"><span class="hs-identifier hs-var">pid''</span></a></span></span><span class="hs-special">]</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">Char
+</span><span class="hs-char">'('</span></span><span class="annot"><span class="annottext">Char -&gt; String -&gt; String
+forall a. a -&gt; [a] -&gt; [a]
+</span><span class="hs-glyph hs-var">:</span></span><span class="annot"><span class="annottext">CLong -&gt; String
+forall a. Show a =&gt; a -&gt; String
+</span><span class="hs-identifier hs-var">show</span></span><span> </span><span class="annot"><span class="annottext">CLong
+</span><a href="#local-6989586621679369790"><span class="hs-identifier hs-var">pid''</span></a></span><span> </span><span class="annot"><span class="annottext">String -&gt; String -&gt; String
+forall a. [a] -&gt; [a] -&gt; [a]
+</span><span class="hs-operator hs-var">++</span></span><span> </span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot;)&quot;</span></span><span>
+</span><span id="line-79"></span><span>                  </span><span class="annot"><span class="annottext">Maybe [CLong]
+</span><span class="hs-identifier">_</span></span><span>            </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot;&quot;</span></span><span>
+</span><span id="line-80"></span><span>      </span><span class="hs-keyword">let</span><span> </span><span id="local-6989586621679369788"><span class="annot"><span class="annottext">cmd :: String
+</span><a href="#local-6989586621679369788"><span class="hs-identifier hs-var hs-var">cmd</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679369798"><span class="hs-identifier hs-var">p</span></a></span><span> </span><span class="annot"><span class="annottext">String -&gt; String -&gt; String
+forall a. [a] -&gt; [a] -&gt; [a]
+</span><span class="hs-operator hs-var">++</span></span><span> </span><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679369791"><span class="hs-identifier hs-var">pid</span></a></span><span> </span><span class="annot"><span class="annottext">String -&gt; String -&gt; String
+forall a. [a] -&gt; [a] -&gt; [a]
+</span><span class="hs-operator hs-var">++</span></span><span> </span><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679369802"><span class="hs-identifier hs-var">h</span></a></span><span>
+</span><span id="line-81"></span><span>      </span><span class="hs-keyword">let</span><span> </span><span class="hs-special">(</span><span id="local-6989586621679369787"><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679369787"><span class="hs-identifier hs-var">lb</span></a></span></span><span class="hs-special">,</span><span id="local-6989586621679369786"><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679369786"><span class="hs-identifier hs-var">rb</span></a></span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-keyword">case</span><span> </span><span class="hs-special">(</span><span class="hs-special">)</span><span> </span><span class="hs-keyword">of</span><span>
+</span><span id="line-82"></span><span>                      </span><span class="hs-special">(</span><span class="hs-special">)</span><span> </span><span class="hs-glyph">|</span><span> </span><span class="annot"><span class="annottext">CInt
+</span><a href="#local-6989586621679369832"><span class="hs-identifier hs-var">m</span></a></span><span> </span><span class="annot"><span class="annottext">CInt -&gt; CInt -&gt; Bool
+forall a. Eq a =&gt; a -&gt; a -&gt; Bool
+</span><span class="hs-operator hs-var">==</span></span><span> </span><span class="annot"><span class="annottext">CInt
+</span><span class="hs-identifier hs-var">waIsViewable</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot;&quot;</span></span><span class="hs-special">,</span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot;&quot;</span></span><span class="hs-special">)</span><span>
+</span><span id="line-83"></span><span>                         </span><span class="hs-glyph">|</span><span> </span><span class="annot"><span class="annottext">Bool
+</span><span class="hs-identifier hs-var">otherwise</span></span><span>         </span><span class="hs-glyph">-&gt;</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot;[&quot;</span></span><span class="hs-special">,</span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot;]&quot;</span></span><span class="hs-special">)</span><span>
+</span><span id="line-84"></span><span>          </span><span id="local-6989586621679369784"><span class="annot"><span class="annottext">o' :: String
+</span><a href="#local-6989586621679369784"><span class="hs-identifier hs-var hs-var">o'</span></a></span></span><span>      </span><span class="hs-glyph">=</span><span> </span><span class="hs-keyword">if</span><span> </span><span class="annot"><span class="annottext">Bool
+</span><a href="#local-6989586621679369830"><span class="hs-identifier hs-var">o</span></a></span><span> </span><span class="hs-keyword">then</span><span> </span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot;!&quot;</span></span><span> </span><span class="hs-keyword">else</span><span> </span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot;&quot;</span></span><span>
+</span><span id="line-85"></span><span>      </span><span class="annot"><span class="annottext">String -&gt; X String
+forall (m :: * -&gt; *) a. Monad m =&gt; a -&gt; m a
+</span><span class="hs-identifier hs-var">return</span></span><span> </span><span class="annot"><span class="annottext">(String -&gt; X String) -&gt; String -&gt; X String
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">[String] -&gt; String
+forall (t :: * -&gt; *) a. Foldable t =&gt; t [a] -&gt; [a]
+</span><span class="hs-identifier hs-var">concat</span></span><span> </span><span class="hs-special">[</span><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679369787"><span class="hs-identifier hs-var">lb</span></a></span><span>
+</span><span id="line-86"></span><span>                      </span><span class="hs-special">,</span><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679369784"><span class="hs-identifier hs-var">o'</span></a></span><span>
+</span><span id="line-87"></span><span>                      </span><span class="hs-special">,</span><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679369851"><span class="hs-identifier hs-var">wx</span></a></span><span>
+</span><span id="line-88"></span><span>                      </span><span class="hs-special">,</span><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679369810"><span class="hs-identifier hs-var">t</span></a></span><span>
+</span><span id="line-89"></span><span>                      </span><span class="hs-special">,</span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot; &quot;</span></span><span>
+</span><span id="line-90"></span><span>                      </span><span class="hs-special">,</span><span class="annot"><span class="annottext">CInt -&gt; String
+forall a. Show a =&gt; a -&gt; String
+</span><span class="hs-identifier hs-var">show</span></span><span> </span><span class="annot"><span class="annottext">CInt
+</span><a href="#local-6989586621679369838"><span class="hs-identifier hs-var">wid</span></a></span><span>
+</span><span id="line-91"></span><span>                      </span><span class="hs-special">,</span><span class="annot"><span class="annottext">Char
+</span><span class="hs-char">'x'</span></span><span class="annot"><span class="annottext">Char -&gt; String -&gt; String
+forall a. a -&gt; [a] -&gt; [a]
+</span><span class="hs-glyph hs-var">:</span></span><span class="annot"><span class="annottext">CInt -&gt; String
+forall a. Show a =&gt; a -&gt; String
+</span><span class="hs-identifier hs-var">show</span></span><span> </span><span class="annot"><span class="annottext">CInt
+</span><a href="#local-6989586621679369836"><span class="hs-identifier hs-var">ht</span></a></span><span>
+</span><span id="line-92"></span><span>                      </span><span class="hs-special">,</span><span class="hs-keyword">if</span><span> </span><span class="annot"><span class="annottext">CInt
+</span><a href="#local-6989586621679369834"><span class="hs-identifier hs-var">bw</span></a></span><span> </span><span class="annot"><span class="annottext">CInt -&gt; CInt -&gt; Bool
+forall a. Eq a =&gt; a -&gt; a -&gt; Bool
+</span><span class="hs-operator hs-var">==</span></span><span> </span><span class="annot"><span class="annottext">CInt
+</span><span class="hs-number">0</span></span><span> </span><span class="hs-keyword">then</span><span> </span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot;&quot;</span></span><span> </span><span class="hs-keyword">else</span><span> </span><span class="annot"><span class="annottext">Char
+</span><span class="hs-char">'+'</span></span><span class="annot"><span class="annottext">Char -&gt; String -&gt; String
+forall a. a -&gt; [a] -&gt; [a]
+</span><span class="hs-glyph hs-var">:</span></span><span class="annot"><span class="annottext">CInt -&gt; String
+forall a. Show a =&gt; a -&gt; String
+</span><span class="hs-identifier hs-var">show</span></span><span> </span><span class="annot"><span class="annottext">CInt
+</span><a href="#local-6989586621679369834"><span class="hs-identifier hs-var">bw</span></a></span><span>
+</span><span id="line-93"></span><span>                      </span><span class="hs-special">,</span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot;@&quot;</span></span><span>
+</span><span id="line-94"></span><span>                      </span><span class="hs-special">,</span><span class="annot"><span class="annottext">CInt -&gt; String
+forall a. Show a =&gt; a -&gt; String
+</span><span class="hs-identifier hs-var">show</span></span><span> </span><span class="annot"><span class="annottext">CInt
+</span><a href="#local-6989586621679369842"><span class="hs-identifier hs-var">x</span></a></span><span>
+</span><span id="line-95"></span><span>                      </span><span class="hs-special">,</span><span class="annot"><span class="annottext">Char
+</span><span class="hs-char">','</span></span><span class="annot"><span class="annottext">Char -&gt; String -&gt; String
+forall a. a -&gt; [a] -&gt; [a]
+</span><span class="hs-glyph hs-var">:</span></span><span class="annot"><span class="annottext">CInt -&gt; String
+forall a. Show a =&gt; a -&gt; String
+</span><span class="hs-identifier hs-var">show</span></span><span> </span><span class="annot"><span class="annottext">CInt
+</span><a href="#local-6989586621679369840"><span class="hs-identifier hs-var">y</span></a></span><span>
+</span><span id="line-96"></span><span>                      </span><span class="hs-special">,</span><span class="hs-keyword">if</span><span> </span><span class="annot"><span class="annottext">String -&gt; Bool
+forall (t :: * -&gt; *) a. Foldable t =&gt; t a -&gt; Bool
+</span><span class="hs-identifier hs-var">null</span></span><span> </span><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679369825"><span class="hs-identifier hs-var">c</span></a></span><span> </span><span class="hs-keyword">then</span><span> </span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot;&quot;</span></span><span> </span><span class="hs-keyword">else</span><span> </span><span class="annot"><span class="annottext">Char
+</span><span class="hs-char">' '</span></span><span class="annot"><span class="annottext">Char -&gt; String -&gt; String
+forall a. a -&gt; [a] -&gt; [a]
+</span><span class="hs-glyph hs-var">:</span></span><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679369825"><span class="hs-identifier hs-var">c</span></a></span><span>
+</span><span id="line-97"></span><span>                      </span><span class="hs-special">,</span><span class="hs-keyword">if</span><span> </span><span class="annot"><span class="annottext">String -&gt; Bool
+forall (t :: * -&gt; *) a. Foldable t =&gt; t a -&gt; Bool
+</span><span class="hs-identifier hs-var">null</span></span><span> </span><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679369788"><span class="hs-identifier hs-var">cmd</span></a></span><span> </span><span class="hs-keyword">then</span><span> </span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot;&quot;</span></span><span> </span><span class="hs-keyword">else</span><span> </span><span class="annot"><span class="annottext">Char
+</span><span class="hs-char">' '</span></span><span class="annot"><span class="annottext">Char -&gt; String -&gt; String
+forall a. a -&gt; [a] -&gt; [a]
+</span><span class="hs-glyph hs-var">:</span></span><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679369788"><span class="hs-identifier hs-var">cmd</span></a></span><span>
+</span><span id="line-98"></span><span>                      </span><span class="hs-special">,</span><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679369786"><span class="hs-identifier hs-var">rb</span></a></span><span>
+</span><span id="line-99"></span><span>                      </span><span class="hs-special">]</span><span>
+</span><span id="line-100"></span><span>
+</span><span id="line-101"></span><span class="annot"><a href="XMonad.Util.DebugWindow.html#getEWMHTitle"><span class="hs-identifier hs-type">getEWMHTitle</span></a></span><span>       </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">String</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Window</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">X</span></span><span> </span><span class="annot"><span class="hs-identifier hs-type">String</span></span><span>
+</span><span id="line-102"></span><span id="getEWMHTitle"><span class="annot"><span class="annottext">getEWMHTitle :: String -&gt; Window -&gt; X String
+</span><a href="XMonad.Util.DebugWindow.html#getEWMHTitle"><span class="hs-identifier hs-var hs-var">getEWMHTitle</span></a></span></span><span> </span><span id="local-6989586621679369782"><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679369782"><span class="hs-identifier hs-var">sub</span></a></span></span><span> </span><span id="local-6989586621679369781"><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679369781"><span class="hs-identifier hs-var">w</span></a></span></span><span> </span><span class="hs-glyph">=</span><span>  </span><span class="hs-keyword">do</span><span>
+</span><span id="line-103"></span><span>  </span><span id="local-6989586621679369780"><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679369780"><span class="hs-identifier hs-var">a</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">String -&gt; X Window
+</span><span class="hs-identifier hs-var">getAtom</span></span><span> </span><span class="annot"><span class="annottext">(String -&gt; X Window) -&gt; String -&gt; X Window
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot;_NET_WM_&quot;</span></span><span> </span><span class="annot"><span class="annottext">String -&gt; String -&gt; String
+forall a. [a] -&gt; [a] -&gt; [a]
+</span><span class="hs-operator hs-var">++</span></span><span> </span><span class="hs-special">(</span><span class="hs-keyword">if</span><span> </span><span class="annot"><span class="annottext">String -&gt; Bool
+forall (t :: * -&gt; *) a. Foldable t =&gt; t a -&gt; Bool
+</span><span class="hs-identifier hs-var">null</span></span><span> </span><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679369782"><span class="hs-identifier hs-var">sub</span></a></span><span> </span><span class="hs-keyword">then</span><span> </span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot;&quot;</span></span><span> </span><span class="hs-keyword">else</span><span> </span><span class="annot"><span class="annottext">Char
+</span><span class="hs-char">'_'</span></span><span class="annot"><span class="annottext">Char -&gt; String -&gt; String
+forall a. a -&gt; [a] -&gt; [a]
+</span><span class="hs-glyph hs-var">:</span></span><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679369782"><span class="hs-identifier hs-var">sub</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">String -&gt; String -&gt; String
+forall a. [a] -&gt; [a] -&gt; [a]
+</span><span class="hs-operator hs-var">++</span></span><span> </span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot;_NAME&quot;</span></span><span>
+</span><span id="line-104"></span><span>  </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">Just</span></span><span> </span><span id="local-6989586621679369779"><span class="annot"><span class="annottext">[CLong]
+</span><a href="#local-6989586621679369779"><span class="hs-identifier hs-var">t</span></a></span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">(Display -&gt; X (Maybe [CLong])) -&gt; X (Maybe [CLong])
+forall a. (Display -&gt; X a) -&gt; X a
+</span><span class="hs-identifier hs-var">withDisplay</span></span><span> </span><span class="annot"><span class="annottext">((Display -&gt; X (Maybe [CLong])) -&gt; X (Maybe [CLong]))
+-&gt; (Display -&gt; X (Maybe [CLong])) -&gt; X (Maybe [CLong])
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="hs-glyph">\</span><span id="local-6989586621679369778"><span class="annot"><span class="annottext">Display
+</span><a href="#local-6989586621679369778"><span class="hs-identifier hs-var">d</span></a></span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">IO (Maybe [CLong]) -&gt; X (Maybe [CLong])
+forall (m :: * -&gt; *) a. MonadIO m =&gt; IO a -&gt; m a
+</span><span class="hs-identifier hs-var">io</span></span><span> </span><span class="annot"><span class="annottext">(IO (Maybe [CLong]) -&gt; X (Maybe [CLong]))
+-&gt; IO (Maybe [CLong]) -&gt; X (Maybe [CLong])
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">Display -&gt; Window -&gt; Window -&gt; IO (Maybe [CLong])
+</span><span class="hs-identifier hs-var">getWindowProperty32</span></span><span> </span><span class="annot"><span class="annottext">Display
+</span><a href="#local-6989586621679369778"><span class="hs-identifier hs-var">d</span></a></span><span> </span><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679369780"><span class="hs-identifier hs-var">a</span></a></span><span> </span><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679369781"><span class="hs-identifier hs-var">w</span></a></span><span>
+</span><span id="line-105"></span><span>  </span><span class="annot"><span class="annottext">String -&gt; X String
+forall (m :: * -&gt; *) a. Monad m =&gt; a -&gt; m a
+</span><span class="hs-identifier hs-var">return</span></span><span> </span><span class="annot"><span class="annottext">(String -&gt; X String) -&gt; String -&gt; X String
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">(CLong -&gt; Char) -&gt; [CLong] -&gt; String
+forall a b. (a -&gt; b) -&gt; [a] -&gt; [b]
+</span><span class="hs-identifier hs-var">map</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Int -&gt; Char
+forall a. Enum a =&gt; Int -&gt; a
+</span><span class="hs-identifier hs-var">toEnum</span></span><span> </span><span class="annot"><span class="annottext">(Int -&gt; Char) -&gt; (CLong -&gt; Int) -&gt; CLong -&gt; Char
+forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">CLong -&gt; Int
+forall a. Enum a =&gt; a -&gt; Int
+</span><span class="hs-identifier hs-var">fromEnum</span></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">[CLong]
+</span><a href="#local-6989586621679369779"><span class="hs-identifier hs-var">t</span></a></span><span>
+</span><span id="line-106"></span><span>
+</span><span id="line-107"></span><span class="annot"><a href="XMonad.Util.DebugWindow.html#getICCCMTitle"><span class="hs-identifier hs-type">getICCCMTitle</span></a></span><span>   </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Window</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">X</span></span><span> </span><span class="annot"><span class="hs-identifier hs-type">String</span></span><span>
+</span><span id="line-108"></span><span id="getICCCMTitle"><span class="annot"><span class="annottext">getICCCMTitle :: Window -&gt; X String
+</span><a href="XMonad.Util.DebugWindow.html#getICCCMTitle"><span class="hs-identifier hs-var hs-var">getICCCMTitle</span></a></span></span><span> </span><span id="local-6989586621679369777"><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679369777"><span class="hs-identifier hs-var">w</span></a></span></span><span> </span><span class="hs-glyph">=</span><span>  </span><span class="annot"><span class="annottext">Window -&gt; Window -&gt; X String
+</span><a href="XMonad.Util.DebugWindow.html#getDecodedStringProp"><span class="hs-identifier hs-var">getDecodedStringProp</span></a></span><span> </span><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679369777"><span class="hs-identifier hs-var">w</span></a></span><span> </span><span class="annot"><span class="annottext">Window
+</span><span class="hs-identifier hs-var">wM_NAME</span></span><span>
+</span><span id="line-109"></span><span>
+</span><span id="line-110"></span><span class="annot"><a href="XMonad.Util.DebugWindow.html#getDecodedStringProp"><span class="hs-identifier hs-type">getDecodedStringProp</span></a></span><span>     </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Window</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Atom</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">X</span></span><span> </span><span class="annot"><span class="hs-identifier hs-type">String</span></span><span>
+</span><span id="line-111"></span><span id="getDecodedStringProp"><span class="annot"><span class="annottext">getDecodedStringProp :: Window -&gt; Window -&gt; X String
+</span><a href="XMonad.Util.DebugWindow.html#getDecodedStringProp"><span class="hs-identifier hs-var hs-var">getDecodedStringProp</span></a></span></span><span> </span><span id="local-6989586621679369773"><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679369773"><span class="hs-identifier hs-var">w</span></a></span></span><span> </span><span id="local-6989586621679369772"><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679369772"><span class="hs-identifier hs-var">a</span></a></span></span><span> </span><span class="hs-glyph">=</span><span>  </span><span class="hs-keyword">do</span><span>
+</span><span id="line-112"></span><span>  </span><span id="local-6989586621679369771"><span class="annot"><span class="annottext">t :: TextProperty
+</span><a href="#local-6989586621679369771"><span class="hs-identifier hs-var">t</span></a></span></span><span class="hs-glyph">@</span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">TextProperty</span></span><span> </span><span id="local-6989586621679369769"><span class="annot"><span class="annottext">CString
+</span><a href="#local-6989586621679369769"><span class="hs-identifier hs-var">t'</span></a></span></span><span> </span><span class="annot"><span class="annottext">Window
+</span><span class="hs-identifier">_</span></span><span> </span><span class="annot"><span class="annottext">CInt
+</span><span class="hs-number">8</span></span><span> </span><span class="annot"><span class="annottext">Window
+</span><span class="hs-identifier">_</span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">(Display -&gt; X TextProperty) -&gt; X TextProperty
+forall a. (Display -&gt; X a) -&gt; X a
+</span><span class="hs-identifier hs-var">withDisplay</span></span><span> </span><span class="annot"><span class="annottext">((Display -&gt; X TextProperty) -&gt; X TextProperty)
+-&gt; (Display -&gt; X TextProperty) -&gt; X TextProperty
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="hs-glyph">\</span><span id="local-6989586621679369768"><span class="annot"><span class="annottext">Display
+</span><a href="#local-6989586621679369768"><span class="hs-identifier hs-var">d</span></a></span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">IO TextProperty -&gt; X TextProperty
+forall (m :: * -&gt; *) a. MonadIO m =&gt; IO a -&gt; m a
+</span><span class="hs-identifier hs-var">io</span></span><span> </span><span class="annot"><span class="annottext">(IO TextProperty -&gt; X TextProperty)
+-&gt; IO TextProperty -&gt; X TextProperty
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">Display -&gt; Window -&gt; Window -&gt; IO TextProperty
+</span><span class="hs-identifier hs-var">getTextProperty</span></span><span> </span><span class="annot"><span class="annottext">Display
+</span><a href="#local-6989586621679369768"><span class="hs-identifier hs-var">d</span></a></span><span> </span><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679369773"><span class="hs-identifier hs-var">w</span></a></span><span> </span><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679369772"><span class="hs-identifier hs-var">a</span></a></span><span>
+</span><span id="line-113"></span><span>  </span><span class="hs-special">[</span><span id="local-6989586621679369766"><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679369766"><span class="hs-identifier hs-var">s</span></a></span></span><span class="hs-special">]</span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">X [String] -&gt; X [String] -&gt; X [String]
+forall a. X a -&gt; X a -&gt; X a
+</span><a href="XMonad.Util.DebugWindow.html#catchX%27"><span class="hs-identifier hs-var">catchX'</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">TextProperty -&gt; X [String]
+</span><a href="XMonad.Util.DebugWindow.html#tryUTF8"><span class="hs-identifier hs-var">tryUTF8</span></a></span><span>     </span><span class="annot"><span class="annottext">TextProperty
+</span><a href="#local-6989586621679369771"><span class="hs-identifier hs-var">t</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">(X [String] -&gt; X [String]) -&gt; X [String] -&gt; X [String]
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span>
+</span><span id="line-114"></span><span>         </span><span class="annot"><span class="annottext">X [String] -&gt; X [String] -&gt; X [String]
+forall a. X a -&gt; X a -&gt; X a
+</span><a href="XMonad.Util.DebugWindow.html#catchX%27"><span class="hs-identifier hs-var">catchX'</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">TextProperty -&gt; X [String]
+</span><a href="XMonad.Util.DebugWindow.html#tryCompound"><span class="hs-identifier hs-var">tryCompound</span></a></span><span> </span><span class="annot"><span class="annottext">TextProperty
+</span><a href="#local-6989586621679369771"><span class="hs-identifier hs-var">t</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">(X [String] -&gt; X [String]) -&gt; X [String] -&gt; X [String]
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span>
+</span><span id="line-115"></span><span>         </span><span class="annot"><span class="annottext">IO [String] -&gt; X [String]
+forall (m :: * -&gt; *) a. MonadIO m =&gt; IO a -&gt; m a
+</span><span class="hs-identifier hs-var">io</span></span><span> </span><span class="hs-special">(</span><span class="hs-special">(</span><span class="annot"><span class="annottext">String -&gt; [String] -&gt; [String]
+forall a. a -&gt; [a] -&gt; [a]
+</span><span class="hs-glyph hs-var">:</span></span><span class="hs-special">[</span><span class="hs-special">]</span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">(String -&gt; [String]) -&gt; IO String -&gt; IO [String]
+forall (f :: * -&gt; *) a b. Functor f =&gt; (a -&gt; b) -&gt; f a -&gt; f b
+</span><span class="hs-operator hs-var">&lt;$&gt;</span></span><span> </span><span class="annot"><span class="annottext">CString -&gt; IO String
+</span><span class="hs-identifier hs-var">peekCString</span></span><span> </span><span class="annot"><span class="annottext">CString
+</span><a href="#local-6989586621679369769"><span class="hs-identifier hs-var">t'</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-116"></span><span>  </span><span class="annot"><span class="annottext">String -&gt; X String
+forall (m :: * -&gt; *) a. Monad m =&gt; a -&gt; m a
+</span><span class="hs-identifier hs-var">return</span></span><span> </span><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679369766"><span class="hs-identifier hs-var">s</span></a></span><span>
+</span><span id="line-117"></span><span>
+</span><span id="line-118"></span><span class="annot"><a href="XMonad.Util.DebugWindow.html#tryUTF8"><span class="hs-identifier hs-type">tryUTF8</span></a></span><span>                          </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">TextProperty</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">X</span></span><span> </span><span class="hs-special">[</span><span class="annot"><span class="hs-identifier hs-type">String</span></span><span class="hs-special">]</span><span>
+</span><span id="line-119"></span><span id="tryUTF8"><span class="annot"><span class="annottext">tryUTF8 :: TextProperty -&gt; X [String]
+</span><a href="XMonad.Util.DebugWindow.html#tryUTF8"><span class="hs-identifier hs-var hs-var">tryUTF8</span></a></span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">TextProperty</span></span><span> </span><span id="local-6989586621679369762"><span class="annot"><span class="annottext">CString
+</span><a href="#local-6989586621679369762"><span class="hs-identifier hs-var">s</span></a></span></span><span> </span><span id="local-6989586621679369761"><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679369761"><span class="hs-identifier hs-var">enc</span></a></span></span><span> </span><span class="annot"><span class="annottext">CInt
+</span><span class="hs-identifier">_</span></span><span> </span><span class="annot"><span class="annottext">Window
+</span><span class="hs-identifier">_</span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=</span><span>  </span><span class="hs-keyword">do</span><span>
+</span><span id="line-120"></span><span>  </span><span id="local-6989586621679369760"><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679369760"><span class="hs-identifier hs-var">uTF8_STRING</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">String -&gt; X Window
+</span><span class="hs-identifier hs-var">getAtom</span></span><span> </span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot;UTF8_STRING&quot;</span></span><span>
+</span><span id="line-121"></span><span>  </span><span class="annot"><span class="annottext">Bool -&gt; X () -&gt; X ()
+forall (f :: * -&gt; *). Applicative f =&gt; Bool -&gt; f () -&gt; f ()
+</span><span class="hs-identifier hs-var">when</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679369761"><span class="hs-identifier hs-var">enc</span></a></span><span> </span><span class="annot"><span class="annottext">Window -&gt; Window -&gt; Bool
+forall a. Eq a =&gt; a -&gt; a -&gt; Bool
+</span><span class="hs-operator hs-var">/=</span></span><span> </span><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679369760"><span class="hs-identifier hs-var">uTF8_STRING</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">(X () -&gt; X ()) -&gt; X () -&gt; X ()
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">String -&gt; X ()
+forall a. HasCallStack =&gt; String -&gt; a
+</span><span class="hs-identifier hs-var">error</span></span><span> </span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot;String is not UTF8_STRING&quot;</span></span><span>
+</span><span id="line-122"></span><span>  </span><span class="annot"><span class="annottext">(String -&gt; String) -&gt; [String] -&gt; [String]
+forall a b. (a -&gt; b) -&gt; [a] -&gt; [b]
+</span><span class="hs-identifier hs-var">map</span></span><span> </span><span class="annot"><span class="annottext">String -&gt; String
+</span><span class="hs-identifier hs-var">decodeString</span></span><span> </span><span class="annot"><span class="annottext">([String] -&gt; [String])
+-&gt; (String -&gt; [String]) -&gt; String -&gt; [String]
+forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">String -&gt; [String]
+</span><a href="XMonad.Util.DebugWindow.html#splitNul"><span class="hs-identifier hs-var">splitNul</span></a></span><span> </span><span class="annot"><span class="annottext">(String -&gt; [String]) -&gt; X String -&gt; X [String]
+forall (f :: * -&gt; *) a b. Functor f =&gt; (a -&gt; b) -&gt; f a -&gt; f b
+</span><span class="hs-operator hs-var">&lt;$&gt;</span></span><span> </span><span class="annot"><span class="annottext">IO String -&gt; X String
+forall (m :: * -&gt; *) a. MonadIO m =&gt; IO a -&gt; m a
+</span><span class="hs-identifier hs-var">io</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">CString -&gt; IO String
+</span><span class="hs-identifier hs-var">peekCString</span></span><span> </span><span class="annot"><span class="annottext">CString
+</span><a href="#local-6989586621679369762"><span class="hs-identifier hs-var">s</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-123"></span><span>
+</span><span id="line-124"></span><span class="annot"><a href="XMonad.Util.DebugWindow.html#tryCompound"><span class="hs-identifier hs-type">tryCompound</span></a></span><span>                            </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">TextProperty</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">X</span></span><span> </span><span class="hs-special">[</span><span class="annot"><span class="hs-identifier hs-type">String</span></span><span class="hs-special">]</span><span>
+</span><span id="line-125"></span><span id="tryCompound"><span class="annot"><span class="annottext">tryCompound :: TextProperty -&gt; X [String]
+</span><a href="XMonad.Util.DebugWindow.html#tryCompound"><span class="hs-identifier hs-var hs-var">tryCompound</span></a></span></span><span> </span><span id="local-6989586621679369755"><span class="annot"><span class="annottext">t :: TextProperty
+</span><a href="#local-6989586621679369755"><span class="hs-identifier hs-var">t</span></a></span></span><span class="hs-glyph">@</span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">TextProperty</span></span><span> </span><span class="annot"><span class="annottext">CString
+</span><span class="hs-identifier">_</span></span><span> </span><span id="local-6989586621679369754"><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679369754"><span class="hs-identifier hs-var">enc</span></a></span></span><span> </span><span class="annot"><span class="annottext">CInt
+</span><span class="hs-identifier">_</span></span><span> </span><span class="annot"><span class="annottext">Window
+</span><span class="hs-identifier">_</span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=</span><span>  </span><span class="hs-keyword">do</span><span>
+</span><span id="line-126"></span><span>  </span><span id="local-6989586621679369753"><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679369753"><span class="hs-identifier hs-var">cOMPOUND_TEXT</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">String -&gt; X Window
+</span><span class="hs-identifier hs-var">getAtom</span></span><span> </span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot;COMPOUND_TEXT&quot;</span></span><span>
+</span><span id="line-127"></span><span>  </span><span class="annot"><span class="annottext">Bool -&gt; X () -&gt; X ()
+forall (f :: * -&gt; *). Applicative f =&gt; Bool -&gt; f () -&gt; f ()
+</span><span class="hs-identifier hs-var">when</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679369754"><span class="hs-identifier hs-var">enc</span></a></span><span> </span><span class="annot"><span class="annottext">Window -&gt; Window -&gt; Bool
+forall a. Eq a =&gt; a -&gt; a -&gt; Bool
+</span><span class="hs-operator hs-var">/=</span></span><span> </span><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679369753"><span class="hs-identifier hs-var">cOMPOUND_TEXT</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">(X () -&gt; X ()) -&gt; X () -&gt; X ()
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">String -&gt; X ()
+forall a. HasCallStack =&gt; String -&gt; a
+</span><span class="hs-identifier hs-var">error</span></span><span> </span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot;String is not COMPOUND_TEXT&quot;</span></span><span>
+</span><span id="line-128"></span><span>  </span><span class="annot"><span class="annottext">(Display -&gt; X [String]) -&gt; X [String]
+forall a. (Display -&gt; X a) -&gt; X a
+</span><span class="hs-identifier hs-var">withDisplay</span></span><span> </span><span class="annot"><span class="annottext">((Display -&gt; X [String]) -&gt; X [String])
+-&gt; (Display -&gt; X [String]) -&gt; X [String]
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="hs-glyph">\</span><span id="local-6989586621679369752"><span class="annot"><span class="annottext">Display
+</span><a href="#local-6989586621679369752"><span class="hs-identifier hs-var">d</span></a></span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">IO [String] -&gt; X [String]
+forall (m :: * -&gt; *) a. MonadIO m =&gt; IO a -&gt; m a
+</span><span class="hs-identifier hs-var">io</span></span><span> </span><span class="annot"><span class="annottext">(IO [String] -&gt; X [String]) -&gt; IO [String] -&gt; X [String]
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">Display -&gt; TextProperty -&gt; IO [String]
+</span><span class="hs-identifier hs-var">wcTextPropertyToTextList</span></span><span> </span><span class="annot"><span class="annottext">Display
+</span><a href="#local-6989586621679369752"><span class="hs-identifier hs-var">d</span></a></span><span> </span><span class="annot"><span class="annottext">TextProperty
+</span><a href="#local-6989586621679369755"><span class="hs-identifier hs-var">t</span></a></span><span>
+</span><span id="line-129"></span><span>
+</span><span id="line-130"></span><span class="annot"><a href="XMonad.Util.DebugWindow.html#splitNul"><span class="hs-identifier hs-type">splitNul</span></a></span><span>    </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">String</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="hs-special">[</span><span class="annot"><span class="hs-identifier hs-type">String</span></span><span class="hs-special">]</span><span>
+</span><span id="line-131"></span><span id="splitNul"><span class="annot"><span class="annottext">splitNul :: String -&gt; [String]
+</span><a href="XMonad.Util.DebugWindow.html#splitNul"><span class="hs-identifier hs-var hs-var">splitNul</span></a></span></span><span> </span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot;&quot;</span></span><span> </span><span class="hs-glyph">=</span><span>  </span><span class="hs-special">[</span><span class="hs-special">]</span><span>
+</span><span id="line-132"></span><span class="annot"><a href="XMonad.Util.DebugWindow.html#splitNul"><span class="hs-identifier hs-var">splitNul</span></a></span><span> </span><span id="local-6989586621679369750"><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679369750"><span class="hs-identifier hs-var">s</span></a></span></span><span>  </span><span class="hs-glyph">=</span><span>  </span><span class="hs-keyword">let</span><span> </span><span class="hs-special">(</span><span id="local-6989586621679369749"><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679369749"><span class="hs-identifier hs-var">s'</span></a></span></span><span class="hs-special">,</span><span id="local-6989586621679369748"><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679369748"><span class="hs-identifier hs-var">ss'</span></a></span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">(Char -&gt; Bool) -&gt; String -&gt; (String, String)
+forall a. (a -&gt; Bool) -&gt; [a] -&gt; ([a], [a])
+</span><span class="hs-identifier hs-var">break</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Char -&gt; Char -&gt; Bool
+forall a. Eq a =&gt; a -&gt; a -&gt; Bool
+</span><span class="hs-operator hs-var">==</span></span><span> </span><span class="annot"><span class="annottext">Char
+</span><span class="hs-char">'\NUL'</span></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679369750"><span class="hs-identifier hs-var">s</span></a></span><span> </span><span class="hs-keyword">in</span><span> </span><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679369749"><span class="hs-identifier hs-var">s'</span></a></span><span> </span><span class="annot"><span class="annottext">String -&gt; [String] -&gt; [String]
+forall a. a -&gt; [a] -&gt; [a]
+</span><span class="hs-glyph hs-var">:</span></span><span> </span><span class="annot"><span class="annottext">String -&gt; [String]
+</span><a href="XMonad.Util.DebugWindow.html#splitNul"><span class="hs-identifier hs-var">splitNul</span></a></span><span> </span><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679369748"><span class="hs-identifier hs-var">ss'</span></a></span><span>
+</span><span id="line-133"></span><span>
+</span><span id="line-134"></span><span class="annot"><a href="XMonad.Util.DebugWindow.html#pad"><span class="hs-identifier hs-type">pad</span></a></span><span>       </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Int</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Char</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">String</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">String</span></span><span>
+</span><span id="line-135"></span><span id="pad"><span class="annot"><span class="annottext">pad :: Int -&gt; Char -&gt; String -&gt; String
+</span><a href="XMonad.Util.DebugWindow.html#pad"><span class="hs-identifier hs-var hs-var">pad</span></a></span></span><span> </span><span id="local-6989586621679369747"><span class="annot"><span class="annottext">Int
+</span><a href="#local-6989586621679369747"><span class="hs-identifier hs-var">w</span></a></span></span><span> </span><span id="local-6989586621679369746"><span class="annot"><span class="annottext">Char
+</span><a href="#local-6989586621679369746"><span class="hs-identifier hs-var">c</span></a></span></span><span> </span><span id="local-6989586621679369745"><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679369745"><span class="hs-identifier hs-var">s</span></a></span></span><span> </span><span class="hs-glyph">=</span><span>  </span><span class="annot"><span class="annottext">Int -&gt; Char -&gt; String
+forall a. Int -&gt; a -&gt; [a]
+</span><span class="hs-identifier hs-var">replicate</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Int
+</span><a href="#local-6989586621679369747"><span class="hs-identifier hs-var">w</span></a></span><span> </span><span class="annot"><span class="annottext">Int -&gt; Int -&gt; Int
+forall a. Num a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-glyph hs-var">-</span></span><span> </span><span class="annot"><span class="annottext">String -&gt; Int
+forall (t :: * -&gt; *) a. Foldable t =&gt; t a -&gt; Int
+</span><span class="hs-identifier hs-var">length</span></span><span> </span><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679369745"><span class="hs-identifier hs-var">s</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">Char
+</span><a href="#local-6989586621679369746"><span class="hs-identifier hs-var">c</span></a></span><span> </span><span class="annot"><span class="annottext">String -&gt; String -&gt; String
+forall a. [a] -&gt; [a] -&gt; [a]
+</span><span class="hs-operator hs-var">++</span></span><span> </span><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679369745"><span class="hs-identifier hs-var">s</span></a></span><span>
+</span><span id="line-136"></span><span>
+</span><span id="line-137"></span><span class="hs-comment">-- modified 'catchX' without the print to 'stderr'</span><span>
+</span><span id="line-138"></span><span id="local-6989586621679369902"><span class="annot"><a href="XMonad.Util.DebugWindow.html#catchX%27"><span class="hs-identifier hs-type">catchX'</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">X</span></span><span> </span><span class="annot"><a href="#local-6989586621679369902"><span class="hs-identifier hs-type">a</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">X</span></span><span> </span><span class="annot"><a href="#local-6989586621679369902"><span class="hs-identifier hs-type">a</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">X</span></span><span> </span><span class="annot"><a href="#local-6989586621679369902"><span class="hs-identifier hs-type">a</span></a></span></span><span>
+</span><span id="line-139"></span><span id="catchX%27"><span class="annot"><span class="annottext">catchX' :: X a -&gt; X a -&gt; X a
+</span><a href="XMonad.Util.DebugWindow.html#catchX%27"><span class="hs-identifier hs-var hs-var">catchX'</span></a></span></span><span> </span><span id="local-6989586621679369742"><span class="annot"><span class="annottext">X a
+</span><a href="#local-6989586621679369742"><span class="hs-identifier hs-var">job</span></a></span></span><span> </span><span id="local-6989586621679369741"><span class="annot"><span class="annottext">X a
+</span><a href="#local-6989586621679369741"><span class="hs-identifier hs-var">errcase</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-140"></span><span>  </span><span id="local-6989586621679369740"><span class="annot"><span class="annottext">XState
+</span><a href="#local-6989586621679369740"><span class="hs-identifier hs-var">st</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">X XState
+forall s (m :: * -&gt; *). MonadState s m =&gt; m s
+</span><span class="hs-identifier hs-var">get</span></span><span>
+</span><span id="line-141"></span><span>  </span><span id="local-6989586621679369738"><span class="annot"><span class="annottext">XConf
+</span><a href="#local-6989586621679369738"><span class="hs-identifier hs-var">c</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">X XConf
+forall r (m :: * -&gt; *). MonadReader r m =&gt; m r
+</span><span class="hs-identifier hs-var">ask</span></span><span>
+</span><span id="line-142"></span><span>  </span><span class="hs-special">(</span><span id="local-6989586621679369736"><span class="annot"><span class="annottext">a
+</span><a href="#local-6989586621679369736"><span class="hs-identifier hs-var">a</span></a></span></span><span class="hs-special">,</span><span> </span><span id="local-6989586621679369735"><span class="annot"><span class="annottext">XState
+</span><a href="#local-6989586621679369735"><span class="hs-identifier hs-var">s'</span></a></span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">IO (a, XState) -&gt; X (a, XState)
+forall (m :: * -&gt; *) a. MonadIO m =&gt; IO a -&gt; m a
+</span><span class="hs-identifier hs-var">io</span></span><span> </span><span class="annot"><span class="annottext">(IO (a, XState) -&gt; X (a, XState))
+-&gt; IO (a, XState) -&gt; X (a, XState)
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">XConf -&gt; XState -&gt; X a -&gt; IO (a, XState)
+forall a. XConf -&gt; XState -&gt; X a -&gt; IO (a, XState)
+</span><span class="hs-identifier hs-var">runX</span></span><span> </span><span class="annot"><span class="annottext">XConf
+</span><a href="#local-6989586621679369738"><span class="hs-identifier hs-var">c</span></a></span><span> </span><span class="annot"><span class="annottext">XState
+</span><a href="#local-6989586621679369740"><span class="hs-identifier hs-var">st</span></a></span><span> </span><span class="annot"><span class="annottext">X a
+</span><a href="#local-6989586621679369742"><span class="hs-identifier hs-var">job</span></a></span><span> </span><span class="annot"><span class="annottext">IO (a, XState)
+-&gt; (SomeException -&gt; IO (a, XState)) -&gt; IO (a, XState)
+forall e a. Exception e =&gt; IO a -&gt; (e -&gt; IO a) -&gt; IO a
+</span><span class="hs-operator hs-var">`E.catch`</span></span><span> </span><span class="hs-glyph">\</span><span id="local-6989586621679369732"><span class="annot"><span class="annottext">SomeException
+</span><a href="#local-6989586621679369732"><span class="hs-identifier hs-var">e</span></a></span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="hs-keyword">case</span><span> </span><span class="annot"><span class="annottext">SomeException -&gt; Maybe ExitCode
+forall e. Exception e =&gt; SomeException -&gt; Maybe e
+</span><span class="hs-identifier hs-var">fromException</span></span><span> </span><span class="annot"><span class="annottext">SomeException
+</span><a href="#local-6989586621679369732"><span class="hs-identifier hs-var">e</span></a></span><span> </span><span class="hs-keyword">of</span><span>
+</span><span id="line-143"></span><span>    </span><span class="annot"><span class="hs-identifier hs-type">Just</span></span><span> </span><span id="local-6989586621679369730"><span class="annot"><span class="annottext">ExitCode
+</span><a href="#local-6989586621679369730"><span class="hs-identifier hs-var">x</span></a></span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">SomeException -&gt; IO (a, XState)
+forall a e. Exception e =&gt; e -&gt; a
+</span><span class="hs-identifier hs-var">throw</span></span><span> </span><span class="annot"><span class="annottext">SomeException
+</span><a href="#local-6989586621679369732"><span class="hs-identifier hs-var">e</span></a></span><span> </span><span class="annot"><span class="annottext">IO (a, XState) -&gt; ExitCode -&gt; IO (a, XState)
+forall a b. a -&gt; b -&gt; a
+</span><span class="hs-operator hs-var">`const`</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">ExitCode
+</span><a href="#local-6989586621679369730"><span class="hs-identifier hs-var">x</span></a></span><span> </span><span class="annot"><span class="annottext">ExitCode -&gt; ExitCode -&gt; ExitCode
+forall a. a -&gt; a -&gt; a
+</span><span class="hs-operator hs-var">`asTypeOf`</span></span><span> </span><span class="annot"><span class="annottext">ExitCode
+</span><span class="hs-identifier hs-var">ExitSuccess</span></span><span class="hs-special">)</span><span>
+</span><span id="line-144"></span><span>    </span><span class="annot"><span class="annottext">Maybe ExitCode
+</span><span class="hs-identifier">_</span></span><span>      </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">XConf -&gt; XState -&gt; X a -&gt; IO (a, XState)
+forall a. XConf -&gt; XState -&gt; X a -&gt; IO (a, XState)
+</span><span class="hs-identifier hs-var">runX</span></span><span> </span><span class="annot"><span class="annottext">XConf
+</span><a href="#local-6989586621679369738"><span class="hs-identifier hs-var">c</span></a></span><span> </span><span class="annot"><span class="annottext">XState
+</span><a href="#local-6989586621679369740"><span class="hs-identifier hs-var">st</span></a></span><span> </span><span class="annot"><span class="annottext">X a
+</span><a href="#local-6989586621679369741"><span class="hs-identifier hs-var">errcase</span></a></span><span>
+</span><span id="line-145"></span><span>  </span><span class="annot"><span class="annottext">XState -&gt; X ()
+forall s (m :: * -&gt; *). MonadState s m =&gt; s -&gt; m ()
+</span><span class="hs-identifier hs-var">put</span></span><span> </span><span class="annot"><span class="annottext">XState
+</span><a href="#local-6989586621679369735"><span class="hs-identifier hs-var">s'</span></a></span><span>
+</span><span id="line-146"></span><span>  </span><span class="annot"><span class="annottext">a -&gt; X a
+forall (m :: * -&gt; *) a. Monad m =&gt; a -&gt; m a
+</span><span class="hs-identifier hs-var">return</span></span><span> </span><span class="annot"><span class="annottext">a
+</span><a href="#local-6989586621679369736"><span class="hs-identifier hs-var">a</span></a></span><span>
+</span><span id="line-147"></span><span>
+</span><span id="line-148"></span><span class="annot"><a href="XMonad.Util.DebugWindow.html#wrap"><span class="hs-identifier hs-type">wrap</span></a></span><span>   </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">String</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">String</span></span><span>
+</span><span id="line-149"></span><span id="wrap"><span class="annot"><span class="annottext">wrap :: String -&gt; String
+</span><a href="XMonad.Util.DebugWindow.html#wrap"><span class="hs-identifier hs-var hs-var">wrap</span></a></span></span><span> </span><span id="local-6989586621679369724"><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679369724"><span class="hs-identifier hs-var">s</span></a></span></span><span> </span><span class="hs-glyph">=</span><span>  </span><span class="annot"><span class="annottext">Char
+</span><span class="hs-char">' '</span></span><span> </span><span class="annot"><span class="annottext">Char -&gt; String -&gt; String
+forall a. a -&gt; [a] -&gt; [a]
+</span><span class="hs-glyph hs-var">:</span></span><span> </span><span class="annot"><span class="annottext">Char
+</span><span class="hs-char">'&quot;'</span></span><span> </span><span class="annot"><span class="annottext">Char -&gt; String -&gt; String
+forall a. a -&gt; [a] -&gt; [a]
+</span><span class="hs-glyph hs-var">:</span></span><span> </span><span class="annot"><span class="annottext">String -&gt; String
+</span><a href="#local-6989586621679369723"><span class="hs-identifier hs-var">wrap'</span></a></span><span> </span><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679369724"><span class="hs-identifier hs-var">s</span></a></span><span> </span><span class="annot"><span class="annottext">String -&gt; String -&gt; String
+forall a. [a] -&gt; [a] -&gt; [a]
+</span><span class="hs-operator hs-var">++</span></span><span> </span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot;\&quot;&quot;</span></span><span>
+</span><span id="line-150"></span><span>  </span><span class="hs-keyword">where</span><span>
+</span><span id="line-151"></span><span>    </span><span id="local-6989586621679369723"><span class="annot"><span class="annottext">wrap' :: String -&gt; String
+</span><a href="#local-6989586621679369723"><span class="hs-identifier hs-var hs-var">wrap'</span></a></span></span><span> </span><span class="hs-special">(</span><span id="local-6989586621679369722"><span class="annot"><span class="annottext">Char
+</span><a href="#local-6989586621679369722"><span class="hs-identifier hs-var">s'</span></a></span></span><span class="annot"><span class="hs-glyph hs-type">:</span></span><span id="local-6989586621679369721"><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679369721"><span class="hs-identifier hs-var">ss</span></a></span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">|</span><span> </span><span class="annot"><span class="annottext">Char
+</span><a href="#local-6989586621679369722"><span class="hs-identifier hs-var">s'</span></a></span><span> </span><span class="annot"><span class="annottext">Char -&gt; Char -&gt; Bool
+forall a. Eq a =&gt; a -&gt; a -&gt; Bool
+</span><span class="hs-operator hs-var">==</span></span><span> </span><span class="annot"><span class="annottext">Char
+</span><span class="hs-char">'&quot;'</span></span><span>  </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Char
+</span><span class="hs-char">'\\'</span></span><span> </span><span class="annot"><span class="annottext">Char -&gt; String -&gt; String
+forall a. a -&gt; [a] -&gt; [a]
+</span><span class="hs-glyph hs-var">:</span></span><span> </span><span class="annot"><span class="annottext">Char
+</span><a href="#local-6989586621679369722"><span class="hs-identifier hs-var">s'</span></a></span><span> </span><span class="annot"><span class="annottext">Char -&gt; String -&gt; String
+forall a. a -&gt; [a] -&gt; [a]
+</span><span class="hs-glyph hs-var">:</span></span><span> </span><span class="annot"><span class="annottext">String -&gt; String
+</span><a href="#local-6989586621679369723"><span class="hs-identifier hs-var">wrap'</span></a></span><span> </span><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679369721"><span class="hs-identifier hs-var">ss</span></a></span><span>
+</span><span id="line-152"></span><span>                  </span><span class="hs-glyph">|</span><span> </span><span class="annot"><span class="annottext">Char
+</span><a href="#local-6989586621679369722"><span class="hs-identifier hs-var">s'</span></a></span><span> </span><span class="annot"><span class="annottext">Char -&gt; Char -&gt; Bool
+forall a. Eq a =&gt; a -&gt; a -&gt; Bool
+</span><span class="hs-operator hs-var">==</span></span><span> </span><span class="annot"><span class="annottext">Char
+</span><span class="hs-char">'\\'</span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Char
+</span><span class="hs-char">'\\'</span></span><span> </span><span class="annot"><span class="annottext">Char -&gt; String -&gt; String
+forall a. a -&gt; [a] -&gt; [a]
+</span><span class="hs-glyph hs-var">:</span></span><span> </span><span class="annot"><span class="annottext">Char
+</span><a href="#local-6989586621679369722"><span class="hs-identifier hs-var">s'</span></a></span><span> </span><span class="annot"><span class="annottext">Char -&gt; String -&gt; String
+forall a. a -&gt; [a] -&gt; [a]
+</span><span class="hs-glyph hs-var">:</span></span><span> </span><span class="annot"><span class="annottext">String -&gt; String
+</span><a href="#local-6989586621679369723"><span class="hs-identifier hs-var">wrap'</span></a></span><span> </span><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679369721"><span class="hs-identifier hs-var">ss</span></a></span><span>
+</span><span id="line-153"></span><span>                  </span><span class="hs-glyph">|</span><span> </span><span class="annot"><span class="annottext">Bool
+</span><span class="hs-identifier hs-var">otherwise</span></span><span>  </span><span class="hs-glyph">=</span><span>        </span><span class="annot"><span class="annottext">Char
+</span><a href="#local-6989586621679369722"><span class="hs-identifier hs-var">s'</span></a></span><span> </span><span class="annot"><span class="annottext">Char -&gt; String -&gt; String
+forall a. a -&gt; [a] -&gt; [a]
+</span><span class="hs-glyph hs-var">:</span></span><span> </span><span class="annot"><span class="annottext">String -&gt; String
+</span><a href="#local-6989586621679369723"><span class="hs-identifier hs-var">wrap'</span></a></span><span> </span><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679369721"><span class="hs-identifier hs-var">ss</span></a></span><span>
+</span><span id="line-154"></span><span>    </span><span class="annot"><a href="#local-6989586621679369723"><span class="hs-identifier hs-var">wrap'</span></a></span><span> </span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot;&quot;</span></span><span>                   </span><span class="hs-glyph">=</span><span>             </span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot;&quot;</span></span><span>
+</span><span id="line-155"></span><span>
+</span><span id="line-156"></span><span class="hs-comment">-- Graphics.X11.Extras.getWindowAttributes is bugggggggy</span><span>
+</span><span id="line-157"></span><span class="annot"><a href="XMonad.Util.DebugWindow.html#safeGetWindowAttributes"><span class="hs-identifier hs-type">safeGetWindowAttributes</span></a></span><span>     </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Display</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Window</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">IO</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">Maybe</span></span><span> </span><span class="annot"><span class="hs-identifier hs-type">WindowAttributes</span></span><span class="hs-special">)</span><span>
+</span><span id="line-158"></span><span id="safeGetWindowAttributes"><span class="annot"><span class="annottext">safeGetWindowAttributes :: Display -&gt; Window -&gt; IO (Maybe WindowAttributes)
+</span><a href="XMonad.Util.DebugWindow.html#safeGetWindowAttributes"><span class="hs-identifier hs-var hs-var">safeGetWindowAttributes</span></a></span></span><span> </span><span id="local-6989586621679369720"><span class="annot"><span class="annottext">Display
+</span><a href="#local-6989586621679369720"><span class="hs-identifier hs-var">d</span></a></span></span><span> </span><span id="local-6989586621679369719"><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679369719"><span class="hs-identifier hs-var">w</span></a></span></span><span> </span><span class="hs-glyph">=</span><span>  </span><span class="annot"><span class="annottext">(Ptr WindowAttributes -&gt; IO (Maybe WindowAttributes))
+-&gt; IO (Maybe WindowAttributes)
+forall a b. Storable a =&gt; (Ptr a -&gt; IO b) -&gt; IO b
+</span><span class="hs-identifier hs-var">alloca</span></span><span> </span><span class="annot"><span class="annottext">((Ptr WindowAttributes -&gt; IO (Maybe WindowAttributes))
+ -&gt; IO (Maybe WindowAttributes))
+-&gt; (Ptr WindowAttributes -&gt; IO (Maybe WindowAttributes))
+-&gt; IO (Maybe WindowAttributes)
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="hs-glyph">\</span><span id="local-6989586621679369717"><span class="annot"><span class="annottext">Ptr WindowAttributes
+</span><a href="#local-6989586621679369717"><span class="hs-identifier hs-var">p</span></a></span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-159"></span><span>  </span><span id="local-6989586621679369716"><span class="annot"><span class="annottext">CInt
+</span><a href="#local-6989586621679369716"><span class="hs-identifier hs-var">s</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">Display -&gt; Window -&gt; Ptr WindowAttributes -&gt; IO CInt
+</span><span class="hs-identifier hs-var">xGetWindowAttributes</span></span><span> </span><span class="annot"><span class="annottext">Display
+</span><a href="#local-6989586621679369720"><span class="hs-identifier hs-var">d</span></a></span><span> </span><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679369719"><span class="hs-identifier hs-var">w</span></a></span><span> </span><span class="annot"><span class="annottext">Ptr WindowAttributes
+</span><a href="#local-6989586621679369717"><span class="hs-identifier hs-var">p</span></a></span><span>
+</span><span id="line-160"></span><span>  </span><span class="hs-keyword">case</span><span> </span><span class="annot"><span class="annottext">CInt
+</span><a href="#local-6989586621679369716"><span class="hs-identifier hs-var">s</span></a></span><span> </span><span class="hs-keyword">of</span><span>
+</span><span id="line-161"></span><span>    </span><span class="annot"><span class="annottext">CInt
+</span><span class="hs-number">0</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">Maybe WindowAttributes -&gt; IO (Maybe WindowAttributes)
+forall (m :: * -&gt; *) a. Monad m =&gt; a -&gt; m a
+</span><span class="hs-identifier hs-var">return</span></span><span> </span><span class="annot"><span class="annottext">Maybe WindowAttributes
+forall a. Maybe a
+</span><span class="hs-identifier hs-var">Nothing</span></span><span>
+</span><span id="line-162"></span><span>    </span><span class="annot"><span class="annottext">CInt
+</span><span class="hs-identifier">_</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">WindowAttributes -&gt; Maybe WindowAttributes
+forall a. a -&gt; Maybe a
+</span><span class="hs-identifier hs-var">Just</span></span><span> </span><span class="annot"><span class="annottext">(WindowAttributes -&gt; Maybe WindowAttributes)
+-&gt; IO WindowAttributes -&gt; IO (Maybe WindowAttributes)
+forall (f :: * -&gt; *) a b. Functor f =&gt; (a -&gt; b) -&gt; f a -&gt; f b
+</span><span class="hs-operator hs-var">&lt;$&gt;</span></span><span> </span><span class="annot"><span class="annottext">Ptr WindowAttributes -&gt; IO WindowAttributes
+forall a. Storable a =&gt; Ptr a -&gt; IO a
+</span><span class="hs-identifier hs-var">peek</span></span><span> </span><span class="annot"><span class="annottext">Ptr WindowAttributes
+</span><a href="#local-6989586621679369717"><span class="hs-identifier hs-var">p</span></a></span><span>
+</span><span id="line-163"></span><span>
+</span><span id="line-164"></span><span class="hs-comment">-- and so is getCommand</span><span>
+</span><span id="line-165"></span><span class="annot"><a href="XMonad.Util.DebugWindow.html#safeGetCommand"><span class="hs-identifier hs-type">safeGetCommand</span></a></span><span>     </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Display</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Window</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">X</span></span><span> </span><span class="hs-special">[</span><span class="annot"><span class="hs-identifier hs-type">String</span></span><span class="hs-special">]</span><span>
+</span><span id="line-166"></span><span id="safeGetCommand"><span class="annot"><span class="annottext">safeGetCommand :: Display -&gt; Window -&gt; X [String]
+</span><a href="XMonad.Util.DebugWindow.html#safeGetCommand"><span class="hs-identifier hs-var hs-var">safeGetCommand</span></a></span></span><span> </span><span id="local-6989586621679369713"><span class="annot"><span class="annottext">Display
+</span><a href="#local-6989586621679369713"><span class="hs-identifier hs-var">d</span></a></span></span><span> </span><span id="local-6989586621679369712"><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679369712"><span class="hs-identifier hs-var">w</span></a></span></span><span> </span><span class="hs-glyph">=</span><span>  </span><span class="hs-keyword">do</span><span>
+</span><span id="line-167"></span><span>  </span><span id="local-6989586621679369711"><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679369711"><span class="hs-identifier hs-var">wC</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">String -&gt; X Window
+</span><span class="hs-identifier hs-var">getAtom</span></span><span> </span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot;WM_COMMAND&quot;</span></span><span>
+</span><span id="line-168"></span><span>  </span><span id="local-6989586621679369710"><span class="annot"><span class="annottext">Maybe [CChar]
+</span><a href="#local-6989586621679369710"><span class="hs-identifier hs-var">p</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">IO (Maybe [CChar]) -&gt; X (Maybe [CChar])
+forall (m :: * -&gt; *) a. MonadIO m =&gt; IO a -&gt; m a
+</span><span class="hs-identifier hs-var">io</span></span><span> </span><span class="annot"><span class="annottext">(IO (Maybe [CChar]) -&gt; X (Maybe [CChar]))
+-&gt; IO (Maybe [CChar]) -&gt; X (Maybe [CChar])
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">Display -&gt; Window -&gt; Window -&gt; IO (Maybe [CChar])
+</span><span class="hs-identifier hs-var">getWindowProperty8</span></span><span> </span><span class="annot"><span class="annottext">Display
+</span><a href="#local-6989586621679369713"><span class="hs-identifier hs-var">d</span></a></span><span> </span><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679369711"><span class="hs-identifier hs-var">wC</span></a></span><span> </span><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679369712"><span class="hs-identifier hs-var">w</span></a></span><span>
+</span><span id="line-169"></span><span>  </span><span class="hs-keyword">case</span><span> </span><span class="annot"><span class="annottext">Maybe [CChar]
+</span><a href="#local-6989586621679369710"><span class="hs-identifier hs-var">p</span></a></span><span> </span><span class="hs-keyword">of</span><span>
+</span><span id="line-170"></span><span>    </span><span class="annot"><span class="annottext">Maybe [CChar]
+</span><span class="hs-identifier hs-var">Nothing</span></span><span>  </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">[String] -&gt; X [String]
+forall (m :: * -&gt; *) a. Monad m =&gt; a -&gt; m a
+</span><span class="hs-identifier hs-var">return</span></span><span> </span><span class="hs-special">[</span><span class="hs-special">]</span><span>
+</span><span id="line-171"></span><span>    </span><span class="annot"><span class="hs-identifier hs-type">Just</span></span><span> </span><span id="local-6989586621679369709"><span class="annot"><span class="annottext">[CChar]
+</span><a href="#local-6989586621679369709"><span class="hs-identifier hs-var">cs'</span></a></span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-172"></span><span>      </span><span class="hs-keyword">let</span><span> </span><span id="local-6989586621679369708"><span class="annot"><span class="annottext">cs :: String
+</span><a href="#local-6989586621679369708"><span class="hs-identifier hs-var hs-var">cs</span></a></span></span><span>                    </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">(CChar -&gt; Char) -&gt; [CChar] -&gt; String
+forall a b. (a -&gt; b) -&gt; [a] -&gt; [b]
+</span><span class="hs-identifier hs-var">map</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Int -&gt; Char
+forall a. Enum a =&gt; Int -&gt; a
+</span><span class="hs-identifier hs-var">toEnum</span></span><span> </span><span class="annot"><span class="annottext">(Int -&gt; Char) -&gt; (CChar -&gt; Int) -&gt; CChar -&gt; Char
+forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">CChar -&gt; Int
+forall a. Enum a =&gt; a -&gt; Int
+</span><span class="hs-identifier hs-var">fromEnum</span></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">[CChar]
+</span><a href="#local-6989586621679369709"><span class="hs-identifier hs-var">cs'</span></a></span><span>
+</span><span id="line-173"></span><span>          </span><span id="local-6989586621679369707"><span class="annot"><span class="annottext">go :: ([String], (String, String)) -&gt; ([String], (String, String))
+</span><a href="#local-6989586621679369707"><span class="hs-identifier hs-var hs-var">go</span></a></span></span><span>  </span><span class="hs-special">(</span><span id="local-6989586621679369706"><span class="annot"><span class="annottext">[String]
+</span><a href="#local-6989586621679369706"><span class="hs-identifier hs-var">a</span></a></span></span><span class="hs-special">,</span><span class="hs-special">(</span><span id="local-6989586621679369705"><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679369705"><span class="hs-identifier hs-var">s</span></a></span></span><span class="hs-special">,</span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot;\NUL&quot;</span></span><span class="hs-special">)</span><span class="hs-special">)</span><span>    </span><span class="hs-glyph">=</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679369705"><span class="hs-identifier hs-var">s</span></a></span><span class="annot"><span class="annottext">String -&gt; [String] -&gt; [String]
+forall a. a -&gt; [a] -&gt; [a]
+</span><span class="hs-glyph hs-var">:</span></span><span class="annot"><span class="annottext">[String]
+</span><a href="#local-6989586621679369706"><span class="hs-identifier hs-var">a</span></a></span><span class="hs-special">,</span><span class="hs-special">(</span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot;&quot;</span></span><span class="hs-special">,</span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot;&quot;</span></span><span class="hs-special">)</span><span class="hs-special">)</span><span>
+</span><span id="line-174"></span><span>          </span><span class="annot"><a href="#local-6989586621679369707"><span class="hs-identifier hs-var">go</span></a></span><span>  </span><span class="hs-special">(</span><span id="local-6989586621679369704"><span class="annot"><span class="annottext">[String]
+</span><a href="#local-6989586621679369704"><span class="hs-identifier hs-var">a</span></a></span></span><span class="hs-special">,</span><span class="hs-special">(</span><span id="local-6989586621679369703"><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679369703"><span class="hs-identifier hs-var">s</span></a></span></span><span class="hs-special">,</span><span class="annot"><span class="annottext">Char
+</span><span class="hs-char">'\NUL'</span></span><span class="annot"><span class="hs-glyph hs-type">:</span></span><span id="local-6989586621679369702"><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679369702"><span class="hs-identifier hs-var">ss</span></a></span></span><span class="hs-special">)</span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">([String], (String, String)) -&gt; ([String], (String, String))
+</span><a href="#local-6989586621679369707"><span class="hs-identifier hs-var">go</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679369703"><span class="hs-identifier hs-var">s</span></a></span><span class="annot"><span class="annottext">String -&gt; [String] -&gt; [String]
+forall a. a -&gt; [a] -&gt; [a]
+</span><span class="hs-glyph hs-var">:</span></span><span class="annot"><span class="annottext">[String]
+</span><a href="#local-6989586621679369704"><span class="hs-identifier hs-var">a</span></a></span><span class="hs-special">,</span><span class="annot"><span class="annottext">String -&gt; (String, String)
+</span><a href="#local-6989586621679369701"><span class="hs-identifier hs-var">go'</span></a></span><span> </span><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679369702"><span class="hs-identifier hs-var">ss</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-175"></span><span>          </span><span class="annot"><a href="#local-6989586621679369707"><span class="hs-identifier hs-var">go</span></a></span><span>  </span><span id="local-6989586621679369700"><span class="annot"><span class="annottext">([String], (String, String))
+</span><a href="#local-6989586621679369700"><span class="hs-identifier hs-var">r</span></a></span></span><span>                 </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">([String], (String, String))
+</span><a href="#local-6989586621679369700"><span class="hs-identifier hs-var">r</span></a></span><span> </span><span class="hs-comment">-- ???</span><span>
+</span><span id="line-176"></span><span>          </span><span id="local-6989586621679369701"><span class="annot"><span class="annottext">go' :: String -&gt; (String, String)
+</span><a href="#local-6989586621679369701"><span class="hs-identifier hs-var hs-var">go'</span></a></span></span><span>                   </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">(Char -&gt; Bool) -&gt; String -&gt; (String, String)
+forall a. (a -&gt; Bool) -&gt; [a] -&gt; ([a], [a])
+</span><span class="hs-identifier hs-var">break</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Char -&gt; Char -&gt; Bool
+forall a. Eq a =&gt; a -&gt; a -&gt; Bool
+</span><span class="hs-operator hs-var">==</span></span><span> </span><span class="annot"><span class="annottext">Char
+</span><span class="hs-char">'\NUL'</span></span><span class="hs-special">)</span><span>
+</span><span id="line-177"></span><span>       </span><span class="hs-keyword">in</span><span> </span><span class="annot"><span class="annottext">[String] -&gt; X [String]
+forall (m :: * -&gt; *) a. Monad m =&gt; a -&gt; m a
+</span><span class="hs-identifier hs-var">return</span></span><span> </span><span class="annot"><span class="annottext">([String] -&gt; X [String]) -&gt; [String] -&gt; X [String]
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">[String] -&gt; [String]
+forall a. [a] -&gt; [a]
+</span><span class="hs-identifier hs-var">reverse</span></span><span> </span><span class="annot"><span class="annottext">([String] -&gt; [String]) -&gt; [String] -&gt; [String]
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">([String], (String, String)) -&gt; [String]
+forall a b. (a, b) -&gt; a
+</span><span class="hs-identifier hs-var">fst</span></span><span> </span><span class="annot"><span class="annottext">(([String], (String, String)) -&gt; [String])
+-&gt; ([String], (String, String)) -&gt; [String]
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">([String], (String, String)) -&gt; ([String], (String, String))
+</span><a href="#local-6989586621679369707"><span class="hs-identifier hs-var">go</span></a></span><span> </span><span class="hs-special">(</span><span class="hs-special">[</span><span class="hs-special">]</span><span class="hs-special">,</span><span class="annot"><span class="annottext">String -&gt; (String, String)
+</span><a href="#local-6989586621679369701"><span class="hs-identifier hs-var">go'</span></a></span><span> </span><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679369708"><span class="hs-identifier hs-var">cs</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-178"></span><span>
+</span><span id="line-179"></span><span class="annot"><a href="XMonad.Util.DebugWindow.html#getMachine"><span class="hs-identifier hs-type">getMachine</span></a></span><span>   </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Window</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">X</span></span><span> </span><span class="annot"><span class="hs-identifier hs-type">String</span></span><span>
+</span><span id="line-180"></span><span id="getMachine"><span class="annot"><span class="annottext">getMachine :: Window -&gt; X String
+</span><a href="XMonad.Util.DebugWindow.html#getMachine"><span class="hs-identifier hs-var hs-var">getMachine</span></a></span></span><span> </span><span id="local-6989586621679369698"><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679369698"><span class="hs-identifier hs-var">w</span></a></span></span><span> </span><span class="hs-glyph">=</span><span>  </span><span class="annot"><span class="annottext">X String -&gt; X String -&gt; X String
+forall a. X a -&gt; X a -&gt; X a
+</span><a href="XMonad.Util.DebugWindow.html#catchX%27"><span class="hs-identifier hs-var">catchX'</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">String -&gt; X Window
+</span><span class="hs-identifier hs-var">getAtom</span></span><span> </span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot;WM_CLIENT_MACHINE&quot;</span></span><span> </span><span class="annot"><span class="annottext">X Window -&gt; (Window -&gt; X String) -&gt; X String
+forall (m :: * -&gt; *) a b. Monad m =&gt; m a -&gt; (a -&gt; m b) -&gt; m b
+</span><span class="hs-operator hs-var">&gt;&gt;=</span></span><span> </span><span class="annot"><span class="annottext">Window -&gt; Window -&gt; X String
+</span><a href="XMonad.Util.DebugWindow.html#getDecodedStringProp"><span class="hs-identifier hs-var">getDecodedStringProp</span></a></span><span> </span><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679369698"><span class="hs-identifier hs-var">w</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">String -&gt; X String
+forall (m :: * -&gt; *) a. Monad m =&gt; a -&gt; m a
+</span><span class="hs-identifier hs-var">return</span></span><span> </span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot;&quot;</span></span><span class="hs-special">)</span><span>
+</span><span id="line-181"></span></pre></body></html>

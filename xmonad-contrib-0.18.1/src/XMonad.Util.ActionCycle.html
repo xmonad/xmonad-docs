@@ -1,0 +1,167 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd"><html xmlns="http://www.w3.org/1999/xhtml"><head><link rel="stylesheet" type="text/css" href="style.css" /><script type="text/javascript" src="highlight.js"></script></head><body><pre><span class="hs-pragma">{-# LANGUAGE FlexibleInstances, FlexibleContexts #-}</span><span>
+</span><span id="line-2"></span><span class="hs-comment">-----------------------------------------------------------------------------</span><span>
+</span><span id="line-3"></span><span class="hs-comment">-- |</span><span>
+</span><span id="line-4"></span><span class="hs-comment">-- Module      :  XMonad.Util.ActionCycle</span><span>
+</span><span id="line-5"></span><span class="hs-comment">-- Description :  Provides a way to implement cycling actions.</span><span>
+</span><span id="line-6"></span><span class="hs-comment">-- Copyright   :  (c) 2020 Leon Kowarschick</span><span>
+</span><span id="line-7"></span><span class="hs-comment">-- License     :  BSD3-style (see LICENSE)</span><span>
+</span><span id="line-8"></span><span class="hs-comment">--</span><span>
+</span><span id="line-9"></span><span class="hs-comment">-- Maintainer  :  Leon Kowarschick. &lt;thereal.elkowar@gmail.com&gt;</span><span>
+</span><span id="line-10"></span><span class="hs-comment">-- Stability   :  unstable</span><span>
+</span><span id="line-11"></span><span class="hs-comment">-- Portability :  unportable</span><span>
+</span><span id="line-12"></span><span class="hs-comment">--</span><span>
+</span><span id="line-13"></span><span class="hs-comment">-- This module provides a way to have &quot;cycling&quot; actions.</span><span>
+</span><span id="line-14"></span><span class="hs-comment">-- This means that you can define an @X ()@ action that cycles through a list of actions,</span><span>
+</span><span id="line-15"></span><span class="hs-comment">-- advancing every time it is executed.</span><span>
+</span><span id="line-16"></span><span class="hs-comment">-- This may for exapmle be useful for toggle-style keybindings.</span><span>
+</span><span id="line-17"></span><span class="hs-comment">--</span><span>
+</span><span id="line-18"></span><span class="hs-comment">-----------------------------------------------------------------------------</span><span>
+</span><span id="line-19"></span><span>
+</span><span id="line-20"></span><span class="hs-keyword">module</span><span> </span><span class="hs-identifier">XMonad.Util.ActionCycle</span><span>
+</span><span id="line-21"></span><span>  </span><span class="hs-special">(</span><span> </span><span class="annot"><span class="hs-comment">-- * Usage</span></span><span>
+</span><span id="line-22"></span><span>    </span><span class="annot"><span class="hs-comment">-- $usage</span></span><span>
+</span><span id="line-23"></span><span>    </span><span class="annot"><a href="XMonad.Util.ActionCycle.html#cycleAction"><span class="hs-identifier">cycleAction</span></a></span><span>
+</span><span id="line-24"></span><span>  </span><span class="hs-special">,</span><span> </span><span class="annot"><a href="XMonad.Util.ActionCycle.html#cycleActionWithResult"><span class="hs-identifier">cycleActionWithResult</span></a></span><span>
+</span><span id="line-25"></span><span>  </span><span class="hs-special">)</span><span>
+</span><span id="line-26"></span><span class="hs-keyword">where</span><span>
+</span><span id="line-27"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><span class="hs-identifier">Prelude</span></span><span> </span><span class="hs-keyword">hiding</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-operator">(!!)</span></span><span class="hs-special">)</span><span>
+</span><span id="line-28"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><span class="hs-identifier">Data.Map.Strict</span></span><span> </span><span class="hs-keyword">as</span><span> </span><span class="annot"><span class="hs-identifier">M</span></span><span>
+</span><span id="line-29"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><span class="hs-identifier">XMonad</span></span><span>
+</span><span id="line-30"></span><span class="hs-keyword">import</span><span> </span><span class="hs-keyword">qualified</span><span> </span><span class="annot"><a href="XMonad.Util.ExtensibleState.html"><span class="hs-identifier">XMonad.Util.ExtensibleState</span></a></span><span> </span><span class="hs-keyword">as</span><span> </span><span class="annot"><span class="hs-identifier">XS</span></span><span>
+</span><span id="line-31"></span><span class="hs-keyword">import</span><span> </span><span class="hs-keyword">qualified</span><span> </span><span class="annot"><span class="hs-identifier">Data.List.NonEmpty</span></span><span> </span><span class="hs-keyword">as</span><span> </span><span class="annot"><span class="hs-identifier">NonEmpty</span></span><span>
+</span><span id="line-32"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><span class="hs-identifier">Data.List.NonEmpty</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-operator">(!!)</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier">NonEmpty</span></span><span class="hs-special">(</span><span class="annot"><span class="hs-operator">(:|)</span></span><span class="hs-special">)</span><span class="hs-special">)</span><span>
+</span><span id="line-33"></span><span>
+</span><span id="line-34"></span><span>
+</span><span id="line-35"></span><span class="hs-comment">-- $usage</span><span>
+</span><span id="line-36"></span><span class="hs-comment">-- You can use this module to implement cycling key-bindings by importing &quot;XMonad.Util.ActionCycle&quot;</span><span>
+</span><span id="line-37"></span><span class="hs-comment">--</span><span>
+</span><span id="line-38"></span><span class="hs-comment">-- &gt; import XMonad.Util.ActionCycle</span><span>
+</span><span id="line-39"></span><span class="hs-comment">--</span><span>
+</span><span id="line-40"></span><span class="hs-comment">-- and then creating a keybinding as follows:</span><span>
+</span><span id="line-41"></span><span class="hs-comment">--</span><span>
+</span><span id="line-42"></span><span class="hs-comment">-- &gt; ((mod1Mask, xK_t), cycleAction &quot;cycleActions&quot; [ spawn &quot;commmand1&quot;, spawn &quot;command2&quot;, spawn &quot;command3&quot; ])</span><span>
+</span><span id="line-43"></span><span class="hs-comment">--</span><span>
+</span><span id="line-44"></span><span class="hs-comment">-- Note that the name given to cycleAction must be a unique action per cycle.</span><span>
+</span><span id="line-45"></span><span>
+</span><span id="line-46"></span><span>
+</span><span id="line-47"></span><span class="hs-comment">-- | Generate an @X ()@ action that cycles through a list of actions,</span><span>
+</span><span id="line-48"></span><span class="hs-comment">-- advancing every time the action is called.</span><span>
+</span><span id="line-49"></span><span class="annot"><a href="XMonad.Util.ActionCycle.html#cycleAction"><span class="hs-identifier hs-type">cycleAction</span></a></span><span>
+</span><span id="line-50"></span><span>  </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">String</span></span><span> </span><span class="hs-comment">-- ^ Unique name for this action. May be any arbitrary, unique string.</span><span>
+</span><span id="line-51"></span><span>  </span><span class="hs-glyph">-&gt;</span><span> </span><span class="hs-special">[</span><span class="annot"><span class="hs-identifier hs-type">X</span></span><span> </span><span class="hs-special">(</span><span class="hs-special">)</span><span class="hs-special">]</span><span> </span><span class="hs-comment">-- ^ List of actions that will be cycled through.</span><span>
+</span><span id="line-52"></span><span>  </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">X</span></span><span> </span><span class="hs-special">(</span><span class="hs-special">)</span><span>
+</span><span id="line-53"></span><span id="cycleAction"><span class="annot"><span class="annottext">cycleAction :: String -&gt; [X ()] -&gt; X ()
+</span><a href="XMonad.Util.ActionCycle.html#cycleAction"><span class="hs-identifier hs-var hs-var">cycleAction</span></a></span></span><span> </span><span class="annot"><span class="annottext">String
+</span><span class="hs-identifier">_</span></span><span> </span><span class="hs-special">[</span><span class="hs-special">]</span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">forall (f :: * -&gt; *) a. Applicative f =&gt; a -&gt; f a
+</span><span class="hs-identifier hs-var">pure</span></span><span> </span><span class="hs-special">(</span><span class="hs-special">)</span><span>
+</span><span id="line-54"></span><span class="annot"><a href="XMonad.Util.ActionCycle.html#cycleAction"><span class="hs-identifier hs-var">cycleAction</span></a></span><span> </span><span id="local-6989586621679435838"><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679435838"><span class="hs-identifier hs-var">name</span></a></span></span><span> </span><span class="hs-special">(</span><span id="local-6989586621679435837"><span class="annot"><span class="annottext">X ()
+</span><a href="#local-6989586621679435837"><span class="hs-identifier hs-var">x</span></a></span></span><span class="annot"><span class="hs-glyph hs-type">:</span></span><span id="local-6989586621679435836"><span class="annot"><span class="annottext">[X ()]
+</span><a href="#local-6989586621679435836"><span class="hs-identifier hs-var">xs</span></a></span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">forall a. String -&gt; NonEmpty (X a) -&gt; X a
+</span><a href="XMonad.Util.ActionCycle.html#cycleActionWithResult"><span class="hs-identifier hs-var">cycleActionWithResult</span></a></span><span> </span><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679435838"><span class="hs-identifier hs-var">name</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">X ()
+</span><a href="#local-6989586621679435837"><span class="hs-identifier hs-var">x</span></a></span><span> </span><span class="annot"><span class="annottext">forall a. a -&gt; [a] -&gt; NonEmpty a
+</span><span class="hs-operator hs-var">:|</span></span><span> </span><span class="annot"><span class="annottext">[X ()]
+</span><a href="#local-6989586621679435836"><span class="hs-identifier hs-var">xs</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-55"></span><span>
+</span><span id="line-56"></span><span class="hs-comment">-- | Another version of 'cycleAction' that returns the result of the actions.</span><span>
+</span><span id="line-57"></span><span class="hs-comment">-- To allow for this, we must make sure that the list of actions is non-empty.</span><span>
+</span><span id="line-58"></span><span id="local-6989586621679435885"><span class="annot"><a href="XMonad.Util.ActionCycle.html#cycleActionWithResult"><span class="hs-identifier hs-type">cycleActionWithResult</span></a></span><span>
+</span><span id="line-59"></span><span>  </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">String</span></span><span>                   </span><span class="hs-comment">-- ^ Unique name for this action. May be any arbitrary, unique string.</span><span>
+</span><span id="line-60"></span><span>  </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">NonEmpty.NonEmpty</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">X</span></span><span> </span><span class="annot"><a href="#local-6989586621679435885"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">)</span><span>  </span><span class="hs-comment">-- ^ Non-empty List of actions that will be cycled through.</span><span>
+</span><span id="line-61"></span><span>  </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">X</span></span><span> </span><span class="annot"><a href="#local-6989586621679435885"><span class="hs-identifier hs-type">a</span></a></span></span><span>
+</span><span id="line-62"></span><span id="cycleActionWithResult"><span class="annot"><span class="annottext">cycleActionWithResult :: forall a. String -&gt; NonEmpty (X a) -&gt; X a
+</span><a href="XMonad.Util.ActionCycle.html#cycleActionWithResult"><span class="hs-identifier hs-var hs-var">cycleActionWithResult</span></a></span></span><span> </span><span id="local-6989586621679435820"><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679435820"><span class="hs-identifier hs-var">name</span></a></span></span><span> </span><span id="local-6989586621679435819"><span class="annot"><span class="annottext">NonEmpty (X a)
+</span><a href="#local-6989586621679435819"><span class="hs-identifier hs-var">actions</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-63"></span><span>  </span><span id="local-6989586621679435818"><span class="annot"><span class="annottext">Maybe Int
+</span><a href="#local-6989586621679435818"><span class="hs-identifier hs-var">cycleState</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">forall a (m :: * -&gt; *) b.
+(ExtensionClass a, XLike m) =&gt;
+(a -&gt; b) -&gt; m b
+</span><a href="XMonad.Util.ExtensibleState.html#gets"><span class="hs-identifier hs-var">XS.gets</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">String -&gt; ActionCycleState -&gt; Maybe Int
+</span><a href="XMonad.Util.ActionCycle.html#getActionCycle"><span class="hs-identifier hs-var">getActionCycle</span></a></span><span> </span><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679435820"><span class="hs-identifier hs-var">name</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-64"></span><span>  </span><span id="local-6989586621679435815"><span class="annot"><span class="annottext">Int
+</span><a href="#local-6989586621679435815"><span class="hs-identifier hs-var">idx</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="hs-keyword">case</span><span> </span><span class="annot"><span class="annottext">Maybe Int
+</span><a href="#local-6989586621679435818"><span class="hs-identifier hs-var">cycleState</span></a></span><span> </span><span class="hs-keyword">of</span><span>
+</span><span id="line-65"></span><span>    </span><span class="annot"><span class="hs-identifier hs-type">Just</span></span><span> </span><span id="local-6989586621679435814"><span class="annot"><span class="annottext">Int
+</span><a href="#local-6989586621679435814"><span class="hs-identifier hs-var">x</span></a></span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-66"></span><span>      </span><span class="annot"><span class="annottext">forall a (m :: * -&gt; *).
+(ExtensionClass a, XLike m) =&gt;
+(a -&gt; a) -&gt; m ()
+</span><a href="XMonad.Util.ExtensibleState.html#modify"><span class="hs-identifier hs-var">XS.modify</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">String -&gt; Int -&gt; ActionCycleState -&gt; ActionCycleState
+</span><a href="XMonad.Util.ActionCycle.html#nextActionCycle"><span class="hs-identifier hs-var">nextActionCycle</span></a></span><span> </span><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679435820"><span class="hs-identifier hs-var">name</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">forall a. NonEmpty a -&gt; Int
+</span><span class="hs-identifier hs-var">NonEmpty.length</span></span><span> </span><span class="annot"><span class="annottext">NonEmpty (X a)
+</span><a href="#local-6989586621679435819"><span class="hs-identifier hs-var">actions</span></a></span><span class="hs-special">)</span><span class="hs-special">)</span><span>
+</span><span id="line-67"></span><span>      </span><span class="annot"><span class="annottext">forall (f :: * -&gt; *) a. Applicative f =&gt; a -&gt; f a
+</span><span class="hs-identifier hs-var">pure</span></span><span> </span><span class="annot"><span class="annottext">Int
+</span><a href="#local-6989586621679435814"><span class="hs-identifier hs-var">x</span></a></span><span>
+</span><span id="line-68"></span><span>    </span><span class="annot"><span class="annottext">Maybe Int
+</span><span class="hs-identifier hs-var">Nothing</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-69"></span><span>      </span><span class="annot"><span class="annottext">forall a (m :: * -&gt; *).
+(ExtensionClass a, XLike m) =&gt;
+(a -&gt; a) -&gt; m ()
+</span><a href="XMonad.Util.ExtensibleState.html#modify"><span class="hs-identifier hs-var">XS.modify</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">String -&gt; Int -&gt; ActionCycleState -&gt; ActionCycleState
+</span><a href="XMonad.Util.ActionCycle.html#setActionCycle"><span class="hs-identifier hs-var">setActionCycle</span></a></span><span> </span><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679435820"><span class="hs-identifier hs-var">name</span></a></span><span> </span><span class="annot"><span class="annottext">Int
+</span><span class="hs-number">1</span></span><span class="hs-special">)</span><span>
+</span><span id="line-70"></span><span>      </span><span class="annot"><span class="annottext">forall (f :: * -&gt; *) a. Applicative f =&gt; a -&gt; f a
+</span><span class="hs-identifier hs-var">pure</span></span><span> </span><span class="annot"><span class="annottext">Int
+</span><span class="hs-number">0</span></span><span>
+</span><span id="line-71"></span><span>  </span><span class="annot"><span class="annottext">NonEmpty (X a)
+</span><a href="#local-6989586621679435819"><span class="hs-identifier hs-var">actions</span></a></span><span> </span><span class="annot"><span class="annottext">forall a. NonEmpty a -&gt; Int -&gt; a
+</span><span class="hs-operator hs-var">!!</span></span><span> </span><span class="annot"><span class="annottext">Int
+</span><a href="#local-6989586621679435815"><span class="hs-identifier hs-var">idx</span></a></span><span>
+</span><span id="line-72"></span><span>
+</span><span id="line-73"></span><span>
+</span><span id="line-74"></span><span class="hs-keyword">newtype</span><span> </span><span id="ActionCycleState"><span class="annot"><a href="XMonad.Util.ActionCycle.html#ActionCycleState"><span class="hs-identifier hs-var">ActionCycleState</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span id="ActionCycleState"><span class="annot"><a href="XMonad.Util.ActionCycle.html#ActionCycleState"><span class="hs-identifier hs-var">ActionCycleState</span></a></span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">M.Map</span></span><span> </span><span class="annot"><span class="hs-identifier hs-type">String</span></span><span> </span><span class="annot"><span class="hs-identifier hs-type">Int</span></span><span class="hs-special">)</span><span>
+</span><span id="line-75"></span><span>
+</span><span id="line-76"></span><span class="hs-keyword">instance</span><span> </span><span id="local-6989586621679435804"><span class="annot"><span class="hs-identifier hs-type">ExtensionClass</span></span><span> </span><span class="annot"><a href="XMonad.Util.ActionCycle.html#ActionCycleState"><span class="hs-identifier hs-type">ActionCycleState</span></a></span></span><span> </span><span class="hs-keyword">where</span><span>
+</span><span id="line-77"></span><span>  </span><span id="local-6989586621679435800"><span class="annot"><span class="annottext">initialValue :: ActionCycleState
+</span><span class="hs-identifier hs-var hs-var hs-var hs-var">initialValue</span></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Map String Int -&gt; ActionCycleState
+</span><a href="XMonad.Util.ActionCycle.html#ActionCycleState"><span class="hs-identifier hs-var">ActionCycleState</span></a></span><span> </span><span class="annot"><span class="annottext">forall a. Monoid a =&gt; a
+</span><span class="hs-identifier hs-var">mempty</span></span><span>
+</span><span id="line-78"></span><span>
+</span><span id="line-79"></span><span class="annot"><a href="XMonad.Util.ActionCycle.html#getActionCycle"><span class="hs-identifier hs-type">getActionCycle</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">String</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="XMonad.Util.ActionCycle.html#ActionCycleState"><span class="hs-identifier hs-type">ActionCycleState</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Maybe</span></span><span> </span><span class="annot"><span class="hs-identifier hs-type">Int</span></span><span>
+</span><span id="line-80"></span><span id="getActionCycle"><span class="annot"><span class="annottext">getActionCycle :: String -&gt; ActionCycleState -&gt; Maybe Int
+</span><a href="XMonad.Util.ActionCycle.html#getActionCycle"><span class="hs-identifier hs-var hs-var">getActionCycle</span></a></span></span><span> </span><span id="local-6989586621679435798"><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679435798"><span class="hs-identifier hs-var">name</span></a></span></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="XMonad.Util.ActionCycle.html#ActionCycleState"><span class="hs-identifier hs-type">ActionCycleState</span></a></span><span> </span><span id="local-6989586621679435797"><span class="annot"><span class="annottext">Map String Int
+</span><a href="#local-6989586621679435797"><span class="hs-identifier hs-var">s</span></a></span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">forall k a. Ord k =&gt; k -&gt; Map k a -&gt; Maybe a
+</span><span class="hs-identifier hs-var">M.lookup</span></span><span> </span><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679435798"><span class="hs-identifier hs-var">name</span></a></span><span> </span><span class="annot"><span class="annottext">Map String Int
+</span><a href="#local-6989586621679435797"><span class="hs-identifier hs-var">s</span></a></span><span>
+</span><span id="line-81"></span><span>
+</span><span id="line-82"></span><span class="annot"><a href="XMonad.Util.ActionCycle.html#nextActionCycle"><span class="hs-identifier hs-type">nextActionCycle</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">String</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Int</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="XMonad.Util.ActionCycle.html#ActionCycleState"><span class="hs-identifier hs-type">ActionCycleState</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="XMonad.Util.ActionCycle.html#ActionCycleState"><span class="hs-identifier hs-type">ActionCycleState</span></a></span><span>
+</span><span id="line-83"></span><span id="nextActionCycle"><span class="annot"><span class="annottext">nextActionCycle :: String -&gt; Int -&gt; ActionCycleState -&gt; ActionCycleState
+</span><a href="XMonad.Util.ActionCycle.html#nextActionCycle"><span class="hs-identifier hs-var hs-var">nextActionCycle</span></a></span></span><span> </span><span id="local-6989586621679435795"><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679435795"><span class="hs-identifier hs-var">name</span></a></span></span><span> </span><span id="local-6989586621679435794"><span class="annot"><span class="annottext">Int
+</span><a href="#local-6989586621679435794"><span class="hs-identifier hs-var">maxNum</span></a></span></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="XMonad.Util.ActionCycle.html#ActionCycleState"><span class="hs-identifier hs-type">ActionCycleState</span></a></span><span> </span><span id="local-6989586621679435793"><span class="annot"><span class="annottext">Map String Int
+</span><a href="#local-6989586621679435793"><span class="hs-identifier hs-var">s</span></a></span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Map String Int -&gt; ActionCycleState
+</span><a href="XMonad.Util.ActionCycle.html#ActionCycleState"><span class="hs-identifier hs-var">ActionCycleState</span></a></span><span> </span><span class="annot"><span class="annottext">forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">forall k a. Ord k =&gt; (a -&gt; Maybe a) -&gt; k -&gt; Map k a -&gt; Map k a
+</span><span class="hs-identifier hs-var">M.update</span></span><span> </span><span class="hs-special">(</span><span class="hs-glyph">\</span><span id="local-6989586621679435791"><span class="annot"><span class="annottext">Int
+</span><a href="#local-6989586621679435791"><span class="hs-identifier hs-var">n</span></a></span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">forall a. a -&gt; Maybe a
+</span><span class="hs-identifier hs-var">Just</span></span><span> </span><span class="annot"><span class="annottext">forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Int
+</span><a href="#local-6989586621679435791"><span class="hs-identifier hs-var">n</span></a></span><span> </span><span class="annot"><span class="annottext">forall a. Num a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-operator hs-var">+</span></span><span> </span><span class="annot"><span class="annottext">Int
+</span><span class="hs-number">1</span></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">forall a. Integral a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-operator hs-var">`mod`</span></span><span> </span><span class="annot"><span class="annottext">Int
+</span><a href="#local-6989586621679435794"><span class="hs-identifier hs-var">maxNum</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679435795"><span class="hs-identifier hs-var">name</span></a></span><span> </span><span class="annot"><span class="annottext">Map String Int
+</span><a href="#local-6989586621679435793"><span class="hs-identifier hs-var">s</span></a></span><span>
+</span><span id="line-84"></span><span>
+</span><span id="line-85"></span><span class="annot"><a href="XMonad.Util.ActionCycle.html#setActionCycle"><span class="hs-identifier hs-type">setActionCycle</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">String</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Int</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="XMonad.Util.ActionCycle.html#ActionCycleState"><span class="hs-identifier hs-type">ActionCycleState</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="XMonad.Util.ActionCycle.html#ActionCycleState"><span class="hs-identifier hs-type">ActionCycleState</span></a></span><span>
+</span><span id="line-86"></span><span id="setActionCycle"><span class="annot"><span class="annottext">setActionCycle :: String -&gt; Int -&gt; ActionCycleState -&gt; ActionCycleState
+</span><a href="XMonad.Util.ActionCycle.html#setActionCycle"><span class="hs-identifier hs-var hs-var">setActionCycle</span></a></span></span><span> </span><span id="local-6989586621679435788"><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679435788"><span class="hs-identifier hs-var">name</span></a></span></span><span> </span><span id="local-6989586621679435787"><span class="annot"><span class="annottext">Int
+</span><a href="#local-6989586621679435787"><span class="hs-identifier hs-var">n</span></a></span></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="XMonad.Util.ActionCycle.html#ActionCycleState"><span class="hs-identifier hs-type">ActionCycleState</span></a></span><span> </span><span id="local-6989586621679435786"><span class="annot"><span class="annottext">Map String Int
+</span><a href="#local-6989586621679435786"><span class="hs-identifier hs-var">s</span></a></span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Map String Int -&gt; ActionCycleState
+</span><a href="XMonad.Util.ActionCycle.html#ActionCycleState"><span class="hs-identifier hs-var">ActionCycleState</span></a></span><span> </span><span class="annot"><span class="annottext">forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">forall k a. Ord k =&gt; k -&gt; a -&gt; Map k a -&gt; Map k a
+</span><span class="hs-identifier hs-var">M.insert</span></span><span> </span><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679435788"><span class="hs-identifier hs-var">name</span></a></span><span> </span><span class="annot"><span class="annottext">Int
+</span><a href="#local-6989586621679435787"><span class="hs-identifier hs-var">n</span></a></span><span> </span><span class="annot"><span class="annottext">Map String Int
+</span><a href="#local-6989586621679435786"><span class="hs-identifier hs-var">s</span></a></span><span>
+</span><span id="line-87"></span></pre></body></html>

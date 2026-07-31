@@ -1,0 +1,107 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd"><html xmlns="http://www.w3.org/1999/xhtml"><head><link rel="stylesheet" type="text/css" href="style.css" /><script type="text/javascript" src="highlight.js"></script></head><body><pre><span class="hs-comment">-----------------------------------------------------------------------------</span><span>
+</span><span id="line-2"></span><span class="hs-comment">-- |</span><span>
+</span><span id="line-3"></span><span class="hs-comment">-- Module      :  XMonad.Actions.Sift</span><span>
+</span><span id="line-4"></span><span class="hs-comment">-- Description :  Functions for sifting windows up and down.</span><span>
+</span><span id="line-5"></span><span class="hs-comment">-- Copyright   :  (c) 2020 Ivan Brennan &lt;ivanbrennan@gmail.com&gt;</span><span>
+</span><span id="line-6"></span><span class="hs-comment">-- License     :  BSD3-style (see LICENSE)</span><span>
+</span><span id="line-7"></span><span class="hs-comment">--</span><span>
+</span><span id="line-8"></span><span class="hs-comment">-- Maintainer  :  Ivan Brennan &lt;ivanbrennan@gmail.com&gt;</span><span>
+</span><span id="line-9"></span><span class="hs-comment">-- Stability   :  stable</span><span>
+</span><span id="line-10"></span><span class="hs-comment">-- Portability :  unportable</span><span>
+</span><span id="line-11"></span><span class="hs-comment">--</span><span>
+</span><span id="line-12"></span><span class="hs-comment">-- Functions for sifting windows up and down. Sifts behave identically to</span><span>
+</span><span id="line-13"></span><span class="hs-comment">-- swaps (i.e. 'swapUp' and 'swapDown' from &quot;XMonad.StackSet&quot;), except in</span><span>
+</span><span id="line-14"></span><span class="hs-comment">-- the wrapping case: rather than rotating the entire stack by one position</span><span>
+</span><span id="line-15"></span><span class="hs-comment">-- like a swap would, a sift causes the windows at either end of the stack</span><span>
+</span><span id="line-16"></span><span class="hs-comment">-- to trade positions.</span><span>
+</span><span id="line-17"></span><span class="hs-comment">--</span><span>
+</span><span id="line-18"></span><span class="hs-comment">-----------------------------------------------------------------------------</span><span>
+</span><span id="line-19"></span><span>
+</span><span id="line-20"></span><span class="hs-keyword">module</span><span> </span><span class="hs-identifier">XMonad.Actions.Sift</span><span> </span><span class="hs-special">(</span><span>
+</span><span id="line-21"></span><span>    </span><span class="annot"><span class="hs-comment">-- * Usage</span></span><span>
+</span><span id="line-22"></span><span>    </span><span class="annot"><span class="hs-comment">-- $usage</span></span><span>
+</span><span id="line-23"></span><span>    </span><span class="annot"><a href="XMonad.Actions.Sift.html#siftUp"><span class="hs-identifier">siftUp</span></a></span><span class="hs-special">,</span><span>
+</span><span id="line-24"></span><span>    </span><span class="annot"><a href="XMonad.Actions.Sift.html#siftDown"><span class="hs-identifier">siftDown</span></a></span><span class="hs-special">,</span><span>
+</span><span id="line-25"></span><span>  </span><span class="hs-special">)</span><span> </span><span class="hs-keyword">where</span><span>
+</span><span id="line-26"></span><span>
+</span><span id="line-27"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><span class="hs-identifier">XMonad.StackSet</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier">Stack</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier">Stack</span></span><span class="hs-special">)</span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier">StackSet</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier">modify'</span></span><span class="hs-special">)</span><span>
+</span><span id="line-28"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><a href="XMonad.Util.Stack.html"><span class="hs-identifier">XMonad.Util.Stack</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="XMonad.Util.Stack.html#reverseS"><span class="hs-identifier">reverseS</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-29"></span><span>
+</span><span id="line-30"></span><span class="hs-comment">-- $usage</span><span>
+</span><span id="line-31"></span><span class="hs-comment">-- You can use this module with the following in your @~\/.xmonad\/xmonad.hs@:</span><span>
+</span><span id="line-32"></span><span class="hs-comment">--</span><span>
+</span><span id="line-33"></span><span class="hs-comment">-- &gt; import XMonad.Actions.Sift</span><span>
+</span><span id="line-34"></span><span class="hs-comment">--</span><span>
+</span><span id="line-35"></span><span class="hs-comment">-- and add keybindings such as the following:</span><span>
+</span><span id="line-36"></span><span class="hs-comment">--</span><span>
+</span><span id="line-37"></span><span class="hs-comment">-- &gt;   , ((modMask .|. shiftMask, xK_j ), windows siftDown)</span><span>
+</span><span id="line-38"></span><span class="hs-comment">-- &gt;   , ((modMask .|. shiftMask, xK_k ), windows siftUp  )</span><span>
+</span><span id="line-39"></span><span class="hs-comment">--</span><span>
+</span><span id="line-40"></span><span>
+</span><span id="line-41"></span><span class="hs-comment">-- |</span><span>
+</span><span id="line-42"></span><span class="hs-comment">-- siftUp, siftDown. Exchange the focused window with its neighbour in</span><span>
+</span><span id="line-43"></span><span class="hs-comment">-- the stack ordering, wrapping if we reach the end. Unlike 'swapUp' and</span><span>
+</span><span id="line-44"></span><span class="hs-comment">-- 'swapDown', wrapping is handled by trading positions with the window</span><span>
+</span><span id="line-45"></span><span class="hs-comment">-- at the other end of the stack.</span><span>
+</span><span id="line-46"></span><span class="hs-comment">--</span><span>
+</span><span id="line-47"></span><span id="local-6989586621679384030"><span id="local-6989586621679384031"><span id="local-6989586621679384032"><span id="local-6989586621679384033"><span id="local-6989586621679384034"><span class="annot"><a href="XMonad.Actions.Sift.html#siftUp"><span class="hs-identifier hs-type">siftUp</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><a href="XMonad.Actions.Sift.html#siftDown"><span class="hs-identifier hs-type">siftDown</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">StackSet</span></span><span> </span><span class="annot"><a href="#local-6989586621679384034"><span class="hs-identifier hs-type">i</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679384033"><span class="hs-identifier hs-type">l</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679384032"><span class="hs-identifier hs-type">a</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679384031"><span class="hs-identifier hs-type">s</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679384030"><span class="hs-identifier hs-type">sd</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">StackSet</span></span><span> </span><span class="annot"><a href="#local-6989586621679384034"><span class="hs-identifier hs-type">i</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679384033"><span class="hs-identifier hs-type">l</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679384032"><span class="hs-identifier hs-type">a</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679384031"><span class="hs-identifier hs-type">s</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679384030"><span class="hs-identifier hs-type">sd</span></a></span></span></span></span></span></span><span>
+</span><span id="line-48"></span><span id="siftUp"><span class="annot"><span class="annottext">siftUp :: StackSet i l a s sd -&gt; StackSet i l a s sd
+</span><a href="XMonad.Actions.Sift.html#siftUp"><span class="hs-identifier hs-var hs-var">siftUp</span></a></span></span><span>   </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">(Stack a -&gt; Stack a) -&gt; StackSet i l a s sd -&gt; StackSet i l a s sd
+forall a i l s sd.
+(Stack a -&gt; Stack a) -&gt; StackSet i l a s sd -&gt; StackSet i l a s sd
+</span><span class="hs-identifier hs-var">modify'</span></span><span> </span><span class="annot"><span class="annottext">Stack a -&gt; Stack a
+forall a. Stack a -&gt; Stack a
+</span><a href="XMonad.Actions.Sift.html#siftUp%27"><span class="hs-identifier hs-var">siftUp'</span></a></span><span>
+</span><span id="line-49"></span><span id="siftDown"><span class="annot"><span class="annottext">siftDown :: StackSet i l a s sd -&gt; StackSet i l a s sd
+</span><a href="XMonad.Actions.Sift.html#siftDown"><span class="hs-identifier hs-var hs-var">siftDown</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">(Stack a -&gt; Stack a) -&gt; StackSet i l a s sd -&gt; StackSet i l a s sd
+forall a i l s sd.
+(Stack a -&gt; Stack a) -&gt; StackSet i l a s sd -&gt; StackSet i l a s sd
+</span><span class="hs-identifier hs-var">modify'</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Stack a -&gt; Stack a
+forall a. Stack a -&gt; Stack a
+</span><a href="XMonad.Util.Stack.html#reverseS"><span class="hs-identifier hs-var">reverseS</span></a></span><span> </span><span class="annot"><span class="annottext">(Stack a -&gt; Stack a) -&gt; (Stack a -&gt; Stack a) -&gt; Stack a -&gt; Stack a
+forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">Stack a -&gt; Stack a
+forall a. Stack a -&gt; Stack a
+</span><a href="XMonad.Actions.Sift.html#siftUp%27"><span class="hs-identifier hs-var">siftUp'</span></a></span><span> </span><span class="annot"><span class="annottext">(Stack a -&gt; Stack a) -&gt; (Stack a -&gt; Stack a) -&gt; Stack a -&gt; Stack a
+forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">Stack a -&gt; Stack a
+forall a. Stack a -&gt; Stack a
+</span><a href="XMonad.Util.Stack.html#reverseS"><span class="hs-identifier hs-var">reverseS</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-50"></span><span>
+</span><span id="line-51"></span><span id="local-6989586621679384053"><span class="annot"><a href="XMonad.Actions.Sift.html#siftUp%27"><span class="hs-identifier hs-type">siftUp'</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Stack</span></span><span> </span><span class="annot"><a href="#local-6989586621679384053"><span class="hs-identifier hs-type">a</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Stack</span></span><span> </span><span class="annot"><a href="#local-6989586621679384053"><span class="hs-identifier hs-type">a</span></a></span></span><span>
+</span><span id="line-52"></span><span id="siftUp%27"><span class="annot"><span class="annottext">siftUp' :: Stack a -&gt; Stack a
+</span><a href="XMonad.Actions.Sift.html#siftUp%27"><span class="hs-identifier hs-var hs-var">siftUp'</span></a></span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">Stack</span></span><span> </span><span id="local-6989586621679384027"><span class="annot"><span class="annottext">a
+</span><a href="#local-6989586621679384027"><span class="hs-identifier hs-var">t</span></a></span></span><span> </span><span class="hs-special">(</span><span id="local-6989586621679384026"><span class="annot"><span class="annottext">a
+</span><a href="#local-6989586621679384026"><span class="hs-identifier hs-var">l</span></a></span></span><span class="annot"><span class="hs-glyph hs-type">:</span></span><span id="local-6989586621679384025"><span class="annot"><span class="annottext">[a]
+</span><a href="#local-6989586621679384025"><span class="hs-identifier hs-var">ls</span></a></span></span><span class="hs-special">)</span><span> </span><span id="local-6989586621679384024"><span class="annot"><span class="annottext">[a]
+</span><a href="#local-6989586621679384024"><span class="hs-identifier hs-var">rs</span></a></span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">a -&gt; [a] -&gt; [a] -&gt; Stack a
+forall a. a -&gt; [a] -&gt; [a] -&gt; Stack a
+</span><span class="hs-identifier hs-var">Stack</span></span><span> </span><span class="annot"><span class="annottext">a
+</span><a href="#local-6989586621679384027"><span class="hs-identifier hs-var">t</span></a></span><span> </span><span class="annot"><span class="annottext">[a]
+</span><a href="#local-6989586621679384025"><span class="hs-identifier hs-var">ls</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">a
+</span><a href="#local-6989586621679384026"><span class="hs-identifier hs-var">l</span></a></span><span class="annot"><span class="annottext">a -&gt; [a] -&gt; [a]
+forall a. a -&gt; [a] -&gt; [a]
+</span><span class="hs-glyph hs-var">:</span></span><span class="annot"><span class="annottext">[a]
+</span><a href="#local-6989586621679384024"><span class="hs-identifier hs-var">rs</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-53"></span><span class="annot"><a href="XMonad.Actions.Sift.html#siftUp%27"><span class="hs-identifier hs-var">siftUp'</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">Stack</span></span><span> </span><span id="local-6989586621679384023"><span class="annot"><span class="annottext">a
+</span><a href="#local-6989586621679384023"><span class="hs-identifier hs-var">t</span></a></span></span><span> </span><span class="hs-special">[</span><span class="hs-special">]</span><span>     </span><span id="local-6989586621679384022"><span class="annot"><span class="annottext">[a]
+</span><a href="#local-6989586621679384022"><span class="hs-identifier hs-var">rs</span></a></span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=</span><span>
+</span><span id="line-54"></span><span>  </span><span class="hs-keyword">case</span><span> </span><span class="annot"><span class="annottext">[a] -&gt; [a]
+forall a. [a] -&gt; [a]
+</span><span class="hs-identifier hs-var">reverse</span></span><span> </span><span class="annot"><span class="annottext">[a]
+</span><a href="#local-6989586621679384022"><span class="hs-identifier hs-var">rs</span></a></span><span> </span><span class="hs-keyword">of</span><span>
+</span><span id="line-55"></span><span>    </span><span class="hs-special">(</span><span id="local-6989586621679384020"><span class="annot"><span class="annottext">a
+</span><a href="#local-6989586621679384020"><span class="hs-identifier hs-var">x</span></a></span></span><span class="annot"><span class="hs-glyph hs-type">:</span></span><span id="local-6989586621679384019"><span class="annot"><span class="annottext">[a]
+</span><a href="#local-6989586621679384019"><span class="hs-identifier hs-var">xs</span></a></span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">a -&gt; [a] -&gt; [a] -&gt; Stack a
+forall a. a -&gt; [a] -&gt; [a] -&gt; Stack a
+</span><span class="hs-identifier hs-var">Stack</span></span><span> </span><span class="annot"><span class="annottext">a
+</span><a href="#local-6989586621679384023"><span class="hs-identifier hs-var">t</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">[a]
+</span><a href="#local-6989586621679384019"><span class="hs-identifier hs-var">xs</span></a></span><span> </span><span class="annot"><span class="annottext">[a] -&gt; [a] -&gt; [a]
+forall a. [a] -&gt; [a] -&gt; [a]
+</span><span class="hs-operator hs-var">++</span></span><span> </span><span class="hs-special">[</span><span class="annot"><span class="annottext">a
+</span><a href="#local-6989586621679384020"><span class="hs-identifier hs-var">x</span></a></span><span class="hs-special">]</span><span class="hs-special">)</span><span> </span><span class="hs-special">[</span><span class="hs-special">]</span><span>
+</span><span id="line-56"></span><span>    </span><span class="hs-special">[</span><span class="hs-special">]</span><span>     </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">a -&gt; [a] -&gt; [a] -&gt; Stack a
+forall a. a -&gt; [a] -&gt; [a] -&gt; Stack a
+</span><span class="hs-identifier hs-var">Stack</span></span><span> </span><span class="annot"><span class="annottext">a
+</span><a href="#local-6989586621679384023"><span class="hs-identifier hs-var">t</span></a></span><span> </span><span class="hs-special">[</span><span class="hs-special">]</span><span>          </span><span class="hs-special">[</span><span class="hs-special">]</span><span>
+</span><span id="line-57"></span></pre></body></html>

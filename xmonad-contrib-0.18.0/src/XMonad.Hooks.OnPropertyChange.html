@@ -1,0 +1,165 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd"><html xmlns="http://www.w3.org/1999/xhtml"><head><link rel="stylesheet" type="text/css" href="style.css" /><script type="text/javascript" src="highlight.js"></script></head><body><pre><span class="hs-comment">-----------------------------------------------------------------------------</span><span>
+</span><span id="line-2"></span><span class="hs-comment">-- |</span><span>
+</span><span id="line-3"></span><span class="hs-comment">-- Module      :  XMonad.Hooks.OnPropertyChange</span><span>
+</span><span id="line-4"></span><span class="hs-comment">-- Description :  Apply a manageHook on a property (e.g., @WM_CLASS@) change</span><span>
+</span><span id="line-5"></span><span class="hs-comment">-- Copyright   :  (c) Brandon S Allbery, 2015</span><span>
+</span><span id="line-6"></span><span class="hs-comment">-- License     :  BSD3-style (see LICENSE)</span><span>
+</span><span id="line-7"></span><span class="hs-comment">--</span><span>
+</span><span id="line-8"></span><span class="hs-comment">-- Maintainer  :  allbery.b@gmail.com</span><span>
+</span><span id="line-9"></span><span class="hs-comment">-- Stability   :  unstable</span><span>
+</span><span id="line-10"></span><span class="hs-comment">-- Portability :  not portable</span><span>
+</span><span id="line-11"></span><span class="hs-comment">--</span><span>
+</span><span id="line-12"></span><span class="hs-comment">-- Module to apply a ManageHook to an already-mapped window when a property</span><span>
+</span><span id="line-13"></span><span class="hs-comment">-- changes. This would commonly be used to match browser windows by title,</span><span>
+</span><span id="line-14"></span><span class="hs-comment">-- since the final title will only be set after (a) the window is mapped,</span><span>
+</span><span id="line-15"></span><span class="hs-comment">-- (b) its document has been loaded, (c) all load-time scripts have run.</span><span>
+</span><span id="line-16"></span><span class="hs-comment">-- (Don't blame browsers for this; it's inherent in HTML and the DOM. And</span><span>
+</span><span id="line-17"></span><span class="hs-comment">-- changing title dynamically is explicitly permitted by ICCCM and EWMH;</span><span>
+</span><span id="line-18"></span><span class="hs-comment">-- you don't really want to have your editor window umapped/remapped to</span><span>
+</span><span id="line-19"></span><span class="hs-comment">-- show the current document and modified state in the titlebar, do you?)</span><span>
+</span><span id="line-20"></span><span class="hs-comment">--</span><span>
+</span><span id="line-21"></span><span class="hs-comment">-- This is a handleEventHook that triggers on a PropertyChange event. It</span><span>
+</span><span id="line-22"></span><span class="hs-comment">-- currently ignores properties being removed, in part because you can't</span><span>
+</span><span id="line-23"></span><span class="hs-comment">-- do anything useful in a ManageHook involving nonexistence of a property.</span><span>
+</span><span id="line-24"></span><span class="hs-comment">--</span><span>
+</span><span id="line-25"></span><span class="hs-comment">-- This module could also be useful for Electron applications like Spotify</span><span>
+</span><span id="line-26"></span><span class="hs-comment">-- which sets its WM_CLASS too late for window manager to map it properly.</span><span>
+</span><span id="line-27"></span><span class="hs-comment">--</span><span>
+</span><span id="line-28"></span><span class="hs-comment">-----------------------------------------------------------------------------</span><span>
+</span><span id="line-29"></span><span>
+</span><span id="line-30"></span><span class="hs-keyword">module</span><span> </span><span class="hs-identifier">XMonad.Hooks.OnPropertyChange</span><span> </span><span class="hs-special">(</span><span>
+</span><span id="line-31"></span><span>  </span><span class="annot"><span class="hs-comment">-- * Usage</span></span><span>
+</span><span id="line-32"></span><span>  </span><span class="annot"><span class="hs-comment">-- $usage</span></span><span>
+</span><span id="line-33"></span><span>  </span><span class="annot"><a href="XMonad.Hooks.OnPropertyChange.html#onXPropertyChange"><span class="hs-identifier">onXPropertyChange</span></a></span><span class="hs-special">,</span><span>
+</span><span id="line-34"></span><span>  </span><span class="annot"><a href="XMonad.Hooks.OnPropertyChange.html#onTitleChange"><span class="hs-identifier">onTitleChange</span></a></span><span class="hs-special">,</span><span>
+</span><span id="line-35"></span><span>  </span><span class="annot"><a href="XMonad.Hooks.OnPropertyChange.html#onClassChange"><span class="hs-identifier">onClassChange</span></a></span><span class="hs-special">,</span><span>
+</span><span id="line-36"></span><span class="hs-special">)</span><span> </span><span class="hs-keyword">where</span><span>
+</span><span id="line-37"></span><span>
+</span><span id="line-38"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><span class="hs-identifier">XMonad</span></span><span>
+</span><span id="line-39"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><a href="XMonad.Prelude.html"><span class="hs-identifier">XMonad.Prelude</span></a></span><span>
+</span><span id="line-40"></span><span>
+</span><span id="line-41"></span><span class="hs-comment">-- $usage</span><span>
+</span><span id="line-42"></span><span class="hs-comment">-- You can use this module with the following in your @xmonad.hs@:</span><span>
+</span><span id="line-43"></span><span class="hs-comment">--</span><span>
+</span><span id="line-44"></span><span class="hs-comment">-- &gt; import XMonad.Hooks.DynamicProperty</span><span>
+</span><span id="line-45"></span><span class="hs-comment">--</span><span>
+</span><span id="line-46"></span><span class="hs-comment">-- Enable it by including in you handleEventHook definition:</span><span>
+</span><span id="line-47"></span><span class="hs-comment">--</span><span>
+</span><span id="line-48"></span><span class="hs-comment">-- &gt;  main = xmonad $ def</span><span>
+</span><span id="line-49"></span><span class="hs-comment">-- &gt;      { ...</span><span>
+</span><span id="line-50"></span><span class="hs-comment">-- &gt;      , handleEventHook = onXPropertyChange &quot;WM_NAME&quot; (title =? &quot;Spotify&quot; --&gt; doShift &quot;5&quot;))</span><span>
+</span><span id="line-51"></span><span class="hs-comment">-- &gt;      , ...</span><span>
+</span><span id="line-52"></span><span class="hs-comment">-- &gt;      }</span><span>
+</span><span id="line-53"></span><span class="hs-comment">--</span><span>
+</span><span id="line-54"></span><span class="hs-comment">-- Or you could create a dynamicManageHook as below:</span><span>
+</span><span id="line-55"></span><span class="hs-comment">--</span><span>
+</span><span id="line-56"></span><span class="hs-comment">-- &gt; myDynamicManageHook :: ManageHook</span><span>
+</span><span id="line-57"></span><span class="hs-comment">-- &gt; myDynamicManageHook =</span><span>
+</span><span id="line-58"></span><span class="hs-comment">-- &gt;  composeAll</span><span>
+</span><span id="line-59"></span><span class="hs-comment">-- &gt;    [ className =? &quot;Spotify&quot; --&gt; doShift (myWorkspaces !! 4),</span><span>
+</span><span id="line-60"></span><span class="hs-comment">-- &gt;      title =? &quot;maybe_special_terminal&quot; &lt;||&gt; title =? &quot;special_terminal&quot; --&gt; doCenterFloat,</span><span>
+</span><span id="line-61"></span><span class="hs-comment">-- &gt;      className =? &quot;dynamicApp&quot; &lt;&amp;&amp;&gt; title =? &quot;dynamic_app&quot; --&gt; doCenterFloat</span><span>
+</span><span id="line-62"></span><span class="hs-comment">-- &gt;    ]</span><span>
+</span><span id="line-63"></span><span class="hs-comment">--</span><span>
+</span><span id="line-64"></span><span class="hs-comment">-- And then use it in your handleEventHookDefinition:</span><span>
+</span><span id="line-65"></span><span class="hs-comment">--</span><span>
+</span><span id="line-66"></span><span class="hs-comment">-- &gt;  main = xmonad $ def</span><span>
+</span><span id="line-67"></span><span class="hs-comment">-- &gt;      { ...</span><span>
+</span><span id="line-68"></span><span class="hs-comment">-- &gt;      , handleEventHook = onXPropertyChange &quot;WM_NAME&quot; myDynamicManageHook</span><span>
+</span><span id="line-69"></span><span class="hs-comment">-- &gt;      , ...</span><span>
+</span><span id="line-70"></span><span class="hs-comment">-- &gt;      }</span><span>
+</span><span id="line-71"></span><span class="hs-comment">--</span><span>
+</span><span id="line-72"></span><span>
+</span><span id="line-73"></span><span class="hs-comment">-- |</span><span>
+</span><span id="line-74"></span><span class="hs-comment">-- Run a 'ManageHook' when a specific property is changed on a window. Note</span><span>
+</span><span id="line-75"></span><span class="hs-comment">-- that this will run on any window which changes the property, so you should</span><span>
+</span><span id="line-76"></span><span class="hs-comment">-- be very specific in your 'ManageHook' matching (lots of windows change</span><span>
+</span><span id="line-77"></span><span class="hs-comment">-- their titles on the fly!):</span><span>
+</span><span id="line-78"></span><span class="hs-comment">--</span><span>
+</span><span id="line-79"></span><span class="hs-comment">-- &gt; onXPropertyChange &quot;WM_NAME&quot; (className =? &quot;Iceweasel&quot; &lt;&amp;&amp;&gt; title =? &quot;whatever&quot; --&gt; doShift &quot;2&quot;)</span><span>
+</span><span id="line-80"></span><span class="hs-comment">--</span><span>
+</span><span id="line-81"></span><span class="hs-comment">-- Note that the fixity of (--&gt;) won't allow it to be mixed with ($), so you</span><span>
+</span><span id="line-82"></span><span class="hs-comment">-- can't use the obvious $ shorthand.</span><span>
+</span><span id="line-83"></span><span class="hs-comment">--</span><span>
+</span><span id="line-84"></span><span class="hs-comment">-- &gt; onXPropertyChange &quot;WM_NAME&quot; $ title =? &quot;Foo&quot; --&gt; doFloat -- won't work!</span><span>
+</span><span id="line-85"></span><span class="hs-comment">--</span><span>
+</span><span id="line-86"></span><span class="hs-comment">-- Consider instead phrasing it like any</span><span>
+</span><span id="line-87"></span><span class="hs-comment">-- other 'ManageHook':</span><span>
+</span><span id="line-88"></span><span class="hs-comment">--</span><span>
+</span><span id="line-89"></span><span class="hs-comment">-- &gt;  main = xmonad $ def</span><span>
+</span><span id="line-90"></span><span class="hs-comment">-- &gt;      { ...</span><span>
+</span><span id="line-91"></span><span class="hs-comment">-- &gt;      , handleEventHook = onXPropertyChange &quot;WM_NAME&quot; myDynHook</span><span>
+</span><span id="line-92"></span><span class="hs-comment">-- &gt;      , ...</span><span>
+</span><span id="line-93"></span><span class="hs-comment">-- &gt;      }</span><span>
+</span><span id="line-94"></span><span class="hs-comment">-- &gt;</span><span>
+</span><span id="line-95"></span><span class="hs-comment">-- &gt;    myDynHook = composeAll [...]</span><span>
+</span><span id="line-96"></span><span class="hs-comment">--</span><span>
+</span><span id="line-97"></span><span class="annot"><a href="XMonad.Hooks.OnPropertyChange.html#onXPropertyChange"><span class="hs-identifier hs-type">onXPropertyChange</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">String</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">ManageHook</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Event</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">X</span></span><span> </span><span class="annot"><span class="hs-identifier hs-type">All</span></span><span>
+</span><span id="line-98"></span><span id="onXPropertyChange"><span class="annot"><span class="annottext">onXPropertyChange :: String -&gt; ManageHook -&gt; Event -&gt; X All
+</span><a href="XMonad.Hooks.OnPropertyChange.html#onXPropertyChange"><span class="hs-identifier hs-var hs-var">onXPropertyChange</span></a></span></span><span> </span><span id="local-6989586621679413565"><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679413565"><span class="hs-identifier hs-var">prop</span></a></span></span><span> </span><span id="local-6989586621679413564"><span class="annot"><span class="annottext">ManageHook
+</span><a href="#local-6989586621679413564"><span class="hs-identifier hs-var">hook</span></a></span></span><span> </span><span class="annot"><span class="hs-identifier hs-type">PropertyEvent</span></span><span> </span><span class="hs-special">{</span><span> </span><span class="annot"><span class="annottext">ev_window :: Event -&gt; Atom
+</span><span class="hs-identifier hs-var">ev_window</span></span><span> </span><span class="hs-glyph">=</span><span> </span><span id="local-6989586621679413561"><span class="annot"><span class="annottext">Atom
+</span><a href="#local-6989586621679413561"><span class="hs-identifier hs-var">w</span></a></span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">ev_atom :: Event -&gt; Atom
+</span><span class="hs-identifier hs-var">ev_atom</span></span><span> </span><span class="hs-glyph">=</span><span> </span><span id="local-6989586621679413559"><span class="annot"><span class="annottext">Atom
+</span><a href="#local-6989586621679413559"><span class="hs-identifier hs-var">a</span></a></span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">ev_propstate :: Event -&gt; CInt
+</span><span class="hs-identifier hs-var">ev_propstate</span></span><span> </span><span class="hs-glyph">=</span><span> </span><span id="local-6989586621679413557"><span class="annot"><span class="annottext">CInt
+</span><a href="#local-6989586621679413557"><span class="hs-identifier hs-var">ps</span></a></span></span><span> </span><span class="hs-special">}</span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-99"></span><span>  </span><span id="local-6989586621679413556"><span class="annot"><span class="annottext">Atom
+</span><a href="#local-6989586621679413556"><span class="hs-identifier hs-var">pa</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">String -&gt; X Atom
+</span><span class="hs-identifier hs-var">getAtom</span></span><span> </span><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679413565"><span class="hs-identifier hs-var">prop</span></a></span><span>
+</span><span id="line-100"></span><span>  </span><span class="annot"><span class="annottext">forall (f :: * -&gt; *). Applicative f =&gt; Bool -&gt; f () -&gt; f ()
+</span><span class="hs-identifier hs-var">when</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">CInt
+</span><a href="#local-6989586621679413557"><span class="hs-identifier hs-var">ps</span></a></span><span> </span><span class="annot"><span class="annottext">forall a. Eq a =&gt; a -&gt; a -&gt; Bool
+</span><span class="hs-operator hs-var">==</span></span><span> </span><span class="annot"><span class="annottext">CInt
+</span><span class="hs-identifier hs-var">propertyNewValue</span></span><span> </span><span class="annot"><span class="annottext">Bool -&gt; Bool -&gt; Bool
+</span><span class="hs-operator hs-var">&amp;&amp;</span></span><span> </span><span class="annot"><span class="annottext">Atom
+</span><a href="#local-6989586621679413559"><span class="hs-identifier hs-var">a</span></a></span><span> </span><span class="annot"><span class="annottext">forall a. Eq a =&gt; a -&gt; a -&gt; Bool
+</span><span class="hs-operator hs-var">==</span></span><span> </span><span class="annot"><span class="annottext">Atom
+</span><a href="#local-6989586621679413556"><span class="hs-identifier hs-var">pa</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-101"></span><span>    </span><span id="local-6989586621679413551"><span class="annot"><span class="annottext">WindowSet -&gt; WindowSet
+</span><a href="#local-6989586621679413551"><span class="hs-identifier hs-var">g</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">forall a. Endo a -&gt; a -&gt; a
+</span><span class="hs-identifier hs-var">appEndo</span></span><span> </span><span class="annot"><span class="annottext">forall (f :: * -&gt; *) a b. Functor f =&gt; (a -&gt; b) -&gt; f a -&gt; f b
+</span><span class="hs-operator hs-var">&lt;$&gt;</span></span><span> </span><span class="annot"><span class="annottext">forall a. a -&gt; X a -&gt; X a
+</span><span class="hs-identifier hs-var">userCodeDef</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">forall a. (a -&gt; a) -&gt; Endo a
+</span><span class="hs-identifier hs-var">Endo</span></span><span> </span><span class="annot"><span class="annottext">forall a. a -&gt; a
+</span><span class="hs-identifier hs-var">id</span></span><span class="hs-special">)</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">forall a. Query a -&gt; Atom -&gt; X a
+</span><span class="hs-identifier hs-var">runQuery</span></span><span> </span><span class="annot"><span class="annottext">ManageHook
+</span><a href="#local-6989586621679413564"><span class="hs-identifier hs-var">hook</span></a></span><span> </span><span class="annot"><span class="annottext">Atom
+</span><a href="#local-6989586621679413561"><span class="hs-identifier hs-var">w</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-102"></span><span>    </span><span class="annot"><span class="annottext">(WindowSet -&gt; WindowSet) -&gt; X ()
+</span><span class="hs-identifier hs-var">windows</span></span><span> </span><span class="annot"><span class="annottext">WindowSet -&gt; WindowSet
+</span><a href="#local-6989586621679413551"><span class="hs-identifier hs-var">g</span></a></span><span>
+</span><span id="line-103"></span><span>  </span><span class="annot"><span class="annottext">forall (m :: * -&gt; *) a. Monad m =&gt; a -&gt; m a
+</span><span class="hs-identifier hs-var">return</span></span><span> </span><span class="annot"><span class="annottext">forall a. Monoid a =&gt; a
+</span><span class="hs-identifier hs-var">mempty</span></span><span> </span><span class="hs-comment">-- so anything else also processes it</span><span>
+</span><span id="line-104"></span><span class="annot"><a href="XMonad.Hooks.OnPropertyChange.html#onXPropertyChange"><span class="hs-identifier hs-var">onXPropertyChange</span></a></span><span> </span><span class="annot"><span class="annottext">String
+</span><span class="hs-identifier">_</span></span><span> </span><span class="annot"><span class="annottext">ManageHook
+</span><span class="hs-identifier">_</span></span><span> </span><span class="annot"><span class="annottext">Event
+</span><span class="hs-identifier">_</span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">forall (m :: * -&gt; *) a. Monad m =&gt; a -&gt; m a
+</span><span class="hs-identifier hs-var">return</span></span><span> </span><span class="annot"><span class="annottext">forall a. Monoid a =&gt; a
+</span><span class="hs-identifier hs-var">mempty</span></span><span>
+</span><span id="line-105"></span><span>
+</span><span id="line-106"></span><span class="hs-comment">-- | A shorthand for dynamic titles; i.e., applications changing their</span><span>
+</span><span id="line-107"></span><span class="hs-comment">-- @WM_NAME@ property.</span><span>
+</span><span id="line-108"></span><span class="annot"><a href="XMonad.Hooks.OnPropertyChange.html#onTitleChange"><span class="hs-identifier hs-type">onTitleChange</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">ManageHook</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Event</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">X</span></span><span> </span><span class="annot"><span class="hs-identifier hs-type">All</span></span><span>
+</span><span id="line-109"></span><span class="hs-comment">-- strictly, this should also check _NET_WM_NAME. practically, both will</span><span>
+</span><span id="line-110"></span><span class="hs-comment">-- change and each gets its own PropertyEvent, so we'd need to record that</span><span>
+</span><span id="line-111"></span><span class="hs-comment">-- we saw the event for that window and ignore the second one. Instead, just</span><span>
+</span><span id="line-112"></span><span class="hs-comment">-- trust that nobody sets only _NET_WM_NAME. (I'm sure this will prove false,</span><span>
+</span><span id="line-113"></span><span class="hs-comment">-- since there's always someone who can't bother being compliant.)</span><span>
+</span><span id="line-114"></span><span id="onTitleChange"><span class="annot"><span class="annottext">onTitleChange :: ManageHook -&gt; Event -&gt; X All
+</span><a href="XMonad.Hooks.OnPropertyChange.html#onTitleChange"><span class="hs-identifier hs-var hs-var">onTitleChange</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">String -&gt; ManageHook -&gt; Event -&gt; X All
+</span><a href="XMonad.Hooks.OnPropertyChange.html#onXPropertyChange"><span class="hs-identifier hs-var">onXPropertyChange</span></a></span><span> </span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot;WM_NAME&quot;</span></span><span>
+</span><span id="line-115"></span><span>
+</span><span id="line-116"></span><span class="hs-comment">-- | A shorthand for dynamic resource and class names; i.e.,</span><span>
+</span><span id="line-117"></span><span class="hs-comment">-- applications changing their @WM_CLASS@ property.</span><span>
+</span><span id="line-118"></span><span class="annot"><a href="XMonad.Hooks.OnPropertyChange.html#onClassChange"><span class="hs-identifier hs-type">onClassChange</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">ManageHook</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Event</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">X</span></span><span> </span><span class="annot"><span class="hs-identifier hs-type">All</span></span><span>
+</span><span id="line-119"></span><span id="onClassChange"><span class="annot"><span class="annottext">onClassChange :: ManageHook -&gt; Event -&gt; X All
+</span><a href="XMonad.Hooks.OnPropertyChange.html#onClassChange"><span class="hs-identifier hs-var hs-var">onClassChange</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">String -&gt; ManageHook -&gt; Event -&gt; X All
+</span><a href="XMonad.Hooks.OnPropertyChange.html#onXPropertyChange"><span class="hs-identifier hs-var">onXPropertyChange</span></a></span><span> </span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot;WM_CLASS&quot;</span></span><span>
+</span><span id="line-120"></span></pre></body></html>

@@ -1,0 +1,272 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd"><html xmlns="http://www.w3.org/1999/xhtml"><head><link rel="stylesheet" type="text/css" href="style.css" /><script type="text/javascript" src="highlight.js"></script></head><body><pre><span class="hs-pragma">{-# LANGUAGE ScopedTypeVariables #-}</span><span>
+</span><span id="line-2"></span><span class="hs-comment">-----------------------------------------------------------------------------</span><span>
+</span><span id="line-3"></span><span class="hs-comment">-- |</span><span>
+</span><span id="line-4"></span><span class="hs-comment">-- Module       : XMonad.Hooks.XPropManage</span><span>
+</span><span id="line-5"></span><span class="hs-comment">-- Description  : ManageHook matching on XProperties.</span><span>
+</span><span id="line-6"></span><span class="hs-comment">-- Copyright    : (c) Karsten Schoelzel &lt;kuser@gmx.de&gt;</span><span>
+</span><span id="line-7"></span><span class="hs-comment">-- License      : BSD</span><span>
+</span><span id="line-8"></span><span class="hs-comment">--</span><span>
+</span><span id="line-9"></span><span class="hs-comment">-- Maintainer   : Karsten Schoelzel &lt;kuser@gmx.de&gt;</span><span>
+</span><span id="line-10"></span><span class="hs-comment">-- Stability    : unstable</span><span>
+</span><span id="line-11"></span><span class="hs-comment">-- Portability  : unportable</span><span>
+</span><span id="line-12"></span><span class="hs-comment">--</span><span>
+</span><span id="line-13"></span><span class="hs-comment">-- A ManageHook matching on XProperties.</span><span>
+</span><span id="line-14"></span><span class="hs-comment">-----------------------------------------------------------------------------</span><span>
+</span><span id="line-15"></span><span>
+</span><span id="line-16"></span><span class="hs-keyword">module</span><span> </span><span class="hs-identifier">XMonad.Hooks.XPropManage</span><span> </span><span class="hs-special">(</span><span>
+</span><span id="line-17"></span><span>                 </span><span class="annot"><span class="hs-comment">-- * Usage</span></span><span>
+</span><span id="line-18"></span><span>                 </span><span class="annot"><span class="hs-comment">-- $usage</span></span><span>
+</span><span id="line-19"></span><span>                 </span><span class="annot"><a href="XMonad.Hooks.XPropManage.html#xPropManageHook"><span class="hs-identifier">xPropManageHook</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><a href="XMonad.Hooks.XPropManage.html#XPropMatch"><span class="hs-identifier">XPropMatch</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><a href="XMonad.Hooks.XPropManage.html#pmX"><span class="hs-identifier">pmX</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><a href="XMonad.Hooks.XPropManage.html#pmP"><span class="hs-identifier">pmP</span></a></span><span>
+</span><span id="line-20"></span><span>                 </span><span class="hs-special">)</span><span> </span><span class="hs-keyword">where</span><span>
+</span><span id="line-21"></span><span>
+</span><span id="line-22"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><span class="hs-identifier">Control.Exception</span></span><span> </span><span class="hs-keyword">as</span><span> </span><span class="annot"><span class="hs-identifier">E</span></span><span>
+</span><span id="line-23"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><span class="hs-identifier">Control.Monad.Trans</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier">lift</span></span><span class="hs-special">)</span><span>
+</span><span id="line-24"></span><span>
+</span><span id="line-25"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><span class="hs-identifier">XMonad</span></span><span>
+</span><span id="line-26"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><a href="XMonad.Prelude.html"><span class="hs-identifier">XMonad.Prelude</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier">Endo</span></span><span> </span><span class="hs-special">(</span><span class="hs-glyph">..</span><span class="hs-special">)</span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier">chr</span></span><span class="hs-special">)</span><span>
+</span><span id="line-27"></span><span>
+</span><span id="line-28"></span><span class="hs-comment">-- $usage</span><span>
+</span><span id="line-29"></span><span class="hs-comment">-- You can use this module with the following in your @~\/.xmonad\/xmonad.hs@:</span><span>
+</span><span id="line-30"></span><span class="hs-comment">--</span><span>
+</span><span id="line-31"></span><span class="hs-comment">-- &gt; import XMonad.Hooks.XPropManage</span><span>
+</span><span id="line-32"></span><span class="hs-comment">-- &gt; import qualified XMonad.StackSet as W</span><span>
+</span><span id="line-33"></span><span class="hs-comment">-- &gt; import XMonad.Actions.TagWindows</span><span>
+</span><span id="line-34"></span><span class="hs-comment">-- &gt; import Data.List</span><span>
+</span><span id="line-35"></span><span class="hs-comment">--</span><span>
+</span><span id="line-36"></span><span class="hs-comment">-- &gt; manageHook = xPropManageHook xPropMatches</span><span>
+</span><span id="line-37"></span><span class="hs-comment">-- &gt;</span><span>
+</span><span id="line-38"></span><span class="hs-comment">-- &gt; xPropMatches :: [XPropMatch]</span><span>
+</span><span id="line-39"></span><span class="hs-comment">-- &gt; xPropMatches = [ ([ (wM_CLASS, any (&quot;gimp&quot;==))], (\w -&gt; float w &gt;&gt; return (W.shift &quot;2&quot;)))</span><span>
+</span><span id="line-40"></span><span class="hs-comment">-- &gt;                , ([ (wM_COMMAND, any (&quot;screen&quot; ==)), (wM_CLASS, any (&quot;xterm&quot; ==))], pmX (addTag &quot;screen&quot;))</span><span>
+</span><span id="line-41"></span><span class="hs-comment">-- &gt;                , ([ (wM_NAME, any (&quot;Iceweasel&quot; `isInfixOf`))], pmP (W.shift &quot;3&quot;))</span><span>
+</span><span id="line-42"></span><span class="hs-comment">-- &gt;                ]</span><span>
+</span><span id="line-43"></span><span class="hs-comment">--</span><span>
+</span><span id="line-44"></span><span class="hs-comment">-- Properties known to work: wM_CLASS, wM_NAME, wM_COMMAND</span><span>
+</span><span id="line-45"></span><span class="hs-comment">--</span><span>
+</span><span id="line-46"></span><span class="hs-comment">-- A XPropMatch consists of a list of conditions and function telling what to do.</span><span>
+</span><span id="line-47"></span><span class="hs-comment">--</span><span>
+</span><span id="line-48"></span><span class="hs-comment">-- The list entries are pairs of an XProperty to match on (like wM_CLASS, wM_NAME)^1,</span><span>
+</span><span id="line-49"></span><span class="hs-comment">-- and an function which matches onto the value of the property (represented as a List</span><span>
+</span><span id="line-50"></span><span class="hs-comment">-- of Strings).</span><span>
+</span><span id="line-51"></span><span class="hs-comment">--</span><span>
+</span><span id="line-52"></span><span class="hs-comment">-- If a match succeeds the function is called immediately, can perform any action and then return</span><span>
+</span><span id="line-53"></span><span class="hs-comment">-- a function to apply in 'windows' (see Operations.hs). So if the action does only work on the</span><span>
+</span><span id="line-54"></span><span class="hs-comment">-- WindowSet use just 'pmP function'.</span><span>
+</span><span id="line-55"></span><span class="hs-comment">--</span><span>
+</span><span id="line-56"></span><span class="hs-comment">-- \*1 You can get the available properties of an application with the xprop utility. STRING properties</span><span>
+</span><span id="line-57"></span><span class="hs-comment">-- should work fine. Others might not work.</span><span>
+</span><span id="line-58"></span><span class="hs-comment">--</span><span>
+</span><span id="line-59"></span><span>
+</span><span id="line-60"></span><span class="hs-keyword">type</span><span> </span><span id="XPropMatch"><span class="annot"><a href="XMonad.Hooks.XPropManage.html#XPropMatch"><span class="hs-identifier hs-var">XPropMatch</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-special">(</span><span class="hs-special">[</span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">Atom</span></span><span class="hs-special">,</span><span> </span><span class="hs-special">[</span><span class="annot"><span class="hs-identifier hs-type">String</span></span><span class="hs-special">]</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Bool</span></span><span class="hs-special">)</span><span class="hs-special">]</span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Window</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">X</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">WindowSet</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">WindowSet</span></span><span class="hs-special">)</span><span class="hs-special">)</span><span>
+</span><span id="line-61"></span><span>
+</span><span id="line-62"></span><span class="annot"><a href="XMonad.Hooks.XPropManage.html#pmX"><span class="hs-identifier hs-type">pmX</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">Window</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">X</span></span><span> </span><span class="hs-special">(</span><span class="hs-special">)</span><span class="hs-special">)</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Window</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">X</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">WindowSet</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">WindowSet</span></span><span class="hs-special">)</span><span>
+</span><span id="line-63"></span><span id="pmX"><span class="annot"><span class="annottext">pmX :: (Window -&gt; X ()) -&gt; Window -&gt; X (WindowSet -&gt; WindowSet)
+</span><a href="XMonad.Hooks.XPropManage.html#pmX"><span class="hs-identifier hs-var hs-var">pmX</span></a></span></span><span> </span><span id="local-6989586621679365681"><span class="annot"><span class="annottext">Window -&gt; X ()
+</span><a href="#local-6989586621679365681"><span class="hs-identifier hs-var">f</span></a></span></span><span> </span><span id="local-6989586621679365680"><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679365680"><span class="hs-identifier hs-var">w</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Window -&gt; X ()
+</span><a href="#local-6989586621679365681"><span class="hs-identifier hs-var">f</span></a></span><span> </span><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679365680"><span class="hs-identifier hs-var">w</span></a></span><span> </span><span class="annot"><span class="annottext">X () -&gt; X (WindowSet -&gt; WindowSet) -&gt; X (WindowSet -&gt; WindowSet)
+forall (m :: * -&gt; *) a b. Monad m =&gt; m a -&gt; m b -&gt; m b
+</span><span class="hs-operator hs-var">&gt;&gt;</span></span><span> </span><span class="annot"><span class="annottext">(WindowSet -&gt; WindowSet) -&gt; X (WindowSet -&gt; WindowSet)
+forall (m :: * -&gt; *) a. Monad m =&gt; a -&gt; m a
+</span><span class="hs-identifier hs-var">return</span></span><span> </span><span class="annot"><span class="annottext">WindowSet -&gt; WindowSet
+forall a. a -&gt; a
+</span><span class="hs-identifier hs-var">id</span></span><span>
+</span><span id="line-64"></span><span>
+</span><span id="line-65"></span><span class="annot"><a href="XMonad.Hooks.XPropManage.html#pmP"><span class="hs-identifier hs-type">pmP</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">WindowSet</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">WindowSet</span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Window</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">X</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">WindowSet</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">WindowSet</span></span><span class="hs-special">)</span><span>
+</span><span id="line-66"></span><span id="pmP"><span class="annot"><span class="annottext">pmP :: (WindowSet -&gt; WindowSet) -&gt; Window -&gt; X (WindowSet -&gt; WindowSet)
+</span><a href="XMonad.Hooks.XPropManage.html#pmP"><span class="hs-identifier hs-var hs-var">pmP</span></a></span></span><span> </span><span id="local-6989586621679365678"><span class="annot"><span class="annottext">WindowSet -&gt; WindowSet
+</span><a href="#local-6989586621679365678"><span class="hs-identifier hs-var">f</span></a></span></span><span> </span><span class="annot"><span class="annottext">Window
+</span><span class="hs-identifier">_</span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">(WindowSet -&gt; WindowSet) -&gt; X (WindowSet -&gt; WindowSet)
+forall (m :: * -&gt; *) a. Monad m =&gt; a -&gt; m a
+</span><span class="hs-identifier hs-var">return</span></span><span> </span><span class="annot"><span class="annottext">WindowSet -&gt; WindowSet
+</span><a href="#local-6989586621679365678"><span class="hs-identifier hs-var">f</span></a></span><span>
+</span><span id="line-67"></span><span>
+</span><span id="line-68"></span><span class="annot"><a href="XMonad.Hooks.XPropManage.html#xPropManageHook"><span class="hs-identifier hs-type">xPropManageHook</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="hs-special">[</span><span class="annot"><a href="XMonad.Hooks.XPropManage.html#XPropMatch"><span class="hs-identifier hs-type">XPropMatch</span></a></span><span class="hs-special">]</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">ManageHook</span></span><span>
+</span><span id="line-69"></span><span id="xPropManageHook"><span class="annot"><span class="annottext">xPropManageHook :: [XPropMatch] -&gt; ManageHook
+</span><a href="XMonad.Hooks.XPropManage.html#xPropManageHook"><span class="hs-identifier hs-var hs-var">xPropManageHook</span></a></span></span><span> </span><span id="local-6989586621679365677"><span class="annot"><span class="annottext">[XPropMatch]
+</span><a href="#local-6989586621679365677"><span class="hs-identifier hs-var">tms</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">[ManageHook] -&gt; ManageHook
+forall a. Monoid a =&gt; [a] -&gt; a
+</span><span class="hs-identifier hs-var">mconcat</span></span><span> </span><span class="annot"><span class="annottext">([ManageHook] -&gt; ManageHook) -&gt; [ManageHook] -&gt; ManageHook
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">(XPropMatch -&gt; ManageHook) -&gt; [XPropMatch] -&gt; [ManageHook]
+forall a b. (a -&gt; b) -&gt; [a] -&gt; [b]
+</span><span class="hs-identifier hs-var">map</span></span><span> </span><span class="annot"><span class="annottext">XPropMatch -&gt; ManageHook
+forall (t :: * -&gt; *) a.
+Traversable t =&gt;
+(t (Window, [String] -&gt; Bool), Window -&gt; X (a -&gt; a))
+-&gt; Query (Endo a)
+</span><a href="#local-6989586621679365676"><span class="hs-identifier hs-var">propToHook</span></a></span><span> </span><span class="annot"><span class="annottext">[XPropMatch]
+</span><a href="#local-6989586621679365677"><span class="hs-identifier hs-var">tms</span></a></span><span>
+</span><span id="line-70"></span><span>    </span><span class="hs-keyword">where</span><span>
+</span><span id="line-71"></span><span>      </span><span id="local-6989586621679365676"><span class="annot"><span class="annottext">propToHook :: (t (Window, [String] -&gt; Bool), Window -&gt; X (a -&gt; a))
+-&gt; Query (Endo a)
+</span><a href="#local-6989586621679365676"><span class="hs-identifier hs-var hs-var">propToHook</span></a></span></span><span> </span><span class="hs-special">(</span><span id="local-6989586621679365675"><span class="annot"><span class="annottext">t (Window, [String] -&gt; Bool)
+</span><a href="#local-6989586621679365675"><span class="hs-identifier hs-var">ms</span></a></span></span><span class="hs-special">,</span><span> </span><span id="local-6989586621679365674"><span class="annot"><span class="annottext">Window -&gt; X (a -&gt; a)
+</span><a href="#local-6989586621679365674"><span class="hs-identifier hs-var">f</span></a></span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">(t Bool -&gt; Bool) -&gt; Query (t Bool) -&gt; Query Bool
+forall (f :: * -&gt; *) a b. Functor f =&gt; (a -&gt; b) -&gt; f a -&gt; f b
+</span><span class="hs-identifier hs-var">fmap</span></span><span> </span><span class="annot"><span class="annottext">t Bool -&gt; Bool
+forall (t :: * -&gt; *). Foldable t =&gt; t Bool -&gt; Bool
+</span><span class="hs-identifier hs-var">and</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">((Window, [String] -&gt; Bool) -&gt; Query Bool)
+-&gt; t (Window, [String] -&gt; Bool) -&gt; Query (t Bool)
+forall (t :: * -&gt; *) (m :: * -&gt; *) a b.
+(Traversable t, Monad m) =&gt;
+(a -&gt; m b) -&gt; t a -&gt; m (t b)
+</span><span class="hs-identifier hs-var">mapM</span></span><span> </span><span class="annot"><span class="annottext">(Window, [String] -&gt; Bool) -&gt; Query Bool
+forall b. (Window, [String] -&gt; b) -&gt; Query b
+</span><a href="#local-6989586621679365671"><span class="hs-identifier hs-var">mkQuery</span></a></span><span> </span><span class="annot"><span class="annottext">t (Window, [String] -&gt; Bool)
+</span><a href="#local-6989586621679365675"><span class="hs-identifier hs-var">ms</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">Query Bool -&gt; Query (Endo a) -&gt; Query (Endo a)
+forall (m :: * -&gt; *) a. (Monad m, Monoid a) =&gt; m Bool -&gt; m a -&gt; m a
+</span><span class="hs-operator hs-var">--&gt;</span></span><span> </span><span class="annot"><span class="annottext">(Window -&gt; X (a -&gt; a)) -&gt; Query (Endo a)
+forall a. (Window -&gt; X (a -&gt; a)) -&gt; Query (Endo a)
+</span><a href="#local-6989586621679365669"><span class="hs-identifier hs-var">mkHook</span></a></span><span> </span><span class="annot"><span class="annottext">Window -&gt; X (a -&gt; a)
+</span><a href="#local-6989586621679365674"><span class="hs-identifier hs-var">f</span></a></span><span>
+</span><span id="line-72"></span><span>      </span><span id="local-6989586621679365671"><span class="annot"><span class="annottext">mkQuery :: (Window, [String] -&gt; b) -&gt; Query b
+</span><a href="#local-6989586621679365671"><span class="hs-identifier hs-var hs-var">mkQuery</span></a></span></span><span> </span><span class="hs-special">(</span><span id="local-6989586621679365668"><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679365668"><span class="hs-identifier hs-var">a</span></a></span></span><span class="hs-special">,</span><span> </span><span id="local-6989586621679365667"><span class="annot"><span class="annottext">[String] -&gt; b
+</span><a href="#local-6989586621679365667"><span class="hs-identifier hs-var">tf</span></a></span></span><span class="hs-special">)</span><span>    </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">([String] -&gt; b) -&gt; Query [String] -&gt; Query b
+forall (f :: * -&gt; *) a b. Functor f =&gt; (a -&gt; b) -&gt; f a -&gt; f b
+</span><span class="hs-identifier hs-var">fmap</span></span><span> </span><span class="annot"><span class="annottext">[String] -&gt; b
+</span><a href="#local-6989586621679365667"><span class="hs-identifier hs-var">tf</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Window -&gt; Query [String]
+</span><a href="XMonad.Hooks.XPropManage.html#getQuery"><span class="hs-identifier hs-var">getQuery</span></a></span><span> </span><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679365668"><span class="hs-identifier hs-var">a</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-73"></span><span>      </span><span id="local-6989586621679365669"><span class="annot"><span class="annottext">mkHook :: (Window -&gt; X (a -&gt; a)) -&gt; Query (Endo a)
+</span><a href="#local-6989586621679365669"><span class="hs-identifier hs-var hs-var">mkHook</span></a></span></span><span> </span><span id="local-6989586621679365665"><span class="annot"><span class="annottext">Window -&gt; X (a -&gt; a)
+</span><a href="#local-6989586621679365665"><span class="hs-identifier hs-var">func</span></a></span></span><span>        </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Query Window
+forall r (m :: * -&gt; *). MonadReader r m =&gt; m r
+</span><span class="hs-identifier hs-var">ask</span></span><span> </span><span class="annot"><span class="annottext">Query Window -&gt; (Window -&gt; Query (Endo a)) -&gt; Query (Endo a)
+forall (m :: * -&gt; *) a b. Monad m =&gt; m a -&gt; (a -&gt; m b) -&gt; m b
+</span><span class="hs-operator hs-var">&gt;&gt;=</span></span><span> </span><span class="annot"><span class="annottext">ReaderT Window X (Endo a) -&gt; Query (Endo a)
+forall a. ReaderT Window X a -&gt; Query a
+</span><span class="hs-identifier hs-var">Query</span></span><span> </span><span class="annot"><span class="annottext">(ReaderT Window X (Endo a) -&gt; Query (Endo a))
+-&gt; (Window -&gt; ReaderT Window X (Endo a))
+-&gt; Window
+-&gt; Query (Endo a)
+forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">X (Endo a) -&gt; ReaderT Window X (Endo a)
+forall (t :: (* -&gt; *) -&gt; * -&gt; *) (m :: * -&gt; *) a.
+(MonadTrans t, Monad m) =&gt;
+m a -&gt; t m a
+</span><span class="hs-identifier hs-var">lift</span></span><span> </span><span class="annot"><span class="annottext">(X (Endo a) -&gt; ReaderT Window X (Endo a))
+-&gt; (Window -&gt; X (Endo a)) -&gt; Window -&gt; ReaderT Window X (Endo a)
+forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">((a -&gt; a) -&gt; Endo a) -&gt; X (a -&gt; a) -&gt; X (Endo a)
+forall (f :: * -&gt; *) a b. Functor f =&gt; (a -&gt; b) -&gt; f a -&gt; f b
+</span><span class="hs-identifier hs-var">fmap</span></span><span> </span><span class="annot"><span class="annottext">(a -&gt; a) -&gt; Endo a
+forall a. (a -&gt; a) -&gt; Endo a
+</span><span class="hs-identifier hs-var">Endo</span></span><span> </span><span class="annot"><span class="annottext">(X (a -&gt; a) -&gt; X (Endo a))
+-&gt; (Window -&gt; X (a -&gt; a)) -&gt; Window -&gt; X (Endo a)
+forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">Window -&gt; X (a -&gt; a)
+</span><a href="#local-6989586621679365665"><span class="hs-identifier hs-var">func</span></a></span><span>
+</span><span id="line-74"></span><span>
+</span><span id="line-75"></span><span class="annot"><a href="XMonad.Hooks.XPropManage.html#getProp"><span class="hs-identifier hs-type">getProp</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Display</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Window</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Atom</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">X</span></span><span> </span><span class="hs-special">[</span><span class="annot"><span class="hs-identifier hs-type">String</span></span><span class="hs-special">]</span><span>
+</span><span id="line-76"></span><span id="getProp"><span class="annot"><span class="annottext">getProp :: Display -&gt; Window -&gt; Window -&gt; X [String]
+</span><a href="XMonad.Hooks.XPropManage.html#getProp"><span class="hs-identifier hs-var hs-var">getProp</span></a></span></span><span> </span><span id="local-6989586621679365659"><span class="annot"><span class="annottext">Display
+</span><a href="#local-6989586621679365659"><span class="hs-identifier hs-var">d</span></a></span></span><span> </span><span id="local-6989586621679365658"><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679365658"><span class="hs-identifier hs-var">w</span></a></span></span><span> </span><span id="local-6989586621679365657"><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679365657"><span class="hs-identifier hs-var">p</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-77"></span><span>    </span><span id="local-6989586621679365656"><span class="annot"><span class="annottext">[String]
+</span><a href="#local-6989586621679365656"><span class="hs-identifier hs-var">prop</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">IO [String] -&gt; X [String]
+forall (m :: * -&gt; *) a. MonadIO m =&gt; IO a -&gt; m a
+</span><span class="hs-identifier hs-var">io</span></span><span> </span><span class="annot"><span class="annottext">(IO [String] -&gt; X [String]) -&gt; IO [String] -&gt; X [String]
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">IO [String] -&gt; (IOException -&gt; IO [String]) -&gt; IO [String]
+forall e a. Exception e =&gt; IO a -&gt; (e -&gt; IO a) -&gt; IO a
+</span><span class="hs-identifier hs-var">E.catch</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Display -&gt; Window -&gt; Window -&gt; IO TextProperty
+</span><span class="hs-identifier hs-var">getTextProperty</span></span><span> </span><span class="annot"><span class="annottext">Display
+</span><a href="#local-6989586621679365659"><span class="hs-identifier hs-var">d</span></a></span><span> </span><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679365658"><span class="hs-identifier hs-var">w</span></a></span><span> </span><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679365657"><span class="hs-identifier hs-var">p</span></a></span><span> </span><span class="annot"><span class="annottext">IO TextProperty -&gt; (TextProperty -&gt; IO [String]) -&gt; IO [String]
+forall (m :: * -&gt; *) a b. Monad m =&gt; m a -&gt; (a -&gt; m b) -&gt; m b
+</span><span class="hs-operator hs-var">&gt;&gt;=</span></span><span> </span><span class="annot"><span class="annottext">Display -&gt; TextProperty -&gt; IO [String]
+</span><span class="hs-identifier hs-var">wcTextPropertyToTextList</span></span><span> </span><span class="annot"><span class="annottext">Display
+</span><a href="#local-6989586621679365659"><span class="hs-identifier hs-var">d</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-special">(</span><span class="hs-glyph">\</span><span class="hs-special">(</span><span class="annot"><span class="annottext">IOException
+</span><span class="hs-identifier">_</span></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">IOException</span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">[String] -&gt; IO [String]
+forall (m :: * -&gt; *) a. Monad m =&gt; a -&gt; m a
+</span><span class="hs-identifier hs-var">return</span></span><span> </span><span class="hs-special">[</span><span class="hs-special">[</span><span class="hs-special">]</span><span class="hs-special">]</span><span class="hs-special">)</span><span>
+</span><span id="line-78"></span><span>    </span><span class="hs-keyword">let</span><span> </span><span id="local-6989586621679365651"><span class="annot"><span class="annottext">filt :: Window -&gt; [String] -&gt; [String]
+</span><a href="#local-6989586621679365651"><span class="hs-identifier hs-var hs-var">filt</span></a></span></span><span> </span><span id="local-6989586621679365650"><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679365650"><span class="hs-identifier hs-var">q</span></a></span></span><span> </span><span class="hs-glyph">|</span><span> </span><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679365650"><span class="hs-identifier hs-var">q</span></a></span><span> </span><span class="annot"><span class="annottext">Window -&gt; Window -&gt; Bool
+forall a. Eq a =&gt; a -&gt; a -&gt; Bool
+</span><span class="hs-operator hs-var">==</span></span><span> </span><span class="annot"><span class="annottext">Window
+</span><span class="hs-identifier hs-var">wM_COMMAND</span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">(String -&gt; [String]) -&gt; [String] -&gt; [String]
+forall (t :: * -&gt; *) a b. Foldable t =&gt; (a -&gt; [b]) -&gt; t a -&gt; [b]
+</span><span class="hs-identifier hs-var">concatMap</span></span><span> </span><span class="annot"><span class="annottext">String -&gt; [String]
+</span><a href="XMonad.Hooks.XPropManage.html#splitAtNull"><span class="hs-identifier hs-var">splitAtNull</span></a></span><span>
+</span><span id="line-79"></span><span>               </span><span class="hs-glyph">|</span><span> </span><span class="annot"><span class="annottext">Bool
+</span><span class="hs-identifier hs-var">otherwise</span></span><span>       </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">[String] -&gt; [String]
+forall a. a -&gt; a
+</span><span class="hs-identifier hs-var">id</span></span><span>
+</span><span id="line-80"></span><span>    </span><span class="annot"><span class="annottext">[String] -&gt; X [String]
+forall (m :: * -&gt; *) a. Monad m =&gt; a -&gt; m a
+</span><span class="hs-identifier hs-var">return</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Window -&gt; [String] -&gt; [String]
+</span><a href="#local-6989586621679365651"><span class="hs-identifier hs-var">filt</span></a></span><span> </span><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679365657"><span class="hs-identifier hs-var">p</span></a></span><span> </span><span class="annot"><span class="annottext">[String]
+</span><a href="#local-6989586621679365656"><span class="hs-identifier hs-var">prop</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-81"></span><span>
+</span><span id="line-82"></span><span class="annot"><a href="XMonad.Hooks.XPropManage.html#getQuery"><span class="hs-identifier hs-type">getQuery</span></a></span><span> </span><span class="hs-glyph">::</span><span>  </span><span class="annot"><span class="hs-identifier hs-type">Atom</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Query</span></span><span> </span><span class="hs-special">[</span><span class="annot"><span class="hs-identifier hs-type">String</span></span><span class="hs-special">]</span><span>
+</span><span id="line-83"></span><span id="getQuery"><span class="annot"><span class="annottext">getQuery :: Window -&gt; Query [String]
+</span><a href="XMonad.Hooks.XPropManage.html#getQuery"><span class="hs-identifier hs-var hs-var">getQuery</span></a></span></span><span> </span><span id="local-6989586621679365646"><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679365646"><span class="hs-identifier hs-var">p</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Query Window
+forall r (m :: * -&gt; *). MonadReader r m =&gt; m r
+</span><span class="hs-identifier hs-var">ask</span></span><span> </span><span class="annot"><span class="annottext">Query Window -&gt; (Window -&gt; Query [String]) -&gt; Query [String]
+forall (m :: * -&gt; *) a b. Monad m =&gt; m a -&gt; (a -&gt; m b) -&gt; m b
+</span><span class="hs-operator hs-var">&gt;&gt;=</span></span><span> </span><span class="hs-glyph">\</span><span id="local-6989586621679365645"><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679365645"><span class="hs-identifier hs-var">w</span></a></span></span><span> </span><span class="hs-glyph">-&gt;</span><span>  </span><span class="annot"><span class="annottext">ReaderT Window X [String] -&gt; Query [String]
+forall a. ReaderT Window X a -&gt; Query a
+</span><span class="hs-identifier hs-var">Query</span></span><span> </span><span class="annot"><span class="annottext">(ReaderT Window X [String] -&gt; Query [String])
+-&gt; (X [String] -&gt; ReaderT Window X [String])
+-&gt; X [String]
+-&gt; Query [String]
+forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">X [String] -&gt; ReaderT Window X [String]
+forall (t :: (* -&gt; *) -&gt; * -&gt; *) (m :: * -&gt; *) a.
+(MonadTrans t, Monad m) =&gt;
+m a -&gt; t m a
+</span><span class="hs-identifier hs-var">lift</span></span><span> </span><span class="annot"><span class="annottext">(X [String] -&gt; Query [String]) -&gt; X [String] -&gt; Query [String]
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">(Display -&gt; X [String]) -&gt; X [String]
+forall a. (Display -&gt; X a) -&gt; X a
+</span><span class="hs-identifier hs-var">withDisplay</span></span><span> </span><span class="annot"><span class="annottext">((Display -&gt; X [String]) -&gt; X [String])
+-&gt; (Display -&gt; X [String]) -&gt; X [String]
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="hs-glyph">\</span><span id="local-6989586621679365643"><span class="annot"><span class="annottext">Display
+</span><a href="#local-6989586621679365643"><span class="hs-identifier hs-var">d</span></a></span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">Display -&gt; Window -&gt; Window -&gt; X [String]
+</span><a href="XMonad.Hooks.XPropManage.html#getProp"><span class="hs-identifier hs-var">getProp</span></a></span><span> </span><span class="annot"><span class="annottext">Display
+</span><a href="#local-6989586621679365643"><span class="hs-identifier hs-var">d</span></a></span><span> </span><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679365645"><span class="hs-identifier hs-var">w</span></a></span><span> </span><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679365646"><span class="hs-identifier hs-var">p</span></a></span><span>
+</span><span id="line-84"></span><span>
+</span><span id="line-85"></span><span class="annot"><a href="XMonad.Hooks.XPropManage.html#splitAtNull"><span class="hs-identifier hs-type">splitAtNull</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">String</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="hs-special">[</span><span class="annot"><span class="hs-identifier hs-type">String</span></span><span class="hs-special">]</span><span>
+</span><span id="line-86"></span><span id="splitAtNull"><span class="annot"><span class="annottext">splitAtNull :: String -&gt; [String]
+</span><a href="XMonad.Hooks.XPropManage.html#splitAtNull"><span class="hs-identifier hs-var hs-var">splitAtNull</span></a></span></span><span> </span><span id="local-6989586621679365642"><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679365642"><span class="hs-identifier hs-var">s</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-keyword">case</span><span> </span><span class="annot"><span class="annottext">(Char -&gt; Bool) -&gt; String -&gt; String
+forall a. (a -&gt; Bool) -&gt; [a] -&gt; [a]
+</span><span class="hs-identifier hs-var">dropWhile</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Char -&gt; Char -&gt; Bool
+forall a. Eq a =&gt; a -&gt; a -&gt; Bool
+</span><span class="hs-operator hs-var">==</span></span><span> </span><span class="annot"><span class="annottext">Int -&gt; Char
+</span><span class="hs-identifier hs-var">chr</span></span><span> </span><span class="annot"><span class="annottext">Int
+</span><span class="hs-number">0</span></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679365642"><span class="hs-identifier hs-var">s</span></a></span><span> </span><span class="hs-keyword">of</span><span>
+</span><span id="line-87"></span><span>    </span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot;&quot;</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="hs-special">[</span><span class="hs-special">]</span><span>
+</span><span id="line-88"></span><span>    </span><span id="local-6989586621679365640"><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679365640"><span class="hs-identifier hs-var">s'</span></a></span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679365639"><span class="hs-identifier hs-var">w</span></a></span><span> </span><span class="annot"><span class="annottext">String -&gt; [String] -&gt; [String]
+forall a. a -&gt; [a] -&gt; [a]
+</span><span class="hs-glyph hs-var">:</span></span><span> </span><span class="annot"><span class="annottext">String -&gt; [String]
+</span><a href="XMonad.Hooks.XPropManage.html#splitAtNull"><span class="hs-identifier hs-var">splitAtNull</span></a></span><span> </span><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679365638"><span class="hs-identifier hs-var">s''</span></a></span><span>
+</span><span id="line-89"></span><span>          </span><span class="hs-keyword">where</span><span> </span><span class="hs-special">(</span><span id="local-6989586621679365639"><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679365639"><span class="hs-identifier hs-var">w</span></a></span></span><span class="hs-special">,</span><span> </span><span id="local-6989586621679365638"><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679365638"><span class="hs-identifier hs-var">s''</span></a></span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">(Char -&gt; Bool) -&gt; String -&gt; (String, String)
+forall a. (a -&gt; Bool) -&gt; [a] -&gt; ([a], [a])
+</span><span class="hs-identifier hs-var">break</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Char -&gt; Char -&gt; Bool
+forall a. Eq a =&gt; a -&gt; a -&gt; Bool
+</span><span class="hs-operator hs-var">==</span></span><span> </span><span class="annot"><span class="annottext">Int -&gt; Char
+</span><span class="hs-identifier hs-var">chr</span></span><span> </span><span class="annot"><span class="annottext">Int
+</span><span class="hs-number">0</span></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679365640"><span class="hs-identifier hs-var">s'</span></a></span><span>
+</span><span id="line-90"></span></pre></body></html>

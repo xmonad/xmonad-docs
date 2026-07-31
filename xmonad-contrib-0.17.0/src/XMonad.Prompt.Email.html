@@ -1,0 +1,109 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd"><html xmlns="http://www.w3.org/1999/xhtml"><head><link rel="stylesheet" type="text/css" href="style.css" /><script type="text/javascript" src="highlight.js"></script></head><body><pre><span class="hs-comment">-----------------------------------------------------------------------------</span><span>
+</span><span id="line-2"></span><span class="hs-comment">-- |</span><span>
+</span><span id="line-3"></span><span class="hs-comment">-- Module      :  XMonad.Prompt.Email</span><span>
+</span><span id="line-4"></span><span class="hs-comment">-- Description :  A prompt for sending quick, one-line emails, via GNU \'mail\'.</span><span>
+</span><span id="line-5"></span><span class="hs-comment">-- Copyright   :  (c) 2007 Brent Yorgey</span><span>
+</span><span id="line-6"></span><span class="hs-comment">-- License     :  BSD-style (see LICENSE)</span><span>
+</span><span id="line-7"></span><span class="hs-comment">--</span><span>
+</span><span id="line-8"></span><span class="hs-comment">-- Maintainer  :  &lt;byorgey@gmail.com&gt;</span><span>
+</span><span id="line-9"></span><span class="hs-comment">-- Stability   :  stable</span><span>
+</span><span id="line-10"></span><span class="hs-comment">-- Portability :  unportable</span><span>
+</span><span id="line-11"></span><span class="hs-comment">--</span><span>
+</span><span id="line-12"></span><span class="hs-comment">-- A prompt for sending quick, one-line emails, via the standard GNU</span><span>
+</span><span id="line-13"></span><span class="hs-comment">-- \'mail\' utility (which must be in your $PATH).  This module is</span><span>
+</span><span id="line-14"></span><span class="hs-comment">-- intended mostly as an example of using &quot;XMonad.Prompt.Input&quot; to</span><span>
+</span><span id="line-15"></span><span class="hs-comment">-- build an action requiring user input.</span><span>
+</span><span id="line-16"></span><span class="hs-comment">--</span><span>
+</span><span id="line-17"></span><span class="hs-comment">-----------------------------------------------------------------------------</span><span>
+</span><span id="line-18"></span><span>
+</span><span id="line-19"></span><span class="hs-keyword">module</span><span> </span><span class="hs-identifier">XMonad.Prompt.Email</span><span> </span><span class="hs-special">(</span><span>
+</span><span id="line-20"></span><span>                            </span><span class="annot"><span class="hs-comment">-- * Usage</span></span><span>
+</span><span id="line-21"></span><span>                            </span><span class="annot"><span class="hs-comment">-- $usage</span></span><span>
+</span><span id="line-22"></span><span>                            </span><span class="annot"><a href="XMonad.Prompt.Email.html#emailPrompt"><span class="hs-identifier">emailPrompt</span></a></span><span>
+</span><span id="line-23"></span><span>                           </span><span class="hs-special">)</span><span> </span><span class="hs-keyword">where</span><span>
+</span><span id="line-24"></span><span>
+</span><span id="line-25"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><span class="hs-identifier">XMonad.Core</span></span><span>
+</span><span id="line-26"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><a href="XMonad.Util.Run.html"><span class="hs-identifier">XMonad.Util.Run</span></a></span><span>
+</span><span id="line-27"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><a href="XMonad.Prelude.html"><span class="hs-identifier">XMonad.Prelude</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier">void</span></span><span class="hs-special">)</span><span>
+</span><span id="line-28"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><a href="XMonad.Prompt.html"><span class="hs-identifier">XMonad.Prompt</span></a></span><span>
+</span><span id="line-29"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><a href="XMonad.Prompt.Input.html"><span class="hs-identifier">XMonad.Prompt.Input</span></a></span><span>
+</span><span id="line-30"></span><span>
+</span><span id="line-31"></span><span class="hs-comment">-- $usage</span><span>
+</span><span id="line-32"></span><span class="hs-comment">--</span><span>
+</span><span id="line-33"></span><span class="hs-comment">-- You can use this module by importing it, along with</span><span>
+</span><span id="line-34"></span><span class="hs-comment">-- &quot;XMonad.Prompt&quot;, into your ~\/.xmonad\/xmonad.hs file:</span><span>
+</span><span id="line-35"></span><span class="hs-comment">--</span><span>
+</span><span id="line-36"></span><span class="hs-comment">-- &gt; import XMonad.Prompt</span><span>
+</span><span id="line-37"></span><span class="hs-comment">-- &gt; import XMonad.Prompt.Email</span><span>
+</span><span id="line-38"></span><span class="hs-comment">--</span><span>
+</span><span id="line-39"></span><span class="hs-comment">-- and adding an appropriate keybinding, for example:</span><span>
+</span><span id="line-40"></span><span class="hs-comment">--</span><span>
+</span><span id="line-41"></span><span class="hs-comment">-- &gt;  , ((modm .|. controlMask, xK_e), emailPrompt def addresses)</span><span>
+</span><span id="line-42"></span><span class="hs-comment">--</span><span>
+</span><span id="line-43"></span><span class="hs-comment">-- where @addresses@ is a list of email addresses that should</span><span>
+</span><span id="line-44"></span><span class="hs-comment">-- autocomplete, for example:</span><span>
+</span><span id="line-45"></span><span class="hs-comment">--</span><span>
+</span><span id="line-46"></span><span class="hs-comment">-- &gt; addresses = [&quot;me@me.com&quot;, &quot;mr@big.com&quot;, &quot;tom.jones@foo.bar&quot;]</span><span>
+</span><span id="line-47"></span><span class="hs-comment">--</span><span>
+</span><span id="line-48"></span><span class="hs-comment">-- You can still send email to any address, but sending to these</span><span>
+</span><span id="line-49"></span><span class="hs-comment">-- addresses will be faster since you only have to type a few</span><span>
+</span><span id="line-50"></span><span class="hs-comment">-- characters and then hit \'tab\'.</span><span>
+</span><span id="line-51"></span><span class="hs-comment">--</span><span>
+</span><span id="line-52"></span><span class="hs-comment">-- For detailed instructions on editing your key bindings, see</span><span>
+</span><span id="line-53"></span><span class="hs-comment">-- &quot;XMonad.Doc.Extending#Editing_key_bindings&quot;.</span><span>
+</span><span id="line-54"></span><span>
+</span><span id="line-55"></span><span>
+</span><span id="line-56"></span><span class="hs-comment">-- | Prompt the user for a recipient, subject, and body, and send an</span><span>
+</span><span id="line-57"></span><span class="hs-comment">--   email via the GNU \'mail\' utility.  The second argument is a list</span><span>
+</span><span id="line-58"></span><span class="hs-comment">--   of addresses for autocompletion.</span><span>
+</span><span id="line-59"></span><span class="annot"><a href="XMonad.Prompt.Email.html#emailPrompt"><span class="hs-identifier hs-type">emailPrompt</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><a href="XMonad.Prompt.html#XPConfig"><span class="hs-identifier hs-type">XPConfig</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="hs-special">[</span><span class="annot"><span class="hs-identifier hs-type">String</span></span><span class="hs-special">]</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">X</span></span><span> </span><span class="hs-special">(</span><span class="hs-special">)</span><span>
+</span><span id="line-60"></span><span id="emailPrompt"><span class="annot"><span class="annottext">emailPrompt :: XPConfig -&gt; [String] -&gt; X ()
+</span><a href="XMonad.Prompt.Email.html#emailPrompt"><span class="hs-identifier hs-var hs-var">emailPrompt</span></a></span></span><span> </span><span id="local-6989586621679392373"><span class="annot"><span class="annottext">XPConfig
+</span><a href="#local-6989586621679392373"><span class="hs-identifier hs-var">c</span></a></span></span><span> </span><span id="local-6989586621679392372"><span class="annot"><span class="annottext">[String]
+</span><a href="#local-6989586621679392372"><span class="hs-identifier hs-var">addrs</span></a></span></span><span> </span><span class="hs-glyph">=</span><span>
+</span><span id="line-61"></span><span>    </span><span class="annot"><span class="annottext">XPConfig -&gt; String -&gt; ComplFunction -&gt; X (Maybe String)
+</span><a href="XMonad.Prompt.Input.html#inputPromptWithCompl"><span class="hs-identifier hs-var">inputPromptWithCompl</span></a></span><span> </span><span class="annot"><span class="annottext">XPConfig
+</span><a href="#local-6989586621679392373"><span class="hs-identifier hs-var">c</span></a></span><span> </span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot;To&quot;</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">XPConfig -&gt; [String] -&gt; ComplFunction
+</span><a href="XMonad.Prompt.html#mkComplFunFromList"><span class="hs-identifier hs-var">mkComplFunFromList</span></a></span><span> </span><span class="annot"><span class="annottext">XPConfig
+</span><a href="#local-6989586621679392373"><span class="hs-identifier hs-var">c</span></a></span><span> </span><span class="annot"><span class="annottext">[String]
+</span><a href="#local-6989586621679392372"><span class="hs-identifier hs-var">addrs</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">X (Maybe String) -&gt; (String -&gt; X ()) -&gt; X ()
+forall (m :: * -&gt; *) a.
+Monad m =&gt;
+m (Maybe a) -&gt; (a -&gt; m ()) -&gt; m ()
+</span><a href="XMonad.Prompt.Input.html#%3F%2B"><span class="hs-operator hs-var">?+</span></a></span><span> </span><span class="hs-glyph">\</span><span id="local-6989586621679392368"><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679392368"><span class="hs-identifier hs-var">to</span></a></span></span><span> </span><span class="hs-glyph">-&gt;</span><span>
+</span><span id="line-62"></span><span>    </span><span class="annot"><span class="annottext">XPConfig -&gt; String -&gt; X (Maybe String)
+</span><a href="XMonad.Prompt.Input.html#inputPrompt"><span class="hs-identifier hs-var">inputPrompt</span></a></span><span> </span><span class="annot"><span class="annottext">XPConfig
+</span><a href="#local-6989586621679392373"><span class="hs-identifier hs-var">c</span></a></span><span> </span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot;Subject&quot;</span></span><span> </span><span class="annot"><span class="annottext">X (Maybe String) -&gt; (String -&gt; X ()) -&gt; X ()
+forall (m :: * -&gt; *) a.
+Monad m =&gt;
+m (Maybe a) -&gt; (a -&gt; m ()) -&gt; m ()
+</span><a href="XMonad.Prompt.Input.html#%3F%2B"><span class="hs-operator hs-var">?+</span></a></span><span> </span><span class="hs-glyph">\</span><span id="local-6989586621679392366"><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679392366"><span class="hs-identifier hs-var">subj</span></a></span></span><span> </span><span class="hs-glyph">-&gt;</span><span>
+</span><span id="line-63"></span><span>    </span><span class="annot"><span class="annottext">XPConfig -&gt; String -&gt; X (Maybe String)
+</span><a href="XMonad.Prompt.Input.html#inputPrompt"><span class="hs-identifier hs-var">inputPrompt</span></a></span><span> </span><span class="annot"><span class="annottext">XPConfig
+</span><a href="#local-6989586621679392373"><span class="hs-identifier hs-var">c</span></a></span><span> </span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot;Body&quot;</span></span><span> </span><span class="annot"><span class="annottext">X (Maybe String) -&gt; (String -&gt; X ()) -&gt; X ()
+forall (m :: * -&gt; *) a.
+Monad m =&gt;
+m (Maybe a) -&gt; (a -&gt; m ()) -&gt; m ()
+</span><a href="XMonad.Prompt.Input.html#%3F%2B"><span class="hs-operator hs-var">?+</span></a></span><span> </span><span class="hs-glyph">\</span><span id="local-6989586621679392365"><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679392365"><span class="hs-identifier hs-var">body</span></a></span></span><span> </span><span class="hs-glyph">-&gt;</span><span>
+</span><span id="line-64"></span><span>    </span><span class="annot"><span class="annottext">X String -&gt; X ()
+forall (f :: * -&gt; *) a. Functor f =&gt; f a -&gt; f ()
+</span><span class="hs-identifier hs-var">void</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">String -&gt; [String] -&gt; String -&gt; X String
+forall (m :: * -&gt; *).
+MonadIO m =&gt;
+String -&gt; [String] -&gt; String -&gt; m String
+</span><a href="XMonad.Util.Run.html#runProcessWithInput"><span class="hs-identifier hs-var">runProcessWithInput</span></a></span><span> </span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot;mail&quot;</span></span><span> </span><span class="hs-special">[</span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot;-s&quot;</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679392366"><span class="hs-identifier hs-var">subj</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679392368"><span class="hs-identifier hs-var">to</span></a></span><span class="hs-special">]</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679392365"><span class="hs-identifier hs-var">body</span></a></span><span> </span><span class="annot"><span class="annottext">String -&gt; String -&gt; String
+forall a. [a] -&gt; [a] -&gt; [a]
+</span><span class="hs-operator hs-var">++</span></span><span> </span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot;\n&quot;</span></span><span class="hs-special">)</span><span class="hs-special">)</span><span>
+</span><span id="line-65"></span></pre></body></html>

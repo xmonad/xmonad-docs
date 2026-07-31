@@ -1,0 +1,553 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd"><html xmlns="http://www.w3.org/1999/xhtml"><head><link rel="stylesheet" type="text/css" href="style.css" /><script type="text/javascript" src="highlight.js"></script></head><body><pre><span id="local-6989586621679396859"><span id="local-6989586621679396860"></span></span><span class="hs-pragma">{-# LANGUAGE FlexibleInstances, MultiParamTypeClasses #-}</span><span>
+</span><span id="line-2"></span><span>
+</span><span id="line-3"></span><span class="hs-comment">-----------------------------------------------------------------------------</span><span>
+</span><span id="line-4"></span><span class="hs-comment">-- |</span><span>
+</span><span id="line-5"></span><span class="hs-comment">-- Module      :  XMonad.Layout.Spiral</span><span>
+</span><span id="line-6"></span><span class="hs-comment">-- Description :  A spiral tiling layout.</span><span>
+</span><span id="line-7"></span><span class="hs-comment">-- Copyright   :  (c) Joe Thornber &lt;joe.thornber@gmail.com&gt;</span><span>
+</span><span id="line-8"></span><span class="hs-comment">-- License     :  BSD3-style (see LICENSE)</span><span>
+</span><span id="line-9"></span><span class="hs-comment">--</span><span>
+</span><span id="line-10"></span><span class="hs-comment">-- Maintainer  :  Joe Thornber &lt;joe.thornber@gmail.com&gt;</span><span>
+</span><span id="line-11"></span><span class="hs-comment">-- Stability   :  stable</span><span>
+</span><span id="line-12"></span><span class="hs-comment">-- Portability :  portable</span><span>
+</span><span id="line-13"></span><span class="hs-comment">--</span><span>
+</span><span id="line-14"></span><span class="hs-comment">-- A spiral tiling layout.</span><span>
+</span><span id="line-15"></span><span class="hs-comment">--</span><span>
+</span><span id="line-16"></span><span class="hs-comment">-----------------------------------------------------------------------------</span><span>
+</span><span id="line-17"></span><span>
+</span><span id="line-18"></span><span class="hs-keyword">module</span><span> </span><span class="hs-identifier">XMonad.Layout.Spiral</span><span> </span><span class="hs-special">(</span><span>
+</span><span id="line-19"></span><span>                             </span><span class="annot"><span class="hs-comment">-- * Usage</span></span><span>
+</span><span id="line-20"></span><span>                             </span><span class="annot"><span class="hs-comment">-- $usage</span></span><span>
+</span><span id="line-21"></span><span>                             </span><span class="annot"><a href="XMonad.Layout.Spiral.html#spiral"><span class="hs-identifier">spiral</span></a></span><span>
+</span><span id="line-22"></span><span>                            </span><span class="hs-special">,</span><span> </span><span class="annot"><a href="XMonad.Layout.Spiral.html#spiralWithDir"><span class="hs-identifier">spiralWithDir</span></a></span><span>
+</span><span id="line-23"></span><span>                            </span><span class="hs-special">,</span><span> </span><span class="annot"><a href="XMonad.Layout.Spiral.html#Rotation"><span class="hs-identifier">Rotation</span></a></span><span> </span><span class="hs-special">(</span><span class="hs-glyph">..</span><span class="hs-special">)</span><span>
+</span><span id="line-24"></span><span>                            </span><span class="hs-special">,</span><span> </span><span class="annot"><a href="XMonad.Layout.Spiral.html#Direction"><span class="hs-identifier">Direction</span></a></span><span> </span><span class="hs-special">(</span><span class="hs-glyph">..</span><span class="hs-special">)</span><span>
+</span><span id="line-25"></span><span>
+</span><span id="line-26"></span><span>                            </span><span class="hs-special">,</span><span> </span><span class="annot"><a href="XMonad.Layout.Spiral.html#SpiralWithDir"><span class="hs-identifier">SpiralWithDir</span></a></span><span>
+</span><span id="line-27"></span><span>                            </span><span class="hs-special">)</span><span> </span><span class="hs-keyword">where</span><span>
+</span><span id="line-28"></span><span>
+</span><span id="line-29"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><span class="hs-identifier">Data.Ratio</span></span><span>
+</span><span id="line-30"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><span class="hs-identifier">XMonad</span></span><span> </span><span class="hs-keyword">hiding</span><span> </span><span class="hs-special">(</span><span> </span><span class="annot"><span class="hs-identifier">Rotation</span></span><span> </span><span class="hs-special">)</span><span>
+</span><span id="line-31"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><span class="hs-identifier">XMonad.StackSet</span></span><span> </span><span class="hs-special">(</span><span> </span><span class="annot"><span class="hs-identifier">integrate</span></span><span> </span><span class="hs-special">)</span><span>
+</span><span id="line-32"></span><span>
+</span><span id="line-33"></span><span class="hs-comment">-- $usage</span><span>
+</span><span id="line-34"></span><span class="hs-comment">-- You can use this module with the following in your @xmonad.hs@:</span><span>
+</span><span id="line-35"></span><span class="hs-comment">--</span><span>
+</span><span id="line-36"></span><span class="hs-comment">-- &gt; import XMonad.Layout.Spiral</span><span>
+</span><span id="line-37"></span><span class="hs-comment">--</span><span>
+</span><span id="line-38"></span><span class="hs-comment">-- Then edit your @layoutHook@ by adding the Spiral layout:</span><span>
+</span><span id="line-39"></span><span class="hs-comment">--</span><span>
+</span><span id="line-40"></span><span class="hs-comment">-- &gt; myLayout =  spiral (6/7) ||| etc..</span><span>
+</span><span id="line-41"></span><span class="hs-comment">-- &gt; main = xmonad def { layoutHook = myLayout }</span><span>
+</span><span id="line-42"></span><span class="hs-comment">--</span><span>
+</span><span id="line-43"></span><span class="hs-comment">-- For more detailed instructions on editing the layoutHook see</span><span>
+</span><span id="line-44"></span><span class="hs-comment">-- &lt;https://xmonad.org/TUTORIAL.html#customizing-xmonad the tutorial&gt; and</span><span>
+</span><span id="line-45"></span><span class="hs-comment">-- &quot;XMonad.Doc.Extending#Editing_the_layout_hook&quot;.</span><span>
+</span><span id="line-46"></span><span>
+</span><span id="line-47"></span><span class="annot"><a href="XMonad.Layout.Spiral.html#fibs"><span class="hs-identifier hs-type">fibs</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="hs-special">[</span><span class="annot"><span class="hs-identifier hs-type">Integer</span></span><span class="hs-special">]</span><span>
+</span><span id="line-48"></span><span id="fibs"><span class="annot"><span class="annottext">fibs :: [Integer]
+</span><a href="XMonad.Layout.Spiral.html#fibs"><span class="hs-identifier hs-var hs-var">fibs</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Integer
+</span><span class="hs-number">1</span></span><span> </span><span class="annot"><span class="annottext">forall a. a -&gt; [a] -&gt; [a]
+</span><span class="hs-glyph hs-var">:</span></span><span> </span><span class="annot"><span class="annottext">Integer
+</span><span class="hs-number">1</span></span><span> </span><span class="annot"><span class="annottext">forall a. a -&gt; [a] -&gt; [a]
+</span><span class="hs-glyph hs-var">:</span></span><span> </span><span class="annot"><span class="annottext">forall a b c. (a -&gt; b -&gt; c) -&gt; [a] -&gt; [b] -&gt; [c]
+</span><span class="hs-identifier hs-var">zipWith</span></span><span> </span><span class="annot"><span class="annottext">forall a. Num a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-operator hs-var">(+)</span></span><span> </span><span class="annot"><span class="annottext">[Integer]
+</span><a href="XMonad.Layout.Spiral.html#fibs"><span class="hs-identifier hs-var">fibs</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">forall a. Int -&gt; [a] -&gt; [a]
+</span><span class="hs-identifier hs-var">drop</span></span><span> </span><span class="annot"><span class="annottext">Int
+</span><span class="hs-number">1</span></span><span> </span><span class="annot"><span class="annottext">[Integer]
+</span><a href="XMonad.Layout.Spiral.html#fibs"><span class="hs-identifier hs-var">fibs</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-49"></span><span>
+</span><span id="line-50"></span><span class="annot"><a href="XMonad.Layout.Spiral.html#mkRatios"><span class="hs-identifier hs-type">mkRatios</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="hs-special">[</span><span class="annot"><span class="hs-identifier hs-type">Integer</span></span><span class="hs-special">]</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="hs-special">[</span><span class="annot"><span class="hs-identifier hs-type">Rational</span></span><span class="hs-special">]</span><span>
+</span><span id="line-51"></span><span id="mkRatios"><span class="annot"><span class="annottext">mkRatios :: [Integer] -&gt; [Rational]
+</span><a href="XMonad.Layout.Spiral.html#mkRatios"><span class="hs-identifier hs-var hs-var">mkRatios</span></a></span></span><span> </span><span class="hs-special">(</span><span id="local-6989586621679396816"><span class="annot"><span class="annottext">Integer
+</span><a href="#local-6989586621679396816"><span class="hs-identifier hs-var">x1</span></a></span></span><span class="annot"><span class="hs-glyph hs-type">:</span></span><span id="local-6989586621679396815"><span class="annot"><span class="annottext">Integer
+</span><a href="#local-6989586621679396815"><span class="hs-identifier hs-var">x2</span></a></span></span><span class="annot"><span class="hs-glyph hs-type">:</span></span><span id="local-6989586621679396814"><span class="annot"><span class="annottext">[Integer]
+</span><a href="#local-6989586621679396814"><span class="hs-identifier hs-var">xs</span></a></span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Integer
+</span><a href="#local-6989586621679396816"><span class="hs-identifier hs-var">x1</span></a></span><span> </span><span class="annot"><span class="annottext">forall a. Integral a =&gt; a -&gt; a -&gt; Ratio a
+</span><span class="hs-operator hs-var">%</span></span><span> </span><span class="annot"><span class="annottext">Integer
+</span><a href="#local-6989586621679396815"><span class="hs-identifier hs-var">x2</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">forall a. a -&gt; [a] -&gt; [a]
+</span><span class="hs-glyph hs-var">:</span></span><span> </span><span class="annot"><span class="annottext">[Integer] -&gt; [Rational]
+</span><a href="XMonad.Layout.Spiral.html#mkRatios"><span class="hs-identifier hs-var">mkRatios</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Integer
+</span><a href="#local-6989586621679396815"><span class="hs-identifier hs-var">x2</span></a></span><span class="annot"><span class="annottext">forall a. a -&gt; [a] -&gt; [a]
+</span><span class="hs-glyph hs-var">:</span></span><span class="annot"><span class="annottext">[Integer]
+</span><a href="#local-6989586621679396814"><span class="hs-identifier hs-var">xs</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-52"></span><span class="annot"><a href="XMonad.Layout.Spiral.html#mkRatios"><span class="hs-identifier hs-var">mkRatios</span></a></span><span> </span><span class="annot"><span class="annottext">[Integer]
+</span><span class="hs-identifier">_</span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-special">[</span><span class="hs-special">]</span><span>
+</span><span id="line-53"></span><span>
+</span><span id="line-54"></span><span class="hs-keyword">data</span><span> </span><span id="Rotation"><span class="annot"><a href="XMonad.Layout.Spiral.html#Rotation"><span class="hs-identifier hs-var">Rotation</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span id="CW"><span class="annot"><a href="XMonad.Layout.Spiral.html#CW"><span class="hs-identifier hs-var">CW</span></a></span></span><span> </span><span class="hs-glyph">|</span><span> </span><span id="CCW"><span class="annot"><a href="XMonad.Layout.Spiral.html#CCW"><span class="hs-identifier hs-var">CCW</span></a></span></span><span> </span><span class="hs-keyword">deriving</span><span> </span><span class="hs-special">(</span><span id="local-6989586621679396799"><span id="local-6989586621679396804"><span id="local-6989586621679396807"><span id="local-6989586621679396809"><span class="annot"><span class="annottext">ReadPrec [Rotation]
+ReadPrec Rotation
+Int -&gt; ReadS Rotation
+ReadS [Rotation]
+forall a.
+(Int -&gt; ReadS a)
+-&gt; ReadS [a] -&gt; ReadPrec a -&gt; ReadPrec [a] -&gt; Read a
+readListPrec :: ReadPrec [Rotation]
+$creadListPrec :: ReadPrec [Rotation]
+readPrec :: ReadPrec Rotation
+$creadPrec :: ReadPrec Rotation
+readList :: ReadS [Rotation]
+$creadList :: ReadS [Rotation]
+readsPrec :: Int -&gt; ReadS Rotation
+$creadsPrec :: Int -&gt; ReadS Rotation
+</span><span class="hs-identifier hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var">Read</span></span></span></span></span></span><span class="hs-special">,</span><span> </span><span id="local-6989586621679396791"><span id="local-6989586621679396793"><span id="local-6989586621679396795"><span class="annot"><span class="annottext">Int -&gt; Rotation -&gt; ShowS
+[Rotation] -&gt; ShowS
+Rotation -&gt; String
+forall a.
+(Int -&gt; a -&gt; ShowS) -&gt; (a -&gt; String) -&gt; ([a] -&gt; ShowS) -&gt; Show a
+showList :: [Rotation] -&gt; ShowS
+$cshowList :: [Rotation] -&gt; ShowS
+show :: Rotation -&gt; String
+$cshow :: Rotation -&gt; String
+showsPrec :: Int -&gt; Rotation -&gt; ShowS
+$cshowsPrec :: Int -&gt; Rotation -&gt; ShowS
+</span><span class="hs-identifier hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var">Show</span></span></span></span></span><span class="hs-special">)</span><span>
+</span><span id="line-55"></span><span class="hs-keyword">data</span><span> </span><span id="Direction"><span class="annot"><a href="XMonad.Layout.Spiral.html#Direction"><span class="hs-identifier hs-var">Direction</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span id="East"><span class="annot"><a href="XMonad.Layout.Spiral.html#East"><span class="hs-identifier hs-var">East</span></a></span></span><span> </span><span class="hs-glyph">|</span><span> </span><span id="South"><span class="annot"><a href="XMonad.Layout.Spiral.html#South"><span class="hs-identifier hs-var">South</span></a></span></span><span> </span><span class="hs-glyph">|</span><span> </span><span id="West"><span class="annot"><a href="XMonad.Layout.Spiral.html#West"><span class="hs-identifier hs-var">West</span></a></span></span><span> </span><span class="hs-glyph">|</span><span> </span><span id="North"><span class="annot"><a href="XMonad.Layout.Spiral.html#North"><span class="hs-identifier hs-var">North</span></a></span></span><span> </span><span class="hs-keyword">deriving</span><span> </span><span class="hs-special">(</span><span id="local-6989586621679396782"><span id="local-6989586621679396784"><span class="annot"><span class="annottext">Direction -&gt; Direction -&gt; Bool
+forall a. (a -&gt; a -&gt; Bool) -&gt; (a -&gt; a -&gt; Bool) -&gt; Eq a
+/= :: Direction -&gt; Direction -&gt; Bool
+$c/= :: Direction -&gt; Direction -&gt; Bool
+== :: Direction -&gt; Direction -&gt; Bool
+$c== :: Direction -&gt; Direction -&gt; Bool
+</span><span class="hs-identifier hs-var hs-var hs-var hs-var hs-var hs-var">Eq</span></span></span></span><span class="hs-special">,</span><span> </span><span id="local-6989586621679396743"><span id="local-6989586621679396745"><span id="local-6989586621679396749"><span id="local-6989586621679396753"><span id="local-6989586621679396755"><span id="local-6989586621679396765"><span id="local-6989586621679396771"><span id="local-6989586621679396779"><span class="annot"><span class="annottext">Int -&gt; Direction
+Direction -&gt; Int
+Direction -&gt; [Direction]
+Direction -&gt; Direction
+Direction -&gt; Direction -&gt; [Direction]
+Direction -&gt; Direction -&gt; Direction -&gt; [Direction]
+forall a.
+(a -&gt; a)
+-&gt; (a -&gt; a)
+-&gt; (Int -&gt; a)
+-&gt; (a -&gt; Int)
+-&gt; (a -&gt; [a])
+-&gt; (a -&gt; a -&gt; [a])
+-&gt; (a -&gt; a -&gt; [a])
+-&gt; (a -&gt; a -&gt; a -&gt; [a])
+-&gt; Enum a
+enumFromThenTo :: Direction -&gt; Direction -&gt; Direction -&gt; [Direction]
+$cenumFromThenTo :: Direction -&gt; Direction -&gt; Direction -&gt; [Direction]
+enumFromTo :: Direction -&gt; Direction -&gt; [Direction]
+$cenumFromTo :: Direction -&gt; Direction -&gt; [Direction]
+enumFromThen :: Direction -&gt; Direction -&gt; [Direction]
+$cenumFromThen :: Direction -&gt; Direction -&gt; [Direction]
+enumFrom :: Direction -&gt; [Direction]
+$cenumFrom :: Direction -&gt; [Direction]
+fromEnum :: Direction -&gt; Int
+$cfromEnum :: Direction -&gt; Int
+toEnum :: Int -&gt; Direction
+$ctoEnum :: Int -&gt; Direction
+pred :: Direction -&gt; Direction
+$cpred :: Direction -&gt; Direction
+succ :: Direction -&gt; Direction
+$csucc :: Direction -&gt; Direction
+</span><span class="hs-identifier hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var">Enum</span></span></span></span></span></span></span></span></span></span><span class="hs-special">,</span><span> </span><span id="local-6989586621679396729"><span id="local-6989586621679396735"><span id="local-6989586621679396738"><span id="local-6989586621679396740"><span class="annot"><span class="annottext">ReadPrec [Direction]
+ReadPrec Direction
+Int -&gt; ReadS Direction
+ReadS [Direction]
+forall a.
+(Int -&gt; ReadS a)
+-&gt; ReadS [a] -&gt; ReadPrec a -&gt; ReadPrec [a] -&gt; Read a
+readListPrec :: ReadPrec [Direction]
+$creadListPrec :: ReadPrec [Direction]
+readPrec :: ReadPrec Direction
+$creadPrec :: ReadPrec Direction
+readList :: ReadS [Direction]
+$creadList :: ReadS [Direction]
+readsPrec :: Int -&gt; ReadS Direction
+$creadsPrec :: Int -&gt; ReadS Direction
+</span><span class="hs-identifier hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var">Read</span></span></span></span></span></span><span class="hs-special">,</span><span> </span><span id="local-6989586621679396722"><span id="local-6989586621679396724"><span id="local-6989586621679396726"><span class="annot"><span class="annottext">Int -&gt; Direction -&gt; ShowS
+[Direction] -&gt; ShowS
+Direction -&gt; String
+forall a.
+(Int -&gt; a -&gt; ShowS) -&gt; (a -&gt; String) -&gt; ([a] -&gt; ShowS) -&gt; Show a
+showList :: [Direction] -&gt; ShowS
+$cshowList :: [Direction] -&gt; ShowS
+show :: Direction -&gt; String
+$cshow :: Direction -&gt; String
+showsPrec :: Int -&gt; Direction -&gt; ShowS
+$cshowsPrec :: Int -&gt; Direction -&gt; ShowS
+</span><span class="hs-identifier hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var">Show</span></span></span></span></span><span class="hs-special">)</span><span>
+</span><span id="line-56"></span><span>
+</span><span id="line-57"></span><span class="annot"><a href="XMonad.Layout.Spiral.html#blend"><span class="hs-identifier hs-type">blend</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Rational</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="hs-special">[</span><span class="annot"><span class="hs-identifier hs-type">Rational</span></span><span class="hs-special">]</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="hs-special">[</span><span class="annot"><span class="hs-identifier hs-type">Rational</span></span><span class="hs-special">]</span><span>
+</span><span id="line-58"></span><span id="blend"><span class="annot"><span class="annottext">blend :: Rational -&gt; [Rational] -&gt; [Rational]
+</span><a href="XMonad.Layout.Spiral.html#blend"><span class="hs-identifier hs-var hs-var">blend</span></a></span></span><span> </span><span id="local-6989586621679396720"><span class="annot"><span class="annottext">Rational
+</span><a href="#local-6989586621679396720"><span class="hs-identifier hs-var">scale</span></a></span></span><span> </span><span id="local-6989586621679396719"><span class="annot"><span class="annottext">[Rational]
+</span><a href="#local-6989586621679396719"><span class="hs-identifier hs-var">ratios</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">forall a b c. (a -&gt; b -&gt; c) -&gt; [a] -&gt; [b] -&gt; [c]
+</span><span class="hs-identifier hs-var">zipWith</span></span><span> </span><span class="annot"><span class="annottext">forall a. Num a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-operator hs-var">(+)</span></span><span> </span><span class="annot"><span class="annottext">[Rational]
+</span><a href="#local-6989586621679396719"><span class="hs-identifier hs-var">ratios</span></a></span><span> </span><span class="annot"><span class="annottext">[Rational]
+</span><a href="#local-6989586621679396718"><span class="hs-identifier hs-var">scaleFactors</span></a></span><span>
+</span><span id="line-59"></span><span>    </span><span class="hs-keyword">where</span><span>
+</span><span id="line-60"></span><span>      </span><span id="local-6989586621679396715"><span class="annot"><span class="annottext">len :: Int
+</span><a href="#local-6989586621679396715"><span class="hs-identifier hs-var hs-var">len</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">forall (t :: * -&gt; *) a. Foldable t =&gt; t a -&gt; Int
+</span><span class="hs-identifier hs-var">length</span></span><span> </span><span class="annot"><span class="annottext">[Rational]
+</span><a href="#local-6989586621679396719"><span class="hs-identifier hs-var">ratios</span></a></span><span>
+</span><span id="line-61"></span><span>      </span><span id="local-6989586621679396703"><span class="annot"><span class="annottext">step :: Rational
+</span><a href="#local-6989586621679396703"><span class="hs-identifier hs-var hs-var">step</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Rational
+</span><a href="#local-6989586621679396720"><span class="hs-identifier hs-var">scale</span></a></span><span> </span><span class="annot"><span class="annottext">forall a. Num a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-glyph hs-var">-</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Integer
+</span><span class="hs-number">1</span></span><span> </span><span class="annot"><span class="annottext">forall a. Integral a =&gt; a -&gt; a -&gt; Ratio a
+</span><span class="hs-operator hs-var">%</span></span><span> </span><span class="annot"><span class="annottext">Integer
+</span><span class="hs-number">1</span></span><span class="hs-special">)</span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">forall a. Fractional a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-operator hs-var">/</span></span><span> </span><span class="annot"><span class="annottext">forall a b. (Integral a, Num b) =&gt; a -&gt; b
+</span><span class="hs-identifier hs-var">fromIntegral</span></span><span> </span><span class="annot"><span class="annottext">Int
+</span><a href="#local-6989586621679396715"><span class="hs-identifier hs-var">len</span></a></span><span>
+</span><span id="line-62"></span><span>      </span><span id="local-6989586621679396718"><span class="annot"><span class="annottext">scaleFactors :: [Rational]
+</span><a href="#local-6989586621679396718"><span class="hs-identifier hs-var hs-var">scaleFactors</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">forall a b. (a -&gt; b) -&gt; [a] -&gt; [b]
+</span><span class="hs-identifier hs-var">map</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">forall a. Num a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-operator hs-var">*</span></span><span> </span><span class="annot"><span class="annottext">Rational
+</span><a href="#local-6989586621679396703"><span class="hs-identifier hs-var">step</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">forall a. [a] -&gt; [a]
+</span><span class="hs-identifier hs-var">reverse</span></span><span> </span><span class="annot"><span class="annottext">forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">forall a. Int -&gt; [a] -&gt; [a]
+</span><span class="hs-identifier hs-var">take</span></span><span> </span><span class="annot"><span class="annottext">Int
+</span><a href="#local-6989586621679396715"><span class="hs-identifier hs-var">len</span></a></span><span> </span><span class="annot"><span class="annottext">forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="hs-special">[</span><span class="annot"><span class="annottext">Rational
+</span><span class="hs-number">0</span></span><span class="hs-glyph">..</span><span class="hs-special">]</span><span>
+</span><span id="line-63"></span><span>
+</span><span id="line-64"></span><span class="hs-comment">-- | A spiral layout.  The parameter controls the size ratio between</span><span>
+</span><span id="line-65"></span><span class="hs-comment">--   successive windows in the spiral.  Sensible values range from 0</span><span>
+</span><span id="line-66"></span><span class="hs-comment">--   up to the aspect ratio of your monitor (often 4\/3).</span><span>
+</span><span id="line-67"></span><span class="hs-comment">--</span><span>
+</span><span id="line-68"></span><span class="hs-comment">--   By default, the spiral is counterclockwise, starting to the east.</span><span>
+</span><span id="line-69"></span><span class="hs-comment">--   See also 'spiralWithDir'.</span><span>
+</span><span id="line-70"></span><span id="local-6989586621679396914"><span class="annot"><a href="XMonad.Layout.Spiral.html#spiral"><span class="hs-identifier hs-type">spiral</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Rational</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="XMonad.Layout.Spiral.html#SpiralWithDir"><span class="hs-identifier hs-type">SpiralWithDir</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679396914"><span class="hs-identifier hs-type">a</span></a></span></span><span>
+</span><span id="line-71"></span><span id="spiral"><span class="annot"><span class="annottext">spiral :: forall a. Rational -&gt; SpiralWithDir a
+</span><a href="XMonad.Layout.Spiral.html#spiral"><span class="hs-identifier hs-var hs-var">spiral</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">forall a. Direction -&gt; Rotation -&gt; Rational -&gt; SpiralWithDir a
+</span><a href="XMonad.Layout.Spiral.html#spiralWithDir"><span class="hs-identifier hs-var">spiralWithDir</span></a></span><span> </span><span class="annot"><span class="annottext">Direction
+</span><a href="XMonad.Layout.Spiral.html#East"><span class="hs-identifier hs-var">East</span></a></span><span> </span><span class="annot"><span class="annottext">Rotation
+</span><a href="XMonad.Layout.Spiral.html#CW"><span class="hs-identifier hs-var">CW</span></a></span><span>
+</span><span id="line-72"></span><span>
+</span><span id="line-73"></span><span class="hs-comment">-- | Create a spiral layout, specifying the starting cardinal direction,</span><span>
+</span><span id="line-74"></span><span class="hs-comment">--   the spiral direction (clockwise or counterclockwise), and the</span><span>
+</span><span id="line-75"></span><span class="hs-comment">--   size ratio.</span><span>
+</span><span id="line-76"></span><span id="local-6989586621679396913"><span class="annot"><a href="XMonad.Layout.Spiral.html#spiralWithDir"><span class="hs-identifier hs-type">spiralWithDir</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><a href="XMonad.Layout.Spiral.html#Direction"><span class="hs-identifier hs-type">Direction</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="XMonad.Layout.Spiral.html#Rotation"><span class="hs-identifier hs-type">Rotation</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Rational</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="XMonad.Layout.Spiral.html#SpiralWithDir"><span class="hs-identifier hs-type">SpiralWithDir</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679396913"><span class="hs-identifier hs-type">a</span></a></span></span><span>
+</span><span id="line-77"></span><span id="spiralWithDir"><span class="annot"><span class="annottext">spiralWithDir :: forall a. Direction -&gt; Rotation -&gt; Rational -&gt; SpiralWithDir a
+</span><a href="XMonad.Layout.Spiral.html#spiralWithDir"><span class="hs-identifier hs-var hs-var">spiralWithDir</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">forall a. Direction -&gt; Rotation -&gt; Rational -&gt; SpiralWithDir a
+</span><a href="XMonad.Layout.Spiral.html#SpiralWithDir"><span class="hs-identifier hs-var">SpiralWithDir</span></a></span><span>
+</span><span id="line-78"></span><span>
+</span><span id="line-79"></span><span class="hs-keyword">data</span><span> </span><span id="SpiralWithDir"><span class="annot"><a href="XMonad.Layout.Spiral.html#SpiralWithDir"><span class="hs-identifier hs-var">SpiralWithDir</span></a></span></span><span> </span><span id="local-6989586621679396911"><span class="annot"><a href="#local-6989586621679396911"><span class="hs-identifier hs-type">a</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span id="SpiralWithDir"><span class="annot"><a href="XMonad.Layout.Spiral.html#SpiralWithDir"><span class="hs-identifier hs-var">SpiralWithDir</span></a></span></span><span> </span><span class="annot"><a href="XMonad.Layout.Spiral.html#Direction"><span class="hs-identifier hs-type">Direction</span></a></span><span> </span><span class="annot"><a href="XMonad.Layout.Spiral.html#Rotation"><span class="hs-identifier hs-type">Rotation</span></a></span><span> </span><span class="annot"><span class="hs-identifier hs-type">Rational</span></span><span>
+</span><span id="line-80"></span><span>                     </span><span class="hs-keyword">deriving</span><span> </span><span class="hs-special">(</span><span> </span><span id="local-6989586621679396673"><span id="local-6989586621679396685"><span id="local-6989586621679396688"><span id="local-6989586621679396690"><span class="annot"><span class="annottext">ReadPrec [SpiralWithDir a]
+ReadPrec (SpiralWithDir a)
+ReadS [SpiralWithDir a]
+forall a. ReadPrec [SpiralWithDir a]
+forall a. ReadPrec (SpiralWithDir a)
+forall a. Int -&gt; ReadS (SpiralWithDir a)
+forall a. ReadS [SpiralWithDir a]
+forall a.
+(Int -&gt; ReadS a)
+-&gt; ReadS [a] -&gt; ReadPrec a -&gt; ReadPrec [a] -&gt; Read a
+readListPrec :: ReadPrec [SpiralWithDir a]
+$creadListPrec :: forall a. ReadPrec [SpiralWithDir a]
+readPrec :: ReadPrec (SpiralWithDir a)
+$creadPrec :: forall a. ReadPrec (SpiralWithDir a)
+readList :: ReadS [SpiralWithDir a]
+$creadList :: forall a. ReadS [SpiralWithDir a]
+readsPrec :: Int -&gt; ReadS (SpiralWithDir a)
+$creadsPrec :: forall a. Int -&gt; ReadS (SpiralWithDir a)
+</span><span class="hs-identifier hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var">Read</span></span></span></span></span></span><span class="hs-special">,</span><span> </span><span id="local-6989586621679396659"><span id="local-6989586621679396661"><span id="local-6989586621679396669"><span class="annot"><span class="annottext">Int -&gt; SpiralWithDir a -&gt; ShowS
+forall a. Int -&gt; SpiralWithDir a -&gt; ShowS
+forall a. [SpiralWithDir a] -&gt; ShowS
+forall a. SpiralWithDir a -&gt; String
+forall a.
+(Int -&gt; a -&gt; ShowS) -&gt; (a -&gt; String) -&gt; ([a] -&gt; ShowS) -&gt; Show a
+showList :: [SpiralWithDir a] -&gt; ShowS
+$cshowList :: forall a. [SpiralWithDir a] -&gt; ShowS
+show :: SpiralWithDir a -&gt; String
+$cshow :: forall a. SpiralWithDir a -&gt; String
+showsPrec :: Int -&gt; SpiralWithDir a -&gt; ShowS
+$cshowsPrec :: forall a. Int -&gt; SpiralWithDir a -&gt; ShowS
+</span><span class="hs-identifier hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var">Show</span></span></span></span></span><span> </span><span class="hs-special">)</span><span>
+</span><span id="line-81"></span><span>
+</span><span id="line-82"></span><span class="hs-keyword">instance</span><span> </span><span id="local-6989586621679396644"><span id="local-6989586621679396647"><span id="local-6989586621679396650"><span id="local-6989586621679396652"><span id="local-6989586621679396902"><span class="annot"><span class="hs-identifier hs-type">LayoutClass</span></span><span> </span><span class="annot"><a href="XMonad.Layout.Spiral.html#SpiralWithDir"><span class="hs-identifier hs-type">SpiralWithDir</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679396902"><span class="hs-identifier hs-type">a</span></a></span></span></span></span></span></span><span> </span><span class="hs-keyword">where</span><span>
+</span><span id="line-83"></span><span>    </span><span id="local-6989586621679396641"><span class="annot"><span class="annottext">pureLayout :: SpiralWithDir a -&gt; Rectangle -&gt; Stack a -&gt; [(a, Rectangle)]
+</span><span class="hs-identifier hs-var hs-var hs-var hs-var">pureLayout</span></span></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="XMonad.Layout.Spiral.html#SpiralWithDir"><span class="hs-identifier hs-type">SpiralWithDir</span></a></span><span> </span><span id="local-6989586621679396639"><span class="annot"><span class="annottext">Direction
+</span><a href="#local-6989586621679396639"><span class="hs-identifier hs-var">dir</span></a></span></span><span> </span><span id="local-6989586621679396638"><span class="annot"><span class="annottext">Rotation
+</span><a href="#local-6989586621679396638"><span class="hs-identifier hs-var">rot</span></a></span></span><span> </span><span id="local-6989586621679396637"><span class="annot"><span class="annottext">Rational
+</span><a href="#local-6989586621679396637"><span class="hs-identifier hs-var">scale</span></a></span></span><span class="hs-special">)</span><span> </span><span id="local-6989586621679396636"><span class="annot"><span class="annottext">Rectangle
+</span><a href="#local-6989586621679396636"><span class="hs-identifier hs-var">sc</span></a></span></span><span> </span><span id="local-6989586621679396635"><span class="annot"><span class="annottext">Stack a
+</span><a href="#local-6989586621679396635"><span class="hs-identifier hs-var">stack</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">forall a b. [a] -&gt; [b] -&gt; [(a, b)]
+</span><span class="hs-identifier hs-var">zip</span></span><span> </span><span class="annot"><span class="annottext">[a]
+</span><a href="#local-6989586621679396634"><span class="hs-identifier hs-var">ws</span></a></span><span> </span><span class="annot"><span class="annottext">[Rectangle]
+</span><a href="#local-6989586621679396633"><span class="hs-identifier hs-var">rects</span></a></span><span>
+</span><span id="line-84"></span><span>        </span><span class="hs-keyword">where</span><span> </span><span id="local-6989586621679396634"><span class="annot"><span class="annottext">ws :: [a]
+</span><a href="#local-6989586621679396634"><span class="hs-identifier hs-var hs-var">ws</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">forall a. Stack a -&gt; [a]
+</span><span class="hs-identifier hs-var">integrate</span></span><span> </span><span class="annot"><span class="annottext">Stack a
+</span><a href="#local-6989586621679396635"><span class="hs-identifier hs-var">stack</span></a></span><span>
+</span><span id="line-85"></span><span>              </span><span id="local-6989586621679396629"><span class="annot"><span class="annottext">ratios :: [Rational]
+</span><a href="#local-6989586621679396629"><span class="hs-identifier hs-var hs-var">ratios</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Rational -&gt; [Rational] -&gt; [Rational]
+</span><a href="XMonad.Layout.Spiral.html#blend"><span class="hs-identifier hs-var">blend</span></a></span><span> </span><span class="annot"><span class="annottext">Rational
+</span><a href="#local-6989586621679396637"><span class="hs-identifier hs-var">scale</span></a></span><span> </span><span class="annot"><span class="annottext">forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">forall a. [a] -&gt; [a]
+</span><span class="hs-identifier hs-var">reverse</span></span><span> </span><span class="annot"><span class="annottext">forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">forall a. Int -&gt; [a] -&gt; [a]
+</span><span class="hs-identifier hs-var">take</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">forall (t :: * -&gt; *) a. Foldable t =&gt; t a -&gt; Int
+</span><span class="hs-identifier hs-var">length</span></span><span> </span><span class="annot"><span class="annottext">[a]
+</span><a href="#local-6989586621679396634"><span class="hs-identifier hs-var">ws</span></a></span><span> </span><span class="annot"><span class="annottext">forall a. Num a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-glyph hs-var">-</span></span><span> </span><span class="annot"><span class="annottext">Int
+</span><span class="hs-number">1</span></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">[Integer] -&gt; [Rational]
+</span><a href="XMonad.Layout.Spiral.html#mkRatios"><span class="hs-identifier hs-var">mkRatios</span></a></span><span> </span><span class="annot"><span class="annottext">forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">forall a. Int -&gt; [a] -&gt; [a]
+</span><span class="hs-identifier hs-var">drop</span></span><span> </span><span class="annot"><span class="annottext">Int
+</span><span class="hs-number">1</span></span><span> </span><span class="annot"><span class="annottext">[Integer]
+</span><a href="XMonad.Layout.Spiral.html#fibs"><span class="hs-identifier hs-var">fibs</span></a></span><span>
+</span><span id="line-86"></span><span>              </span><span id="local-6989586621679396633"><span class="annot"><span class="annottext">rects :: [Rectangle]
+</span><a href="#local-6989586621679396633"><span class="hs-identifier hs-var hs-var">rects</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">[(Rational, Direction)] -&gt; Rectangle -&gt; [Rectangle]
+</span><a href="XMonad.Layout.Spiral.html#divideRects"><span class="hs-identifier hs-var">divideRects</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">forall a b. [a] -&gt; [b] -&gt; [(a, b)]
+</span><span class="hs-identifier hs-var">zip</span></span><span> </span><span class="annot"><span class="annottext">[Rational]
+</span><a href="#local-6989586621679396629"><span class="hs-identifier hs-var">ratios</span></a></span><span> </span><span class="annot"><span class="annottext">[Direction]
+</span><a href="#local-6989586621679396627"><span class="hs-identifier hs-var">dirs</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">Rectangle
+</span><a href="#local-6989586621679396636"><span class="hs-identifier hs-var">sc</span></a></span><span>
+</span><span id="line-87"></span><span>              </span><span id="local-6989586621679396627"><span class="annot"><span class="annottext">dirs :: [Direction]
+</span><a href="#local-6989586621679396627"><span class="hs-identifier hs-var hs-var">dirs</span></a></span></span><span>  </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">forall a. (a -&gt; Bool) -&gt; [a] -&gt; [a]
+</span><span class="hs-identifier hs-var">dropWhile</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">forall a. Eq a =&gt; a -&gt; a -&gt; Bool
+</span><span class="hs-operator hs-var">/=</span></span><span> </span><span class="annot"><span class="annottext">Direction
+</span><a href="#local-6989586621679396639"><span class="hs-identifier hs-var">dir</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="hs-keyword">case</span><span> </span><span class="annot"><span class="annottext">Rotation
+</span><a href="#local-6989586621679396638"><span class="hs-identifier hs-var">rot</span></a></span><span> </span><span class="hs-keyword">of</span><span>
+</span><span id="line-88"></span><span>                                           </span><span class="annot"><span class="annottext">Rotation
+</span><a href="XMonad.Layout.Spiral.html#CW"><span class="hs-identifier hs-var">CW</span></a></span><span>  </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">forall a. [a] -&gt; [a]
+</span><span class="hs-identifier hs-var">cycle</span></span><span> </span><span class="hs-special">[</span><span class="annot"><span class="annottext">Direction
+</span><a href="XMonad.Layout.Spiral.html#East"><span class="hs-identifier hs-var">East</span></a></span><span> </span><span class="hs-glyph">..</span><span> </span><span class="annot"><span class="annottext">Direction
+</span><a href="XMonad.Layout.Spiral.html#North"><span class="hs-identifier hs-var">North</span></a></span><span class="hs-special">]</span><span>
+</span><span id="line-89"></span><span>                                           </span><span class="annot"><span class="annottext">Rotation
+</span><a href="XMonad.Layout.Spiral.html#CCW"><span class="hs-identifier hs-var">CCW</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">forall a. [a] -&gt; [a]
+</span><span class="hs-identifier hs-var">cycle</span></span><span> </span><span class="hs-special">[</span><span class="annot"><span class="annottext">Direction
+</span><a href="XMonad.Layout.Spiral.html#North"><span class="hs-identifier hs-var">North</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">Direction
+</span><a href="XMonad.Layout.Spiral.html#West"><span class="hs-identifier hs-var">West</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">Direction
+</span><a href="XMonad.Layout.Spiral.html#South"><span class="hs-identifier hs-var">South</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">Direction
+</span><a href="XMonad.Layout.Spiral.html#East"><span class="hs-identifier hs-var">East</span></a></span><span class="hs-special">]</span><span>
+</span><span id="line-90"></span><span>    </span><span id="local-6989586621679396615"><span class="annot"><span class="annottext">handleMessage :: SpiralWithDir a -&gt; SomeMessage -&gt; X (Maybe (SpiralWithDir a))
+</span><span class="hs-identifier hs-var hs-var hs-var hs-var">handleMessage</span></span></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="XMonad.Layout.Spiral.html#SpiralWithDir"><span class="hs-identifier hs-type">SpiralWithDir</span></a></span><span> </span><span id="local-6989586621679396613"><span class="annot"><span class="annottext">Direction
+</span><a href="#local-6989586621679396613"><span class="hs-identifier hs-var">dir</span></a></span></span><span> </span><span id="local-6989586621679396612"><span class="annot"><span class="annottext">Rotation
+</span><a href="#local-6989586621679396612"><span class="hs-identifier hs-var">rot</span></a></span></span><span> </span><span id="local-6989586621679396611"><span class="annot"><span class="annottext">Rational
+</span><a href="#local-6989586621679396611"><span class="hs-identifier hs-var">scale</span></a></span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">forall (m :: * -&gt; *) a. Monad m =&gt; a -&gt; m a
+</span><span class="hs-identifier hs-var">return</span></span><span> </span><span class="annot"><span class="annottext">forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">forall (f :: * -&gt; *) a b. Functor f =&gt; (a -&gt; b) -&gt; f a -&gt; f b
+</span><span class="hs-identifier hs-var">fmap</span></span><span> </span><span class="annot"><span class="annottext">forall {a}. Resize -&gt; SpiralWithDir a
+</span><a href="#local-6989586621679396610"><span class="hs-identifier hs-var">resize</span></a></span><span> </span><span class="annot"><span class="annottext">forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">forall m. Message m =&gt; SomeMessage -&gt; Maybe m
+</span><span class="hs-identifier hs-var">fromMessage</span></span><span>
+</span><span id="line-91"></span><span>        </span><span class="hs-keyword">where</span><span> </span><span id="local-6989586621679396610"><span class="annot"><span class="annottext">resize :: Resize -&gt; SpiralWithDir a
+</span><a href="#local-6989586621679396610"><span class="hs-identifier hs-var hs-var">resize</span></a></span></span><span> </span><span class="annot"><span class="annottext">Resize
+</span><span class="hs-identifier hs-var">Expand</span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">forall a. Direction -&gt; Rotation -&gt; Rational -&gt; SpiralWithDir a
+</span><a href="XMonad.Layout.Spiral.html#spiralWithDir"><span class="hs-identifier hs-var">spiralWithDir</span></a></span><span> </span><span class="annot"><span class="annottext">Direction
+</span><a href="#local-6989586621679396613"><span class="hs-identifier hs-var">dir</span></a></span><span> </span><span class="annot"><span class="annottext">Rotation
+</span><a href="#local-6989586621679396612"><span class="hs-identifier hs-var">rot</span></a></span><span> </span><span class="annot"><span class="annottext">forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Integer
+</span><span class="hs-number">21</span></span><span> </span><span class="annot"><span class="annottext">forall a. Integral a =&gt; a -&gt; a -&gt; Ratio a
+</span><span class="hs-operator hs-var">%</span></span><span> </span><span class="annot"><span class="annottext">Integer
+</span><span class="hs-number">20</span></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">forall a. Num a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-operator hs-var">*</span></span><span> </span><span class="annot"><span class="annottext">Rational
+</span><a href="#local-6989586621679396611"><span class="hs-identifier hs-var">scale</span></a></span><span>
+</span><span id="line-92"></span><span>              </span><span class="annot"><a href="#local-6989586621679396610"><span class="hs-identifier hs-var">resize</span></a></span><span> </span><span class="annot"><span class="annottext">Resize
+</span><span class="hs-identifier hs-var">Shrink</span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">forall a. Direction -&gt; Rotation -&gt; Rational -&gt; SpiralWithDir a
+</span><a href="XMonad.Layout.Spiral.html#spiralWithDir"><span class="hs-identifier hs-var">spiralWithDir</span></a></span><span> </span><span class="annot"><span class="annottext">Direction
+</span><a href="#local-6989586621679396613"><span class="hs-identifier hs-var">dir</span></a></span><span> </span><span class="annot"><span class="annottext">Rotation
+</span><a href="#local-6989586621679396612"><span class="hs-identifier hs-var">rot</span></a></span><span> </span><span class="annot"><span class="annottext">forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Integer
+</span><span class="hs-number">20</span></span><span> </span><span class="annot"><span class="annottext">forall a. Integral a =&gt; a -&gt; a -&gt; Ratio a
+</span><span class="hs-operator hs-var">%</span></span><span> </span><span class="annot"><span class="annottext">Integer
+</span><span class="hs-number">21</span></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">forall a. Num a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-operator hs-var">*</span></span><span> </span><span class="annot"><span class="annottext">Rational
+</span><a href="#local-6989586621679396611"><span class="hs-identifier hs-var">scale</span></a></span><span>
+</span><span id="line-93"></span><span>    </span><span id="local-6989586621679396597"><span class="annot"><span class="annottext">description :: SpiralWithDir a -&gt; String
+</span><span class="hs-identifier hs-var hs-var hs-var hs-var">description</span></span></span><span> </span><span class="annot"><span class="annottext">SpiralWithDir a
+</span><span class="hs-identifier">_</span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot;Spiral&quot;</span></span><span>
+</span><span id="line-94"></span><span>
+</span><span id="line-95"></span><span class="hs-comment">-- This will produce one more rectangle than there are splits details</span><span>
+</span><span id="line-96"></span><span class="annot"><a href="XMonad.Layout.Spiral.html#divideRects"><span class="hs-identifier hs-type">divideRects</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="hs-special">[</span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">Rational</span></span><span class="hs-special">,</span><span> </span><span class="annot"><a href="XMonad.Layout.Spiral.html#Direction"><span class="hs-identifier hs-type">Direction</span></a></span><span class="hs-special">)</span><span class="hs-special">]</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Rectangle</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="hs-special">[</span><span class="annot"><span class="hs-identifier hs-type">Rectangle</span></span><span class="hs-special">]</span><span>
+</span><span id="line-97"></span><span id="divideRects"><span class="annot"><span class="annottext">divideRects :: [(Rational, Direction)] -&gt; Rectangle -&gt; [Rectangle]
+</span><a href="XMonad.Layout.Spiral.html#divideRects"><span class="hs-identifier hs-var hs-var">divideRects</span></a></span></span><span> </span><span class="hs-special">[</span><span class="hs-special">]</span><span> </span><span id="local-6989586621679396595"><span class="annot"><span class="annottext">Rectangle
+</span><a href="#local-6989586621679396595"><span class="hs-identifier hs-var">r</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-special">[</span><span class="annot"><span class="annottext">Rectangle
+</span><a href="#local-6989586621679396595"><span class="hs-identifier hs-var">r</span></a></span><span class="hs-special">]</span><span>
+</span><span id="line-98"></span><span class="annot"><a href="XMonad.Layout.Spiral.html#divideRects"><span class="hs-identifier hs-var">divideRects</span></a></span><span> </span><span class="hs-special">(</span><span class="hs-special">(</span><span id="local-6989586621679396594"><span class="annot"><span class="annottext">Rational
+</span><a href="#local-6989586621679396594"><span class="hs-identifier hs-var">r</span></a></span></span><span class="hs-special">,</span><span id="local-6989586621679396593"><span class="annot"><span class="annottext">Direction
+</span><a href="#local-6989586621679396593"><span class="hs-identifier hs-var">d</span></a></span></span><span class="hs-special">)</span><span class="annot"><span class="hs-glyph hs-type">:</span></span><span id="local-6989586621679396592"><span class="annot"><span class="annottext">[(Rational, Direction)]
+</span><a href="#local-6989586621679396592"><span class="hs-identifier hs-var">xs</span></a></span></span><span class="hs-special">)</span><span> </span><span id="local-6989586621679396591"><span class="annot"><span class="annottext">Rectangle
+</span><a href="#local-6989586621679396591"><span class="hs-identifier hs-var">rect</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-keyword">case</span><span> </span><span class="annot"><span class="annottext">Rational -&gt; Direction -&gt; Rectangle -&gt; (Rectangle, Rectangle)
+</span><a href="XMonad.Layout.Spiral.html#divideRect"><span class="hs-identifier hs-var">divideRect</span></a></span><span> </span><span class="annot"><span class="annottext">Rational
+</span><a href="#local-6989586621679396594"><span class="hs-identifier hs-var">r</span></a></span><span> </span><span class="annot"><span class="annottext">Direction
+</span><a href="#local-6989586621679396593"><span class="hs-identifier hs-var">d</span></a></span><span> </span><span class="annot"><span class="annottext">Rectangle
+</span><a href="#local-6989586621679396591"><span class="hs-identifier hs-var">rect</span></a></span><span> </span><span class="hs-keyword">of</span><span>
+</span><span id="line-99"></span><span>                                </span><span class="hs-special">(</span><span id="local-6989586621679396589"><span class="annot"><span class="annottext">Rectangle
+</span><a href="#local-6989586621679396589"><span class="hs-identifier hs-var">r1</span></a></span></span><span class="hs-special">,</span><span> </span><span id="local-6989586621679396588"><span class="annot"><span class="annottext">Rectangle
+</span><a href="#local-6989586621679396588"><span class="hs-identifier hs-var">r2</span></a></span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">Rectangle
+</span><a href="#local-6989586621679396589"><span class="hs-identifier hs-var">r1</span></a></span><span> </span><span class="annot"><span class="annottext">forall a. a -&gt; [a] -&gt; [a]
+</span><span class="hs-glyph hs-var">:</span></span><span> </span><span class="annot"><span class="annottext">[(Rational, Direction)] -&gt; Rectangle -&gt; [Rectangle]
+</span><a href="XMonad.Layout.Spiral.html#divideRects"><span class="hs-identifier hs-var">divideRects</span></a></span><span> </span><span class="annot"><span class="annottext">[(Rational, Direction)]
+</span><a href="#local-6989586621679396592"><span class="hs-identifier hs-var">xs</span></a></span><span> </span><span class="annot"><span class="annottext">Rectangle
+</span><a href="#local-6989586621679396588"><span class="hs-identifier hs-var">r2</span></a></span><span>
+</span><span id="line-100"></span><span>
+</span><span id="line-101"></span><span class="hs-comment">-- It's much simpler if we work with all Integers and convert to</span><span>
+</span><span id="line-102"></span><span class="hs-comment">-- Rectangle at the end.</span><span>
+</span><span id="line-103"></span><span class="hs-keyword">data</span><span> </span><span id="Rect"><span class="annot"><a href="XMonad.Layout.Spiral.html#Rect"><span class="hs-identifier hs-var">Rect</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span id="Rect"><span class="annot"><a href="XMonad.Layout.Spiral.html#Rect"><span class="hs-identifier hs-var">Rect</span></a></span></span><span> </span><span class="annot"><span class="hs-identifier hs-type">Integer</span></span><span> </span><span class="annot"><span class="hs-identifier hs-type">Integer</span></span><span> </span><span class="annot"><span class="hs-identifier hs-type">Integer</span></span><span> </span><span class="annot"><span class="hs-identifier hs-type">Integer</span></span><span>
+</span><span id="line-104"></span><span>
+</span><span id="line-105"></span><span class="annot"><a href="XMonad.Layout.Spiral.html#fromRect"><span class="hs-identifier hs-type">fromRect</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><a href="XMonad.Layout.Spiral.html#Rect"><span class="hs-identifier hs-type">Rect</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Rectangle</span></span><span>
+</span><span id="line-106"></span><span id="fromRect"><span class="annot"><span class="annottext">fromRect :: Rect -&gt; Rectangle
+</span><a href="XMonad.Layout.Spiral.html#fromRect"><span class="hs-identifier hs-var hs-var">fromRect</span></a></span></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="XMonad.Layout.Spiral.html#Rect"><span class="hs-identifier hs-type">Rect</span></a></span><span> </span><span id="local-6989586621679396585"><span class="annot"><span class="annottext">Integer
+</span><a href="#local-6989586621679396585"><span class="hs-identifier hs-var">x</span></a></span></span><span> </span><span id="local-6989586621679396584"><span class="annot"><span class="annottext">Integer
+</span><a href="#local-6989586621679396584"><span class="hs-identifier hs-var">y</span></a></span></span><span> </span><span id="local-6989586621679396583"><span class="annot"><span class="annottext">Integer
+</span><a href="#local-6989586621679396583"><span class="hs-identifier hs-var">w</span></a></span></span><span> </span><span id="local-6989586621679396582"><span class="annot"><span class="annottext">Integer
+</span><a href="#local-6989586621679396582"><span class="hs-identifier hs-var">h</span></a></span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Position -&gt; Position -&gt; Dimension -&gt; Dimension -&gt; Rectangle
+</span><span class="hs-identifier hs-var">Rectangle</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">forall a b. (Integral a, Num b) =&gt; a -&gt; b
+</span><span class="hs-identifier hs-var">fromIntegral</span></span><span> </span><span class="annot"><span class="annottext">Integer
+</span><a href="#local-6989586621679396585"><span class="hs-identifier hs-var">x</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">forall a b. (Integral a, Num b) =&gt; a -&gt; b
+</span><span class="hs-identifier hs-var">fromIntegral</span></span><span> </span><span class="annot"><span class="annottext">Integer
+</span><a href="#local-6989586621679396584"><span class="hs-identifier hs-var">y</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">forall a b. (Integral a, Num b) =&gt; a -&gt; b
+</span><span class="hs-identifier hs-var">fromIntegral</span></span><span> </span><span class="annot"><span class="annottext">Integer
+</span><a href="#local-6989586621679396583"><span class="hs-identifier hs-var">w</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">forall a b. (Integral a, Num b) =&gt; a -&gt; b
+</span><span class="hs-identifier hs-var">fromIntegral</span></span><span> </span><span class="annot"><span class="annottext">Integer
+</span><a href="#local-6989586621679396582"><span class="hs-identifier hs-var">h</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-107"></span><span>
+</span><span id="line-108"></span><span class="annot"><a href="XMonad.Layout.Spiral.html#toRect"><span class="hs-identifier hs-type">toRect</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Rectangle</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="XMonad.Layout.Spiral.html#Rect"><span class="hs-identifier hs-type">Rect</span></a></span><span>
+</span><span id="line-109"></span><span id="toRect"><span class="annot"><span class="annottext">toRect :: Rectangle -&gt; Rect
+</span><a href="XMonad.Layout.Spiral.html#toRect"><span class="hs-identifier hs-var hs-var">toRect</span></a></span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">Rectangle</span></span><span> </span><span id="local-6989586621679396579"><span class="annot"><span class="annottext">Position
+</span><a href="#local-6989586621679396579"><span class="hs-identifier hs-var">x</span></a></span></span><span> </span><span id="local-6989586621679396578"><span class="annot"><span class="annottext">Position
+</span><a href="#local-6989586621679396578"><span class="hs-identifier hs-var">y</span></a></span></span><span> </span><span id="local-6989586621679396577"><span class="annot"><span class="annottext">Dimension
+</span><a href="#local-6989586621679396577"><span class="hs-identifier hs-var">w</span></a></span></span><span> </span><span id="local-6989586621679396576"><span class="annot"><span class="annottext">Dimension
+</span><a href="#local-6989586621679396576"><span class="hs-identifier hs-var">h</span></a></span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Integer -&gt; Integer -&gt; Integer -&gt; Integer -&gt; Rect
+</span><a href="XMonad.Layout.Spiral.html#Rect"><span class="hs-identifier hs-var">Rect</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">forall a b. (Integral a, Num b) =&gt; a -&gt; b
+</span><span class="hs-identifier hs-var">fromIntegral</span></span><span> </span><span class="annot"><span class="annottext">Position
+</span><a href="#local-6989586621679396579"><span class="hs-identifier hs-var">x</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">forall a b. (Integral a, Num b) =&gt; a -&gt; b
+</span><span class="hs-identifier hs-var">fromIntegral</span></span><span> </span><span class="annot"><span class="annottext">Position
+</span><a href="#local-6989586621679396578"><span class="hs-identifier hs-var">y</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">forall a b. (Integral a, Num b) =&gt; a -&gt; b
+</span><span class="hs-identifier hs-var">fromIntegral</span></span><span> </span><span class="annot"><span class="annottext">Dimension
+</span><a href="#local-6989586621679396577"><span class="hs-identifier hs-var">w</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">forall a b. (Integral a, Num b) =&gt; a -&gt; b
+</span><span class="hs-identifier hs-var">fromIntegral</span></span><span> </span><span class="annot"><span class="annottext">Dimension
+</span><a href="#local-6989586621679396576"><span class="hs-identifier hs-var">h</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-110"></span><span>
+</span><span id="line-111"></span><span class="annot"><a href="XMonad.Layout.Spiral.html#divideRect"><span class="hs-identifier hs-type">divideRect</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Rational</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="XMonad.Layout.Spiral.html#Direction"><span class="hs-identifier hs-type">Direction</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Rectangle</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">Rectangle</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Rectangle</span></span><span class="hs-special">)</span><span>
+</span><span id="line-112"></span><span id="divideRect"><span class="annot"><span class="annottext">divideRect :: Rational -&gt; Direction -&gt; Rectangle -&gt; (Rectangle, Rectangle)
+</span><a href="XMonad.Layout.Spiral.html#divideRect"><span class="hs-identifier hs-var hs-var">divideRect</span></a></span></span><span> </span><span id="local-6989586621679396575"><span class="annot"><span class="annottext">Rational
+</span><a href="#local-6989586621679396575"><span class="hs-identifier hs-var">r</span></a></span></span><span> </span><span id="local-6989586621679396574"><span class="annot"><span class="annottext">Direction
+</span><a href="#local-6989586621679396574"><span class="hs-identifier hs-var">d</span></a></span></span><span> </span><span id="local-6989586621679396573"><span class="annot"><span class="annottext">Rectangle
+</span><a href="#local-6989586621679396573"><span class="hs-identifier hs-var">rect</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-keyword">let</span><span> </span><span class="hs-special">(</span><span id="local-6989586621679396572"><span class="annot"><span class="annottext">Rect
+</span><a href="#local-6989586621679396572"><span class="hs-identifier hs-var">r1</span></a></span></span><span class="hs-special">,</span><span> </span><span id="local-6989586621679396571"><span class="annot"><span class="annottext">Rect
+</span><a href="#local-6989586621679396571"><span class="hs-identifier hs-var">r2</span></a></span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Rational -&gt; Direction -&gt; Rect -&gt; (Rect, Rect)
+</span><a href="XMonad.Layout.Spiral.html#divideRect%27"><span class="hs-identifier hs-var">divideRect'</span></a></span><span> </span><span class="annot"><span class="annottext">Rational
+</span><a href="#local-6989586621679396575"><span class="hs-identifier hs-var">r</span></a></span><span> </span><span class="annot"><span class="annottext">Direction
+</span><a href="#local-6989586621679396574"><span class="hs-identifier hs-var">d</span></a></span><span> </span><span class="annot"><span class="annottext">forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">Rectangle -&gt; Rect
+</span><a href="XMonad.Layout.Spiral.html#toRect"><span class="hs-identifier hs-var">toRect</span></a></span><span> </span><span class="annot"><span class="annottext">Rectangle
+</span><a href="#local-6989586621679396573"><span class="hs-identifier hs-var">rect</span></a></span><span> </span><span class="hs-keyword">in</span><span>
+</span><span id="line-113"></span><span>                      </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Rect -&gt; Rectangle
+</span><a href="XMonad.Layout.Spiral.html#fromRect"><span class="hs-identifier hs-var">fromRect</span></a></span><span> </span><span class="annot"><span class="annottext">Rect
+</span><a href="#local-6989586621679396572"><span class="hs-identifier hs-var">r1</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">Rect -&gt; Rectangle
+</span><a href="XMonad.Layout.Spiral.html#fromRect"><span class="hs-identifier hs-var">fromRect</span></a></span><span> </span><span class="annot"><span class="annottext">Rect
+</span><a href="#local-6989586621679396571"><span class="hs-identifier hs-var">r2</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-114"></span><span>
+</span><span id="line-115"></span><span class="annot"><a href="XMonad.Layout.Spiral.html#divideRect%27"><span class="hs-identifier hs-type">divideRect'</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Rational</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="XMonad.Layout.Spiral.html#Direction"><span class="hs-identifier hs-type">Direction</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="XMonad.Layout.Spiral.html#Rect"><span class="hs-identifier hs-type">Rect</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="hs-special">(</span><span class="annot"><a href="XMonad.Layout.Spiral.html#Rect"><span class="hs-identifier hs-type">Rect</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><a href="XMonad.Layout.Spiral.html#Rect"><span class="hs-identifier hs-type">Rect</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-116"></span><span id="divideRect%27"><span class="annot"><span class="annottext">divideRect' :: Rational -&gt; Direction -&gt; Rect -&gt; (Rect, Rect)
+</span><a href="XMonad.Layout.Spiral.html#divideRect%27"><span class="hs-identifier hs-var hs-var">divideRect'</span></a></span></span><span> </span><span id="local-6989586621679396569"><span class="annot"><span class="annottext">Rational
+</span><a href="#local-6989586621679396569"><span class="hs-identifier hs-var">ratio</span></a></span></span><span> </span><span id="local-6989586621679396568"><span class="annot"><span class="annottext">Direction
+</span><a href="#local-6989586621679396568"><span class="hs-identifier hs-var">dir</span></a></span></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="XMonad.Layout.Spiral.html#Rect"><span class="hs-identifier hs-type">Rect</span></a></span><span> </span><span id="local-6989586621679396567"><span class="annot"><span class="annottext">Integer
+</span><a href="#local-6989586621679396567"><span class="hs-identifier hs-var">x</span></a></span></span><span> </span><span id="local-6989586621679396566"><span class="annot"><span class="annottext">Integer
+</span><a href="#local-6989586621679396566"><span class="hs-identifier hs-var">y</span></a></span></span><span> </span><span id="local-6989586621679396565"><span class="annot"><span class="annottext">Integer
+</span><a href="#local-6989586621679396565"><span class="hs-identifier hs-var">w</span></a></span></span><span> </span><span id="local-6989586621679396564"><span class="annot"><span class="annottext">Integer
+</span><a href="#local-6989586621679396564"><span class="hs-identifier hs-var">h</span></a></span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=</span><span>
+</span><span id="line-117"></span><span>    </span><span class="hs-keyword">case</span><span> </span><span class="annot"><span class="annottext">Direction
+</span><a href="#local-6989586621679396568"><span class="hs-identifier hs-var">dir</span></a></span><span> </span><span class="hs-keyword">of</span><span>
+</span><span id="line-118"></span><span>      </span><span class="annot"><span class="annottext">Direction
+</span><a href="XMonad.Layout.Spiral.html#East"><span class="hs-identifier hs-var">East</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="hs-keyword">let</span><span> </span><span class="hs-special">(</span><span id="local-6989586621679396563"><span class="annot"><span class="annottext">Integer
+</span><a href="#local-6989586621679396563"><span class="hs-identifier hs-var">w1</span></a></span></span><span class="hs-special">,</span><span> </span><span id="local-6989586621679396562"><span class="annot"><span class="annottext">Integer
+</span><a href="#local-6989586621679396562"><span class="hs-identifier hs-var">w2</span></a></span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Rational -&gt; Integer -&gt; (Integer, Integer)
+</span><a href="XMonad.Layout.Spiral.html#chop"><span class="hs-identifier hs-var">chop</span></a></span><span> </span><span class="annot"><span class="annottext">Rational
+</span><a href="#local-6989586621679396569"><span class="hs-identifier hs-var">ratio</span></a></span><span> </span><span class="annot"><span class="annottext">Integer
+</span><a href="#local-6989586621679396565"><span class="hs-identifier hs-var">w</span></a></span><span> </span><span class="hs-keyword">in</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Integer -&gt; Integer -&gt; Integer -&gt; Integer -&gt; Rect
+</span><a href="XMonad.Layout.Spiral.html#Rect"><span class="hs-identifier hs-var">Rect</span></a></span><span> </span><span class="annot"><span class="annottext">Integer
+</span><a href="#local-6989586621679396567"><span class="hs-identifier hs-var">x</span></a></span><span> </span><span class="annot"><span class="annottext">Integer
+</span><a href="#local-6989586621679396566"><span class="hs-identifier hs-var">y</span></a></span><span> </span><span class="annot"><span class="annottext">Integer
+</span><a href="#local-6989586621679396563"><span class="hs-identifier hs-var">w1</span></a></span><span> </span><span class="annot"><span class="annottext">Integer
+</span><a href="#local-6989586621679396564"><span class="hs-identifier hs-var">h</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">Integer -&gt; Integer -&gt; Integer -&gt; Integer -&gt; Rect
+</span><a href="XMonad.Layout.Spiral.html#Rect"><span class="hs-identifier hs-var">Rect</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Integer
+</span><a href="#local-6989586621679396567"><span class="hs-identifier hs-var">x</span></a></span><span> </span><span class="annot"><span class="annottext">forall a. Num a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-operator hs-var">+</span></span><span> </span><span class="annot"><span class="annottext">Integer
+</span><a href="#local-6989586621679396563"><span class="hs-identifier hs-var">w1</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">Integer
+</span><a href="#local-6989586621679396566"><span class="hs-identifier hs-var">y</span></a></span><span> </span><span class="annot"><span class="annottext">Integer
+</span><a href="#local-6989586621679396562"><span class="hs-identifier hs-var">w2</span></a></span><span> </span><span class="annot"><span class="annottext">Integer
+</span><a href="#local-6989586621679396564"><span class="hs-identifier hs-var">h</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-119"></span><span>      </span><span class="annot"><span class="annottext">Direction
+</span><a href="XMonad.Layout.Spiral.html#South"><span class="hs-identifier hs-var">South</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="hs-keyword">let</span><span> </span><span class="hs-special">(</span><span id="local-6989586621679396560"><span class="annot"><span class="annottext">Integer
+</span><a href="#local-6989586621679396560"><span class="hs-identifier hs-var">h1</span></a></span></span><span class="hs-special">,</span><span> </span><span id="local-6989586621679396559"><span class="annot"><span class="annottext">Integer
+</span><a href="#local-6989586621679396559"><span class="hs-identifier hs-var">h2</span></a></span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Rational -&gt; Integer -&gt; (Integer, Integer)
+</span><a href="XMonad.Layout.Spiral.html#chop"><span class="hs-identifier hs-var">chop</span></a></span><span> </span><span class="annot"><span class="annottext">Rational
+</span><a href="#local-6989586621679396569"><span class="hs-identifier hs-var">ratio</span></a></span><span> </span><span class="annot"><span class="annottext">Integer
+</span><a href="#local-6989586621679396564"><span class="hs-identifier hs-var">h</span></a></span><span> </span><span class="hs-keyword">in</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Integer -&gt; Integer -&gt; Integer -&gt; Integer -&gt; Rect
+</span><a href="XMonad.Layout.Spiral.html#Rect"><span class="hs-identifier hs-var">Rect</span></a></span><span> </span><span class="annot"><span class="annottext">Integer
+</span><a href="#local-6989586621679396567"><span class="hs-identifier hs-var">x</span></a></span><span> </span><span class="annot"><span class="annottext">Integer
+</span><a href="#local-6989586621679396566"><span class="hs-identifier hs-var">y</span></a></span><span> </span><span class="annot"><span class="annottext">Integer
+</span><a href="#local-6989586621679396565"><span class="hs-identifier hs-var">w</span></a></span><span> </span><span class="annot"><span class="annottext">Integer
+</span><a href="#local-6989586621679396560"><span class="hs-identifier hs-var">h1</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">Integer -&gt; Integer -&gt; Integer -&gt; Integer -&gt; Rect
+</span><a href="XMonad.Layout.Spiral.html#Rect"><span class="hs-identifier hs-var">Rect</span></a></span><span> </span><span class="annot"><span class="annottext">Integer
+</span><a href="#local-6989586621679396567"><span class="hs-identifier hs-var">x</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Integer
+</span><a href="#local-6989586621679396566"><span class="hs-identifier hs-var">y</span></a></span><span> </span><span class="annot"><span class="annottext">forall a. Num a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-operator hs-var">+</span></span><span> </span><span class="annot"><span class="annottext">Integer
+</span><a href="#local-6989586621679396560"><span class="hs-identifier hs-var">h1</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">Integer
+</span><a href="#local-6989586621679396565"><span class="hs-identifier hs-var">w</span></a></span><span> </span><span class="annot"><span class="annottext">Integer
+</span><a href="#local-6989586621679396559"><span class="hs-identifier hs-var">h2</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-120"></span><span>      </span><span class="annot"><span class="annottext">Direction
+</span><a href="XMonad.Layout.Spiral.html#West"><span class="hs-identifier hs-var">West</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="hs-keyword">let</span><span> </span><span class="hs-special">(</span><span id="local-6989586621679396555"><span class="annot"><span class="annottext">Integer
+</span><a href="#local-6989586621679396555"><span class="hs-identifier hs-var">w1</span></a></span></span><span class="hs-special">,</span><span> </span><span id="local-6989586621679396554"><span class="annot"><span class="annottext">Integer
+</span><a href="#local-6989586621679396554"><span class="hs-identifier hs-var">w2</span></a></span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Rational -&gt; Integer -&gt; (Integer, Integer)
+</span><a href="XMonad.Layout.Spiral.html#chop"><span class="hs-identifier hs-var">chop</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Rational
+</span><span class="hs-number">1</span></span><span> </span><span class="annot"><span class="annottext">forall a. Num a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-glyph hs-var">-</span></span><span> </span><span class="annot"><span class="annottext">Rational
+</span><a href="#local-6989586621679396569"><span class="hs-identifier hs-var">ratio</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">Integer
+</span><a href="#local-6989586621679396565"><span class="hs-identifier hs-var">w</span></a></span><span> </span><span class="hs-keyword">in</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Integer -&gt; Integer -&gt; Integer -&gt; Integer -&gt; Rect
+</span><a href="XMonad.Layout.Spiral.html#Rect"><span class="hs-identifier hs-var">Rect</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Integer
+</span><a href="#local-6989586621679396567"><span class="hs-identifier hs-var">x</span></a></span><span> </span><span class="annot"><span class="annottext">forall a. Num a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-operator hs-var">+</span></span><span> </span><span class="annot"><span class="annottext">Integer
+</span><a href="#local-6989586621679396555"><span class="hs-identifier hs-var">w1</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">Integer
+</span><a href="#local-6989586621679396566"><span class="hs-identifier hs-var">y</span></a></span><span> </span><span class="annot"><span class="annottext">Integer
+</span><a href="#local-6989586621679396554"><span class="hs-identifier hs-var">w2</span></a></span><span> </span><span class="annot"><span class="annottext">Integer
+</span><a href="#local-6989586621679396564"><span class="hs-identifier hs-var">h</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">Integer -&gt; Integer -&gt; Integer -&gt; Integer -&gt; Rect
+</span><a href="XMonad.Layout.Spiral.html#Rect"><span class="hs-identifier hs-var">Rect</span></a></span><span> </span><span class="annot"><span class="annottext">Integer
+</span><a href="#local-6989586621679396567"><span class="hs-identifier hs-var">x</span></a></span><span> </span><span class="annot"><span class="annottext">Integer
+</span><a href="#local-6989586621679396566"><span class="hs-identifier hs-var">y</span></a></span><span> </span><span class="annot"><span class="annottext">Integer
+</span><a href="#local-6989586621679396555"><span class="hs-identifier hs-var">w1</span></a></span><span> </span><span class="annot"><span class="annottext">Integer
+</span><a href="#local-6989586621679396564"><span class="hs-identifier hs-var">h</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-121"></span><span>      </span><span class="annot"><span class="annottext">Direction
+</span><a href="XMonad.Layout.Spiral.html#North"><span class="hs-identifier hs-var">North</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="hs-keyword">let</span><span> </span><span class="hs-special">(</span><span id="local-6989586621679396550"><span class="annot"><span class="annottext">Integer
+</span><a href="#local-6989586621679396550"><span class="hs-identifier hs-var">h1</span></a></span></span><span class="hs-special">,</span><span> </span><span id="local-6989586621679396549"><span class="annot"><span class="annottext">Integer
+</span><a href="#local-6989586621679396549"><span class="hs-identifier hs-var">h2</span></a></span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Rational -&gt; Integer -&gt; (Integer, Integer)
+</span><a href="XMonad.Layout.Spiral.html#chop"><span class="hs-identifier hs-var">chop</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Rational
+</span><span class="hs-number">1</span></span><span> </span><span class="annot"><span class="annottext">forall a. Num a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-glyph hs-var">-</span></span><span> </span><span class="annot"><span class="annottext">Rational
+</span><a href="#local-6989586621679396569"><span class="hs-identifier hs-var">ratio</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">Integer
+</span><a href="#local-6989586621679396564"><span class="hs-identifier hs-var">h</span></a></span><span> </span><span class="hs-keyword">in</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Integer -&gt; Integer -&gt; Integer -&gt; Integer -&gt; Rect
+</span><a href="XMonad.Layout.Spiral.html#Rect"><span class="hs-identifier hs-var">Rect</span></a></span><span> </span><span class="annot"><span class="annottext">Integer
+</span><a href="#local-6989586621679396567"><span class="hs-identifier hs-var">x</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Integer
+</span><a href="#local-6989586621679396566"><span class="hs-identifier hs-var">y</span></a></span><span> </span><span class="annot"><span class="annottext">forall a. Num a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-operator hs-var">+</span></span><span> </span><span class="annot"><span class="annottext">Integer
+</span><a href="#local-6989586621679396550"><span class="hs-identifier hs-var">h1</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">Integer
+</span><a href="#local-6989586621679396565"><span class="hs-identifier hs-var">w</span></a></span><span> </span><span class="annot"><span class="annottext">Integer
+</span><a href="#local-6989586621679396549"><span class="hs-identifier hs-var">h2</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">Integer -&gt; Integer -&gt; Integer -&gt; Integer -&gt; Rect
+</span><a href="XMonad.Layout.Spiral.html#Rect"><span class="hs-identifier hs-var">Rect</span></a></span><span> </span><span class="annot"><span class="annottext">Integer
+</span><a href="#local-6989586621679396567"><span class="hs-identifier hs-var">x</span></a></span><span> </span><span class="annot"><span class="annottext">Integer
+</span><a href="#local-6989586621679396566"><span class="hs-identifier hs-var">y</span></a></span><span> </span><span class="annot"><span class="annottext">Integer
+</span><a href="#local-6989586621679396565"><span class="hs-identifier hs-var">w</span></a></span><span> </span><span class="annot"><span class="annottext">Integer
+</span><a href="#local-6989586621679396550"><span class="hs-identifier hs-var">h1</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-122"></span><span>
+</span><span id="line-123"></span><span class="annot"><a href="XMonad.Layout.Spiral.html#chop"><span class="hs-identifier hs-type">chop</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Rational</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Integer</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">Integer</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Integer</span></span><span class="hs-special">)</span><span>
+</span><span id="line-124"></span><span id="chop"><span class="annot"><span class="annottext">chop :: Rational -&gt; Integer -&gt; (Integer, Integer)
+</span><a href="XMonad.Layout.Spiral.html#chop"><span class="hs-identifier hs-var hs-var">chop</span></a></span></span><span> </span><span id="local-6989586621679396548"><span class="annot"><span class="annottext">Rational
+</span><a href="#local-6989586621679396548"><span class="hs-identifier hs-var">rat</span></a></span></span><span> </span><span id="local-6989586621679396547"><span class="annot"><span class="annottext">Integer
+</span><a href="#local-6989586621679396547"><span class="hs-identifier hs-var">n</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-keyword">let</span><span> </span><span id="local-6989586621679396542"><span class="annot"><span class="annottext">f :: Integer
+</span><a href="#local-6989586621679396542"><span class="hs-identifier hs-var hs-var">f</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">forall a b. (Integral a, Num b) =&gt; a -&gt; b
+</span><span class="hs-identifier hs-var">fromIntegral</span></span><span> </span><span class="annot"><span class="annottext">Integer
+</span><a href="#local-6989586621679396547"><span class="hs-identifier hs-var">n</span></a></span><span> </span><span class="annot"><span class="annottext">forall a. Num a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-operator hs-var">*</span></span><span> </span><span class="annot"><span class="annottext">forall a. Ratio a -&gt; a
+</span><span class="hs-identifier hs-var">numerator</span></span><span> </span><span class="annot"><span class="annottext">Rational
+</span><a href="#local-6989586621679396548"><span class="hs-identifier hs-var">rat</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">forall a. Integral a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-operator hs-var">`div`</span></span><span> </span><span class="annot"><span class="annottext">forall a. Ratio a -&gt; a
+</span><span class="hs-identifier hs-var">denominator</span></span><span> </span><span class="annot"><span class="annottext">Rational
+</span><a href="#local-6989586621679396548"><span class="hs-identifier hs-var">rat</span></a></span><span> </span><span class="hs-keyword">in</span><span>
+</span><span id="line-125"></span><span>             </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Integer
+</span><a href="#local-6989586621679396542"><span class="hs-identifier hs-var">f</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">Integer
+</span><a href="#local-6989586621679396547"><span class="hs-identifier hs-var">n</span></a></span><span> </span><span class="annot"><span class="annottext">forall a. Num a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-glyph hs-var">-</span></span><span> </span><span class="annot"><span class="annottext">Integer
+</span><a href="#local-6989586621679396542"><span class="hs-identifier hs-var">f</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-126"></span></pre></body></html>

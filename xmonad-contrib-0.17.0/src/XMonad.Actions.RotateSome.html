@@ -1,0 +1,444 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd"><html xmlns="http://www.w3.org/1999/xhtml"><head><link rel="stylesheet" type="text/css" href="style.css" /><script type="text/javascript" src="highlight.js"></script></head><body><pre><span class="hs-comment">-----------------------------------------------------------------------------</span><span>
+</span><span id="line-2"></span><span class="hs-comment">-- |</span><span>
+</span><span id="line-3"></span><span class="hs-comment">-- Module      :  XMonad.Actions.RotateSome</span><span>
+</span><span id="line-4"></span><span class="hs-comment">-- Description :  Rotate some elements around the stack.</span><span>
+</span><span id="line-5"></span><span class="hs-comment">-- Copyright   :  (c) 2020 Ivan Brennan &lt;ivanbrennan@gmail.com&gt;</span><span>
+</span><span id="line-6"></span><span class="hs-comment">-- License     :  BSD3-style (see LICENSE)</span><span>
+</span><span id="line-7"></span><span class="hs-comment">--</span><span>
+</span><span id="line-8"></span><span class="hs-comment">-- Maintainer  :  Ivan Brennan &lt;ivanbrennan@gmail.com&gt;</span><span>
+</span><span id="line-9"></span><span class="hs-comment">-- Stability   :  stable</span><span>
+</span><span id="line-10"></span><span class="hs-comment">-- Portability :  unportable</span><span>
+</span><span id="line-11"></span><span class="hs-comment">--</span><span>
+</span><span id="line-12"></span><span class="hs-comment">-- Functions for rotating some elements around the stack while keeping others</span><span>
+</span><span id="line-13"></span><span class="hs-comment">-- anchored in place. Useful in combination with layouts that dictate window</span><span>
+</span><span id="line-14"></span><span class="hs-comment">-- visibility based on stack position, such as &quot;XMonad.Layout.LimitWindows&quot;.</span><span>
+</span><span id="line-15"></span><span class="hs-comment">--</span><span>
+</span><span id="line-16"></span><span class="hs-comment">-----------------------------------------------------------------------------</span><span>
+</span><span id="line-17"></span><span>
+</span><span id="line-18"></span><span class="hs-keyword">module</span><span> </span><span class="hs-identifier">XMonad.Actions.RotateSome</span><span> </span><span class="hs-special">(</span><span>
+</span><span id="line-19"></span><span>    </span><span class="annot"><span class="hs-comment">-- * Usage</span></span><span>
+</span><span id="line-20"></span><span>    </span><span class="hs-comment">-- $usage</span><span>
+</span><span id="line-21"></span><span>    </span><span class="hs-comment">-- * Example</span><span>
+</span><span id="line-22"></span><span>    </span><span class="annot"><span class="hs-comment">-- $example</span></span><span>
+</span><span id="line-23"></span><span>    </span><span class="annot"><a href="XMonad.Actions.RotateSome.html#surfaceNext"><span class="hs-identifier">surfaceNext</span></a></span><span class="hs-special">,</span><span>
+</span><span id="line-24"></span><span>    </span><span class="annot"><a href="XMonad.Actions.RotateSome.html#surfacePrev"><span class="hs-identifier">surfacePrev</span></a></span><span class="hs-special">,</span><span>
+</span><span id="line-25"></span><span>    </span><span class="annot"><a href="XMonad.Actions.RotateSome.html#rotateSome"><span class="hs-identifier">rotateSome</span></a></span><span class="hs-special">,</span><span>
+</span><span id="line-26"></span><span>  </span><span class="hs-special">)</span><span> </span><span class="hs-keyword">where</span><span>
+</span><span id="line-27"></span><span>
+</span><span id="line-28"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><span class="hs-identifier">Control.Arrow</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-operator">(***)</span></span><span class="hs-special">)</span><span>
+</span><span id="line-29"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><a href="XMonad.Prelude.html"><span class="hs-identifier">XMonad.Prelude</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier">partition</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier">sortOn</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-operator">(\\)</span></span><span class="hs-special">)</span><span>
+</span><span id="line-30"></span><span class="hs-keyword">import</span><span> </span><span class="hs-keyword">qualified</span><span> </span><span class="annot"><span class="hs-identifier">Data.Map</span></span><span> </span><span class="hs-keyword">as</span><span> </span><span class="annot"><span class="hs-identifier">M</span></span><span>
+</span><span id="line-31"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><span class="hs-identifier">XMonad</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier">Window</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier">WindowSpace</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier">Rectangle</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier">X</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier">runLayout</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier">screenRect</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier">windows</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier">withWindowSet</span></span><span class="hs-special">)</span><span>
+</span><span id="line-32"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><span class="hs-identifier">XMonad.StackSet</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier">Screen</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier">Screen</span></span><span class="hs-special">)</span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier">Stack</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier">Stack</span></span><span class="hs-special">)</span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier">current</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier">floating</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier">modify'</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier">stack</span></span><span class="hs-special">)</span><span>
+</span><span id="line-33"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><a href="XMonad.Util.Stack.html"><span class="hs-identifier">XMonad.Util.Stack</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="XMonad.Util.Stack.html#reverseS"><span class="hs-identifier">reverseS</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-34"></span><span>
+</span><span id="line-35"></span><span class="hs-comment">{- $usage
+You can use this module with the following in your @~\/.xmonad\/xmonad.hs@:
+
+&gt; import XMonad.Actions.RotateSome
+
+and add keybindings such as the following:
+
+&gt;   , ((modMask .|. controlMask, xK_n), surfaceNext)
+&gt;   , ((modMask .|. controlMask, xK_p), surfacePrev)
+
+-}</span><span>
+</span><span id="line-46"></span><span>
+</span><span id="line-47"></span><span class="hs-comment">{- $example
+#Example#
+
+Consider a workspace whose stack contains five windows A B C D E but whose
+layout limits how many will actually be shown, showing only the first plus
+two additional windows, starting with the third:
+
+&gt;  &#9484;&#9472;&#9472;&#9472;&#9472;&#9472;&#9516;&#9472;&#9472;&#9472;&#9472;&#9472;&#9488;
+&gt;  &#9474;     &#9474;  C  &#9474;
+&gt;  &#9474;  A  &#9500;&#9472;&#9472;&#9472;&#9472;&#9472;&#9508;
+&gt;  &#9474;     &#9474;  D  &#9474;
+&gt;  &#9492;&#9472;&#9472;&#9472;&#9472;&#9472;&#9524;&#9472;&#9472;&#9472;&#9472;&#9472;&#9496;
+&gt;
+&gt;  A  B  C  D  E
+&gt;  _     ____
+
+If C has focus and we'd like to replace it with one of the unshown windows,
+'surfaceNext' will move the next unshown window, E, into the focused position:
+
+&gt;  &#9484;&#9472;&#9472;&#9472;&#9472;&#9472;&#9516;&#9472;&#9472;&#9472;&#9472;&#9472;&#9488;                &#9484;&#9472;&#9472;&#9472;&#9472;&#9472;&#9516;&#9472;&#9472;&#9472;&#9472;&#9472;&#9488;
+&gt;  &#9474;     &#9474; *C* &#9474;                &#9474;     &#9474; *E* &#9474;
+&gt;  &#9474;  A  &#9500;&#9472;&#9472;&#9472;&#9472;&#9472;&#9508; surfaceNext -&gt; &#9474;  A  &#9500;&#9472;&#9472;&#9472;&#9472;&#9472;&#9508;
+&gt;  &#9474;     &#9474;  D  &#9474;                &#9474;     &#9474;  D  &#9474;
+&gt;  &#9492;&#9472;&#9472;&#9472;&#9472;&#9472;&#9524;&#9472;&#9472;&#9472;&#9472;&#9472;&#9496;                &#9492;&#9472;&#9472;&#9472;&#9472;&#9472;&#9524;&#9472;&#9472;&#9472;&#9472;&#9472;&#9496;
+&gt;
+&gt;  A  B *C* D  E                A  C *E* D  B
+&gt;  _     ____                   _     ____
+
+This repositioned windows B C E by treating them as a sequence that can be
+rotated through the focused stack position. Windows A and D remain anchored
+to their original (visible) positions.
+
+A second call to 'surfaceNext' moves B into focus:
+
+&gt;  &#9484;&#9472;&#9472;&#9472;&#9472;&#9472;&#9516;&#9472;&#9472;&#9472;&#9472;&#9472;&#9488;                &#9484;&#9472;&#9472;&#9472;&#9472;&#9472;&#9516;&#9472;&#9472;&#9472;&#9472;&#9472;&#9488;
+&gt;  &#9474;     &#9474; *E* &#9474;                &#9474;     &#9474; *B* &#9474;
+&gt;  &#9474;  A  &#9500;&#9472;&#9472;&#9472;&#9472;&#9472;&#9508; surfaceNext -&gt; &#9474;  A  &#9500;&#9472;&#9472;&#9472;&#9472;&#9472;&#9508;
+&gt;  &#9474;     &#9474;  D  &#9474;                &#9474;     &#9474;  D  &#9474;
+&gt;  &#9492;&#9472;&#9472;&#9472;&#9472;&#9472;&#9524;&#9472;&#9472;&#9472;&#9472;&#9472;&#9496;                &#9492;&#9472;&#9472;&#9472;&#9472;&#9472;&#9524;&#9472;&#9472;&#9472;&#9472;&#9472;&#9496;
+&gt;
+&gt;  A  C *E* D  B                A  E *B* D  C
+&gt;  _     ____                   _     ____
+
+A third call would complete the cycle, bringing C back into focus.
+
+-}</span><span>
+</span><span id="line-93"></span><span>
+</span><span id="line-94"></span><span class="hs-comment">-- |</span><span>
+</span><span id="line-95"></span><span class="hs-comment">-- Treating the focused window and any unshown windows as a ring that can be</span><span>
+</span><span id="line-96"></span><span class="hs-comment">-- rotated through the focused position, surface the next element in the ring.</span><span>
+</span><span id="line-97"></span><span class="annot"><a href="XMonad.Actions.RotateSome.html#surfaceNext"><span class="hs-identifier hs-type">surfaceNext</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">X</span></span><span> </span><span class="hs-special">(</span><span class="hs-special">)</span><span>
+</span><span id="line-98"></span><span id="surfaceNext"><span class="annot"><span class="annottext">surfaceNext :: X ()
+</span><a href="XMonad.Actions.RotateSome.html#surfaceNext"><span class="hs-identifier hs-var hs-var">surfaceNext</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-99"></span><span>  </span><span id="local-6989586621679384660"><span class="annot"><span class="annottext">[Window]
+</span><a href="#local-6989586621679384660"><span class="hs-identifier hs-var">ring</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">X [Window]
+</span><a href="XMonad.Actions.RotateSome.html#surfaceRing"><span class="hs-identifier hs-var">surfaceRing</span></a></span><span>
+</span><span id="line-100"></span><span>  </span><span class="annot"><span class="annottext">(WindowSet -&gt; WindowSet) -&gt; X ()
+</span><span class="hs-identifier hs-var">windows</span></span><span> </span><span class="annot"><span class="annottext">((WindowSet -&gt; WindowSet) -&gt; X ())
+-&gt; ((Stack Window -&gt; Stack Window) -&gt; WindowSet -&gt; WindowSet)
+-&gt; (Stack Window -&gt; Stack Window)
+-&gt; X ()
+forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">(Stack Window -&gt; Stack Window) -&gt; WindowSet -&gt; WindowSet
+forall a i l s sd.
+(Stack a -&gt; Stack a) -&gt; StackSet i l a s sd -&gt; StackSet i l a s sd
+</span><span class="hs-identifier hs-var">modify'</span></span><span> </span><span class="annot"><span class="annottext">((Stack Window -&gt; Stack Window) -&gt; X ())
+-&gt; (Stack Window -&gt; Stack Window) -&gt; X ()
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">(Window -&gt; Bool) -&gt; Stack Window -&gt; Stack Window
+forall a. (a -&gt; Bool) -&gt; Stack a -&gt; Stack a
+</span><a href="XMonad.Actions.RotateSome.html#rotateSome"><span class="hs-identifier hs-var">rotateSome</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Window -&gt; [Window] -&gt; Bool
+forall (t :: * -&gt; *) a. (Foldable t, Eq a) =&gt; a -&gt; t a -&gt; Bool
+</span><span class="hs-operator hs-var">`elem`</span></span><span> </span><span class="annot"><span class="annottext">[Window]
+</span><a href="#local-6989586621679384660"><span class="hs-identifier hs-var">ring</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-101"></span><span>
+</span><span id="line-102"></span><span class="hs-comment">-- | Like 'surfaceNext' in reverse.</span><span>
+</span><span id="line-103"></span><span class="annot"><a href="XMonad.Actions.RotateSome.html#surfacePrev"><span class="hs-identifier hs-type">surfacePrev</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">X</span></span><span> </span><span class="hs-special">(</span><span class="hs-special">)</span><span>
+</span><span id="line-104"></span><span id="surfacePrev"><span class="annot"><span class="annottext">surfacePrev :: X ()
+</span><a href="XMonad.Actions.RotateSome.html#surfacePrev"><span class="hs-identifier hs-var hs-var">surfacePrev</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-105"></span><span>  </span><span id="local-6989586621679384656"><span class="annot"><span class="annottext">[Window]
+</span><a href="#local-6989586621679384656"><span class="hs-identifier hs-var">ring</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">X [Window]
+</span><a href="XMonad.Actions.RotateSome.html#surfaceRing"><span class="hs-identifier hs-var">surfaceRing</span></a></span><span>
+</span><span id="line-106"></span><span>  </span><span class="annot"><span class="annottext">(WindowSet -&gt; WindowSet) -&gt; X ()
+</span><span class="hs-identifier hs-var">windows</span></span><span> </span><span class="annot"><span class="annottext">((WindowSet -&gt; WindowSet) -&gt; X ())
+-&gt; ((Stack Window -&gt; Stack Window) -&gt; WindowSet -&gt; WindowSet)
+-&gt; (Stack Window -&gt; Stack Window)
+-&gt; X ()
+forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">(Stack Window -&gt; Stack Window) -&gt; WindowSet -&gt; WindowSet
+forall a i l s sd.
+(Stack a -&gt; Stack a) -&gt; StackSet i l a s sd -&gt; StackSet i l a s sd
+</span><span class="hs-identifier hs-var">modify'</span></span><span> </span><span class="annot"><span class="annottext">((Stack Window -&gt; Stack Window) -&gt; X ())
+-&gt; (Stack Window -&gt; Stack Window) -&gt; X ()
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">Stack Window -&gt; Stack Window
+forall a. Stack a -&gt; Stack a
+</span><a href="XMonad.Util.Stack.html#reverseS"><span class="hs-identifier hs-var">reverseS</span></a></span><span> </span><span class="annot"><span class="annottext">(Stack Window -&gt; Stack Window)
+-&gt; (Stack Window -&gt; Stack Window) -&gt; Stack Window -&gt; Stack Window
+forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">(Window -&gt; Bool) -&gt; Stack Window -&gt; Stack Window
+forall a. (a -&gt; Bool) -&gt; Stack a -&gt; Stack a
+</span><a href="XMonad.Actions.RotateSome.html#rotateSome"><span class="hs-identifier hs-var">rotateSome</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Window -&gt; [Window] -&gt; Bool
+forall (t :: * -&gt; *) a. (Foldable t, Eq a) =&gt; a -&gt; t a -&gt; Bool
+</span><span class="hs-operator hs-var">`elem`</span></span><span> </span><span class="annot"><span class="annottext">[Window]
+</span><a href="#local-6989586621679384656"><span class="hs-identifier hs-var">ring</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">(Stack Window -&gt; Stack Window)
+-&gt; (Stack Window -&gt; Stack Window) -&gt; Stack Window -&gt; Stack Window
+forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">Stack Window -&gt; Stack Window
+forall a. Stack a -&gt; Stack a
+</span><a href="XMonad.Util.Stack.html#reverseS"><span class="hs-identifier hs-var">reverseS</span></a></span><span>
+</span><span id="line-107"></span><span>
+</span><span id="line-108"></span><span class="hs-comment">-- |</span><span>
+</span><span id="line-109"></span><span class="hs-comment">-- Return a list containing the current focus plus any unshown windows. Note</span><span>
+</span><span id="line-110"></span><span class="hs-comment">-- that windows are shown if 'runLayout' provides them with a rectangle or if</span><span>
+</span><span id="line-111"></span><span class="hs-comment">-- they are floating.</span><span>
+</span><span id="line-112"></span><span class="annot"><a href="XMonad.Actions.RotateSome.html#surfaceRing"><span class="hs-identifier hs-type">surfaceRing</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">X</span></span><span> </span><span class="hs-special">[</span><span class="annot"><span class="hs-identifier hs-type">Window</span></span><span class="hs-special">]</span><span>
+</span><span id="line-113"></span><span id="surfaceRing"><span class="annot"><span class="annottext">surfaceRing :: X [Window]
+</span><a href="XMonad.Actions.RotateSome.html#surfaceRing"><span class="hs-identifier hs-var hs-var">surfaceRing</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">(WindowSet -&gt; X [Window]) -&gt; X [Window]
+forall a. (WindowSet -&gt; X a) -&gt; X a
+</span><span class="hs-identifier hs-var">withWindowSet</span></span><span> </span><span class="annot"><span class="annottext">((WindowSet -&gt; X [Window]) -&gt; X [Window])
+-&gt; (WindowSet -&gt; X [Window]) -&gt; X [Window]
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="hs-glyph">\</span><span id="local-6989586621679384655"><span class="annot"><span class="annottext">WindowSet
+</span><a href="#local-6989586621679384655"><span class="hs-identifier hs-var">wset</span></a></span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-114"></span><span>  </span><span class="hs-keyword">let</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Screen</span></span><span> </span><span id="local-6989586621679384654"><span class="annot"><span class="annottext">Workspace WorkspaceId (Layout Window) Window
+</span><a href="#local-6989586621679384654"><span class="hs-identifier hs-var">wsp</span></a></span></span><span> </span><span class="annot"><span class="annottext">ScreenId
+</span><span class="hs-identifier">_</span></span><span> </span><span id="local-6989586621679384653"><span class="annot"><span class="annottext">ScreenDetail
+</span><a href="#local-6989586621679384653"><span class="hs-identifier hs-var">sd</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">WindowSet
+-&gt; Screen WorkspaceId (Layout Window) Window ScreenId ScreenDetail
+forall i l a sid sd. StackSet i l a sid sd -&gt; Screen i l a sid sd
+</span><span class="hs-identifier hs-var hs-var">current</span></span><span> </span><span class="annot"><span class="annottext">WindowSet
+</span><a href="#local-6989586621679384655"><span class="hs-identifier hs-var">wset</span></a></span><span>
+</span><span id="line-115"></span><span>
+</span><span id="line-116"></span><span>  </span><span class="hs-keyword">case</span><span> </span><span class="annot"><span class="annottext">Workspace WorkspaceId (Layout Window) Window
+-&gt; Maybe (Stack Window)
+forall i l a. Workspace i l a -&gt; Maybe (Stack a)
+</span><span class="hs-identifier hs-var hs-var">stack</span></span><span> </span><span class="annot"><span class="annottext">Workspace WorkspaceId (Layout Window) Window
+</span><a href="#local-6989586621679384654"><span class="hs-identifier hs-var">wsp</span></a></span><span> </span><span class="annot"><span class="annottext">Maybe (Stack Window)
+-&gt; (Stack Window -&gt; Maybe (Stack Window)) -&gt; Maybe (Stack Window)
+forall (m :: * -&gt; *) a b. Monad m =&gt; m a -&gt; (a -&gt; m b) -&gt; m b
+</span><span class="hs-operator hs-var">&gt;&gt;=</span></span><span> </span><span class="annot"><span class="annottext">(Window -&gt; Bool) -&gt; Stack Window -&gt; Maybe (Stack Window)
+forall a. (a -&gt; Bool) -&gt; Stack a -&gt; Maybe (Stack a)
+</span><a href="XMonad.Actions.RotateSome.html#filter%27"><span class="hs-identifier hs-var">filter'</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Window -&gt; Map Window RationalRect -&gt; Bool
+forall k a. Ord k =&gt; k -&gt; Map k a -&gt; Bool
+</span><span class="hs-operator hs-var">`M.notMember`</span></span><span> </span><span class="annot"><span class="annottext">WindowSet -&gt; Map Window RationalRect
+forall i l a sid sd. StackSet i l a sid sd -&gt; Map a RationalRect
+</span><span class="hs-identifier hs-var hs-var">floating</span></span><span> </span><span class="annot"><span class="annottext">WindowSet
+</span><a href="#local-6989586621679384655"><span class="hs-identifier hs-var">wset</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-keyword">of</span><span>
+</span><span id="line-117"></span><span>    </span><span class="annot"><span class="annottext">Maybe (Stack Window)
+</span><span class="hs-identifier hs-var">Nothing</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">[Window] -&gt; X [Window]
+forall (f :: * -&gt; *) a. Applicative f =&gt; a -&gt; f a
+</span><span class="hs-identifier hs-var">pure</span></span><span> </span><span class="hs-special">[</span><span class="hs-special">]</span><span>
+</span><span id="line-118"></span><span>    </span><span class="annot"><span class="hs-identifier hs-type">Just</span></span><span> </span><span id="local-6989586621679384650"><span class="annot"><span class="annottext">Stack Window
+</span><a href="#local-6989586621679384650"><span class="hs-identifier hs-var">st</span></a></span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">Stack Window -&gt; [Window] -&gt; [Window]
+</span><a href="#local-6989586621679384649"><span class="hs-identifier hs-var">go</span></a></span><span> </span><span class="annot"><span class="annottext">Stack Window
+</span><a href="#local-6989586621679384650"><span class="hs-identifier hs-var">st</span></a></span><span> </span><span class="annot"><span class="annottext">([Window] -&gt; [Window]) -&gt; X [Window] -&gt; X [Window]
+forall (f :: * -&gt; *) a b. Functor f =&gt; (a -&gt; b) -&gt; f a -&gt; f b
+</span><span class="hs-operator hs-var">&lt;$&gt;</span></span><span> </span><span class="annot"><span class="annottext">Workspace WorkspaceId (Layout Window) Window
+-&gt; Rectangle -&gt; X [Window]
+</span><a href="#local-6989586621679384647"><span class="hs-identifier hs-var">layoutWindows</span></a></span><span> </span><span class="annot"><span class="annottext">Workspace WorkspaceId (Layout Window) Window
+</span><a href="#local-6989586621679384654"><span class="hs-identifier hs-var">wsp</span></a></span><span> </span><span class="hs-special">{</span><span class="annot"><span class="annottext">stack :: Maybe (Stack Window)
+</span><span class="hs-identifier hs-var">stack</span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Stack Window -&gt; Maybe (Stack Window)
+forall a. a -&gt; Maybe a
+</span><span class="hs-identifier hs-var">Just</span></span><span> </span><span class="annot"><span class="annottext">Stack Window
+</span><a href="#local-6989586621679384650"><span class="hs-identifier hs-var">st</span></a></span><span class="hs-special">}</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">ScreenDetail -&gt; Rectangle
+</span><span class="hs-identifier hs-var hs-var">screenRect</span></span><span> </span><span class="annot"><span class="annottext">ScreenDetail
+</span><a href="#local-6989586621679384653"><span class="hs-identifier hs-var">sd</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-119"></span><span>  </span><span class="hs-keyword">where</span><span>
+</span><span id="line-120"></span><span>    </span><span class="annot"><a href="#local-6989586621679384649"><span class="hs-identifier hs-type">go</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Stack</span></span><span> </span><span class="annot"><span class="hs-identifier hs-type">Window</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="hs-special">[</span><span class="annot"><span class="hs-identifier hs-type">Window</span></span><span class="hs-special">]</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="hs-special">[</span><span class="annot"><span class="hs-identifier hs-type">Window</span></span><span class="hs-special">]</span><span>
+</span><span id="line-121"></span><span>    </span><span id="local-6989586621679384649"><span class="annot"><span class="annottext">go :: Stack Window -&gt; [Window] -&gt; [Window]
+</span><a href="#local-6989586621679384649"><span class="hs-identifier hs-var hs-var">go</span></a></span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">Stack</span></span><span> </span><span id="local-6989586621679384646"><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679384646"><span class="hs-identifier hs-var">t</span></a></span></span><span> </span><span id="local-6989586621679384645"><span class="annot"><span class="annottext">[Window]
+</span><a href="#local-6989586621679384645"><span class="hs-identifier hs-var">ls</span></a></span></span><span> </span><span id="local-6989586621679384644"><span class="annot"><span class="annottext">[Window]
+</span><a href="#local-6989586621679384644"><span class="hs-identifier hs-var">rs</span></a></span></span><span class="hs-special">)</span><span> </span><span id="local-6989586621679384643"><span class="annot"><span class="annottext">[Window]
+</span><a href="#local-6989586621679384643"><span class="hs-identifier hs-var">shown</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679384646"><span class="hs-identifier hs-var">t</span></a></span><span> </span><span class="annot"><span class="annottext">Window -&gt; [Window] -&gt; [Window]
+forall a. a -&gt; [a] -&gt; [a]
+</span><span class="hs-glyph hs-var">:</span></span><span> </span><span class="hs-special">(</span><span class="hs-special">(</span><span class="annot"><span class="annottext">[Window]
+</span><a href="#local-6989586621679384645"><span class="hs-identifier hs-var">ls</span></a></span><span> </span><span class="annot"><span class="annottext">[Window] -&gt; [Window] -&gt; [Window]
+forall a. [a] -&gt; [a] -&gt; [a]
+</span><span class="hs-operator hs-var">++</span></span><span> </span><span class="annot"><span class="annottext">[Window]
+</span><a href="#local-6989586621679384644"><span class="hs-identifier hs-var">rs</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">[Window] -&gt; [Window] -&gt; [Window]
+forall a. Eq a =&gt; [a] -&gt; [a] -&gt; [a]
+</span><span class="hs-operator hs-var">\\</span></span><span> </span><span class="annot"><span class="annottext">[Window]
+</span><a href="#local-6989586621679384643"><span class="hs-identifier hs-var">shown</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-122"></span><span>
+</span><span id="line-123"></span><span>    </span><span class="annot"><a href="#local-6989586621679384647"><span class="hs-identifier hs-type">layoutWindows</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">WindowSpace</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Rectangle</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">X</span></span><span> </span><span class="hs-special">[</span><span class="annot"><span class="hs-identifier hs-type">Window</span></span><span class="hs-special">]</span><span>
+</span><span id="line-124"></span><span>    </span><span id="local-6989586621679384647"><span class="annot"><span class="annottext">layoutWindows :: Workspace WorkspaceId (Layout Window) Window
+-&gt; Rectangle -&gt; X [Window]
+</span><a href="#local-6989586621679384647"><span class="hs-identifier hs-var hs-var">layoutWindows</span></a></span></span><span> </span><span id="local-6989586621679384642"><span class="annot"><span class="annottext">Workspace WorkspaceId (Layout Window) Window
+</span><a href="#local-6989586621679384642"><span class="hs-identifier hs-var">wsp</span></a></span></span><span> </span><span id="local-6989586621679384641"><span class="annot"><span class="annottext">Rectangle
+</span><a href="#local-6989586621679384641"><span class="hs-identifier hs-var">rect</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">((Window, Rectangle) -&gt; Window)
+-&gt; [(Window, Rectangle)] -&gt; [Window]
+forall a b. (a -&gt; b) -&gt; [a] -&gt; [b]
+</span><span class="hs-identifier hs-var">map</span></span><span> </span><span class="annot"><span class="annottext">(Window, Rectangle) -&gt; Window
+forall a b. (a, b) -&gt; a
+</span><span class="hs-identifier hs-var">fst</span></span><span> </span><span class="annot"><span class="annottext">([(Window, Rectangle)] -&gt; [Window])
+-&gt; (([(Window, Rectangle)], Maybe (Layout Window))
+    -&gt; [(Window, Rectangle)])
+-&gt; ([(Window, Rectangle)], Maybe (Layout Window))
+-&gt; [Window]
+forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">([(Window, Rectangle)], Maybe (Layout Window))
+-&gt; [(Window, Rectangle)]
+forall a b. (a, b) -&gt; a
+</span><span class="hs-identifier hs-var">fst</span></span><span> </span><span class="annot"><span class="annottext">(([(Window, Rectangle)], Maybe (Layout Window)) -&gt; [Window])
+-&gt; X ([(Window, Rectangle)], Maybe (Layout Window)) -&gt; X [Window]
+forall (f :: * -&gt; *) a b. Functor f =&gt; (a -&gt; b) -&gt; f a -&gt; f b
+</span><span class="hs-operator hs-var">&lt;$&gt;</span></span><span> </span><span class="annot"><span class="annottext">Workspace WorkspaceId (Layout Window) Window
+-&gt; Rectangle -&gt; X ([(Window, Rectangle)], Maybe (Layout Window))
+forall (layout :: * -&gt; *) a.
+LayoutClass layout a =&gt;
+Workspace WorkspaceId (layout a) a
+-&gt; Rectangle -&gt; X ([(a, Rectangle)], Maybe (layout a))
+</span><span class="hs-identifier hs-var">runLayout</span></span><span> </span><span class="annot"><span class="annottext">Workspace WorkspaceId (Layout Window) Window
+</span><a href="#local-6989586621679384642"><span class="hs-identifier hs-var">wsp</span></a></span><span> </span><span class="annot"><span class="annottext">Rectangle
+</span><a href="#local-6989586621679384641"><span class="hs-identifier hs-var">rect</span></a></span><span>
+</span><span id="line-125"></span><span>
+</span><span id="line-126"></span><span class="hs-comment">-- | Like &quot;XMonad.StackSet.filter&quot; but won't move focus.</span><span>
+</span><span id="line-127"></span><span id="local-6989586621679384740"><span class="annot"><a href="XMonad.Actions.RotateSome.html#filter%27"><span class="hs-identifier hs-type">filter'</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="hs-special">(</span><span class="annot"><a href="#local-6989586621679384740"><span class="hs-identifier hs-type">a</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Bool</span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Stack</span></span><span> </span><span class="annot"><a href="#local-6989586621679384740"><span class="hs-identifier hs-type">a</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Maybe</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">Stack</span></span><span> </span><span class="annot"><a href="#local-6989586621679384740"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">)</span></span><span>
+</span><span id="line-128"></span><span id="filter%27"><span class="annot"><span class="annottext">filter' :: (a -&gt; Bool) -&gt; Stack a -&gt; Maybe (Stack a)
+</span><a href="XMonad.Actions.RotateSome.html#filter%27"><span class="hs-identifier hs-var hs-var">filter'</span></a></span></span><span> </span><span id="local-6989586621679384640"><span class="annot"><span class="annottext">a -&gt; Bool
+</span><a href="#local-6989586621679384640"><span class="hs-identifier hs-var">p</span></a></span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">Stack</span></span><span> </span><span id="local-6989586621679384639"><span class="annot"><span class="annottext">a
+</span><a href="#local-6989586621679384639"><span class="hs-identifier hs-var">f</span></a></span></span><span> </span><span id="local-6989586621679384638"><span class="annot"><span class="annottext">[a]
+</span><a href="#local-6989586621679384638"><span class="hs-identifier hs-var">ls</span></a></span></span><span> </span><span id="local-6989586621679384637"><span class="annot"><span class="annottext">[a]
+</span><a href="#local-6989586621679384637"><span class="hs-identifier hs-var">rs</span></a></span></span><span class="hs-special">)</span><span>
+</span><span id="line-129"></span><span>  </span><span class="hs-glyph">|</span><span> </span><span class="annot"><span class="annottext">a -&gt; Bool
+</span><a href="#local-6989586621679384640"><span class="hs-identifier hs-var">p</span></a></span><span> </span><span class="annot"><span class="annottext">a
+</span><a href="#local-6989586621679384639"><span class="hs-identifier hs-var">f</span></a></span><span>       </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Stack a -&gt; Maybe (Stack a)
+forall a. a -&gt; Maybe a
+</span><span class="hs-identifier hs-var">Just</span></span><span> </span><span class="annot"><span class="annottext">(Stack a -&gt; Maybe (Stack a)) -&gt; Stack a -&gt; Maybe (Stack a)
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">a -&gt; [a] -&gt; [a] -&gt; Stack a
+forall a. a -&gt; [a] -&gt; [a] -&gt; Stack a
+</span><span class="hs-identifier hs-var">Stack</span></span><span> </span><span class="annot"><span class="annottext">a
+</span><a href="#local-6989586621679384639"><span class="hs-identifier hs-var">f</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">(a -&gt; Bool) -&gt; [a] -&gt; [a]
+forall a. (a -&gt; Bool) -&gt; [a] -&gt; [a]
+</span><span class="hs-identifier hs-var">filter</span></span><span> </span><span class="annot"><span class="annottext">a -&gt; Bool
+</span><a href="#local-6989586621679384640"><span class="hs-identifier hs-var">p</span></a></span><span> </span><span class="annot"><span class="annottext">[a]
+</span><a href="#local-6989586621679384638"><span class="hs-identifier hs-var">ls</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">(a -&gt; Bool) -&gt; [a] -&gt; [a]
+forall a. (a -&gt; Bool) -&gt; [a] -&gt; [a]
+</span><span class="hs-identifier hs-var">filter</span></span><span> </span><span class="annot"><span class="annottext">a -&gt; Bool
+</span><a href="#local-6989586621679384640"><span class="hs-identifier hs-var">p</span></a></span><span> </span><span class="annot"><span class="annottext">[a]
+</span><a href="#local-6989586621679384637"><span class="hs-identifier hs-var">rs</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-130"></span><span>  </span><span class="hs-glyph">|</span><span> </span><span class="annot"><span class="annottext">Bool
+</span><span class="hs-identifier hs-var">otherwise</span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Maybe (Stack a)
+forall a. Maybe a
+</span><span class="hs-identifier hs-var">Nothing</span></span><span>
+</span><span id="line-131"></span><span>
+</span><span id="line-132"></span><span class="hs-comment">-- |</span><span>
+</span><span id="line-133"></span><span class="hs-comment">-- @'rotateSome' p stack@ treats the elements of @stack@ that satisfy predicate</span><span>
+</span><span id="line-134"></span><span class="hs-comment">-- @p@ as a ring that can be rotated, while all other elements remain anchored</span><span>
+</span><span id="line-135"></span><span class="hs-comment">-- in place.</span><span>
+</span><span id="line-136"></span><span id="local-6989586621679384762"><span class="annot"><a href="XMonad.Actions.RotateSome.html#rotateSome"><span class="hs-identifier hs-type">rotateSome</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="hs-special">(</span><span class="annot"><a href="#local-6989586621679384762"><span class="hs-identifier hs-type">a</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Bool</span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Stack</span></span><span> </span><span class="annot"><a href="#local-6989586621679384762"><span class="hs-identifier hs-type">a</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Stack</span></span><span> </span><span class="annot"><a href="#local-6989586621679384762"><span class="hs-identifier hs-type">a</span></a></span></span><span>
+</span><span id="line-137"></span><span id="rotateSome"><span class="annot"><span class="annottext">rotateSome :: (a -&gt; Bool) -&gt; Stack a -&gt; Stack a
+</span><a href="XMonad.Actions.RotateSome.html#rotateSome"><span class="hs-identifier hs-var hs-var">rotateSome</span></a></span></span><span> </span><span id="local-6989586621679384636"><span class="annot"><span class="annottext">a -&gt; Bool
+</span><a href="#local-6989586621679384636"><span class="hs-identifier hs-var">p</span></a></span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">Stack</span></span><span> </span><span id="local-6989586621679384635"><span class="annot"><span class="annottext">a
+</span><a href="#local-6989586621679384635"><span class="hs-identifier hs-var">t</span></a></span></span><span> </span><span id="local-6989586621679384634"><span class="annot"><span class="annottext">[a]
+</span><a href="#local-6989586621679384634"><span class="hs-identifier hs-var">ls</span></a></span></span><span> </span><span id="local-6989586621679384633"><span class="annot"><span class="annottext">[a]
+</span><a href="#local-6989586621679384633"><span class="hs-identifier hs-var">rs</span></a></span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=</span><span>
+</span><span id="line-138"></span><span>  </span><span class="hs-keyword">let</span><span>
+</span><span id="line-139"></span><span>    </span><span class="hs-comment">-- Flatten the stack, index each element relative to the focused position,</span><span>
+</span><span id="line-140"></span><span>    </span><span class="hs-comment">-- then partition into movable and anchored elements.</span><span>
+</span><span id="line-141"></span><span>    </span><span class="hs-special">(</span><span id="local-6989586621679384632"><span class="annot"><span class="annottext">[(Int, a)]
+</span><a href="#local-6989586621679384632"><span class="hs-identifier hs-var">movables</span></a></span></span><span class="hs-special">,</span><span> </span><span id="local-6989586621679384631"><span class="annot"><span class="annottext">[(Int, a)]
+</span><a href="#local-6989586621679384631"><span class="hs-identifier hs-var">anchors</span></a></span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=</span><span>
+</span><span id="line-142"></span><span>      </span><span class="annot"><span class="annottext">((Int, a) -&gt; Bool) -&gt; [(Int, a)] -&gt; ([(Int, a)], [(Int, a)])
+forall a. (a -&gt; Bool) -&gt; [a] -&gt; ([a], [a])
+</span><span class="hs-identifier hs-var">partition</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">a -&gt; Bool
+</span><a href="#local-6989586621679384636"><span class="hs-identifier hs-var">p</span></a></span><span> </span><span class="annot"><span class="annottext">(a -&gt; Bool) -&gt; ((Int, a) -&gt; a) -&gt; (Int, a) -&gt; Bool
+forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">(Int, a) -&gt; a
+forall a b. (a, b) -&gt; b
+</span><span class="hs-identifier hs-var">snd</span></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">([(Int, a)] -&gt; ([(Int, a)], [(Int, a)]))
+-&gt; [(Int, a)] -&gt; ([(Int, a)], [(Int, a)])
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span>
+</span><span id="line-143"></span><span>        </span><span class="annot"><span class="annottext">[Int] -&gt; [a] -&gt; [(Int, a)]
+forall a b. [a] -&gt; [b] -&gt; [(a, b)]
+</span><span class="hs-identifier hs-var">zip</span></span><span>
+</span><span id="line-144"></span><span>          </span><span class="hs-special">[</span><span class="annot"><span class="annottext">Int -&gt; Int
+forall a. Num a =&gt; a -&gt; a
+</span><span class="hs-identifier hs-var">negate</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">[a] -&gt; Int
+forall (t :: * -&gt; *) a. Foldable t =&gt; t a -&gt; Int
+</span><span class="hs-identifier hs-var">length</span></span><span> </span><span class="annot"><span class="annottext">[a]
+</span><a href="#local-6989586621679384634"><span class="hs-identifier hs-var">ls</span></a></span><span class="hs-special">)</span><span class="hs-glyph">..</span><span class="hs-special">]</span><span>
+</span><span id="line-145"></span><span>          </span><span class="hs-special">(</span><span class="annot"><span class="annottext">[a] -&gt; [a]
+forall a. [a] -&gt; [a]
+</span><span class="hs-identifier hs-var">reverse</span></span><span> </span><span class="annot"><span class="annottext">[a]
+</span><a href="#local-6989586621679384634"><span class="hs-identifier hs-var">ls</span></a></span><span> </span><span class="annot"><span class="annottext">[a] -&gt; [a] -&gt; [a]
+forall a. [a] -&gt; [a] -&gt; [a]
+</span><span class="hs-operator hs-var">++</span></span><span> </span><span class="annot"><span class="annottext">a
+</span><a href="#local-6989586621679384635"><span class="hs-identifier hs-var">t</span></a></span><span> </span><span class="annot"><span class="annottext">a -&gt; [a] -&gt; [a]
+forall a. a -&gt; [a] -&gt; [a]
+</span><span class="hs-glyph hs-var">:</span></span><span> </span><span class="annot"><span class="annottext">[a]
+</span><a href="#local-6989586621679384633"><span class="hs-identifier hs-var">rs</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-146"></span><span>
+</span><span id="line-147"></span><span>    </span><span class="hs-comment">-- Pair each movable element with the index of its next movable neighbor.</span><span>
+</span><span id="line-148"></span><span>    </span><span class="hs-comment">-- Append anchored elements, along with their unchanged indices, and sort</span><span>
+</span><span id="line-149"></span><span>    </span><span class="hs-comment">-- by index. Separate lefts (negative indices) from the rest, and grab the</span><span>
+</span><span id="line-150"></span><span>    </span><span class="hs-comment">-- new focus from the head of the remaining elements.</span><span>
+</span><span id="line-151"></span><span>    </span><span class="hs-special">(</span><span id="local-6989586621679384628"><span class="annot"><span class="annottext">[a]
+</span><a href="#local-6989586621679384628"><span class="hs-identifier hs-var">ls'</span></a></span></span><span class="hs-special">,</span><span> </span><span id="local-6989586621679384627"><span class="annot"><span class="annottext">a
+</span><a href="#local-6989586621679384627"><span class="hs-identifier hs-var">t'</span></a></span></span><span class="annot"><span class="hs-glyph hs-type">:</span></span><span id="local-6989586621679384626"><span class="annot"><span class="annottext">[a]
+</span><a href="#local-6989586621679384626"><span class="hs-identifier hs-var">rs'</span></a></span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=</span><span>
+</span><span id="line-152"></span><span>      </span><span class="hs-special">(</span><span class="annot"><span class="annottext">((Int, a) -&gt; a) -&gt; [(Int, a)] -&gt; [a]
+forall a b. (a -&gt; b) -&gt; [a] -&gt; [b]
+</span><span class="hs-identifier hs-var">map</span></span><span> </span><span class="annot"><span class="annottext">(Int, a) -&gt; a
+forall a b. (a, b) -&gt; b
+</span><span class="hs-identifier hs-var">snd</span></span><span> </span><span class="annot"><span class="annottext">([(Int, a)] -&gt; [a])
+-&gt; ([(Int, a)] -&gt; [a]) -&gt; ([(Int, a)], [(Int, a)]) -&gt; ([a], [a])
+forall (a :: * -&gt; * -&gt; *) b c b' c'.
+Arrow a =&gt;
+a b c -&gt; a b' c' -&gt; a (b, b') (c, c')
+</span><span class="hs-operator hs-var">***</span></span><span> </span><span class="annot"><span class="annottext">((Int, a) -&gt; a) -&gt; [(Int, a)] -&gt; [a]
+forall a b. (a -&gt; b) -&gt; [a] -&gt; [b]
+</span><span class="hs-identifier hs-var">map</span></span><span> </span><span class="annot"><span class="annottext">(Int, a) -&gt; a
+forall a b. (a, b) -&gt; b
+</span><span class="hs-identifier hs-var">snd</span></span><span class="hs-special">)</span><span>
+</span><span id="line-153"></span><span>        </span><span class="annot"><span class="annottext">(([(Int, a)], [(Int, a)]) -&gt; ([a], [a]))
+-&gt; ([(Int, a)] -&gt; ([(Int, a)], [(Int, a)]))
+-&gt; [(Int, a)]
+-&gt; ([a], [a])
+forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">((Int, a) -&gt; Bool) -&gt; [(Int, a)] -&gt; ([(Int, a)], [(Int, a)])
+forall a. (a -&gt; Bool) -&gt; [a] -&gt; ([a], [a])
+</span><span class="hs-identifier hs-var">span</span></span><span> </span><span class="hs-special">(</span><span class="hs-special">(</span><span class="annot"><span class="annottext">Int -&gt; Int -&gt; Bool
+forall a. Ord a =&gt; a -&gt; a -&gt; Bool
+</span><span class="hs-operator hs-var">&lt;</span></span><span> </span><span class="annot"><span class="annottext">Int
+</span><span class="hs-number">0</span></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">(Int -&gt; Bool) -&gt; ((Int, a) -&gt; Int) -&gt; (Int, a) -&gt; Bool
+forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">(Int, a) -&gt; Int
+forall a b. (a, b) -&gt; a
+</span><span class="hs-identifier hs-var">fst</span></span><span class="hs-special">)</span><span>
+</span><span id="line-154"></span><span>        </span><span class="annot"><span class="annottext">([(Int, a)] -&gt; ([(Int, a)], [(Int, a)]))
+-&gt; ([(Int, a)] -&gt; [(Int, a)])
+-&gt; [(Int, a)]
+-&gt; ([(Int, a)], [(Int, a)])
+forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">((Int, a) -&gt; Int) -&gt; [(Int, a)] -&gt; [(Int, a)]
+forall b a. Ord b =&gt; (a -&gt; b) -&gt; [a] -&gt; [a]
+</span><span class="hs-identifier hs-var">sortOn</span></span><span> </span><span class="annot"><span class="annottext">(Int, a) -&gt; Int
+forall a b. (a, b) -&gt; a
+</span><span class="hs-identifier hs-var">fst</span></span><span>
+</span><span id="line-155"></span><span>        </span><span class="annot"><span class="annottext">([(Int, a)] -&gt; [(Int, a)])
+-&gt; ([(Int, a)] -&gt; [(Int, a)]) -&gt; [(Int, a)] -&gt; [(Int, a)]
+forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">[(Int, a)] -&gt; [(Int, a)] -&gt; [(Int, a)]
+forall a. [a] -&gt; [a] -&gt; [a]
+</span><span class="hs-operator hs-var">(++)</span></span><span> </span><span class="annot"><span class="annottext">[(Int, a)]
+</span><a href="#local-6989586621679384631"><span class="hs-identifier hs-var">anchors</span></a></span><span>
+</span><span id="line-156"></span><span>        </span><span class="annot"><span class="annottext">([(Int, a)] -&gt; ([a], [a])) -&gt; [(Int, a)] -&gt; ([a], [a])
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">((Int, a) -&gt; (Int, a) -&gt; (Int, a))
+-&gt; [(Int, a)] -&gt; [(Int, a)] -&gt; [(Int, a)]
+forall a b c. (a -&gt; b -&gt; c) -&gt; [a] -&gt; [b] -&gt; [c]
+</span><span class="hs-identifier hs-var">zipWith</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">(((Int, a), (Int, a)) -&gt; (Int, a))
+-&gt; (Int, a) -&gt; (Int, a) -&gt; (Int, a)
+forall a b c. ((a, b) -&gt; c) -&gt; a -&gt; b -&gt; c
+</span><span class="hs-identifier hs-var">curry</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">(Int, a) -&gt; Int
+forall a b. (a, b) -&gt; a
+</span><span class="hs-identifier hs-var">fst</span></span><span> </span><span class="annot"><span class="annottext">((Int, a) -&gt; Int)
+-&gt; ((Int, a) -&gt; a) -&gt; ((Int, a), (Int, a)) -&gt; (Int, a)
+forall (a :: * -&gt; * -&gt; *) b c b' c'.
+Arrow a =&gt;
+a b c -&gt; a b' c' -&gt; a (b, b') (c, c')
+</span><span class="hs-operator hs-var">***</span></span><span> </span><span class="annot"><span class="annottext">(Int, a) -&gt; a
+forall a b. (a, b) -&gt; b
+</span><span class="hs-identifier hs-var">snd</span></span><span class="hs-special">)</span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">[(Int, a)]
+</span><a href="#local-6989586621679384632"><span class="hs-identifier hs-var">movables</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">[(Int, a)] -&gt; [(Int, a)]
+forall a. [a] -&gt; [a]
+</span><a href="XMonad.Actions.RotateSome.html#rotate"><span class="hs-identifier hs-var">rotate</span></a></span><span> </span><span class="annot"><span class="annottext">[(Int, a)]
+</span><a href="#local-6989586621679384632"><span class="hs-identifier hs-var">movables</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-157"></span><span>  </span><span class="hs-keyword">in</span><span>
+</span><span id="line-158"></span><span>    </span><span class="annot"><span class="annottext">a -&gt; [a] -&gt; [a] -&gt; Stack a
+forall a. a -&gt; [a] -&gt; [a] -&gt; Stack a
+</span><span class="hs-identifier hs-var">Stack</span></span><span> </span><span class="annot"><span class="annottext">a
+</span><a href="#local-6989586621679384627"><span class="hs-identifier hs-var">t'</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">[a] -&gt; [a]
+forall a. [a] -&gt; [a]
+</span><span class="hs-identifier hs-var">reverse</span></span><span> </span><span class="annot"><span class="annottext">[a]
+</span><a href="#local-6989586621679384628"><span class="hs-identifier hs-var">ls'</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">[a]
+</span><a href="#local-6989586621679384626"><span class="hs-identifier hs-var">rs'</span></a></span><span>
+</span><span id="line-159"></span><span>
+</span><span id="line-160"></span><span id="local-6989586621679384620"><span class="annot"><a href="XMonad.Actions.RotateSome.html#rotate"><span class="hs-identifier hs-type">rotate</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="hs-special">[</span><span class="annot"><a href="#local-6989586621679384620"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">]</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="hs-special">[</span><span class="annot"><a href="#local-6989586621679384620"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">]</span></span><span>
+</span><span id="line-161"></span><span id="rotate"><span class="annot"><span class="annottext">rotate :: [a] -&gt; [a]
+</span><a href="XMonad.Actions.RotateSome.html#rotate"><span class="hs-identifier hs-var hs-var">rotate</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">([a] -&gt; [a] -&gt; [a]) -&gt; ([a], [a]) -&gt; [a]
+forall a b c. (a -&gt; b -&gt; c) -&gt; (a, b) -&gt; c
+</span><span class="hs-identifier hs-var">uncurry</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">([a] -&gt; [a] -&gt; [a]) -&gt; [a] -&gt; [a] -&gt; [a]
+forall a b c. (a -&gt; b -&gt; c) -&gt; b -&gt; a -&gt; c
+</span><span class="hs-identifier hs-var">flip</span></span><span> </span><span class="annot"><span class="annottext">[a] -&gt; [a] -&gt; [a]
+forall a. [a] -&gt; [a] -&gt; [a]
+</span><span class="hs-operator hs-var">(++)</span></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">(([a], [a]) -&gt; [a]) -&gt; ([a] -&gt; ([a], [a])) -&gt; [a] -&gt; [a]
+forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">Int -&gt; [a] -&gt; ([a], [a])
+forall a. Int -&gt; [a] -&gt; ([a], [a])
+</span><span class="hs-identifier hs-var">splitAt</span></span><span> </span><span class="annot"><span class="annottext">Int
+</span><span class="hs-number">1</span></span><span>
+</span><span id="line-162"></span></pre></body></html>

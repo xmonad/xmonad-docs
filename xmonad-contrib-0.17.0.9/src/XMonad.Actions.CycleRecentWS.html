@@ -1,0 +1,620 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd"><html xmlns="http://www.w3.org/1999/xhtml"><head><link rel="stylesheet" type="text/css" href="style.css" /><script type="text/javascript" src="highlight.js"></script></head><body><pre><span class="hs-pragma">{-# LANGUAGE CPP #-}</span><span>
+</span><span id="line-2"></span><span class="hs-pragma">{-# LANGUAGE ScopedTypeVariables #-}</span><span>
+</span><span id="line-3"></span><span class="hs-pragma">{-# LANGUAGE PatternGuards #-}</span><span>
+</span><span id="line-4"></span><span class="hs-comment">-----------------------------------------------------------------------------</span><span>
+</span><span id="line-5"></span><span class="hs-comment">-- |</span><span>
+</span><span id="line-6"></span><span class="hs-comment">-- Module      :  XMonad.Actions.CycleRecentWS</span><span>
+</span><span id="line-7"></span><span class="hs-comment">-- Description :  Cycle through most recently used workspaces.</span><span>
+</span><span id="line-8"></span><span class="hs-comment">-- Copyright   :  (c) Michal Janeczek &lt;janeczek@gmail.com&gt;</span><span>
+</span><span id="line-9"></span><span class="hs-comment">-- License     :  BSD3-style (see LICENSE)</span><span>
+</span><span id="line-10"></span><span class="hs-comment">--</span><span>
+</span><span id="line-11"></span><span class="hs-comment">-- Maintainer  :  Michal Janeczek &lt;janeczek@gmail.com&gt;</span><span>
+</span><span id="line-12"></span><span class="hs-comment">-- Stability   :  unstable</span><span>
+</span><span id="line-13"></span><span class="hs-comment">-- Portability :  unportable</span><span>
+</span><span id="line-14"></span><span class="hs-comment">--</span><span>
+</span><span id="line-15"></span><span class="hs-comment">-- Provides bindings to cycle through most recently used workspaces</span><span>
+</span><span id="line-16"></span><span class="hs-comment">-- with repeated presses of a single key (as long as modifier key is</span><span>
+</span><span id="line-17"></span><span class="hs-comment">-- held down). This is similar to how many window managers handle</span><span>
+</span><span id="line-18"></span><span class="hs-comment">-- window switching.</span><span>
+</span><span id="line-19"></span><span class="hs-comment">--</span><span>
+</span><span id="line-20"></span><span class="hs-comment">-----------------------------------------------------------------------------</span><span>
+</span><span id="line-21"></span><span>
+</span><span id="line-22"></span><span class="hs-keyword">module</span><span> </span><span class="hs-identifier">XMonad.Actions.CycleRecentWS</span><span> </span><span class="hs-special">(</span><span>
+</span><span id="line-23"></span><span>                                </span><span class="annot"><span class="hs-comment">-- * Usage</span></span><span>
+</span><span id="line-24"></span><span>                                </span><span class="annot"><span class="hs-comment">-- $usage</span></span><span>
+</span><span id="line-25"></span><span>                                </span><span class="annot"><a href="XMonad.Actions.CycleRecentWS.html#cycleRecentWS"><span class="hs-identifier">cycleRecentWS</span></a></span><span class="hs-special">,</span><span>
+</span><span id="line-26"></span><span>                                </span><span class="annot"><a href="XMonad.Actions.CycleRecentWS.html#cycleRecentNonEmptyWS"><span class="hs-identifier">cycleRecentNonEmptyWS</span></a></span><span class="hs-special">,</span><span>
+</span><span id="line-27"></span><span>                                </span><span class="annot"><a href="XMonad.Actions.CycleRecentWS.html#cycleWindowSets"><span class="hs-identifier">cycleWindowSets</span></a></span><span class="hs-special">,</span><span>
+</span><span id="line-28"></span><span>                                </span><span class="annot"><a href="XMonad.Actions.CycleRecentWS.html#toggleRecentWS"><span class="hs-identifier">toggleRecentWS</span></a></span><span class="hs-special">,</span><span>
+</span><span id="line-29"></span><span>                                </span><span class="annot"><a href="XMonad.Actions.CycleRecentWS.html#toggleRecentNonEmptyWS"><span class="hs-identifier">toggleRecentNonEmptyWS</span></a></span><span class="hs-special">,</span><span>
+</span><span id="line-30"></span><span>                                </span><span class="annot"><a href="XMonad.Actions.CycleRecentWS.html#toggleWindowSets"><span class="hs-identifier">toggleWindowSets</span></a></span><span class="hs-special">,</span><span>
+</span><span id="line-31"></span><span>                                </span><span class="annot"><a href="XMonad.Actions.CycleRecentWS.html#recentWS"><span class="hs-identifier">recentWS</span></a></span><span class="hs-special">,</span><span class="hs-cpp">
+
+#ifdef TESTING
+</span><span>                                </span><span class="hs-identifier">unView</span><span class="hs-special">,</span><span class="hs-cpp">
+#endif
+</span><span class="hs-special">)</span><span> </span><span class="hs-keyword">where</span><span>
+</span><span id="line-37"></span><span>
+</span><span id="line-38"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><span class="hs-identifier">XMonad</span></span><span> </span><span class="hs-keyword">hiding</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier">workspaces</span></span><span class="hs-special">)</span><span>
+</span><span id="line-39"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><span class="hs-identifier">XMonad.StackSet</span></span><span> </span><span class="hs-keyword">hiding</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier">filter</span></span><span class="hs-special">)</span><span>
+</span><span id="line-40"></span><span>
+</span><span id="line-41"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><span class="hs-identifier">Control.Arrow</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-operator">(&amp;&amp;&amp;)</span></span><span class="hs-special">)</span><span>
+</span><span id="line-42"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><span class="hs-identifier">Data.Function</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier">on</span></span><span class="hs-special">)</span><span>
+</span><span id="line-43"></span><span>
+</span><span id="line-44"></span><span class="hs-comment">-- $usage</span><span>
+</span><span id="line-45"></span><span class="hs-comment">-- You can use this module with the following in your @~\/.xmonad\/xmonad.hs@ file:</span><span>
+</span><span id="line-46"></span><span class="hs-comment">--</span><span>
+</span><span id="line-47"></span><span class="hs-comment">-- &gt; import XMonad.Actions.CycleRecentWS</span><span>
+</span><span id="line-48"></span><span class="hs-comment">-- &gt;</span><span>
+</span><span id="line-49"></span><span class="hs-comment">-- &gt;   , ((modm, xK_Tab), cycleRecentWS [xK_Alt_L] xK_Tab xK_grave)</span><span>
+</span><span id="line-50"></span><span class="hs-comment">--</span><span>
+</span><span id="line-51"></span><span class="hs-comment">-- For detailed instructions on editing your key bindings, see</span><span>
+</span><span id="line-52"></span><span class="hs-comment">-- &quot;XMonad.Doc.Extending#Editing_key_bindings&quot;.</span><span>
+</span><span id="line-53"></span><span>
+</span><span id="line-54"></span><span class="hs-comment">-- | Cycle through most recent workspaces with repeated presses of a key, while</span><span>
+</span><span id="line-55"></span><span class="hs-comment">--   a modifier key is held down. The recency of workspaces previewed while browsing</span><span>
+</span><span id="line-56"></span><span class="hs-comment">--   to the target workspace is not affected. That way a stack of most recently used</span><span>
+</span><span id="line-57"></span><span class="hs-comment">--   workspaces is maintained, similarly to how many window managers handle window</span><span>
+</span><span id="line-58"></span><span class="hs-comment">--   switching. For best effects use the same modkey+key combination as the one used</span><span>
+</span><span id="line-59"></span><span class="hs-comment">--   to invoke this action.</span><span>
+</span><span id="line-60"></span><span class="annot"><a href="XMonad.Actions.CycleRecentWS.html#cycleRecentWS"><span class="hs-identifier hs-type">cycleRecentWS</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="hs-special">[</span><span class="annot"><span class="hs-identifier hs-type">KeySym</span></span><span class="hs-special">]</span><span> </span><span class="hs-comment">-- ^ A list of modifier keys used when invoking this action.</span><span>
+</span><span id="line-61"></span><span>                          </span><span class="hs-comment">--   As soon as one of them is released, the final switch is made.</span><span>
+</span><span id="line-62"></span><span>              </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">KeySym</span></span><span>   </span><span class="hs-comment">-- ^ Key used to switch to next (less recent) workspace.</span><span>
+</span><span id="line-63"></span><span>              </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">KeySym</span></span><span>   </span><span class="hs-comment">-- ^ Key used to switch to previous (more recent) workspace.</span><span>
+</span><span id="line-64"></span><span>                          </span><span class="hs-comment">--   If it's the same as the nextWorkspace key, it is effectively ignored.</span><span>
+</span><span id="line-65"></span><span>              </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">X</span></span><span> </span><span class="hs-special">(</span><span class="hs-special">)</span><span>
+</span><span id="line-66"></span><span id="cycleRecentWS"><span class="annot"><span class="annottext">cycleRecentWS :: [KeySym] -&gt; KeySym -&gt; KeySym -&gt; X ()
+</span><a href="XMonad.Actions.CycleRecentWS.html#cycleRecentWS"><span class="hs-identifier hs-var hs-var">cycleRecentWS</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">(WindowSet -&gt; [WorkspaceId])
+-&gt; [KeySym] -&gt; KeySym -&gt; KeySym -&gt; X ()
+</span><a href="XMonad.Actions.CycleRecentWS.html#cycleWindowSets"><span class="hs-identifier hs-var">cycleWindowSets</span></a></span><span> </span><span class="annot"><span class="annottext">((WindowSet -&gt; [WorkspaceId])
+ -&gt; [KeySym] -&gt; KeySym -&gt; KeySym -&gt; X ())
+-&gt; (WindowSet -&gt; [WorkspaceId])
+-&gt; [KeySym]
+-&gt; KeySym
+-&gt; KeySym
+-&gt; X ()
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">(WindowSpace -&gt; Bool) -&gt; WindowSet -&gt; [WorkspaceId]
+</span><a href="XMonad.Actions.CycleRecentWS.html#recentWS"><span class="hs-identifier hs-var">recentWS</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Bool -&gt; WindowSpace -&gt; Bool
+forall a b. a -&gt; b -&gt; a
+</span><span class="hs-identifier hs-var">const</span></span><span> </span><span class="annot"><span class="annottext">Bool
+</span><span class="hs-identifier hs-var">True</span></span><span class="hs-special">)</span><span>
+</span><span id="line-67"></span><span>
+</span><span id="line-68"></span><span>
+</span><span id="line-69"></span><span class="hs-comment">-- | Like 'cycleRecentWS', but restricted to non-empty workspaces.</span><span>
+</span><span id="line-70"></span><span class="annot"><a href="XMonad.Actions.CycleRecentWS.html#cycleRecentNonEmptyWS"><span class="hs-identifier hs-type">cycleRecentNonEmptyWS</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="hs-special">[</span><span class="annot"><span class="hs-identifier hs-type">KeySym</span></span><span class="hs-special">]</span><span> </span><span class="hs-comment">-- ^ A list of modifier keys used when invoking this action.</span><span>
+</span><span id="line-71"></span><span>                                  </span><span class="hs-comment">--   As soon as one of them is released, the final switch is made.</span><span>
+</span><span id="line-72"></span><span>                      </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">KeySym</span></span><span>   </span><span class="hs-comment">-- ^ Key used to switch to next (less recent) workspace.</span><span>
+</span><span id="line-73"></span><span>                      </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">KeySym</span></span><span>   </span><span class="hs-comment">-- ^ Key used to switch to previous (more recent) workspace.</span><span>
+</span><span id="line-74"></span><span>                                  </span><span class="hs-comment">--   If it's the same as the nextWorkspace key, it is effectively ignored.</span><span>
+</span><span id="line-75"></span><span>                      </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">X</span></span><span> </span><span class="hs-special">(</span><span class="hs-special">)</span><span>
+</span><span id="line-76"></span><span id="cycleRecentNonEmptyWS"><span class="annot"><span class="annottext">cycleRecentNonEmptyWS :: [KeySym] -&gt; KeySym -&gt; KeySym -&gt; X ()
+</span><a href="XMonad.Actions.CycleRecentWS.html#cycleRecentNonEmptyWS"><span class="hs-identifier hs-var hs-var">cycleRecentNonEmptyWS</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">(WindowSet -&gt; [WorkspaceId])
+-&gt; [KeySym] -&gt; KeySym -&gt; KeySym -&gt; X ()
+</span><a href="XMonad.Actions.CycleRecentWS.html#cycleWindowSets"><span class="hs-identifier hs-var">cycleWindowSets</span></a></span><span> </span><span class="annot"><span class="annottext">((WindowSet -&gt; [WorkspaceId])
+ -&gt; [KeySym] -&gt; KeySym -&gt; KeySym -&gt; X ())
+-&gt; (WindowSet -&gt; [WorkspaceId])
+-&gt; [KeySym]
+-&gt; KeySym
+-&gt; KeySym
+-&gt; X ()
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">(WindowSpace -&gt; Bool) -&gt; WindowSet -&gt; [WorkspaceId]
+</span><a href="XMonad.Actions.CycleRecentWS.html#recentWS"><span class="hs-identifier hs-var">recentWS</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Bool -&gt; Bool
+</span><span class="hs-identifier hs-var">not</span></span><span> </span><span class="annot"><span class="annottext">(Bool -&gt; Bool) -&gt; (WindowSpace -&gt; Bool) -&gt; WindowSpace -&gt; Bool
+forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">Maybe (Stack KeySym) -&gt; Bool
+forall (t :: * -&gt; *) a. Foldable t =&gt; t a -&gt; Bool
+</span><span class="hs-identifier hs-var">null</span></span><span> </span><span class="annot"><span class="annottext">(Maybe (Stack KeySym) -&gt; Bool)
+-&gt; (WindowSpace -&gt; Maybe (Stack KeySym)) -&gt; WindowSpace -&gt; Bool
+forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">WindowSpace -&gt; Maybe (Stack KeySym)
+forall i l a. Workspace i l a -&gt; Maybe (Stack a)
+</span><span class="hs-identifier hs-var hs-var">stack</span></span><span class="hs-special">)</span><span>
+</span><span id="line-77"></span><span>
+</span><span id="line-78"></span><span>
+</span><span id="line-79"></span><span class="hs-comment">-- | Switch to the most recent workspace. The stack of most recently used workspaces</span><span>
+</span><span id="line-80"></span><span class="hs-comment">-- is updated, so repeated use toggles between a pair of workspaces.</span><span>
+</span><span id="line-81"></span><span class="annot"><a href="XMonad.Actions.CycleRecentWS.html#toggleRecentWS"><span class="hs-identifier hs-type">toggleRecentWS</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">X</span></span><span> </span><span class="hs-special">(</span><span class="hs-special">)</span><span>
+</span><span id="line-82"></span><span id="toggleRecentWS"><span class="annot"><span class="annottext">toggleRecentWS :: X ()
+</span><a href="XMonad.Actions.CycleRecentWS.html#toggleRecentWS"><span class="hs-identifier hs-var hs-var">toggleRecentWS</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">(WindowSet -&gt; [WorkspaceId]) -&gt; X ()
+</span><a href="XMonad.Actions.CycleRecentWS.html#toggleWindowSets"><span class="hs-identifier hs-var">toggleWindowSets</span></a></span><span> </span><span class="annot"><span class="annottext">((WindowSet -&gt; [WorkspaceId]) -&gt; X ())
+-&gt; (WindowSet -&gt; [WorkspaceId]) -&gt; X ()
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">(WindowSpace -&gt; Bool) -&gt; WindowSet -&gt; [WorkspaceId]
+</span><a href="XMonad.Actions.CycleRecentWS.html#recentWS"><span class="hs-identifier hs-var">recentWS</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Bool -&gt; WindowSpace -&gt; Bool
+forall a b. a -&gt; b -&gt; a
+</span><span class="hs-identifier hs-var">const</span></span><span> </span><span class="annot"><span class="annottext">Bool
+</span><span class="hs-identifier hs-var">True</span></span><span class="hs-special">)</span><span>
+</span><span id="line-83"></span><span>
+</span><span id="line-84"></span><span>
+</span><span id="line-85"></span><span class="hs-comment">-- | Like 'toggleRecentWS', but restricted to non-empty workspaces.</span><span>
+</span><span id="line-86"></span><span class="annot"><a href="XMonad.Actions.CycleRecentWS.html#toggleRecentNonEmptyWS"><span class="hs-identifier hs-type">toggleRecentNonEmptyWS</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">X</span></span><span> </span><span class="hs-special">(</span><span class="hs-special">)</span><span>
+</span><span id="line-87"></span><span id="toggleRecentNonEmptyWS"><span class="annot"><span class="annottext">toggleRecentNonEmptyWS :: X ()
+</span><a href="XMonad.Actions.CycleRecentWS.html#toggleRecentNonEmptyWS"><span class="hs-identifier hs-var hs-var">toggleRecentNonEmptyWS</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">(WindowSet -&gt; [WorkspaceId]) -&gt; X ()
+</span><a href="XMonad.Actions.CycleRecentWS.html#toggleWindowSets"><span class="hs-identifier hs-var">toggleWindowSets</span></a></span><span> </span><span class="annot"><span class="annottext">((WindowSet -&gt; [WorkspaceId]) -&gt; X ())
+-&gt; (WindowSet -&gt; [WorkspaceId]) -&gt; X ()
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">(WindowSpace -&gt; Bool) -&gt; WindowSet -&gt; [WorkspaceId]
+</span><a href="XMonad.Actions.CycleRecentWS.html#recentWS"><span class="hs-identifier hs-var">recentWS</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Bool -&gt; Bool
+</span><span class="hs-identifier hs-var">not</span></span><span> </span><span class="annot"><span class="annottext">(Bool -&gt; Bool) -&gt; (WindowSpace -&gt; Bool) -&gt; WindowSpace -&gt; Bool
+forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">Maybe (Stack KeySym) -&gt; Bool
+forall (t :: * -&gt; *) a. Foldable t =&gt; t a -&gt; Bool
+</span><span class="hs-identifier hs-var">null</span></span><span> </span><span class="annot"><span class="annottext">(Maybe (Stack KeySym) -&gt; Bool)
+-&gt; (WindowSpace -&gt; Maybe (Stack KeySym)) -&gt; WindowSpace -&gt; Bool
+forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">WindowSpace -&gt; Maybe (Stack KeySym)
+forall i l a. Workspace i l a -&gt; Maybe (Stack a)
+</span><span class="hs-identifier hs-var hs-var">stack</span></span><span class="hs-special">)</span><span>
+</span><span id="line-88"></span><span>
+</span><span id="line-89"></span><span>
+</span><span id="line-90"></span><span class="hs-comment">-- | Given a predicate @p@ and the current 'WindowSet' @w@, create a</span><span>
+</span><span id="line-91"></span><span class="hs-comment">-- list of workspaces to choose from. They are ordered by recency and</span><span>
+</span><span id="line-92"></span><span class="hs-comment">-- have to satisfy @p@.</span><span>
+</span><span id="line-93"></span><span class="annot"><a href="XMonad.Actions.CycleRecentWS.html#recentWS"><span class="hs-identifier hs-type">recentWS</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">WindowSpace</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Bool</span></span><span class="hs-special">)</span><span> </span><span class="hs-comment">-- ^ A workspace predicate.</span><span>
+</span><span id="line-94"></span><span>         </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">WindowSet</span></span><span>             </span><span class="hs-comment">-- ^ The current WindowSet</span><span>
+</span><span id="line-95"></span><span>         </span><span class="hs-glyph">-&gt;</span><span> </span><span class="hs-special">[</span><span class="annot"><span class="hs-identifier hs-type">WorkspaceId</span></span><span class="hs-special">]</span><span>
+</span><span id="line-96"></span><span id="recentWS"><span class="annot"><span class="annottext">recentWS :: (WindowSpace -&gt; Bool) -&gt; WindowSet -&gt; [WorkspaceId]
+</span><a href="XMonad.Actions.CycleRecentWS.html#recentWS"><span class="hs-identifier hs-var hs-var">recentWS</span></a></span></span><span> </span><span id="local-6989586621679358499"><span class="annot"><span class="annottext">WindowSpace -&gt; Bool
+</span><a href="#local-6989586621679358499"><span class="hs-identifier hs-var">p</span></a></span></span><span> </span><span id="local-6989586621679358498"><span class="annot"><span class="annottext">WindowSet
+</span><a href="#local-6989586621679358498"><span class="hs-identifier hs-var">w</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">(WindowSpace -&gt; WorkspaceId) -&gt; [WindowSpace] -&gt; [WorkspaceId]
+forall a b. (a -&gt; b) -&gt; [a] -&gt; [b]
+</span><span class="hs-identifier hs-var">map</span></span><span> </span><span class="annot"><span class="annottext">WindowSpace -&gt; WorkspaceId
+forall i l a. Workspace i l a -&gt; i
+</span><span class="hs-identifier hs-var hs-var">tag</span></span><span>
+</span><span id="line-97"></span><span>             </span><span class="annot"><span class="annottext">([WindowSpace] -&gt; [WorkspaceId]) -&gt; [WindowSpace] -&gt; [WorkspaceId]
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">(WindowSpace -&gt; Bool) -&gt; [WindowSpace] -&gt; [WindowSpace]
+forall a. (a -&gt; Bool) -&gt; [a] -&gt; [a]
+</span><span class="hs-identifier hs-var">filter</span></span><span> </span><span class="annot"><span class="annottext">WindowSpace -&gt; Bool
+</span><a href="#local-6989586621679358499"><span class="hs-identifier hs-var">p</span></a></span><span>
+</span><span id="line-98"></span><span>             </span><span class="annot"><span class="annottext">([WindowSpace] -&gt; [WindowSpace]) -&gt; [WindowSpace] -&gt; [WindowSpace]
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">(Screen WorkspaceId (Layout KeySym) KeySym ScreenId ScreenDetail
+ -&gt; WindowSpace)
+-&gt; [Screen
+      WorkspaceId (Layout KeySym) KeySym ScreenId ScreenDetail]
+-&gt; [WindowSpace]
+forall a b. (a -&gt; b) -&gt; [a] -&gt; [b]
+</span><span class="hs-identifier hs-var">map</span></span><span> </span><span class="annot"><span class="annottext">Screen WorkspaceId (Layout KeySym) KeySym ScreenId ScreenDetail
+-&gt; WindowSpace
+forall i l a sid sd. Screen i l a sid sd -&gt; Workspace i l a
+</span><span class="hs-identifier hs-var hs-var">workspace</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">WindowSet
+-&gt; [Screen
+      WorkspaceId (Layout KeySym) KeySym ScreenId ScreenDetail]
+forall i l a sid sd. StackSet i l a sid sd -&gt; [Screen i l a sid sd]
+</span><span class="hs-identifier hs-var hs-var">visible</span></span><span> </span><span class="annot"><span class="annottext">WindowSet
+</span><a href="#local-6989586621679358498"><span class="hs-identifier hs-var">w</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-99"></span><span>               </span><span class="annot"><span class="annottext">[WindowSpace] -&gt; [WindowSpace] -&gt; [WindowSpace]
+forall a. [a] -&gt; [a] -&gt; [a]
+</span><span class="hs-operator hs-var">++</span></span><span> </span><span class="annot"><span class="annottext">WindowSet -&gt; [WindowSpace]
+forall i l a sid sd. StackSet i l a sid sd -&gt; [Workspace i l a]
+</span><span class="hs-identifier hs-var hs-var">hidden</span></span><span> </span><span class="annot"><span class="annottext">WindowSet
+</span><a href="#local-6989586621679358498"><span class="hs-identifier hs-var">w</span></a></span><span>
+</span><span id="line-100"></span><span>               </span><span class="annot"><span class="annottext">[WindowSpace] -&gt; [WindowSpace] -&gt; [WindowSpace]
+forall a. [a] -&gt; [a] -&gt; [a]
+</span><span class="hs-operator hs-var">++</span></span><span> </span><span class="hs-special">[</span><span class="annot"><span class="annottext">Screen WorkspaceId (Layout KeySym) KeySym ScreenId ScreenDetail
+-&gt; WindowSpace
+forall i l a sid sd. Screen i l a sid sd -&gt; Workspace i l a
+</span><span class="hs-identifier hs-var hs-var">workspace</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">WindowSet
+-&gt; Screen WorkspaceId (Layout KeySym) KeySym ScreenId ScreenDetail
+forall i l a sid sd. StackSet i l a sid sd -&gt; Screen i l a sid sd
+</span><span class="hs-identifier hs-var hs-var">current</span></span><span> </span><span class="annot"><span class="annottext">WindowSet
+</span><a href="#local-6989586621679358498"><span class="hs-identifier hs-var">w</span></a></span><span class="hs-special">)</span><span class="hs-special">]</span><span>
+</span><span id="line-101"></span><span>
+</span><span id="line-102"></span><span class="hs-comment">-- | Cycle through a finite list of workspaces with repeated presses of a key, while</span><span>
+</span><span id="line-103"></span><span class="hs-comment">--   a modifier key is held down. For best effects use the same modkey+key combination</span><span>
+</span><span id="line-104"></span><span class="hs-comment">--   as the one used to invoke this action.</span><span>
+</span><span id="line-105"></span><span class="annot"><a href="XMonad.Actions.CycleRecentWS.html#cycleWindowSets"><span class="hs-identifier hs-type">cycleWindowSets</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">WindowSet</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="hs-special">[</span><span class="annot"><span class="hs-identifier hs-type">WorkspaceId</span></span><span class="hs-special">]</span><span class="hs-special">)</span><span> </span><span class="hs-comment">-- ^ A function used to create a list of workspaces to choose from</span><span>
+</span><span id="line-106"></span><span>                </span><span class="hs-glyph">-&gt;</span><span> </span><span class="hs-special">[</span><span class="annot"><span class="hs-identifier hs-type">KeySym</span></span><span class="hs-special">]</span><span>                     </span><span class="hs-comment">-- ^ A list of modifier keys used when invoking this action.</span><span>
+</span><span id="line-107"></span><span>                                                </span><span class="hs-comment">--   As soon as one of them is released, the final workspace is chosen and the action exits.</span><span>
+</span><span id="line-108"></span><span>                </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">KeySym</span></span><span>                       </span><span class="hs-comment">-- ^ Key used to preview next workspace from the list of generated options</span><span>
+</span><span id="line-109"></span><span>                </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">KeySym</span></span><span>                       </span><span class="hs-comment">-- ^ Key used to preview previous workspace from the list of generated options.</span><span>
+</span><span id="line-110"></span><span>                                                </span><span class="hs-comment">--   If it's the same as nextOption key, it is effectively ignored.</span><span>
+</span><span id="line-111"></span><span>                </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">X</span></span><span> </span><span class="hs-special">(</span><span class="hs-special">)</span><span>
+</span><span id="line-112"></span><span id="cycleWindowSets"><span class="annot"><span class="annottext">cycleWindowSets :: (WindowSet -&gt; [WorkspaceId])
+-&gt; [KeySym] -&gt; KeySym -&gt; KeySym -&gt; X ()
+</span><a href="XMonad.Actions.CycleRecentWS.html#cycleWindowSets"><span class="hs-identifier hs-var hs-var">cycleWindowSets</span></a></span></span><span> </span><span id="local-6989586621679358492"><span class="annot"><span class="annottext">WindowSet -&gt; [WorkspaceId]
+</span><a href="#local-6989586621679358492"><span class="hs-identifier hs-var">genOptions</span></a></span></span><span> </span><span id="local-6989586621679358491"><span class="annot"><span class="annottext">[KeySym]
+</span><a href="#local-6989586621679358491"><span class="hs-identifier hs-var">mods</span></a></span></span><span> </span><span id="local-6989586621679358490"><span class="annot"><span class="annottext">KeySym
+</span><a href="#local-6989586621679358490"><span class="hs-identifier hs-var">keyNext</span></a></span></span><span> </span><span id="local-6989586621679358489"><span class="annot"><span class="annottext">KeySym
+</span><a href="#local-6989586621679358489"><span class="hs-identifier hs-var">keyPrev</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-113"></span><span>  </span><span class="hs-special">(</span><span id="local-6989586621679358488"><span class="annot"><span class="annottext">[WorkspaceId]
+</span><a href="#local-6989586621679358488"><span class="hs-identifier hs-var">options</span></a></span></span><span class="hs-special">,</span><span> </span><span id="local-6989586621679358487"><span class="annot"><span class="annottext">WindowSet -&gt; WindowSet
+</span><a href="#local-6989586621679358487"><span class="hs-identifier hs-var">unView'</span></a></span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">(XState -&gt; ([WorkspaceId], WindowSet -&gt; WindowSet))
+-&gt; X ([WorkspaceId], WindowSet -&gt; WindowSet)
+forall s (m :: * -&gt; *) a. MonadState s m =&gt; (s -&gt; a) -&gt; m a
+</span><span class="hs-identifier hs-var">gets</span></span><span> </span><span class="annot"><span class="annottext">((XState -&gt; ([WorkspaceId], WindowSet -&gt; WindowSet))
+ -&gt; X ([WorkspaceId], WindowSet -&gt; WindowSet))
+-&gt; (XState -&gt; ([WorkspaceId], WindowSet -&gt; WindowSet))
+-&gt; X ([WorkspaceId], WindowSet -&gt; WindowSet)
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">WindowSet -&gt; [WorkspaceId]
+</span><a href="#local-6989586621679358492"><span class="hs-identifier hs-var">genOptions</span></a></span><span> </span><span class="annot"><span class="annottext">(WindowSet -&gt; [WorkspaceId])
+-&gt; (WindowSet -&gt; WindowSet -&gt; WindowSet)
+-&gt; WindowSet
+-&gt; ([WorkspaceId], WindowSet -&gt; WindowSet)
+forall (a :: * -&gt; * -&gt; *) b c c'.
+Arrow a =&gt;
+a b c -&gt; a b c' -&gt; a b (c, c')
+</span><span class="hs-operator hs-var">&amp;&amp;&amp;</span></span><span> </span><span class="annot"><span class="annottext">WindowSet -&gt; WindowSet -&gt; WindowSet
+forall i l a s sd.
+(Eq i, Eq s) =&gt;
+StackSet i l a s sd -&gt; StackSet i l a s sd -&gt; StackSet i l a s sd
+</span><a href="XMonad.Actions.CycleRecentWS.html#unView"><span class="hs-identifier hs-var">unView</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">(WindowSet -&gt; ([WorkspaceId], WindowSet -&gt; WindowSet))
+-&gt; (XState -&gt; WindowSet)
+-&gt; XState
+-&gt; ([WorkspaceId], WindowSet -&gt; WindowSet)
+forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">XState -&gt; WindowSet
+</span><span class="hs-identifier hs-var hs-var">windowset</span></span><span>
+</span><span id="line-114"></span><span>  </span><span class="annot"><span class="hs-identifier hs-type">XConf</span></span><span> </span><span class="hs-special">{</span><span class="annot"><span class="annottext">theRoot :: XConf -&gt; KeySym
+</span><span class="hs-identifier hs-var">theRoot</span></span><span> </span><span class="hs-glyph">=</span><span> </span><span id="local-6989586621679358481"><span class="annot"><span class="annottext">KeySym
+</span><a href="#local-6989586621679358481"><span class="hs-identifier hs-var">root</span></a></span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">display :: XConf -&gt; Display
+</span><span class="hs-identifier hs-var">display</span></span><span> </span><span class="hs-glyph">=</span><span> </span><span id="local-6989586621679358479"><span class="annot"><span class="annottext">Display
+</span><a href="#local-6989586621679358479"><span class="hs-identifier hs-var">d</span></a></span></span><span class="hs-special">}</span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">X XConf
+forall r (m :: * -&gt; *). MonadReader r m =&gt; m r
+</span><span class="hs-identifier hs-var">ask</span></span><span>
+</span><span id="line-115"></span><span>  </span><span class="hs-keyword">let</span><span> </span><span id="local-6989586621679358466"><span class="annot"><span class="annottext">event :: IO (EventType, KeySym)
+</span><a href="#local-6989586621679358466"><span class="hs-identifier hs-var hs-var">event</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">(XEventPtr -&gt; IO (EventType, KeySym)) -&gt; IO (EventType, KeySym)
+forall a. (XEventPtr -&gt; IO a) -&gt; IO a
+</span><span class="hs-identifier hs-var">allocaXEvent</span></span><span> </span><span class="annot"><span class="annottext">((XEventPtr -&gt; IO (EventType, KeySym)) -&gt; IO (EventType, KeySym))
+-&gt; (XEventPtr -&gt; IO (EventType, KeySym)) -&gt; IO (EventType, KeySym)
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="hs-glyph">\</span><span id="local-6989586621679358464"><span class="annot"><span class="annottext">XEventPtr
+</span><a href="#local-6989586621679358464"><span class="hs-identifier hs-var">p</span></a></span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-116"></span><span>                </span><span class="annot"><span class="annottext">Display -&gt; KeySym -&gt; XEventPtr -&gt; IO ()
+</span><span class="hs-identifier hs-var">maskEvent</span></span><span> </span><span class="annot"><span class="annottext">Display
+</span><a href="#local-6989586621679358479"><span class="hs-identifier hs-var">d</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">KeySym
+</span><span class="hs-identifier hs-var">keyPressMask</span></span><span> </span><span class="annot"><span class="annottext">KeySym -&gt; KeySym -&gt; KeySym
+forall a. Bits a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-operator hs-var">.|.</span></span><span> </span><span class="annot"><span class="annottext">KeySym
+</span><span class="hs-identifier hs-var">keyReleaseMask</span></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">XEventPtr
+</span><a href="#local-6989586621679358464"><span class="hs-identifier hs-var">p</span></a></span><span>
+</span><span id="line-117"></span><span>                </span><span class="annot"><span class="hs-identifier hs-type">KeyEvent</span></span><span> </span><span class="hs-special">{</span><span class="annot"><span class="annottext">ev_event_type :: Event -&gt; EventType
+</span><span class="hs-identifier hs-var">ev_event_type</span></span><span> </span><span class="hs-glyph">=</span><span> </span><span id="local-6989586621679358457"><span class="annot"><span class="annottext">EventType
+</span><a href="#local-6989586621679358457"><span class="hs-identifier hs-var">t</span></a></span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">ev_keycode :: Event -&gt; KeyCode
+</span><span class="hs-identifier hs-var">ev_keycode</span></span><span> </span><span class="hs-glyph">=</span><span> </span><span id="local-6989586621679358455"><span class="annot"><span class="annottext">KeyCode
+</span><a href="#local-6989586621679358455"><span class="hs-identifier hs-var">c</span></a></span></span><span class="hs-special">}</span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">XEventPtr -&gt; IO Event
+</span><span class="hs-identifier hs-var">getEvent</span></span><span> </span><span class="annot"><span class="annottext">XEventPtr
+</span><a href="#local-6989586621679358464"><span class="hs-identifier hs-var">p</span></a></span><span>
+</span><span id="line-118"></span><span>                </span><span id="local-6989586621679358453"><span class="annot"><span class="annottext">KeySym
+</span><a href="#local-6989586621679358453"><span class="hs-identifier hs-var">s</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">Display -&gt; KeyCode -&gt; CInt -&gt; IO KeySym
+</span><span class="hs-identifier hs-var">keycodeToKeysym</span></span><span> </span><span class="annot"><span class="annottext">Display
+</span><a href="#local-6989586621679358479"><span class="hs-identifier hs-var">d</span></a></span><span> </span><span class="annot"><span class="annottext">KeyCode
+</span><a href="#local-6989586621679358455"><span class="hs-identifier hs-var">c</span></a></span><span> </span><span class="annot"><span class="annottext">CInt
+</span><span class="hs-number">0</span></span><span>
+</span><span id="line-119"></span><span>                </span><span class="annot"><span class="annottext">(EventType, KeySym) -&gt; IO (EventType, KeySym)
+forall (m :: * -&gt; *) a. Monad m =&gt; a -&gt; m a
+</span><span class="hs-identifier hs-var">return</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">EventType
+</span><a href="#local-6989586621679358457"><span class="hs-identifier hs-var">t</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">KeySym
+</span><a href="#local-6989586621679358453"><span class="hs-identifier hs-var">s</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-120"></span><span>  </span><span class="hs-keyword">let</span><span> </span><span id="local-6989586621679358429"><span class="annot"><span class="annottext">setOption :: Int -&gt; X ()
+</span><a href="#local-6989586621679358429"><span class="hs-identifier hs-var hs-var">setOption</span></a></span></span><span> </span><span id="local-6989586621679358428"><span class="annot"><span class="annottext">Int
+</span><a href="#local-6989586621679358428"><span class="hs-identifier hs-var">n</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-keyword">do</span><span> </span><span class="annot"><span class="annottext">(WindowSet -&gt; WindowSet) -&gt; X ()
+</span><span class="hs-identifier hs-var">windows</span></span><span> </span><span class="annot"><span class="annottext">((WindowSet -&gt; WindowSet) -&gt; X ())
+-&gt; (WindowSet -&gt; WindowSet) -&gt; X ()
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">WorkspaceId -&gt; WindowSet -&gt; WindowSet
+forall s i l a sd.
+(Eq s, Eq i) =&gt;
+i -&gt; StackSet i l a s sd -&gt; StackSet i l a s sd
+</span><span class="hs-identifier hs-var">view</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">[WorkspaceId]
+</span><a href="#local-6989586621679358488"><span class="hs-identifier hs-var">options</span></a></span><span> </span><span class="annot"><span class="annottext">[WorkspaceId] -&gt; Int -&gt; WorkspaceId
+forall a. [a] -&gt; Int -&gt; a
+</span><a href="#local-6989586621679358425"><span class="hs-operator hs-var">`cycref`</span></a></span><span> </span><span class="annot"><span class="annottext">Int
+</span><a href="#local-6989586621679358428"><span class="hs-identifier hs-var">n</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">(WindowSet -&gt; WindowSet)
+-&gt; (WindowSet -&gt; WindowSet) -&gt; WindowSet -&gt; WindowSet
+forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">WindowSet -&gt; WindowSet
+</span><a href="#local-6989586621679358487"><span class="hs-identifier hs-var">unView'</span></a></span><span>
+</span><span id="line-121"></span><span>                       </span><span class="hs-special">(</span><span id="local-6989586621679358424"><span class="annot"><span class="annottext">EventType
+</span><a href="#local-6989586621679358424"><span class="hs-identifier hs-var">t</span></a></span></span><span class="hs-special">,</span><span> </span><span id="local-6989586621679358423"><span class="annot"><span class="annottext">KeySym
+</span><a href="#local-6989586621679358423"><span class="hs-identifier hs-var">s</span></a></span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">IO (EventType, KeySym) -&gt; X (EventType, KeySym)
+forall (m :: * -&gt; *) a. MonadIO m =&gt; IO a -&gt; m a
+</span><span class="hs-identifier hs-var">io</span></span><span> </span><span class="annot"><span class="annottext">IO (EventType, KeySym)
+</span><a href="#local-6989586621679358466"><span class="hs-identifier hs-var">event</span></a></span><span>
+</span><span id="line-122"></span><span>                       </span><span class="hs-keyword">case</span><span> </span><span class="hs-special">(</span><span class="hs-special">)</span><span> </span><span class="hs-keyword">of</span><span>
+</span><span id="line-123"></span><span>                         </span><span class="hs-special">(</span><span class="hs-special">)</span><span> </span><span class="hs-glyph">|</span><span> </span><span class="annot"><span class="annottext">EventType
+</span><a href="#local-6989586621679358424"><span class="hs-identifier hs-var">t</span></a></span><span> </span><span class="annot"><span class="annottext">EventType -&gt; EventType -&gt; Bool
+forall a. Eq a =&gt; a -&gt; a -&gt; Bool
+</span><span class="hs-operator hs-var">==</span></span><span> </span><span class="annot"><span class="annottext">EventType
+</span><span class="hs-identifier hs-var">keyPress</span></span><span>   </span><span class="annot"><span class="annottext">Bool -&gt; Bool -&gt; Bool
+</span><span class="hs-operator hs-var">&amp;&amp;</span></span><span> </span><span class="annot"><span class="annottext">KeySym
+</span><a href="#local-6989586621679358423"><span class="hs-identifier hs-var">s</span></a></span><span> </span><span class="annot"><span class="annottext">KeySym -&gt; KeySym -&gt; Bool
+forall a. Eq a =&gt; a -&gt; a -&gt; Bool
+</span><span class="hs-operator hs-var">==</span></span><span> </span><span class="annot"><span class="annottext">KeySym
+</span><a href="#local-6989586621679358490"><span class="hs-identifier hs-var">keyNext</span></a></span><span>  </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">Int -&gt; X ()
+</span><a href="#local-6989586621679358429"><span class="hs-identifier hs-var">setOption</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Int
+</span><a href="#local-6989586621679358428"><span class="hs-identifier hs-var">n</span></a></span><span class="annot"><span class="annottext">Int -&gt; Int -&gt; Int
+forall a. Num a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-operator hs-var">+</span></span><span class="annot"><span class="annottext">Int
+</span><span class="hs-number">1</span></span><span class="hs-special">)</span><span>
+</span><span id="line-124"></span><span>                            </span><span class="hs-glyph">|</span><span> </span><span class="annot"><span class="annottext">EventType
+</span><a href="#local-6989586621679358424"><span class="hs-identifier hs-var">t</span></a></span><span> </span><span class="annot"><span class="annottext">EventType -&gt; EventType -&gt; Bool
+forall a. Eq a =&gt; a -&gt; a -&gt; Bool
+</span><span class="hs-operator hs-var">==</span></span><span> </span><span class="annot"><span class="annottext">EventType
+</span><span class="hs-identifier hs-var">keyPress</span></span><span>   </span><span class="annot"><span class="annottext">Bool -&gt; Bool -&gt; Bool
+</span><span class="hs-operator hs-var">&amp;&amp;</span></span><span> </span><span class="annot"><span class="annottext">KeySym
+</span><a href="#local-6989586621679358423"><span class="hs-identifier hs-var">s</span></a></span><span> </span><span class="annot"><span class="annottext">KeySym -&gt; KeySym -&gt; Bool
+forall a. Eq a =&gt; a -&gt; a -&gt; Bool
+</span><span class="hs-operator hs-var">==</span></span><span> </span><span class="annot"><span class="annottext">KeySym
+</span><a href="#local-6989586621679358489"><span class="hs-identifier hs-var">keyPrev</span></a></span><span>  </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">Int -&gt; X ()
+</span><a href="#local-6989586621679358429"><span class="hs-identifier hs-var">setOption</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Int
+</span><a href="#local-6989586621679358428"><span class="hs-identifier hs-var">n</span></a></span><span class="annot"><span class="annottext">Int -&gt; Int -&gt; Int
+forall a. Num a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-glyph hs-var">-</span></span><span class="annot"><span class="annottext">Int
+</span><span class="hs-number">1</span></span><span class="hs-special">)</span><span>
+</span><span id="line-125"></span><span>                            </span><span class="hs-glyph">|</span><span> </span><span class="annot"><span class="annottext">EventType
+</span><a href="#local-6989586621679358424"><span class="hs-identifier hs-var">t</span></a></span><span> </span><span class="annot"><span class="annottext">EventType -&gt; EventType -&gt; Bool
+forall a. Eq a =&gt; a -&gt; a -&gt; Bool
+</span><span class="hs-operator hs-var">==</span></span><span> </span><span class="annot"><span class="annottext">EventType
+</span><span class="hs-identifier hs-var">keyRelease</span></span><span> </span><span class="annot"><span class="annottext">Bool -&gt; Bool -&gt; Bool
+</span><span class="hs-operator hs-var">&amp;&amp;</span></span><span> </span><span class="annot"><span class="annottext">KeySym
+</span><a href="#local-6989586621679358423"><span class="hs-identifier hs-var">s</span></a></span><span> </span><span class="annot"><span class="annottext">KeySym -&gt; [KeySym] -&gt; Bool
+forall (t :: * -&gt; *) a. (Foldable t, Eq a) =&gt; a -&gt; t a -&gt; Bool
+</span><span class="hs-operator hs-var">`elem`</span></span><span> </span><span class="annot"><span class="annottext">[KeySym]
+</span><a href="#local-6989586621679358491"><span class="hs-identifier hs-var">mods</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">() -&gt; X ()
+forall (m :: * -&gt; *) a. Monad m =&gt; a -&gt; m a
+</span><span class="hs-identifier hs-var">return</span></span><span> </span><span class="hs-special">(</span><span class="hs-special">)</span><span>
+</span><span id="line-126"></span><span>                            </span><span class="hs-glyph">|</span><span> </span><span class="annot"><span class="annottext">Bool
+</span><span class="hs-identifier hs-var">otherwise</span></span><span>                        </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">Int -&gt; X ()
+</span><a href="#local-6989586621679358429"><span class="hs-identifier hs-var">setOption</span></a></span><span> </span><span class="annot"><span class="annottext">Int
+</span><a href="#local-6989586621679358428"><span class="hs-identifier hs-var">n</span></a></span><span>
+</span><span id="line-127"></span><span>  </span><span class="annot"><span class="annottext">IO CInt -&gt; X CInt
+forall (m :: * -&gt; *) a. MonadIO m =&gt; IO a -&gt; m a
+</span><span class="hs-identifier hs-var">io</span></span><span> </span><span class="annot"><span class="annottext">(IO CInt -&gt; X CInt) -&gt; IO CInt -&gt; X CInt
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">Display -&gt; KeySym -&gt; Bool -&gt; CInt -&gt; CInt -&gt; KeySym -&gt; IO CInt
+</span><span class="hs-identifier hs-var">grabKeyboard</span></span><span> </span><span class="annot"><span class="annottext">Display
+</span><a href="#local-6989586621679358479"><span class="hs-identifier hs-var">d</span></a></span><span> </span><span class="annot"><span class="annottext">KeySym
+</span><a href="#local-6989586621679358481"><span class="hs-identifier hs-var">root</span></a></span><span> </span><span class="annot"><span class="annottext">Bool
+</span><span class="hs-identifier hs-var">False</span></span><span> </span><span class="annot"><span class="annottext">CInt
+</span><span class="hs-identifier hs-var">grabModeAsync</span></span><span> </span><span class="annot"><span class="annottext">CInt
+</span><span class="hs-identifier hs-var">grabModeAsync</span></span><span> </span><span class="annot"><span class="annottext">KeySym
+</span><span class="hs-identifier hs-var">currentTime</span></span><span>
+</span><span id="line-128"></span><span>  </span><span class="annot"><span class="annottext">Int -&gt; X ()
+</span><a href="#local-6989586621679358429"><span class="hs-identifier hs-var">setOption</span></a></span><span> </span><span class="annot"><span class="annottext">Int
+</span><span class="hs-number">0</span></span><span>
+</span><span id="line-129"></span><span>  </span><span class="annot"><span class="annottext">IO () -&gt; X ()
+forall (m :: * -&gt; *) a. MonadIO m =&gt; IO a -&gt; m a
+</span><span class="hs-identifier hs-var">io</span></span><span> </span><span class="annot"><span class="annottext">(IO () -&gt; X ()) -&gt; IO () -&gt; X ()
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">Display -&gt; KeySym -&gt; IO ()
+</span><span class="hs-identifier hs-var">ungrabKeyboard</span></span><span> </span><span class="annot"><span class="annottext">Display
+</span><a href="#local-6989586621679358479"><span class="hs-identifier hs-var">d</span></a></span><span> </span><span class="annot"><span class="annottext">KeySym
+</span><span class="hs-identifier hs-var">currentTime</span></span><span>
+</span><span id="line-130"></span><span> </span><span class="hs-keyword">where</span><span>
+</span><span id="line-131"></span><span>  </span><span id="local-6989586621679358593"><span class="annot"><a href="#local-6989586621679358425"><span class="hs-identifier hs-type">cycref</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="hs-special">[</span><span class="annot"><a href="#local-6989586621679358593"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">]</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Int</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="#local-6989586621679358593"><span class="hs-identifier hs-type">a</span></a></span></span><span>
+</span><span id="line-132"></span><span>  </span><span id="local-6989586621679358425"><span class="annot"><span class="annottext">cycref :: forall a. [a] -&gt; Int -&gt; a
+</span><a href="#local-6989586621679358425"><span class="hs-identifier hs-var hs-var">cycref</span></a></span></span><span> </span><span id="local-6989586621679358409"><span class="annot"><span class="annottext">[a]
+</span><a href="#local-6989586621679358409"><span class="hs-identifier hs-var">l</span></a></span></span><span> </span><span id="local-6989586621679358408"><span class="annot"><span class="annottext">Int
+</span><a href="#local-6989586621679358408"><span class="hs-identifier hs-var">i</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">[a]
+</span><a href="#local-6989586621679358409"><span class="hs-identifier hs-var">l</span></a></span><span> </span><span class="annot"><span class="annottext">[a] -&gt; Int -&gt; a
+forall a. [a] -&gt; Int -&gt; a
+</span><span class="hs-operator hs-var">!!</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Int
+</span><a href="#local-6989586621679358408"><span class="hs-identifier hs-var">i</span></a></span><span> </span><span class="annot"><span class="annottext">Int -&gt; Int -&gt; Int
+forall a. Integral a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-operator hs-var">`mod`</span></span><span> </span><span class="annot"><span class="annottext">[a] -&gt; Int
+forall (t :: * -&gt; *) a. Foldable t =&gt; t a -&gt; Int
+</span><span class="hs-identifier hs-var">length</span></span><span> </span><span class="annot"><span class="annottext">[a]
+</span><a href="#local-6989586621679358409"><span class="hs-identifier hs-var">l</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-133"></span><span>
+</span><span id="line-134"></span><span class="hs-comment">-- | Given an old and a new 'WindowSet', which is __exactly__ one</span><span>
+</span><span id="line-135"></span><span class="hs-comment">-- 'view' away from the old one, restore the workspace order of the</span><span>
+</span><span id="line-136"></span><span class="hs-comment">-- former inside of the latter.  This respects any new state that the</span><span>
+</span><span id="line-137"></span><span class="hs-comment">-- new 'WindowSet' may have accumulated.</span><span>
+</span><span id="line-138"></span><span class="annot"><a href="XMonad.Actions.CycleRecentWS.html#unView"><span class="hs-identifier hs-type">unView</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="hs-keyword">forall</span><span> </span><span id="local-6989586621679358616"><span class="annot"><a href="#local-6989586621679358616"><span class="hs-identifier hs-type">i</span></a></span></span><span> </span><span id="local-6989586621679358614"><span class="annot"><a href="#local-6989586621679358614"><span class="hs-identifier hs-type">l</span></a></span></span><span> </span><span id="local-6989586621679358613"><span class="annot"><a href="#local-6989586621679358613"><span class="hs-identifier hs-type">a</span></a></span></span><span> </span><span id="local-6989586621679358615"><span class="annot"><a href="#local-6989586621679358615"><span class="hs-identifier hs-type">s</span></a></span></span><span> </span><span id="local-6989586621679358612"><span class="annot"><a href="#local-6989586621679358612"><span class="hs-identifier hs-type">sd</span></a></span></span><span class="hs-operator">.</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">Eq</span></span><span> </span><span class="annot"><a href="#local-6989586621679358616"><span class="hs-identifier hs-type">i</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Eq</span></span><span> </span><span class="annot"><a href="#local-6989586621679358615"><span class="hs-identifier hs-type">s</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-139"></span><span>       </span><span class="hs-glyph">=&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">StackSet</span></span><span> </span><span class="annot"><a href="#local-6989586621679358616"><span class="hs-identifier hs-type">i</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679358614"><span class="hs-identifier hs-type">l</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679358613"><span class="hs-identifier hs-type">a</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679358615"><span class="hs-identifier hs-type">s</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679358612"><span class="hs-identifier hs-type">sd</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">StackSet</span></span><span> </span><span class="annot"><a href="#local-6989586621679358616"><span class="hs-identifier hs-type">i</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679358614"><span class="hs-identifier hs-type">l</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679358613"><span class="hs-identifier hs-type">a</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679358615"><span class="hs-identifier hs-type">s</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679358612"><span class="hs-identifier hs-type">sd</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">StackSet</span></span><span> </span><span class="annot"><a href="#local-6989586621679358616"><span class="hs-identifier hs-type">i</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679358614"><span class="hs-identifier hs-type">l</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679358613"><span class="hs-identifier hs-type">a</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679358615"><span class="hs-identifier hs-type">s</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679358612"><span class="hs-identifier hs-type">sd</span></a></span><span>
+</span><span id="line-140"></span><span id="unView"><span class="annot"><span class="annottext">unView :: forall i l a s sd.
+(Eq i, Eq s) =&gt;
+StackSet i l a s sd -&gt; StackSet i l a s sd -&gt; StackSet i l a s sd
+</span><a href="XMonad.Actions.CycleRecentWS.html#unView"><span class="hs-identifier hs-var hs-var">unView</span></a></span></span><span> </span><span id="local-6989586621679358402"><span class="annot"><span class="annottext">StackSet i l a s sd
+</span><a href="#local-6989586621679358402"><span class="hs-identifier hs-var">w0</span></a></span></span><span> </span><span id="local-6989586621679358401"><span class="annot"><span class="annottext">StackSet i l a s sd
+</span><a href="#local-6989586621679358401"><span class="hs-identifier hs-var">w1</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">StackSet i l a s sd -&gt; StackSet i l a s sd
+forall {sid} {sd}. StackSet i l a sid sd -&gt; StackSet i l a sid sd
+</span><a href="#local-6989586621679358400"><span class="hs-identifier hs-var">fixOrderH</span></a></span><span> </span><span class="annot"><span class="annottext">(StackSet i l a s sd -&gt; StackSet i l a s sd)
+-&gt; (StackSet i l a s sd -&gt; StackSet i l a s sd)
+-&gt; StackSet i l a s sd
+-&gt; StackSet i l a s sd
+forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">StackSet i l a s sd -&gt; StackSet i l a s sd
+</span><a href="#local-6989586621679358399"><span class="hs-identifier hs-var">fixOrderV</span></a></span><span> </span><span class="annot"><span class="annottext">(StackSet i l a s sd -&gt; StackSet i l a s sd)
+-&gt; (StackSet i l a s sd -&gt; StackSet i l a s sd)
+-&gt; StackSet i l a s sd
+-&gt; StackSet i l a s sd
+forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">i -&gt; StackSet i l a s sd -&gt; StackSet i l a s sd
+forall {l} {a} {sd}.
+i -&gt; StackSet i l a s sd -&gt; StackSet i l a s sd
+</span><a href="#local-6989586621679358398"><span class="hs-identifier hs-var">view'</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">StackSet i l a s sd -&gt; i
+forall i l a s sd. StackSet i l a s sd -&gt; i
+</span><span class="hs-identifier hs-var">currentTag</span></span><span> </span><span class="annot"><span class="annottext">StackSet i l a s sd
+</span><a href="#local-6989586621679358402"><span class="hs-identifier hs-var">w0</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">(StackSet i l a s sd -&gt; StackSet i l a s sd)
+-&gt; StackSet i l a s sd -&gt; StackSet i l a s sd
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">StackSet i l a s sd
+</span><a href="#local-6989586621679358401"><span class="hs-identifier hs-var">w1</span></a></span><span>
+</span><span id="line-141"></span><span> </span><span class="hs-keyword">where</span><span>
+</span><span id="line-142"></span><span>  </span><span id="local-6989586621679358398"><span class="annot"><span class="annottext">view' :: i -&gt; StackSet i l a s sd -&gt; StackSet i l a s sd
+</span><a href="#local-6989586621679358398"><span class="hs-identifier hs-var hs-var">view'</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-keyword">if</span><span> </span><span class="annot"><span class="annottext">Screen i l a s sd -&gt; s
+forall i l a sid sd. Screen i l a sid sd -&gt; sid
+</span><span class="hs-identifier hs-var hs-var">screen</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">StackSet i l a s sd -&gt; Screen i l a s sd
+forall i l a sid sd. StackSet i l a sid sd -&gt; Screen i l a sid sd
+</span><span class="hs-identifier hs-var hs-var">current</span></span><span> </span><span class="annot"><span class="annottext">StackSet i l a s sd
+</span><a href="#local-6989586621679358402"><span class="hs-identifier hs-var">w0</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">s -&gt; s -&gt; Bool
+forall a. Eq a =&gt; a -&gt; a -&gt; Bool
+</span><span class="hs-operator hs-var">==</span></span><span> </span><span class="annot"><span class="annottext">Screen i l a s sd -&gt; s
+forall i l a sid sd. Screen i l a sid sd -&gt; sid
+</span><span class="hs-identifier hs-var hs-var">screen</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">StackSet i l a s sd -&gt; Screen i l a s sd
+forall i l a sid sd. StackSet i l a sid sd -&gt; Screen i l a sid sd
+</span><span class="hs-identifier hs-var hs-var">current</span></span><span> </span><span class="annot"><span class="annottext">StackSet i l a s sd
+</span><a href="#local-6989586621679358401"><span class="hs-identifier hs-var">w1</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-keyword">then</span><span> </span><span class="annot"><span class="annottext">i -&gt; StackSet i l a s sd -&gt; StackSet i l a s sd
+forall s i l a sd.
+(Eq s, Eq i) =&gt;
+i -&gt; StackSet i l a s sd -&gt; StackSet i l a s sd
+</span><span class="hs-identifier hs-var">greedyView</span></span><span> </span><span class="hs-keyword">else</span><span> </span><span class="annot"><span class="annottext">i -&gt; StackSet i l a s sd -&gt; StackSet i l a s sd
+forall s i l a sd.
+(Eq s, Eq i) =&gt;
+i -&gt; StackSet i l a s sd -&gt; StackSet i l a s sd
+</span><span class="hs-identifier hs-var">view</span></span><span>
+</span><span id="line-143"></span><span>  </span><span id="local-6989586621679358399"><span class="annot"><span class="annottext">fixOrderV :: StackSet i l a s sd -&gt; StackSet i l a s sd
+</span><a href="#local-6989586621679358399"><span class="hs-identifier hs-var hs-var">fixOrderV</span></a></span></span><span> </span><span id="local-6989586621679358389"><span class="annot"><span class="annottext">StackSet i l a s sd
+</span><a href="#local-6989586621679358389"><span class="hs-identifier hs-var">w</span></a></span></span><span> </span><span class="hs-glyph">|</span><span> </span><span id="local-6989586621679358388"><span class="annot"><span class="annottext">Screen i l a s sd
+</span><a href="#local-6989586621679358388"><span class="hs-identifier hs-var">v</span></a></span></span><span> </span><span class="annot"><span class="hs-glyph hs-type">:</span></span><span> </span><span id="local-6989586621679358387"><span class="annot"><span class="annottext">[Screen i l a s sd]
+</span><a href="#local-6989586621679358387"><span class="hs-identifier hs-var">vs</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">StackSet i l a s sd -&gt; [Screen i l a s sd]
+forall i l a sid sd. StackSet i l a sid sd -&gt; [Screen i l a sid sd]
+</span><span class="hs-identifier hs-var hs-var">visible</span></span><span> </span><span class="annot"><span class="annottext">StackSet i l a s sd
+</span><a href="#local-6989586621679358389"><span class="hs-identifier hs-var">w</span></a></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">StackSet i l a s sd
+</span><a href="#local-6989586621679358389"><span class="hs-identifier hs-var">w</span></a></span><span class="hs-special">{</span><span> </span><span class="annot"><span class="annottext">visible :: [Screen i l a s sd]
+</span><span class="hs-identifier hs-var">visible</span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Int
+-&gt; Screen i l a s sd -&gt; [Screen i l a s sd] -&gt; [Screen i l a s sd]
+forall x. Int -&gt; x -&gt; [x] -&gt; [x]
+</span><a href="#local-6989586621679358386"><span class="hs-identifier hs-var">insertAt</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">[Screen i l a s sd] -&gt; [Screen i l a s sd] -&gt; Int
+forall {l} {a} {sid} {sd}.
+[Screen i l a sid sd] -&gt; [Screen i l a sid sd] -&gt; Int
+</span><a href="#local-6989586621679358385"><span class="hs-identifier hs-var">pfxV</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">StackSet i l a s sd -&gt; [Screen i l a s sd]
+forall i l a sid sd. StackSet i l a sid sd -&gt; [Screen i l a sid sd]
+</span><span class="hs-identifier hs-var hs-var">visible</span></span><span> </span><span class="annot"><span class="annottext">StackSet i l a s sd
+</span><a href="#local-6989586621679358402"><span class="hs-identifier hs-var">w0</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">[Screen i l a s sd]
+</span><a href="#local-6989586621679358387"><span class="hs-identifier hs-var">vs</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">Screen i l a s sd
+</span><a href="#local-6989586621679358388"><span class="hs-identifier hs-var">v</span></a></span><span> </span><span class="annot"><span class="annottext">[Screen i l a s sd]
+</span><a href="#local-6989586621679358387"><span class="hs-identifier hs-var">vs</span></a></span><span> </span><span class="hs-special">}</span><span>
+</span><span id="line-144"></span><span>              </span><span class="hs-glyph">|</span><span> </span><span class="annot"><span class="annottext">Bool
+</span><span class="hs-identifier hs-var">otherwise</span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">StackSet i l a s sd
+</span><a href="#local-6989586621679358389"><span class="hs-identifier hs-var">w</span></a></span><span>
+</span><span id="line-145"></span><span>  </span><span id="local-6989586621679358400"><span class="annot"><span class="annottext">fixOrderH :: StackSet i l a sid sd -&gt; StackSet i l a sid sd
+</span><a href="#local-6989586621679358400"><span class="hs-identifier hs-var hs-var">fixOrderH</span></a></span></span><span> </span><span id="local-6989586621679358384"><span class="annot"><span class="annottext">StackSet i l a sid sd
+</span><a href="#local-6989586621679358384"><span class="hs-identifier hs-var">w</span></a></span></span><span> </span><span class="hs-glyph">|</span><span> </span><span id="local-6989586621679358383"><span class="annot"><span class="annottext">Workspace i l a
+</span><a href="#local-6989586621679358383"><span class="hs-identifier hs-var">h</span></a></span></span><span> </span><span class="annot"><span class="hs-glyph hs-type">:</span></span><span> </span><span id="local-6989586621679358382"><span class="annot"><span class="annottext">[Workspace i l a]
+</span><a href="#local-6989586621679358382"><span class="hs-identifier hs-var">hs</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">StackSet i l a sid sd -&gt; [Workspace i l a]
+forall i l a sid sd. StackSet i l a sid sd -&gt; [Workspace i l a]
+</span><span class="hs-identifier hs-var hs-var">hidden</span></span><span> </span><span class="annot"><span class="annottext">StackSet i l a sid sd
+</span><a href="#local-6989586621679358384"><span class="hs-identifier hs-var">w</span></a></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">StackSet i l a sid sd
+</span><a href="#local-6989586621679358384"><span class="hs-identifier hs-var">w</span></a></span><span class="hs-special">{</span><span> </span><span class="annot"><span class="annottext">hidden :: [Workspace i l a]
+</span><span class="hs-identifier hs-var">hidden</span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Int -&gt; Workspace i l a -&gt; [Workspace i l a] -&gt; [Workspace i l a]
+forall x. Int -&gt; x -&gt; [x] -&gt; [x]
+</span><a href="#local-6989586621679358386"><span class="hs-identifier hs-var">insertAt</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">[Workspace i l a] -&gt; [Workspace i l a] -&gt; Int
+forall {l} {a}. [Workspace i l a] -&gt; [Workspace i l a] -&gt; Int
+</span><a href="#local-6989586621679358381"><span class="hs-identifier hs-var">pfxH</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">StackSet i l a s sd -&gt; [Workspace i l a]
+forall i l a sid sd. StackSet i l a sid sd -&gt; [Workspace i l a]
+</span><span class="hs-identifier hs-var hs-var">hidden</span></span><span> </span><span class="annot"><span class="annottext">StackSet i l a s sd
+</span><a href="#local-6989586621679358402"><span class="hs-identifier hs-var">w0</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">[Workspace i l a]
+</span><a href="#local-6989586621679358382"><span class="hs-identifier hs-var">hs</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">Workspace i l a
+</span><a href="#local-6989586621679358383"><span class="hs-identifier hs-var">h</span></a></span><span> </span><span class="annot"><span class="annottext">[Workspace i l a]
+</span><a href="#local-6989586621679358382"><span class="hs-identifier hs-var">hs</span></a></span><span> </span><span class="hs-special">}</span><span>
+</span><span id="line-146"></span><span>              </span><span class="hs-glyph">|</span><span> </span><span class="annot"><span class="annottext">Bool
+</span><span class="hs-identifier hs-var">otherwise</span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">StackSet i l a sid sd
+</span><a href="#local-6989586621679358384"><span class="hs-identifier hs-var">w</span></a></span><span>
+</span><span id="line-147"></span><span>  </span><span id="local-6989586621679358385"><span class="annot"><span class="annottext">pfxV :: [Screen i l a sid sd] -&gt; [Screen i l a sid sd] -&gt; Int
+</span><a href="#local-6989586621679358385"><span class="hs-identifier hs-var hs-var">pfxV</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">[i] -&gt; [i] -&gt; Int
+forall x. Eq x =&gt; [x] -&gt; [x] -&gt; Int
+</span><a href="#local-6989586621679358377"><span class="hs-identifier hs-var">commonPrefix</span></a></span><span> </span><span class="annot"><span class="annottext">([i] -&gt; [i] -&gt; Int)
+-&gt; ([Screen i l a sid sd] -&gt; [i])
+-&gt; [Screen i l a sid sd]
+-&gt; [Screen i l a sid sd]
+-&gt; Int
+forall b c a. (b -&gt; b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">`on`</span></span><span> </span><span class="annot"><span class="annottext">(Screen i l a sid sd -&gt; i) -&gt; [Screen i l a sid sd] -&gt; [i]
+forall (f :: * -&gt; *) a b. Functor f =&gt; (a -&gt; b) -&gt; f a -&gt; f b
+</span><span class="hs-identifier hs-var">fmap</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Workspace i l a -&gt; i
+forall i l a. Workspace i l a -&gt; i
+</span><span class="hs-identifier hs-var hs-var">tag</span></span><span> </span><span class="annot"><span class="annottext">(Workspace i l a -&gt; i)
+-&gt; (Screen i l a sid sd -&gt; Workspace i l a)
+-&gt; Screen i l a sid sd
+-&gt; i
+forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">Screen i l a sid sd -&gt; Workspace i l a
+forall i l a sid sd. Screen i l a sid sd -&gt; Workspace i l a
+</span><span class="hs-identifier hs-var hs-var">workspace</span></span><span class="hs-special">)</span><span>
+</span><span id="line-148"></span><span>  </span><span id="local-6989586621679358381"><span class="annot"><span class="annottext">pfxH :: [Workspace i l a] -&gt; [Workspace i l a] -&gt; Int
+</span><a href="#local-6989586621679358381"><span class="hs-identifier hs-var hs-var">pfxH</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">[i] -&gt; [i] -&gt; Int
+forall x. Eq x =&gt; [x] -&gt; [x] -&gt; Int
+</span><a href="#local-6989586621679358377"><span class="hs-identifier hs-var">commonPrefix</span></a></span><span> </span><span class="annot"><span class="annottext">([i] -&gt; [i] -&gt; Int)
+-&gt; ([Workspace i l a] -&gt; [i])
+-&gt; [Workspace i l a]
+-&gt; [Workspace i l a]
+-&gt; Int
+forall b c a. (b -&gt; b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">`on`</span></span><span> </span><span class="annot"><span class="annottext">(Workspace i l a -&gt; i) -&gt; [Workspace i l a] -&gt; [i]
+forall (f :: * -&gt; *) a b. Functor f =&gt; (a -&gt; b) -&gt; f a -&gt; f b
+</span><span class="hs-identifier hs-var">fmap</span></span><span> </span><span class="annot"><span class="annottext">Workspace i l a -&gt; i
+forall i l a. Workspace i l a -&gt; i
+</span><span class="hs-identifier hs-var hs-var">tag</span></span><span>
+</span><span id="line-149"></span><span>
+</span><span id="line-150"></span><span>  </span><span id="local-6989586621679358564"><span class="annot"><a href="#local-6989586621679358386"><span class="hs-identifier hs-type">insertAt</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Int</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="#local-6989586621679358564"><span class="hs-identifier hs-type">x</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="hs-special">[</span><span class="annot"><a href="#local-6989586621679358564"><span class="hs-identifier hs-type">x</span></a></span><span class="hs-special">]</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="hs-special">[</span><span class="annot"><a href="#local-6989586621679358564"><span class="hs-identifier hs-type">x</span></a></span><span class="hs-special">]</span></span><span>
+</span><span id="line-151"></span><span>  </span><span id="local-6989586621679358386"><span class="annot"><span class="annottext">insertAt :: forall x. Int -&gt; x -&gt; [x] -&gt; [x]
+</span><a href="#local-6989586621679358386"><span class="hs-identifier hs-var hs-var">insertAt</span></a></span></span><span> </span><span id="local-6989586621679358374"><span class="annot"><span class="annottext">Int
+</span><a href="#local-6989586621679358374"><span class="hs-identifier hs-var">n</span></a></span></span><span> </span><span id="local-6989586621679358373"><span class="annot"><span class="annottext">x
+</span><a href="#local-6989586621679358373"><span class="hs-identifier hs-var">x</span></a></span></span><span> </span><span id="local-6989586621679358372"><span class="annot"><span class="annottext">[x]
+</span><a href="#local-6989586621679358372"><span class="hs-identifier hs-var">xs</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-keyword">let</span><span> </span><span class="hs-special">(</span><span id="local-6989586621679358371"><span class="annot"><span class="annottext">[x]
+</span><a href="#local-6989586621679358371"><span class="hs-identifier hs-var">l</span></a></span></span><span class="hs-special">,</span><span> </span><span id="local-6989586621679358370"><span class="annot"><span class="annottext">[x]
+</span><a href="#local-6989586621679358370"><span class="hs-identifier hs-var">r</span></a></span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Int -&gt; [x] -&gt; ([x], [x])
+forall a. Int -&gt; [a] -&gt; ([a], [a])
+</span><span class="hs-identifier hs-var">splitAt</span></span><span> </span><span class="annot"><span class="annottext">Int
+</span><a href="#local-6989586621679358374"><span class="hs-identifier hs-var">n</span></a></span><span> </span><span class="annot"><span class="annottext">[x]
+</span><a href="#local-6989586621679358372"><span class="hs-identifier hs-var">xs</span></a></span><span> </span><span class="hs-keyword">in</span><span> </span><span class="annot"><span class="annottext">[x]
+</span><a href="#local-6989586621679358371"><span class="hs-identifier hs-var">l</span></a></span><span> </span><span class="annot"><span class="annottext">[x] -&gt; [x] -&gt; [x]
+forall a. [a] -&gt; [a] -&gt; [a]
+</span><span class="hs-operator hs-var">++</span></span><span> </span><span class="hs-special">[</span><span class="annot"><span class="annottext">x
+</span><a href="#local-6989586621679358373"><span class="hs-identifier hs-var">x</span></a></span><span class="hs-special">]</span><span> </span><span class="annot"><span class="annottext">[x] -&gt; [x] -&gt; [x]
+forall a. [a] -&gt; [a] -&gt; [a]
+</span><span class="hs-operator hs-var">++</span></span><span> </span><span class="annot"><span class="annottext">[x]
+</span><a href="#local-6989586621679358370"><span class="hs-identifier hs-var">r</span></a></span><span>
+</span><span id="line-152"></span><span>
+</span><span id="line-153"></span><span>  </span><span id="local-6989586621679358557"><span class="annot"><a href="#local-6989586621679358377"><span class="hs-identifier hs-type">commonPrefix</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Eq</span></span><span> </span><span class="annot"><a href="#local-6989586621679358557"><span class="hs-identifier hs-type">x</span></a></span><span> </span><span class="hs-glyph">=&gt;</span><span> </span><span class="hs-special">[</span><span class="annot"><a href="#local-6989586621679358557"><span class="hs-identifier hs-type">x</span></a></span><span class="hs-special">]</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="hs-special">[</span><span class="annot"><a href="#local-6989586621679358557"><span class="hs-identifier hs-type">x</span></a></span><span class="hs-special">]</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Int</span></span></span><span>
+</span><span id="line-154"></span><span>  </span><span id="local-6989586621679358377"><span class="annot"><span class="annottext">commonPrefix :: forall x. Eq x =&gt; [x] -&gt; [x] -&gt; Int
+</span><a href="#local-6989586621679358377"><span class="hs-identifier hs-var hs-var">commonPrefix</span></a></span></span><span> </span><span id="local-6989586621679358365"><span class="annot"><span class="annottext">[x]
+</span><a href="#local-6989586621679358365"><span class="hs-identifier hs-var">a</span></a></span></span><span> </span><span id="local-6989586621679358364"><span class="annot"><span class="annottext">[x]
+</span><a href="#local-6989586621679358364"><span class="hs-identifier hs-var">b</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">[Bool] -&gt; Int
+forall (t :: * -&gt; *) a. Foldable t =&gt; t a -&gt; Int
+</span><span class="hs-identifier hs-var">length</span></span><span> </span><span class="annot"><span class="annottext">([Bool] -&gt; Int) -&gt; [Bool] -&gt; Int
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">(Bool -&gt; Bool) -&gt; [Bool] -&gt; [Bool]
+forall a. (a -&gt; Bool) -&gt; [a] -&gt; [a]
+</span><span class="hs-identifier hs-var">takeWhile</span></span><span> </span><span class="annot"><span class="annottext">Bool -&gt; Bool
+forall a. a -&gt; a
+</span><span class="hs-identifier hs-var">id</span></span><span> </span><span class="annot"><span class="annottext">([Bool] -&gt; [Bool]) -&gt; [Bool] -&gt; [Bool]
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">(x -&gt; x -&gt; Bool) -&gt; [x] -&gt; [x] -&gt; [Bool]
+forall a b c. (a -&gt; b -&gt; c) -&gt; [a] -&gt; [b] -&gt; [c]
+</span><span class="hs-identifier hs-var">zipWith</span></span><span> </span><span class="annot"><span class="annottext">x -&gt; x -&gt; Bool
+forall a. Eq a =&gt; a -&gt; a -&gt; Bool
+</span><span class="hs-operator hs-var">(==)</span></span><span> </span><span class="annot"><span class="annottext">[x]
+</span><a href="#local-6989586621679358365"><span class="hs-identifier hs-var">a</span></a></span><span> </span><span class="annot"><span class="annottext">[x]
+</span><a href="#local-6989586621679358364"><span class="hs-identifier hs-var">b</span></a></span><span>
+</span><span id="line-155"></span><span>
+</span><span id="line-156"></span><span class="hs-comment">-- | Given some function that generates a list of workspaces from a</span><span>
+</span><span id="line-157"></span><span class="hs-comment">-- given 'WindowSet', switch to the first generated workspace.</span><span>
+</span><span id="line-158"></span><span class="annot"><a href="XMonad.Actions.CycleRecentWS.html#toggleWindowSets"><span class="hs-identifier hs-type">toggleWindowSets</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">WindowSet</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="hs-special">[</span><span class="annot"><span class="hs-identifier hs-type">WorkspaceId</span></span><span class="hs-special">]</span><span class="hs-special">)</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">X</span></span><span> </span><span class="hs-special">(</span><span class="hs-special">)</span><span>
+</span><span id="line-159"></span><span id="toggleWindowSets"><span class="annot"><span class="annottext">toggleWindowSets :: (WindowSet -&gt; [WorkspaceId]) -&gt; X ()
+</span><a href="XMonad.Actions.CycleRecentWS.html#toggleWindowSets"><span class="hs-identifier hs-var hs-var">toggleWindowSets</span></a></span></span><span> </span><span id="local-6989586621679358360"><span class="annot"><span class="annottext">WindowSet -&gt; [WorkspaceId]
+</span><a href="#local-6989586621679358360"><span class="hs-identifier hs-var">genOptions</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-160"></span><span>  </span><span id="local-6989586621679358359"><span class="annot"><span class="annottext">[WorkspaceId]
+</span><a href="#local-6989586621679358359"><span class="hs-identifier hs-var">options</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">(XState -&gt; [WorkspaceId]) -&gt; X [WorkspaceId]
+forall s (m :: * -&gt; *) a. MonadState s m =&gt; (s -&gt; a) -&gt; m a
+</span><span class="hs-identifier hs-var">gets</span></span><span> </span><span class="annot"><span class="annottext">((XState -&gt; [WorkspaceId]) -&gt; X [WorkspaceId])
+-&gt; (XState -&gt; [WorkspaceId]) -&gt; X [WorkspaceId]
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">WindowSet -&gt; [WorkspaceId]
+</span><a href="#local-6989586621679358360"><span class="hs-identifier hs-var">genOptions</span></a></span><span> </span><span class="annot"><span class="annottext">(WindowSet -&gt; [WorkspaceId])
+-&gt; (XState -&gt; WindowSet) -&gt; XState -&gt; [WorkspaceId]
+forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">XState -&gt; WindowSet
+</span><span class="hs-identifier hs-var hs-var">windowset</span></span><span>
+</span><span id="line-161"></span><span>  </span><span class="hs-keyword">case</span><span> </span><span class="annot"><span class="annottext">[WorkspaceId]
+</span><a href="#local-6989586621679358359"><span class="hs-identifier hs-var">options</span></a></span><span> </span><span class="hs-keyword">of</span><span>
+</span><span id="line-162"></span><span>    </span><span class="hs-special">[</span><span class="hs-special">]</span><span>  </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">() -&gt; X ()
+forall (m :: * -&gt; *) a. Monad m =&gt; a -&gt; m a
+</span><span class="hs-identifier hs-var">return</span></span><span> </span><span class="hs-special">(</span><span class="hs-special">)</span><span>
+</span><span id="line-163"></span><span>    </span><span id="local-6989586621679358358"><span class="annot"><span class="annottext">WorkspaceId
+</span><a href="#local-6989586621679358358"><span class="hs-identifier hs-var">o</span></a></span></span><span class="annot"><span class="hs-glyph hs-type">:</span></span><span class="annot"><span class="annottext">[WorkspaceId]
+</span><span class="hs-identifier">_</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">(WindowSet -&gt; WindowSet) -&gt; X ()
+</span><span class="hs-identifier hs-var">windows</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">WorkspaceId -&gt; WindowSet -&gt; WindowSet
+forall s i l a sd.
+(Eq s, Eq i) =&gt;
+i -&gt; StackSet i l a s sd -&gt; StackSet i l a s sd
+</span><span class="hs-identifier hs-var">view</span></span><span> </span><span class="annot"><span class="annottext">WorkspaceId
+</span><a href="#local-6989586621679358358"><span class="hs-identifier hs-var">o</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-164"></span></pre></body></html>
