@@ -1,0 +1,339 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd"><html xmlns="http://www.w3.org/1999/xhtml"><head><link rel="stylesheet" type="text/css" href="style.css" /><script type="text/javascript" src="highlight.js"></script></head><body><pre><span class="hs-comment">-----------------------------------------------------------------------------</span><span>
+</span><span id="line-2"></span><span class="hs-comment">-- |</span><span>
+</span><span id="line-3"></span><span class="hs-comment">-- Module      :  XMonad.Hooks.SetWMName</span><span>
+</span><span id="line-4"></span><span class="hs-comment">-- Description :  Set the WM name to a given string.</span><span>
+</span><span id="line-5"></span><span class="hs-comment">-- Copyright   :  &#169; 2007 Ivan Tarasov &lt;Ivan.Tarasov@gmail.com&gt;</span><span>
+</span><span id="line-6"></span><span class="hs-comment">-- License     :  BSD</span><span>
+</span><span id="line-7"></span><span class="hs-comment">--</span><span>
+</span><span id="line-8"></span><span class="hs-comment">-- Maintainer  :  Ivan.Tarasov@gmail.com</span><span>
+</span><span id="line-9"></span><span class="hs-comment">-- Stability   :  experimental</span><span>
+</span><span id="line-10"></span><span class="hs-comment">-- Portability :  unportable</span><span>
+</span><span id="line-11"></span><span class="hs-comment">--</span><span>
+</span><span id="line-12"></span><span class="hs-comment">-- Sets the WM name to a given string, so that it could be detected using</span><span>
+</span><span id="line-13"></span><span class="hs-comment">-- _NET_SUPPORTING_WM_CHECK protocol.</span><span>
+</span><span id="line-14"></span><span class="hs-comment">--</span><span>
+</span><span id="line-15"></span><span class="hs-comment">-- May be useful for making Java GUI programs work, just set WM name to \&quot;LG3D\&quot;</span><span>
+</span><span id="line-16"></span><span class="hs-comment">-- and use Java 1.6u1 (1.6.0_01-ea-b03 works for me) or later.</span><span>
+</span><span id="line-17"></span><span class="hs-comment">--</span><span>
+</span><span id="line-18"></span><span class="hs-comment">-- To your @xmonad.hs@ file, add the following line:</span><span>
+</span><span id="line-19"></span><span class="hs-comment">--</span><span>
+</span><span id="line-20"></span><span class="hs-comment">-- &gt; import XMonad.Hooks.SetWMName</span><span>
+</span><span id="line-21"></span><span class="hs-comment">--</span><span>
+</span><span id="line-22"></span><span class="hs-comment">-- Then edit your @startupHook@:</span><span>
+</span><span id="line-23"></span><span class="hs-comment">--</span><span>
+</span><span id="line-24"></span><span class="hs-comment">-- &gt; startupHook = setWMName &quot;LG3D&quot;</span><span>
+</span><span id="line-25"></span><span class="hs-comment">--</span><span>
+</span><span id="line-26"></span><span class="hs-comment">-- For details on the problems with running Java GUI programs in non-reparenting</span><span>
+</span><span id="line-27"></span><span class="hs-comment">-- WMs, see &lt;http://bugs.sun.com/bugdatabase/view_bug.do?bug_id=6429775&gt; and</span><span>
+</span><span id="line-28"></span><span class="hs-comment">-- related bugs.</span><span>
+</span><span id="line-29"></span><span class="hs-comment">--</span><span>
+</span><span id="line-30"></span><span class="hs-comment">-- Setting WM name to &quot;compiz&quot; does not solve the problem, because of yet</span><span>
+</span><span id="line-31"></span><span class="hs-comment">-- another bug in AWT code (related to insets). For LG3D insets are explicitly</span><span>
+</span><span id="line-32"></span><span class="hs-comment">-- set to 0, while for other WMs the insets are \&quot;guessed\&quot; and the algorithm</span><span>
+</span><span id="line-33"></span><span class="hs-comment">-- fails miserably by guessing absolutely bogus values.</span><span>
+</span><span id="line-34"></span><span class="hs-comment">--</span><span>
+</span><span id="line-35"></span><span class="hs-comment">-- For detailed instructions on editing your hooks, see</span><span>
+</span><span id="line-36"></span><span class="hs-comment">-- &lt;https://xmonad.org/TUTORIAL.html the tutorial&gt; and &quot;XMonad.Doc.Extending&quot;.</span><span>
+</span><span id="line-37"></span><span class="hs-comment">-----------------------------------------------------------------------------</span><span>
+</span><span id="line-38"></span><span>
+</span><span id="line-39"></span><span class="hs-keyword">module</span><span> </span><span class="hs-identifier">XMonad.Hooks.SetWMName</span><span> </span><span class="hs-special">(</span><span>
+</span><span id="line-40"></span><span>      </span><span class="annot"><a href="XMonad.Hooks.SetWMName.html#setWMName"><span class="hs-identifier">setWMName</span></a></span><span>
+</span><span id="line-41"></span><span>    </span><span class="hs-special">,</span><span> </span><span class="annot"><a href="XMonad.Hooks.SetWMName.html#getWMName"><span class="hs-identifier">getWMName</span></a></span><span>
+</span><span id="line-42"></span><span>    </span><span class="hs-special">)</span><span>
+</span><span id="line-43"></span><span>  </span><span class="hs-keyword">where</span><span>
+</span><span id="line-44"></span><span>
+</span><span id="line-45"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><span class="hs-identifier">Foreign.C.Types</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier">CChar</span></span><span class="hs-special">)</span><span>
+</span><span id="line-46"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><span class="hs-identifier">Foreign.Marshal.Alloc</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier">alloca</span></span><span class="hs-special">)</span><span>
+</span><span id="line-47"></span><span>
+</span><span id="line-48"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><span class="hs-identifier">XMonad</span></span><span>
+</span><span id="line-49"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><a href="XMonad.Prelude.html"><span class="hs-identifier">XMonad.Prelude</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier">fromJust</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier">join</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier">listToMaybe</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier">maybeToList</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier">nub</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier">ord</span></span><span class="hs-special">)</span><span>
+</span><span id="line-50"></span><span>
+</span><span id="line-51"></span><span class="hs-comment">-- | sets WM name</span><span>
+</span><span id="line-52"></span><span class="annot"><a href="XMonad.Hooks.SetWMName.html#setWMName"><span class="hs-identifier hs-type">setWMName</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">String</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">X</span></span><span> </span><span class="hs-special">(</span><span class="hs-special">)</span><span>
+</span><span id="line-53"></span><span id="setWMName"><span class="annot"><span class="annottext">setWMName :: String -&gt; X ()
+</span><a href="XMonad.Hooks.SetWMName.html#setWMName"><span class="hs-identifier hs-var hs-var">setWMName</span></a></span></span><span> </span><span id="local-6989586621679422856"><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679422856"><span class="hs-identifier hs-var">name</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-54"></span><span>    </span><span id="local-6989586621679422855"><span class="annot"><span class="annottext">AttributeMask
+</span><a href="#local-6989586621679422855"><span class="hs-identifier hs-var">atom_NET_SUPPORTING_WM_CHECK</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">X AttributeMask
+</span><a href="XMonad.Hooks.SetWMName.html#netSupportingWMCheckAtom"><span class="hs-identifier hs-var">netSupportingWMCheckAtom</span></a></span><span>
+</span><span id="line-55"></span><span>    </span><span id="local-6989586621679422853"><span class="annot"><span class="annottext">AttributeMask
+</span><a href="#local-6989586621679422853"><span class="hs-identifier hs-var">atom_NET_WM_NAME</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">String -&gt; X AttributeMask
+</span><span class="hs-identifier hs-var">getAtom</span></span><span> </span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot;_NET_WM_NAME&quot;</span></span><span>
+</span><span id="line-56"></span><span>    </span><span id="local-6989586621679422851"><span class="annot"><span class="annottext">AttributeMask
+</span><a href="#local-6989586621679422851"><span class="hs-identifier hs-var">atom_NET_SUPPORTED_ATOM</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">String -&gt; X AttributeMask
+</span><span class="hs-identifier hs-var">getAtom</span></span><span> </span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot;_NET_SUPPORTED&quot;</span></span><span>
+</span><span id="line-57"></span><span>    </span><span id="local-6989586621679422850"><span class="annot"><span class="annottext">AttributeMask
+</span><a href="#local-6989586621679422850"><span class="hs-identifier hs-var">atom_UTF8_STRING</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">String -&gt; X AttributeMask
+</span><span class="hs-identifier hs-var">getAtom</span></span><span> </span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot;UTF8_STRING&quot;</span></span><span>
+</span><span id="line-58"></span><span>
+</span><span id="line-59"></span><span>    </span><span id="local-6989586621679422849"><span class="annot"><span class="annottext">AttributeMask
+</span><a href="#local-6989586621679422849"><span class="hs-identifier hs-var">root</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">forall r (m :: * -&gt; *) a. MonadReader r m =&gt; (r -&gt; a) -&gt; m a
+</span><span class="hs-identifier hs-var">asks</span></span><span> </span><span class="annot"><span class="annottext">XConf -&gt; AttributeMask
+</span><span class="hs-identifier hs-var">theRoot</span></span><span>
+</span><span id="line-60"></span><span>    </span><span id="local-6989586621679422846"><span class="annot"><span class="annottext">AttributeMask
+</span><a href="#local-6989586621679422846"><span class="hs-identifier hs-var">supportWindow</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">X AttributeMask
+</span><a href="XMonad.Hooks.SetWMName.html#getSupportWindow"><span class="hs-identifier hs-var">getSupportWindow</span></a></span><span>
+</span><span id="line-61"></span><span>    </span><span id="local-6989586621679422844"><span class="annot"><span class="annottext">Display
+</span><a href="#local-6989586621679422844"><span class="hs-identifier hs-var">dpy</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">forall r (m :: * -&gt; *) a. MonadReader r m =&gt; (r -&gt; a) -&gt; m a
+</span><span class="hs-identifier hs-var">asks</span></span><span> </span><span class="annot"><span class="annottext">XConf -&gt; Display
+</span><span class="hs-identifier hs-var">display</span></span><span>
+</span><span id="line-62"></span><span>    </span><span class="annot"><span class="annottext">forall (m :: * -&gt; *) a. MonadIO m =&gt; IO a -&gt; m a
+</span><span class="hs-identifier hs-var">io</span></span><span> </span><span class="annot"><span class="annottext">forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-63"></span><span>        </span><span class="hs-comment">-- _NET_SUPPORTING_WM_CHECK atom of root and support windows refers to the support window</span><span>
+</span><span id="line-64"></span><span>        </span><span class="annot"><span class="annottext">forall (t :: * -&gt; *) (m :: * -&gt; *) a b.
+(Foldable t, Monad m) =&gt;
+(a -&gt; m b) -&gt; t a -&gt; m ()
+</span><span class="hs-identifier hs-var">mapM_</span></span><span> </span><span class="hs-special">(</span><span class="hs-glyph">\</span><span id="local-6989586621679422840"><span class="annot"><span class="annottext">AttributeMask
+</span><a href="#local-6989586621679422840"><span class="hs-identifier hs-var">w</span></a></span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">Display
+-&gt; AttributeMask
+-&gt; AttributeMask
+-&gt; AttributeMask
+-&gt; CInt
+-&gt; [CLong]
+-&gt; IO ()
+</span><span class="hs-identifier hs-var">changeProperty32</span></span><span> </span><span class="annot"><span class="annottext">Display
+</span><a href="#local-6989586621679422844"><span class="hs-identifier hs-var">dpy</span></a></span><span> </span><span class="annot"><span class="annottext">AttributeMask
+</span><a href="#local-6989586621679422840"><span class="hs-identifier hs-var">w</span></a></span><span> </span><span class="annot"><span class="annottext">AttributeMask
+</span><a href="#local-6989586621679422855"><span class="hs-identifier hs-var">atom_NET_SUPPORTING_WM_CHECK</span></a></span><span> </span><span class="annot"><span class="annottext">AttributeMask
+</span><span class="hs-identifier hs-var">wINDOW</span></span><span> </span><span class="annot"><span class="annottext">CInt
+</span><span class="hs-identifier hs-var">propModeReplace</span></span><span> </span><span class="hs-special">[</span><span class="annot"><span class="annottext">forall a b. (Integral a, Num b) =&gt; a -&gt; b
+</span><span class="hs-identifier hs-var">fromIntegral</span></span><span> </span><span class="annot"><span class="annottext">AttributeMask
+</span><a href="#local-6989586621679422846"><span class="hs-identifier hs-var">supportWindow</span></a></span><span class="hs-special">]</span><span class="hs-special">)</span><span> </span><span class="hs-special">[</span><span class="annot"><span class="annottext">AttributeMask
+</span><a href="#local-6989586621679422849"><span class="hs-identifier hs-var">root</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">AttributeMask
+</span><a href="#local-6989586621679422846"><span class="hs-identifier hs-var">supportWindow</span></a></span><span class="hs-special">]</span><span>
+</span><span id="line-65"></span><span>        </span><span class="hs-comment">-- set WM_NAME in supportWindow (now only accepts latin1 names to eliminate dependency on utf8 encoder)</span><span>
+</span><span id="line-66"></span><span>        </span><span class="annot"><span class="annottext">Display
+-&gt; AttributeMask
+-&gt; AttributeMask
+-&gt; AttributeMask
+-&gt; CInt
+-&gt; [CChar]
+-&gt; IO ()
+</span><span class="hs-identifier hs-var">changeProperty8</span></span><span> </span><span class="annot"><span class="annottext">Display
+</span><a href="#local-6989586621679422844"><span class="hs-identifier hs-var">dpy</span></a></span><span> </span><span class="annot"><span class="annottext">AttributeMask
+</span><a href="#local-6989586621679422846"><span class="hs-identifier hs-var">supportWindow</span></a></span><span> </span><span class="annot"><span class="annottext">AttributeMask
+</span><a href="#local-6989586621679422853"><span class="hs-identifier hs-var">atom_NET_WM_NAME</span></a></span><span> </span><span class="annot"><span class="annottext">AttributeMask
+</span><a href="#local-6989586621679422850"><span class="hs-identifier hs-var">atom_UTF8_STRING</span></a></span><span> </span><span class="annot"><span class="annottext">CInt
+</span><span class="hs-identifier hs-var">propModeReplace</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">String -&gt; [CChar]
+</span><a href="#local-6989586621679422835"><span class="hs-identifier hs-var">latin1StringToCCharList</span></a></span><span> </span><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679422856"><span class="hs-identifier hs-var">name</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-67"></span><span>        </span><span class="hs-comment">-- declare which _NET protocols are supported (append to the list if it exists)</span><span>
+</span><span id="line-68"></span><span>        </span><span id="local-6989586621679422834"><span class="annot"><span class="annottext">[CLong]
+</span><a href="#local-6989586621679422834"><span class="hs-identifier hs-var">supportedList</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">forall (m :: * -&gt; *) a. Monad m =&gt; m (m a) -&gt; m a
+</span><span class="hs-identifier hs-var">join</span></span><span> </span><span class="annot"><span class="annottext">forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">forall a. Maybe a -&gt; [a]
+</span><span class="hs-identifier hs-var">maybeToList</span></span><span> </span><span class="annot"><span class="annottext">forall (f :: * -&gt; *) a b. Functor f =&gt; (a -&gt; b) -&gt; f a -&gt; f b
+</span><span class="hs-operator hs-var">&lt;$&gt;</span></span><span> </span><span class="annot"><span class="annottext">Display -&gt; AttributeMask -&gt; AttributeMask -&gt; IO (Maybe [CLong])
+</span><span class="hs-identifier hs-var">getWindowProperty32</span></span><span> </span><span class="annot"><span class="annottext">Display
+</span><a href="#local-6989586621679422844"><span class="hs-identifier hs-var">dpy</span></a></span><span> </span><span class="annot"><span class="annottext">AttributeMask
+</span><a href="#local-6989586621679422851"><span class="hs-identifier hs-var">atom_NET_SUPPORTED_ATOM</span></a></span><span> </span><span class="annot"><span class="annottext">AttributeMask
+</span><a href="#local-6989586621679422849"><span class="hs-identifier hs-var">root</span></a></span><span>
+</span><span id="line-69"></span><span>        </span><span class="annot"><span class="annottext">Display
+-&gt; AttributeMask
+-&gt; AttributeMask
+-&gt; AttributeMask
+-&gt; CInt
+-&gt; [CLong]
+-&gt; IO ()
+</span><span class="hs-identifier hs-var">changeProperty32</span></span><span> </span><span class="annot"><span class="annottext">Display
+</span><a href="#local-6989586621679422844"><span class="hs-identifier hs-var">dpy</span></a></span><span> </span><span class="annot"><span class="annottext">AttributeMask
+</span><a href="#local-6989586621679422849"><span class="hs-identifier hs-var">root</span></a></span><span> </span><span class="annot"><span class="annottext">AttributeMask
+</span><a href="#local-6989586621679422851"><span class="hs-identifier hs-var">atom_NET_SUPPORTED_ATOM</span></a></span><span> </span><span class="annot"><span class="annottext">AttributeMask
+</span><span class="hs-identifier hs-var">aTOM</span></span><span> </span><span class="annot"><span class="annottext">CInt
+</span><span class="hs-identifier hs-var">propModeReplace</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">forall a. Eq a =&gt; [a] -&gt; [a]
+</span><span class="hs-identifier hs-var">nub</span></span><span> </span><span class="annot"><span class="annottext">forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">forall a b. (Integral a, Num b) =&gt; a -&gt; b
+</span><span class="hs-identifier hs-var">fromIntegral</span></span><span> </span><span class="annot"><span class="annottext">AttributeMask
+</span><a href="#local-6989586621679422855"><span class="hs-identifier hs-var">atom_NET_SUPPORTING_WM_CHECK</span></a></span><span> </span><span class="annot"><span class="annottext">forall a. a -&gt; [a] -&gt; [a]
+</span><span class="hs-glyph hs-var">:</span></span><span> </span><span class="annot"><span class="annottext">forall a b. (Integral a, Num b) =&gt; a -&gt; b
+</span><span class="hs-identifier hs-var">fromIntegral</span></span><span> </span><span class="annot"><span class="annottext">AttributeMask
+</span><a href="#local-6989586621679422853"><span class="hs-identifier hs-var">atom_NET_WM_NAME</span></a></span><span> </span><span class="annot"><span class="annottext">forall a. a -&gt; [a] -&gt; [a]
+</span><span class="hs-glyph hs-var">:</span></span><span> </span><span class="annot"><span class="annottext">[CLong]
+</span><a href="#local-6989586621679422834"><span class="hs-identifier hs-var">supportedList</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-70"></span><span>  </span><span class="hs-keyword">where</span><span>
+</span><span id="line-71"></span><span>    </span><span class="annot"><a href="#local-6989586621679422835"><span class="hs-identifier hs-type">latin1StringToCCharList</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">String</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="hs-special">[</span><span class="annot"><span class="hs-identifier hs-type">CChar</span></span><span class="hs-special">]</span><span>
+</span><span id="line-72"></span><span>    </span><span id="local-6989586621679422835"><span class="annot"><span class="annottext">latin1StringToCCharList :: String -&gt; [CChar]
+</span><a href="#local-6989586621679422835"><span class="hs-identifier hs-var hs-var">latin1StringToCCharList</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">forall a b. (a -&gt; b) -&gt; [a] -&gt; [b]
+</span><span class="hs-identifier hs-var">map</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">forall a b. (Integral a, Num b) =&gt; a -&gt; b
+</span><span class="hs-identifier hs-var">fromIntegral</span></span><span> </span><span class="annot"><span class="annottext">forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">Char -&gt; Int
+</span><span class="hs-identifier hs-var">ord</span></span><span class="hs-special">)</span><span>
+</span><span id="line-73"></span><span>
+</span><span id="line-74"></span><span class="annot"><a href="XMonad.Hooks.SetWMName.html#netSupportingWMCheckAtom"><span class="hs-identifier hs-type">netSupportingWMCheckAtom</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">X</span></span><span> </span><span class="annot"><span class="hs-identifier hs-type">Atom</span></span><span>
+</span><span id="line-75"></span><span id="netSupportingWMCheckAtom"><span class="annot"><span class="annottext">netSupportingWMCheckAtom :: X AttributeMask
+</span><a href="XMonad.Hooks.SetWMName.html#netSupportingWMCheckAtom"><span class="hs-identifier hs-var hs-var">netSupportingWMCheckAtom</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">String -&gt; X AttributeMask
+</span><span class="hs-identifier hs-var">getAtom</span></span><span> </span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot;_NET_SUPPORTING_WM_CHECK&quot;</span></span><span>
+</span><span id="line-76"></span><span>
+</span><span id="line-77"></span><span class="annot"><a href="XMonad.Hooks.SetWMName.html#getSupportWindow"><span class="hs-identifier hs-type">getSupportWindow</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">X</span></span><span> </span><span class="annot"><span class="hs-identifier hs-type">Window</span></span><span>
+</span><span id="line-78"></span><span id="getSupportWindow"><span class="annot"><span class="annottext">getSupportWindow :: X AttributeMask
+</span><a href="XMonad.Hooks.SetWMName.html#getSupportWindow"><span class="hs-identifier hs-var hs-var">getSupportWindow</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">forall a. (Display -&gt; X a) -&gt; X a
+</span><span class="hs-identifier hs-var">withDisplay</span></span><span> </span><span class="annot"><span class="annottext">forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="hs-glyph">\</span><span id="local-6989586621679422826"><span class="annot"><span class="annottext">Display
+</span><a href="#local-6989586621679422826"><span class="hs-identifier hs-var">dpy</span></a></span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-79"></span><span>    </span><span id="local-6989586621679422825"><span class="annot"><span class="annottext">AttributeMask
+</span><a href="#local-6989586621679422825"><span class="hs-identifier hs-var">atom_NET_SUPPORTING_WM_CHECK</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">X AttributeMask
+</span><a href="XMonad.Hooks.SetWMName.html#netSupportingWMCheckAtom"><span class="hs-identifier hs-var">netSupportingWMCheckAtom</span></a></span><span>
+</span><span id="line-80"></span><span>    </span><span id="local-6989586621679422824"><span class="annot"><span class="annottext">AttributeMask
+</span><a href="#local-6989586621679422824"><span class="hs-identifier hs-var">root</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">forall r (m :: * -&gt; *) a. MonadReader r m =&gt; (r -&gt; a) -&gt; m a
+</span><span class="hs-identifier hs-var">asks</span></span><span> </span><span class="annot"><span class="annottext">XConf -&gt; AttributeMask
+</span><span class="hs-identifier hs-var">theRoot</span></span><span>
+</span><span id="line-81"></span><span>    </span><span id="local-6989586621679422823"><span class="annot"><span class="annottext">Maybe CLong
+</span><a href="#local-6989586621679422823"><span class="hs-identifier hs-var">supportWindow</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">forall a. [a] -&gt; Maybe a
+</span><span class="hs-identifier hs-var">listToMaybe</span></span><span> </span><span class="annot"><span class="annottext">forall (m :: * -&gt; *) a b. Monad m =&gt; (a -&gt; m b) -&gt; m a -&gt; m b
+</span><span class="hs-operator hs-var">=&lt;&lt;</span></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">forall (f :: * -&gt; *) a b. Functor f =&gt; (a -&gt; b) -&gt; f a -&gt; f b
+</span><span class="hs-operator hs-var">&lt;$&gt;</span></span><span> </span><span class="annot"><span class="annottext">forall (m :: * -&gt; *) a. MonadIO m =&gt; IO a -&gt; m a
+</span><span class="hs-identifier hs-var">io</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Display -&gt; AttributeMask -&gt; AttributeMask -&gt; IO (Maybe [CLong])
+</span><span class="hs-identifier hs-var">getWindowProperty32</span></span><span> </span><span class="annot"><span class="annottext">Display
+</span><a href="#local-6989586621679422826"><span class="hs-identifier hs-var">dpy</span></a></span><span> </span><span class="annot"><span class="annottext">AttributeMask
+</span><a href="#local-6989586621679422825"><span class="hs-identifier hs-var">atom_NET_SUPPORTING_WM_CHECK</span></a></span><span> </span><span class="annot"><span class="annottext">AttributeMask
+</span><a href="#local-6989586621679422824"><span class="hs-identifier hs-var">root</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-82"></span><span>    </span><span class="annot"><span class="annottext">Maybe AttributeMask -&gt; X AttributeMask
+</span><a href="#local-6989586621679422821"><span class="hs-identifier hs-var">validateWindow</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">forall (f :: * -&gt; *) a b. Functor f =&gt; (a -&gt; b) -&gt; f a -&gt; f b
+</span><span class="hs-identifier hs-var">fmap</span></span><span> </span><span class="annot"><span class="annottext">forall a b. (Integral a, Num b) =&gt; a -&gt; b
+</span><span class="hs-identifier hs-var">fromIntegral</span></span><span> </span><span class="annot"><span class="annottext">Maybe CLong
+</span><a href="#local-6989586621679422823"><span class="hs-identifier hs-var">supportWindow</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-83"></span><span>  </span><span class="hs-keyword">where</span><span>
+</span><span id="line-84"></span><span>    </span><span class="annot"><a href="#local-6989586621679422821"><span class="hs-identifier hs-type">validateWindow</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Maybe</span></span><span> </span><span class="annot"><span class="hs-identifier hs-type">Window</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">X</span></span><span> </span><span class="annot"><span class="hs-identifier hs-type">Window</span></span><span>
+</span><span id="line-85"></span><span>    </span><span id="local-6989586621679422821"><span class="annot"><span class="annottext">validateWindow :: Maybe AttributeMask -&gt; X AttributeMask
+</span><a href="#local-6989586621679422821"><span class="hs-identifier hs-var hs-var">validateWindow</span></a></span></span><span> </span><span id="local-6989586621679422820"><span class="annot"><span class="annottext">Maybe AttributeMask
+</span><a href="#local-6989586621679422820"><span class="hs-identifier hs-var">w</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-86"></span><span>        </span><span id="local-6989586621679422819"><span class="annot"><span class="annottext">Bool
+</span><a href="#local-6989586621679422819"><span class="hs-identifier hs-var">valid</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">forall b a. b -&gt; (a -&gt; b) -&gt; Maybe a -&gt; b
+</span><span class="hs-identifier hs-var">maybe</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">forall (m :: * -&gt; *) a. Monad m =&gt; a -&gt; m a
+</span><span class="hs-identifier hs-var">return</span></span><span> </span><span class="annot"><span class="annottext">Bool
+</span><span class="hs-identifier hs-var">False</span></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">AttributeMask -&gt; X Bool
+</span><a href="#local-6989586621679422817"><span class="hs-identifier hs-var">isValidWindow</span></a></span><span> </span><span class="annot"><span class="annottext">Maybe AttributeMask
+</span><a href="#local-6989586621679422820"><span class="hs-identifier hs-var">w</span></a></span><span>
+</span><span id="line-87"></span><span>        </span><span class="hs-keyword">if</span><span> </span><span class="annot"><span class="annottext">Bool
+</span><a href="#local-6989586621679422819"><span class="hs-identifier hs-var">valid</span></a></span><span> </span><span class="hs-keyword">then</span><span>
+</span><span id="line-88"></span><span>            </span><span class="annot"><span class="annottext">forall (m :: * -&gt; *) a. Monad m =&gt; a -&gt; m a
+</span><span class="hs-identifier hs-var">return</span></span><span> </span><span class="annot"><span class="annottext">forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">forall a. HasCallStack =&gt; Maybe a -&gt; a
+</span><span class="hs-identifier hs-var">fromJust</span></span><span> </span><span class="annot"><span class="annottext">Maybe AttributeMask
+</span><a href="#local-6989586621679422820"><span class="hs-identifier hs-var">w</span></a></span><span>
+</span><span id="line-89"></span><span>          </span><span class="hs-keyword">else</span><span>
+</span><span id="line-90"></span><span>            </span><span class="annot"><span class="annottext">X AttributeMask
+</span><a href="#local-6989586621679422816"><span class="hs-identifier hs-var">createSupportWindow</span></a></span><span>
+</span><span id="line-91"></span><span>
+</span><span id="line-92"></span><span>    </span><span class="hs-comment">-- is there a better way to check the validity of the window?</span><span>
+</span><span id="line-93"></span><span>    </span><span class="annot"><a href="#local-6989586621679422817"><span class="hs-identifier hs-type">isValidWindow</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Window</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">X</span></span><span> </span><span class="annot"><span class="hs-identifier hs-type">Bool</span></span><span>
+</span><span id="line-94"></span><span>    </span><span id="local-6989586621679422817"><span class="annot"><span class="annottext">isValidWindow :: AttributeMask -&gt; X Bool
+</span><a href="#local-6989586621679422817"><span class="hs-identifier hs-var hs-var">isValidWindow</span></a></span></span><span> </span><span id="local-6989586621679422815"><span class="annot"><span class="annottext">AttributeMask
+</span><a href="#local-6989586621679422815"><span class="hs-identifier hs-var">w</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">forall a. (Display -&gt; X a) -&gt; X a
+</span><span class="hs-identifier hs-var">withDisplay</span></span><span> </span><span class="annot"><span class="annottext">forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="hs-glyph">\</span><span id="local-6989586621679422814"><span class="annot"><span class="annottext">Display
+</span><a href="#local-6989586621679422814"><span class="hs-identifier hs-var">dpy</span></a></span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">forall (m :: * -&gt; *) a. MonadIO m =&gt; IO a -&gt; m a
+</span><span class="hs-identifier hs-var">io</span></span><span> </span><span class="annot"><span class="annottext">forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">forall a b. Storable a =&gt; (Ptr a -&gt; IO b) -&gt; IO b
+</span><span class="hs-identifier hs-var">alloca</span></span><span> </span><span class="annot"><span class="annottext">forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="hs-glyph">\</span><span id="local-6989586621679422813"><span class="annot"><span class="annottext">Ptr WindowAttributes
+</span><a href="#local-6989586621679422813"><span class="hs-identifier hs-var">p</span></a></span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-95"></span><span>        </span><span id="local-6989586621679422812"><span class="annot"><span class="annottext">CInt
+</span><a href="#local-6989586621679422812"><span class="hs-identifier hs-var">status</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">Display -&gt; AttributeMask -&gt; Ptr WindowAttributes -&gt; IO CInt
+</span><span class="hs-identifier hs-var">xGetWindowAttributes</span></span><span> </span><span class="annot"><span class="annottext">Display
+</span><a href="#local-6989586621679422814"><span class="hs-identifier hs-var">dpy</span></a></span><span> </span><span class="annot"><span class="annottext">AttributeMask
+</span><a href="#local-6989586621679422815"><span class="hs-identifier hs-var">w</span></a></span><span> </span><span class="annot"><span class="annottext">Ptr WindowAttributes
+</span><a href="#local-6989586621679422813"><span class="hs-identifier hs-var">p</span></a></span><span>
+</span><span id="line-96"></span><span>        </span><span class="annot"><span class="annottext">forall (m :: * -&gt; *) a. Monad m =&gt; a -&gt; m a
+</span><span class="hs-identifier hs-var">return</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">CInt
+</span><a href="#local-6989586621679422812"><span class="hs-identifier hs-var">status</span></a></span><span> </span><span class="annot"><span class="annottext">forall a. Eq a =&gt; a -&gt; a -&gt; Bool
+</span><span class="hs-operator hs-var">/=</span></span><span> </span><span class="annot"><span class="annottext">CInt
+</span><span class="hs-number">0</span></span><span class="hs-special">)</span><span>
+</span><span id="line-97"></span><span>
+</span><span id="line-98"></span><span>    </span><span class="hs-comment">-- this code was translated from C (see OpenBox WM, screen.c)</span><span>
+</span><span id="line-99"></span><span>    </span><span class="annot"><a href="#local-6989586621679422816"><span class="hs-identifier hs-type">createSupportWindow</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">X</span></span><span> </span><span class="annot"><span class="hs-identifier hs-type">Window</span></span><span>
+</span><span id="line-100"></span><span>    </span><span id="local-6989586621679422816"><span class="annot"><span class="annottext">createSupportWindow :: X AttributeMask
+</span><a href="#local-6989586621679422816"><span class="hs-identifier hs-var hs-var">createSupportWindow</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">forall a. (Display -&gt; X a) -&gt; X a
+</span><span class="hs-identifier hs-var">withDisplay</span></span><span> </span><span class="annot"><span class="annottext">forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="hs-glyph">\</span><span id="local-6989586621679422809"><span class="annot"><span class="annottext">Display
+</span><a href="#local-6989586621679422809"><span class="hs-identifier hs-var">dpy</span></a></span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-101"></span><span>        </span><span id="local-6989586621679422808"><span class="annot"><span class="annottext">AttributeMask
+</span><a href="#local-6989586621679422808"><span class="hs-identifier hs-var">root</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">forall r (m :: * -&gt; *) a. MonadReader r m =&gt; (r -&gt; a) -&gt; m a
+</span><span class="hs-identifier hs-var">asks</span></span><span> </span><span class="annot"><span class="annottext">XConf -&gt; AttributeMask
+</span><span class="hs-identifier hs-var">theRoot</span></span><span>
+</span><span id="line-102"></span><span>        </span><span class="hs-keyword">let</span><span> </span><span id="local-6989586621679422807"><span class="annot"><span class="annottext">visual :: Visual
+</span><a href="#local-6989586621679422807"><span class="hs-identifier hs-var hs-var">visual</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Display -&gt; Dimension -&gt; Visual
+</span><span class="hs-identifier hs-var">defaultVisual</span></span><span> </span><span class="annot"><span class="annottext">Display
+</span><a href="#local-6989586621679422809"><span class="hs-identifier hs-var">dpy</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Display -&gt; Dimension
+</span><span class="hs-identifier hs-var">defaultScreen</span></span><span> </span><span class="annot"><span class="annottext">Display
+</span><a href="#local-6989586621679422809"><span class="hs-identifier hs-var">dpy</span></a></span><span class="hs-special">)</span><span>  </span><span class="hs-comment">-- should be CopyFromParent (=0), but the constructor is hidden in X11.XLib</span><span>
+</span><span id="line-103"></span><span>        </span><span id="local-6989586621679422804"><span class="annot"><span class="annottext">AttributeMask
+</span><a href="#local-6989586621679422804"><span class="hs-identifier hs-var">window</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">forall (m :: * -&gt; *) a. MonadIO m =&gt; IO a -&gt; m a
+</span><span class="hs-identifier hs-var">io</span></span><span> </span><span class="annot"><span class="annottext">forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">forall a. (Ptr SetWindowAttributes -&gt; IO a) -&gt; IO a
+</span><span class="hs-identifier hs-var">allocaSetWindowAttributes</span></span><span> </span><span class="annot"><span class="annottext">forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="hs-glyph">\</span><span id="local-6989586621679422802"><span class="annot"><span class="annottext">Ptr SetWindowAttributes
+</span><a href="#local-6989586621679422802"><span class="hs-identifier hs-var">winAttrs</span></a></span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-104"></span><span>            </span><span class="annot"><span class="annottext">Ptr SetWindowAttributes -&gt; Bool -&gt; IO ()
+</span><span class="hs-identifier hs-var">set_override_redirect</span></span><span> </span><span class="annot"><span class="annottext">Ptr SetWindowAttributes
+</span><a href="#local-6989586621679422802"><span class="hs-identifier hs-var">winAttrs</span></a></span><span> </span><span class="annot"><span class="annottext">Bool
+</span><span class="hs-identifier hs-var">True</span></span><span>         </span><span class="hs-comment">-- WM cannot decorate/move/close this window</span><span>
+</span><span id="line-105"></span><span>            </span><span class="annot"><span class="annottext">Ptr SetWindowAttributes -&gt; AttributeMask -&gt; IO ()
+</span><span class="hs-identifier hs-var">set_event_mask</span></span><span> </span><span class="annot"><span class="annottext">Ptr SetWindowAttributes
+</span><a href="#local-6989586621679422802"><span class="hs-identifier hs-var">winAttrs</span></a></span><span> </span><span class="annot"><span class="annottext">AttributeMask
+</span><span class="hs-identifier hs-var">propertyChangeMask</span></span><span>  </span><span class="hs-comment">-- not sure if this is needed</span><span>
+</span><span id="line-106"></span><span>            </span><span class="hs-keyword">let</span><span> </span><span id="local-6989586621679422795"><span class="annot"><span class="annottext">bogusX :: Position
+</span><a href="#local-6989586621679422795"><span class="hs-identifier hs-var hs-var">bogusX</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-glyph">-</span><span class="annot"><span class="annottext">Position
+</span><span class="hs-number">100</span></span><span>
+</span><span id="line-107"></span><span>                </span><span id="local-6989586621679422792"><span class="annot"><span class="annottext">bogusY :: Position
+</span><a href="#local-6989586621679422792"><span class="hs-identifier hs-var hs-var">bogusY</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-glyph">-</span><span class="annot"><span class="annottext">Position
+</span><span class="hs-number">100</span></span><span>
+</span><span id="line-108"></span><span>              </span><span class="hs-keyword">in</span><span>
+</span><span id="line-109"></span><span>                </span><span class="annot"><span class="annottext">Display
+-&gt; AttributeMask
+-&gt; Position
+-&gt; Position
+-&gt; Dimension
+-&gt; Dimension
+-&gt; CInt
+-&gt; CInt
+-&gt; CInt
+-&gt; Visual
+-&gt; AttributeMask
+-&gt; Ptr SetWindowAttributes
+-&gt; IO AttributeMask
+</span><span class="hs-identifier hs-var">createWindow</span></span><span> </span><span class="annot"><span class="annottext">Display
+</span><a href="#local-6989586621679422809"><span class="hs-identifier hs-var">dpy</span></a></span><span> </span><span class="annot"><span class="annottext">AttributeMask
+</span><a href="#local-6989586621679422808"><span class="hs-identifier hs-var">root</span></a></span><span> </span><span class="annot"><span class="annottext">Position
+</span><a href="#local-6989586621679422795"><span class="hs-identifier hs-var">bogusX</span></a></span><span> </span><span class="annot"><span class="annottext">Position
+</span><a href="#local-6989586621679422792"><span class="hs-identifier hs-var">bogusY</span></a></span><span> </span><span class="annot"><span class="annottext">Dimension
+</span><span class="hs-number">1</span></span><span> </span><span class="annot"><span class="annottext">Dimension
+</span><span class="hs-number">1</span></span><span> </span><span class="annot"><span class="annottext">CInt
+</span><span class="hs-number">0</span></span><span> </span><span class="annot"><span class="annottext">CInt
+</span><span class="hs-number">0</span></span><span> </span><span class="annot"><span class="annottext">CInt
+</span><span class="hs-identifier hs-var">inputOutput</span></span><span> </span><span class="annot"><span class="annottext">Visual
+</span><a href="#local-6989586621679422807"><span class="hs-identifier hs-var">visual</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">AttributeMask
+</span><span class="hs-identifier hs-var">cWEventMask</span></span><span> </span><span class="annot"><span class="annottext">forall a. Bits a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-operator hs-var">.|.</span></span><span> </span><span class="annot"><span class="annottext">AttributeMask
+</span><span class="hs-identifier hs-var">cWOverrideRedirect</span></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">Ptr SetWindowAttributes
+</span><a href="#local-6989586621679422802"><span class="hs-identifier hs-var">winAttrs</span></a></span><span>
+</span><span id="line-110"></span><span>        </span><span class="annot"><span class="annottext">forall (m :: * -&gt; *) a. MonadIO m =&gt; IO a -&gt; m a
+</span><span class="hs-identifier hs-var">io</span></span><span> </span><span class="annot"><span class="annottext">forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">Display -&gt; AttributeMask -&gt; IO ()
+</span><span class="hs-identifier hs-var">mapWindow</span></span><span> </span><span class="annot"><span class="annottext">Display
+</span><a href="#local-6989586621679422809"><span class="hs-identifier hs-var">dpy</span></a></span><span> </span><span class="annot"><span class="annottext">AttributeMask
+</span><a href="#local-6989586621679422804"><span class="hs-identifier hs-var">window</span></a></span><span>   </span><span class="hs-comment">-- not sure if this is needed</span><span>
+</span><span id="line-111"></span><span>        </span><span class="annot"><span class="annottext">forall (m :: * -&gt; *) a. MonadIO m =&gt; IO a -&gt; m a
+</span><span class="hs-identifier hs-var">io</span></span><span> </span><span class="annot"><span class="annottext">forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">Display -&gt; AttributeMask -&gt; IO ()
+</span><span class="hs-identifier hs-var">lowerWindow</span></span><span> </span><span class="annot"><span class="annottext">Display
+</span><a href="#local-6989586621679422809"><span class="hs-identifier hs-var">dpy</span></a></span><span> </span><span class="annot"><span class="annottext">AttributeMask
+</span><a href="#local-6989586621679422804"><span class="hs-identifier hs-var">window</span></a></span><span> </span><span class="hs-comment">-- not sure if this is needed</span><span>
+</span><span id="line-112"></span><span>        </span><span class="annot"><span class="annottext">forall (m :: * -&gt; *) a. Monad m =&gt; a -&gt; m a
+</span><span class="hs-identifier hs-var">return</span></span><span> </span><span class="annot"><span class="annottext">AttributeMask
+</span><a href="#local-6989586621679422804"><span class="hs-identifier hs-var">window</span></a></span><span>
+</span><span id="line-113"></span><span>
+</span><span id="line-114"></span><span class="hs-comment">-- | Get WM name.</span><span>
+</span><span id="line-115"></span><span class="annot"><a href="XMonad.Hooks.SetWMName.html#getWMName"><span class="hs-identifier hs-type">getWMName</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">X</span></span><span> </span><span class="annot"><span class="hs-identifier hs-type">String</span></span><span>
+</span><span id="line-116"></span><span id="getWMName"><span class="annot"><span class="annottext">getWMName :: X String
+</span><a href="XMonad.Hooks.SetWMName.html#getWMName"><span class="hs-identifier hs-var hs-var">getWMName</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">X AttributeMask
+</span><a href="XMonad.Hooks.SetWMName.html#getSupportWindow"><span class="hs-identifier hs-var">getSupportWindow</span></a></span><span> </span><span class="annot"><span class="annottext">forall (m :: * -&gt; *) a b. Monad m =&gt; m a -&gt; (a -&gt; m b) -&gt; m b
+</span><span class="hs-operator hs-var">&gt;&gt;=</span></span><span> </span><span class="annot"><span class="annottext">forall a. Query a -&gt; AttributeMask -&gt; X a
+</span><span class="hs-identifier hs-var">runQuery</span></span><span> </span><span class="annot"><span class="annottext">Query String
+</span><span class="hs-identifier hs-var">title</span></span><span>
+</span><span id="line-117"></span></pre></body></html>

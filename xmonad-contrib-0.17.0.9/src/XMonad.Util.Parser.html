@@ -1,0 +1,429 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd"><html xmlns="http://www.w3.org/1999/xhtml"><head><link rel="stylesheet" type="text/css" href="style.css" /><script type="text/javascript" src="highlight.js"></script></head><body><pre><span class="hs-pragma">{-# LANGUAGE DerivingStrategies         #-}</span><span>
+</span><span id="line-2"></span><span class="hs-pragma">{-# LANGUAGE FlexibleInstances          #-}</span><span>
+</span><span id="line-3"></span><span class="hs-pragma">{-# LANGUAGE GeneralizedNewtypeDeriving #-}</span><span>
+</span><span id="line-4"></span><span class="hs-pragma">{-# LANGUAGE InstanceSigs               #-}</span><span>
+</span><span id="line-5"></span><span class="hs-pragma">{-# LANGUAGE ScopedTypeVariables        #-}</span><span>
+</span><span id="line-6"></span><span class="hs-pragma">{-# LANGUAGE TypeApplications           #-}</span><span>
+</span><span id="line-7"></span><span class="hs-pragma">{-# LANGUAGE TypeFamilies               #-}</span><span>
+</span><span id="line-8"></span><span class="hs-comment">--------------------------------------------------------------------</span><span>
+</span><span id="line-9"></span><span class="hs-comment">-- |</span><span>
+</span><span id="line-10"></span><span class="hs-comment">-- Module      : XMonad.Util.Parser</span><span>
+</span><span id="line-11"></span><span class="hs-comment">-- Description : A parser combinator library for xmonad</span><span>
+</span><span id="line-12"></span><span class="hs-comment">-- Copyright   : (c) 2021  Tony Zorman</span><span>
+</span><span id="line-13"></span><span class="hs-comment">-- License     : BSD3</span><span>
+</span><span id="line-14"></span><span class="hs-comment">-- Maintainer  : Tony Zorman &lt;soliditsallgood@mailbox.org&gt;</span><span>
+</span><span id="line-15"></span><span class="hs-comment">-- Stability   : experimental</span><span>
+</span><span id="line-16"></span><span class="hs-comment">-- Portability : non-portable</span><span>
+</span><span id="line-17"></span><span class="hs-comment">--</span><span>
+</span><span id="line-18"></span><span class="hs-comment">-- A small wrapper around the 'ReadP' parser combinator in @base@,</span><span>
+</span><span id="line-19"></span><span class="hs-comment">-- providing a more intuitive behaviour.  While it's theoretically nice</span><span>
+</span><span id="line-20"></span><span class="hs-comment">-- that 'ReadP' is actually commutative, this makes a lot of parsing</span><span>
+</span><span id="line-21"></span><span class="hs-comment">-- operations rather awkward&#8212;more often than not, one only wants the</span><span>
+</span><span id="line-22"></span><span class="hs-comment">-- argument that's parsed &quot;first&quot;.</span><span>
+</span><span id="line-23"></span><span class="hs-comment">--</span><span>
+</span><span id="line-24"></span><span class="hs-comment">-- Due to the left-biased nature of the chosen semigroup implementation,</span><span>
+</span><span id="line-25"></span><span class="hs-comment">-- using functions like 'many' or 'optional' from &quot;Control.Applicative&quot;</span><span>
+</span><span id="line-26"></span><span class="hs-comment">-- now yields more consistent behaviour with other parser combinator</span><span>
+</span><span id="line-27"></span><span class="hs-comment">-- libraries.</span><span>
+</span><span id="line-28"></span><span class="hs-comment">--</span><span>
+</span><span id="line-29"></span><span class="hs-comment">--------------------------------------------------------------------</span><span>
+</span><span id="line-30"></span><span class="hs-keyword">module</span><span> </span><span class="hs-identifier">XMonad.Util.Parser</span><span> </span><span class="hs-special">(</span><span>
+</span><span id="line-31"></span><span>  </span><span class="annot"><span class="hs-comment">-- * Usage</span></span><span>
+</span><span id="line-32"></span><span>  </span><span class="annot"><span class="hs-comment">-- $usage</span></span><span>
+</span><span id="line-33"></span><span>
+</span><span id="line-34"></span><span>  </span><span class="annot"><span class="hs-comment">-- * Running</span></span><span>
+</span><span id="line-35"></span><span>  </span><span class="annot"><a href="XMonad.Util.Parser.html#Parser"><span class="hs-identifier">Parser</span></a></span><span class="hs-special">,</span><span>
+</span><span id="line-36"></span><span>  </span><span class="annot"><a href="XMonad.Util.Parser.html#runParser"><span class="hs-identifier">runParser</span></a></span><span class="hs-special">,</span><span>
+</span><span id="line-37"></span><span>
+</span><span id="line-38"></span><span>  </span><span class="annot"><span class="hs-comment">-- * Primitive Parsers</span></span><span>
+</span><span id="line-39"></span><span>  </span><span class="annot"><a href="XMonad.Util.Parser.html#eof"><span class="hs-identifier">eof</span></a></span><span class="hs-special">,</span><span>
+</span><span id="line-40"></span><span>  </span><span class="annot"><a href="XMonad.Util.Parser.html#num"><span class="hs-identifier">num</span></a></span><span class="hs-special">,</span><span>
+</span><span id="line-41"></span><span>  </span><span class="annot"><a href="XMonad.Util.Parser.html#char"><span class="hs-identifier">char</span></a></span><span class="hs-special">,</span><span>
+</span><span id="line-42"></span><span>  </span><span class="annot"><a href="XMonad.Util.Parser.html#string"><span class="hs-identifier">string</span></a></span><span class="hs-special">,</span><span>
+</span><span id="line-43"></span><span>  </span><span class="annot"><a href="XMonad.Util.Parser.html#skipSpaces"><span class="hs-identifier">skipSpaces</span></a></span><span class="hs-special">,</span><span>
+</span><span id="line-44"></span><span>  </span><span class="annot"><a href="XMonad.Util.Parser.html#get"><span class="hs-identifier">get</span></a></span><span class="hs-special">,</span><span>
+</span><span id="line-45"></span><span>  </span><span class="annot"><a href="XMonad.Util.Parser.html#look"><span class="hs-identifier">look</span></a></span><span class="hs-special">,</span><span>
+</span><span id="line-46"></span><span>
+</span><span id="line-47"></span><span>  </span><span class="annot"><span class="hs-comment">-- * Combining Parsers</span></span><span>
+</span><span id="line-48"></span><span>  </span><span class="annot"><a href="XMonad.Util.Parser.html#satisfy"><span class="hs-identifier">satisfy</span></a></span><span class="hs-special">,</span><span>
+</span><span id="line-49"></span><span>  </span><span class="annot"><a href="XMonad.Util.Parser.html#choice"><span class="hs-identifier">choice</span></a></span><span class="hs-special">,</span><span>
+</span><span id="line-50"></span><span>  </span><span class="annot"><a href="XMonad.Util.Parser.html#many1"><span class="hs-identifier">many1</span></a></span><span class="hs-special">,</span><span>
+</span><span id="line-51"></span><span>  </span><span class="annot"><a href="XMonad.Util.Parser.html#sepBy"><span class="hs-identifier">sepBy</span></a></span><span class="hs-special">,</span><span>
+</span><span id="line-52"></span><span>  </span><span class="annot"><a href="XMonad.Util.Parser.html#sepBy1"><span class="hs-identifier">sepBy1</span></a></span><span class="hs-special">,</span><span>
+</span><span id="line-53"></span><span>  </span><span class="annot"><a href="XMonad.Util.Parser.html#endBy"><span class="hs-identifier">endBy</span></a></span><span class="hs-special">,</span><span>
+</span><span id="line-54"></span><span>  </span><span class="annot"><a href="XMonad.Util.Parser.html#endBy1"><span class="hs-identifier">endBy1</span></a></span><span class="hs-special">,</span><span>
+</span><span id="line-55"></span><span>  </span><span class="annot"><a href="XMonad.Util.Parser.html#munch"><span class="hs-identifier">munch</span></a></span><span class="hs-special">,</span><span>
+</span><span id="line-56"></span><span>  </span><span class="annot"><a href="XMonad.Util.Parser.html#munch1"><span class="hs-identifier">munch1</span></a></span><span class="hs-special">,</span><span>
+</span><span id="line-57"></span><span>  </span><span class="annot"><a href="XMonad.Util.Parser.html#pfail"><span class="hs-identifier">pfail</span></a></span><span>
+</span><span id="line-58"></span><span class="hs-special">)</span><span> </span><span class="hs-keyword">where</span><span>
+</span><span id="line-59"></span><span>
+</span><span id="line-60"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><a href="XMonad.Prelude.html"><span class="hs-identifier">XMonad.Prelude</span></a></span><span>
+</span><span id="line-61"></span><span>
+</span><span id="line-62"></span><span class="hs-keyword">import</span><span> </span><span class="hs-keyword">qualified</span><span> </span><span class="annot"><span class="hs-identifier">Text.ParserCombinators.ReadP</span></span><span> </span><span class="hs-keyword">as</span><span> </span><span class="annot"><span class="hs-identifier">ReadP</span></span><span>
+</span><span id="line-63"></span><span>
+</span><span id="line-64"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><span class="hs-identifier">Data.Coerce</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier">coerce</span></span><span class="hs-special">)</span><span>
+</span><span id="line-65"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><span class="hs-identifier">Data.String</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier">IsString</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier">fromString</span></span><span class="hs-special">)</span><span class="hs-special">)</span><span>
+</span><span id="line-66"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><span class="hs-identifier">Text.ParserCombinators.ReadP</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier">ReadP</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-operator">(&lt;++)</span></span><span class="hs-special">)</span><span>
+</span><span id="line-67"></span><span>
+</span><span id="line-68"></span><span class="hs-comment">{- $usage
+
+NOTE: This module is mostly intended for developing of other modules.
+If you are a users, you probably won't find much use here&#8212;you have been
+warned.
+
+The high-level API tries to stay as close to 'ReadP' as possible.  If
+you are familiar with that then no functions here should surprise you.
+
+One notable usability difference when forcing left-biasedness is /when/
+one wants to disambiguate a parse.  For normal 'ReadP' usage this
+happens after the actual parsing stage by going through the list of
+successful parses.  For 'Parser' it does when constructing the relevant
+combinators, leading to only one successful parse.  As an example,
+consider the 'ReadP'-based parser
+
+&gt; pLangle = ReadP.string &quot;&lt;&quot;
+&gt; pLongerSequence = ReadP.char '&lt;' *&gt; ReadP.string &quot;f&quot; &lt;* ReadP.char '&gt;'
+&gt; pCombination = pLangle ReadP.+++ pLongerSequence
+
+Parsing the string @&quot;&lt;f&gt;&quot;@ will return
+
+&gt;&gt;&gt; ReadP.readP_to_S pCombination &quot;&lt;f&gt;&quot;
+[(&quot;&lt;&quot;,&quot;f&gt;&quot;),(&quot;f&quot;,&quot;&quot;)]
+
+One would now need to, for example, filter for the second (leftover)
+string being empty and take the head of the resulting list (which may
+still have more than one element).
+
+With 'Parser', the same situation would look like the following
+
+&gt; pLangle' = string &quot;&lt;&quot;
+&gt; pLongerSequence' = char '&lt;' *&gt; string &quot;f&quot; &lt;* char '&gt;'
+&gt; pCombination' = pLongerSequence' &lt;&gt; pLangle'
+
+Notice how @pLangle'@ and @pLongerSequence'@ have traded places&#8212;since we
+are not forcing @pLangle'@ to consume the entire string and @(&lt;&gt;)@ is
+left-biased, @pLongerSequence'@ parses a superset of @pLangle'@!
+Running @runParser pCombination'@ now yields the expected result:
+
+&gt;&gt;&gt; runParser pCombination' &quot;&lt;f&gt;&quot;
+Just &quot;f&quot;
+
+One might also define @pLangle'@ as @string &quot;&lt;&quot; &lt;* eof@, which would
+enable a definition of @pCombination' = pLangle' &lt;&gt; pLongerSequence'@.
+
+For example uses, see &quot;XMonad.Util.EZConfig&quot; or &quot;XMonad.Prompt.OrgMode&quot;.
+-}</span><span>
+</span><span id="line-116"></span><span>
+</span><span id="line-117"></span><span class="hs-comment">-- Parser :: Type -&gt; Type</span><span>
+</span><span id="line-118"></span><span class="hs-keyword">newtype</span><span> </span><span id="Parser"><span class="annot"><a href="XMonad.Util.Parser.html#Parser"><span class="hs-identifier hs-var">Parser</span></a></span></span><span> </span><span id="local-6989586621679388117"><span class="annot"><a href="#local-6989586621679388117"><span class="hs-identifier hs-type">a</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span id="Parser"><span class="annot"><a href="XMonad.Util.Parser.html#Parser"><span class="hs-identifier hs-var">Parser</span></a></span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">ReadP</span></span><span> </span><span class="annot"><a href="#local-6989586621679388117"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-119"></span><span>  </span><span class="hs-keyword">deriving</span><span> </span><span class="annot"><span class="hs-keyword">newtype</span></span><span> </span><span class="hs-special">(</span><span id="local-6989586621679388017"><span id="local-6989586621679388022"><span class="annot"><span class="annottext">(forall a b. (a -&gt; b) -&gt; Parser a -&gt; Parser b)
+-&gt; (forall a b. a -&gt; Parser b -&gt; Parser a) -&gt; Functor Parser
+forall a b. a -&gt; Parser b -&gt; Parser a
+forall a b. (a -&gt; b) -&gt; Parser a -&gt; Parser b
+forall (f :: * -&gt; *).
+(forall a b. (a -&gt; b) -&gt; f a -&gt; f b)
+-&gt; (forall a b. a -&gt; f b -&gt; f a) -&gt; Functor f
+&lt;$ :: forall a b. a -&gt; Parser b -&gt; Parser a
+$c&lt;$ :: forall a b. a -&gt; Parser b -&gt; Parser a
+fmap :: forall a b. (a -&gt; b) -&gt; Parser a -&gt; Parser b
+$cfmap :: forall a b. (a -&gt; b) -&gt; Parser a -&gt; Parser b
+</span><span class="hs-identifier hs-var hs-var hs-var hs-var hs-var hs-var">Functor</span></span></span></span><span class="hs-special">,</span><span> </span><span id="local-6989586621679387992"><span id="local-6989586621679387996"><span id="local-6989586621679388000"><span id="local-6989586621679388004"><span id="local-6989586621679388009"><span class="annot"><span class="annottext">Functor Parser
+Functor Parser
+-&gt; (forall a. a -&gt; Parser a)
+-&gt; (forall a b. Parser (a -&gt; b) -&gt; Parser a -&gt; Parser b)
+-&gt; (forall a b c.
+    (a -&gt; b -&gt; c) -&gt; Parser a -&gt; Parser b -&gt; Parser c)
+-&gt; (forall a b. Parser a -&gt; Parser b -&gt; Parser b)
+-&gt; (forall a b. Parser a -&gt; Parser b -&gt; Parser a)
+-&gt; Applicative Parser
+forall a. a -&gt; Parser a
+forall a b. Parser a -&gt; Parser b -&gt; Parser a
+forall a b. Parser a -&gt; Parser b -&gt; Parser b
+forall a b. Parser (a -&gt; b) -&gt; Parser a -&gt; Parser b
+forall a b c. (a -&gt; b -&gt; c) -&gt; Parser a -&gt; Parser b -&gt; Parser c
+forall (f :: * -&gt; *).
+Functor f
+-&gt; (forall a. a -&gt; f a)
+-&gt; (forall a b. f (a -&gt; b) -&gt; f a -&gt; f b)
+-&gt; (forall a b c. (a -&gt; b -&gt; c) -&gt; f a -&gt; f b -&gt; f c)
+-&gt; (forall a b. f a -&gt; f b -&gt; f b)
+-&gt; (forall a b. f a -&gt; f b -&gt; f a)
+-&gt; Applicative f
+&lt;* :: forall a b. Parser a -&gt; Parser b -&gt; Parser a
+$c&lt;* :: forall a b. Parser a -&gt; Parser b -&gt; Parser a
+*&gt; :: forall a b. Parser a -&gt; Parser b -&gt; Parser b
+$c*&gt; :: forall a b. Parser a -&gt; Parser b -&gt; Parser b
+liftA2 :: forall a b c. (a -&gt; b -&gt; c) -&gt; Parser a -&gt; Parser b -&gt; Parser c
+$cliftA2 :: forall a b c. (a -&gt; b -&gt; c) -&gt; Parser a -&gt; Parser b -&gt; Parser c
+&lt;*&gt; :: forall a b. Parser (a -&gt; b) -&gt; Parser a -&gt; Parser b
+$c&lt;*&gt; :: forall a b. Parser (a -&gt; b) -&gt; Parser a -&gt; Parser b
+pure :: forall a. a -&gt; Parser a
+$cpure :: forall a. a -&gt; Parser a
+</span><span class="hs-identifier hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var">Applicative</span></span></span></span></span></span></span><span class="hs-special">,</span><span> </span><span id="local-6989586621679387975"><span id="local-6989586621679387979"><span id="local-6989586621679387984"><span class="annot"><span class="annottext">Applicative Parser
+Applicative Parser
+-&gt; (forall a b. Parser a -&gt; (a -&gt; Parser b) -&gt; Parser b)
+-&gt; (forall a b. Parser a -&gt; Parser b -&gt; Parser b)
+-&gt; (forall a. a -&gt; Parser a)
+-&gt; Monad Parser
+forall a. a -&gt; Parser a
+forall a b. Parser a -&gt; Parser b -&gt; Parser b
+forall a b. Parser a -&gt; (a -&gt; Parser b) -&gt; Parser b
+forall (m :: * -&gt; *).
+Applicative m
+-&gt; (forall a b. m a -&gt; (a -&gt; m b) -&gt; m b)
+-&gt; (forall a b. m a -&gt; m b -&gt; m b)
+-&gt; (forall a. a -&gt; m a)
+-&gt; Monad m
+return :: forall a. a -&gt; Parser a
+$creturn :: forall a. a -&gt; Parser a
+&gt;&gt; :: forall a b. Parser a -&gt; Parser b -&gt; Parser b
+$c&gt;&gt; :: forall a b. Parser a -&gt; Parser b -&gt; Parser b
+&gt;&gt;= :: forall a b. Parser a -&gt; (a -&gt; Parser b) -&gt; Parser b
+$c&gt;&gt;= :: forall a b. Parser a -&gt; (a -&gt; Parser b) -&gt; Parser b
+</span><span class="hs-identifier hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var">Monad</span></span></span></span></span><span class="hs-special">)</span><span>
+</span><span id="line-120"></span><span>
+</span><span id="line-121"></span><span id="local-6989586621679388124"><span class="hs-keyword">instance</span><span> </span><span id="local-6989586621679387966"><span id="local-6989586621679387968"><span class="annot"><span class="hs-identifier hs-type">Semigroup</span></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="XMonad.Util.Parser.html#Parser"><span class="hs-identifier hs-type">Parser</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679388124"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">)</span></span></span><span> </span><span class="hs-keyword">where</span><span>
+</span><span id="line-122"></span><span>  </span><span class="hs-comment">-- | Local, exclusive, left-biased choice: If left parser locally</span><span>
+</span><span id="line-123"></span><span>  </span><span class="hs-comment">-- produces any result at all, then right parser is not used.</span><span>
+</span><span id="line-124"></span><span>  </span><span class="annot"><span class="hs-operator hs-type">(&lt;&gt;)</span></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><a href="XMonad.Util.Parser.html#Parser"><span class="hs-identifier hs-type">Parser</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679388124"><span class="hs-identifier hs-type">a</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="XMonad.Util.Parser.html#Parser"><span class="hs-identifier hs-type">Parser</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679388124"><span class="hs-identifier hs-type">a</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="XMonad.Util.Parser.html#Parser"><span class="hs-identifier hs-type">Parser</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679388124"><span class="hs-identifier hs-type">a</span></a></span><span>
+</span><span id="line-125"></span><span>  </span><span id="local-6989586621679387963"><span class="annot"><span class="annottext">&lt;&gt; :: Parser a -&gt; Parser a -&gt; Parser a
+</span><span class="hs-operator hs-var hs-var hs-var hs-var">(&lt;&gt;)</span></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">(ReadP a -&gt; ReadP a -&gt; ReadP a) -&gt; Parser a -&gt; Parser a -&gt; Parser a
+</span><span class="hs-identifier hs-var">coerce</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">forall a. ReadP a -&gt; ReadP a -&gt; ReadP a
+</span><span class="hs-operator hs-var">(&lt;++)</span></span><span> </span><span class="hs-glyph">@</span><span class="annot"><a href="#local-6989586621679388124"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">)</span></span><span>
+</span><span id="line-126"></span><span>
+</span><span id="line-127"></span><span id="local-6989586621679388118"><span class="hs-keyword">instance</span><span> </span><span id="local-6989586621679387956"><span id="local-6989586621679387958"><span class="annot"><span class="hs-identifier hs-type">Monoid</span></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="XMonad.Util.Parser.html#Parser"><span class="hs-identifier hs-type">Parser</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679388118"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">)</span></span></span><span> </span><span class="hs-keyword">where</span><span>
+</span><span id="line-128"></span><span>  </span><span class="hs-comment">-- | A parser that always fails.</span><span>
+</span><span id="line-129"></span><span>  </span><span class="annot"><span class="hs-identifier hs-type">mempty</span></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><a href="XMonad.Util.Parser.html#Parser"><span class="hs-identifier hs-type">Parser</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679388118"><span class="hs-identifier hs-type">a</span></a></span><span>
+</span><span id="line-130"></span><span>  </span><span id="local-6989586621679387952"><span class="annot"><span class="annottext">mempty :: Parser a
+</span><span class="hs-identifier hs-var hs-var hs-var hs-var">mempty</span></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">ReadP a -&gt; Parser a
+forall a. ReadP a -&gt; Parser a
+</span><a href="XMonad.Util.Parser.html#Parser"><span class="hs-identifier hs-var">Parser</span></a></span><span> </span><span class="annot"><span class="annottext">ReadP a
+forall (f :: * -&gt; *) a. Alternative f =&gt; f a
+</span><span class="hs-identifier hs-var">empty</span></span></span><span>
+</span><span id="line-131"></span><span>
+</span><span id="line-132"></span><span class="hs-keyword">instance</span><span> </span><span id="local-6989586621679387943"><span id="local-6989586621679387945"><span class="annot"><span class="hs-identifier hs-type">Alternative</span></span><span> </span><span class="annot"><a href="XMonad.Util.Parser.html#Parser"><span class="hs-identifier hs-type">Parser</span></a></span></span></span><span> </span><span class="hs-keyword">where</span><span>
+</span><span id="line-133"></span><span>  </span><span id="local-6989586621679387941"><span class="annot"><span class="hs-identifier hs-type">empty</span></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><a href="XMonad.Util.Parser.html#Parser"><span class="hs-identifier hs-type">Parser</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679387941"><span class="hs-identifier hs-type">a</span></a></span></span><span>
+</span><span id="line-134"></span><span>  </span><span id="local-6989586621679387939"><span class="annot"><span class="annottext">empty :: forall a. Parser a
+</span><a href="#local-6989586621679387939"><span class="hs-identifier hs-var hs-var hs-var hs-var">empty</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Parser a
+forall a. Monoid a =&gt; a
+</span><span class="hs-identifier hs-var">mempty</span></span><span>
+</span><span id="line-135"></span><span>
+</span><span id="line-136"></span><span>  </span><span id="local-6989586621679387938"><span class="annot"><span class="hs-operator hs-type">(&lt;|&gt;)</span></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><a href="XMonad.Util.Parser.html#Parser"><span class="hs-identifier hs-type">Parser</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679387938"><span class="hs-identifier hs-type">a</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="XMonad.Util.Parser.html#Parser"><span class="hs-identifier hs-type">Parser</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679387938"><span class="hs-identifier hs-type">a</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="XMonad.Util.Parser.html#Parser"><span class="hs-identifier hs-type">Parser</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679387938"><span class="hs-identifier hs-type">a</span></a></span></span><span>
+</span><span id="line-137"></span><span>  </span><span id="local-6989586621679387935"><span class="annot"><span class="annottext">&lt;|&gt; :: forall a. Parser a -&gt; Parser a -&gt; Parser a
+</span><a href="#local-6989586621679387935"><span class="hs-operator hs-var hs-var hs-var hs-var">(&lt;|&gt;)</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Parser a -&gt; Parser a -&gt; Parser a
+forall a. Semigroup a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-operator hs-var">(&lt;&gt;)</span></span><span>
+</span><span id="line-138"></span><span>
+</span><span id="line-139"></span><span class="hs-comment">-- | When @-XOverloadedStrings@ is on, treat a string @s@ as the parser</span><span>
+</span><span id="line-140"></span><span class="hs-comment">-- @'string' s@, when appropriate.  This allows one to write things like</span><span>
+</span><span id="line-141"></span><span class="hs-comment">-- @&quot;a&quot; *&gt; otherParser@ instead of @'string' &quot;a&quot; *&gt; otherParser@.</span><span>
+</span><span id="line-142"></span><span id="local-6989586621679388108"><span class="hs-keyword">instance</span><span> </span><span class="annot"><a href="#local-6989586621679388108"><span class="hs-identifier hs-type">a</span></a></span><span> </span><span class="annot"><span class="hs-operator hs-type">~</span></span><span> </span><span class="annot"><span class="hs-identifier hs-type">String</span></span><span> </span><span class="hs-glyph">=&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">IsString</span></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="XMonad.Util.Parser.html#Parser"><span class="hs-identifier hs-type">Parser</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679388108"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-keyword">where</span><span>
+</span><span id="line-143"></span><span>  </span><span class="annot"><span class="hs-identifier hs-type">fromString</span></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">String</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="XMonad.Util.Parser.html#Parser"><span class="hs-identifier hs-type">Parser</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679388108"><span class="hs-identifier hs-type">a</span></a></span><span>
+</span><span id="line-144"></span><span>  </span><span id="local-6989586621679387929"><span class="annot"><span class="annottext">fromString :: String -&gt; Parser a
+</span><span class="hs-identifier hs-var hs-var hs-var hs-var">fromString</span></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">String -&gt; Parser a
+String -&gt; Parser String
+</span><a href="XMonad.Util.Parser.html#string"><span class="hs-identifier hs-var">string</span></a></span></span><span>
+</span><span id="line-145"></span><span>
+</span><span id="line-146"></span><span class="hs-comment">-- | Run a parser on a given string.</span><span>
+</span><span id="line-147"></span><span id="local-6989586621679388107"><span class="annot"><a href="XMonad.Util.Parser.html#runParser"><span class="hs-identifier hs-type">runParser</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><a href="XMonad.Util.Parser.html#Parser"><span class="hs-identifier hs-type">Parser</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679388107"><span class="hs-identifier hs-type">a</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">String</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Maybe</span></span><span> </span><span class="annot"><a href="#local-6989586621679388107"><span class="hs-identifier hs-type">a</span></a></span></span><span>
+</span><span id="line-148"></span><span id="runParser"><span class="annot"><span class="annottext">runParser :: forall a. Parser a -&gt; String -&gt; Maybe a
+</span><a href="XMonad.Util.Parser.html#runParser"><span class="hs-identifier hs-var hs-var">runParser</span></a></span></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="XMonad.Util.Parser.html#Parser"><span class="hs-identifier hs-type">Parser</span></a></span><span> </span><span id="local-6989586621679387926"><span class="annot"><span class="annottext">ReadP a
+</span><a href="#local-6989586621679387926"><span class="hs-identifier hs-var">p</span></a></span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">((a, String) -&gt; a) -&gt; Maybe (a, String) -&gt; Maybe a
+forall (f :: * -&gt; *) a b. Functor f =&gt; (a -&gt; b) -&gt; f a -&gt; f b
+</span><span class="hs-identifier hs-var">fmap</span></span><span> </span><span class="annot"><span class="annottext">(a, String) -&gt; a
+forall a b. (a, b) -&gt; a
+</span><span class="hs-identifier hs-var">fst</span></span><span> </span><span class="annot"><span class="annottext">(Maybe (a, String) -&gt; Maybe a)
+-&gt; (String -&gt; Maybe (a, String)) -&gt; String -&gt; Maybe a
+forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">[(a, String)] -&gt; Maybe (a, String)
+forall a. [a] -&gt; Maybe a
+</span><span class="hs-identifier hs-var">listToMaybe</span></span><span> </span><span class="annot"><span class="annottext">([(a, String)] -&gt; Maybe (a, String))
+-&gt; (String -&gt; [(a, String)]) -&gt; String -&gt; Maybe (a, String)
+forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">ReadP a -&gt; String -&gt; [(a, String)]
+forall a. ReadP a -&gt; ReadS a
+</span><span class="hs-identifier hs-var">ReadP.readP_to_S</span></span><span> </span><span class="annot"><span class="annottext">ReadP a
+</span><a href="#local-6989586621679387926"><span class="hs-identifier hs-var">p</span></a></span><span>
+</span><span id="line-149"></span><span>
+</span><span id="line-150"></span><span class="hs-comment">-- | Always fails</span><span>
+</span><span id="line-151"></span><span id="local-6989586621679387922"><span class="annot"><a href="XMonad.Util.Parser.html#pfail"><span class="hs-identifier hs-type">pfail</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><a href="XMonad.Util.Parser.html#Parser"><span class="hs-identifier hs-type">Parser</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679387922"><span class="hs-identifier hs-type">a</span></a></span></span><span>
+</span><span id="line-152"></span><span id="pfail"><span class="annot"><span class="annottext">pfail :: forall a. Parser a
+</span><a href="XMonad.Util.Parser.html#pfail"><span class="hs-identifier hs-var hs-var">pfail</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Parser a
+forall (f :: * -&gt; *) a. Alternative f =&gt; f a
+</span><span class="hs-identifier hs-var">empty</span></span><span>
+</span><span id="line-153"></span><span>
+</span><span id="line-154"></span><span class="hs-comment">-- | Consume and return the next character.  Fails if there is no input</span><span>
+</span><span id="line-155"></span><span class="hs-comment">-- left.</span><span>
+</span><span id="line-156"></span><span class="annot"><a href="XMonad.Util.Parser.html#get"><span class="hs-identifier hs-type">get</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><a href="XMonad.Util.Parser.html#Parser"><span class="hs-identifier hs-type">Parser</span></a></span><span> </span><span class="annot"><span class="hs-identifier hs-type">Char</span></span><span>
+</span><span id="line-157"></span><span id="get"><span class="annot"><span class="annottext">get :: Parser Char
+</span><a href="XMonad.Util.Parser.html#get"><span class="hs-identifier hs-var hs-var">get</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">ReadP Char -&gt; Parser Char
+</span><span class="hs-identifier hs-var">coerce</span></span><span> </span><span class="annot"><span class="annottext">ReadP Char
+</span><span class="hs-identifier hs-var">ReadP.get</span></span><span>
+</span><span id="line-158"></span><span>
+</span><span id="line-159"></span><span class="hs-comment">-- | Look-ahead: return the part of the input that is left, without</span><span>
+</span><span id="line-160"></span><span class="hs-comment">-- consuming it.</span><span>
+</span><span id="line-161"></span><span class="annot"><a href="XMonad.Util.Parser.html#look"><span class="hs-identifier hs-type">look</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><a href="XMonad.Util.Parser.html#Parser"><span class="hs-identifier hs-type">Parser</span></a></span><span> </span><span class="annot"><span class="hs-identifier hs-type">String</span></span><span>
+</span><span id="line-162"></span><span id="look"><span class="annot"><span class="annottext">look :: Parser String
+</span><a href="XMonad.Util.Parser.html#look"><span class="hs-identifier hs-var hs-var">look</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">ReadP String -&gt; Parser String
+</span><span class="hs-identifier hs-var">coerce</span></span><span> </span><span class="annot"><span class="annottext">ReadP String
+</span><span class="hs-identifier hs-var">ReadP.look</span></span><span>
+</span><span id="line-163"></span><span>
+</span><span id="line-164"></span><span class="hs-comment">-- | Succeeds if and only if we are at the end of input.</span><span>
+</span><span id="line-165"></span><span class="annot"><a href="XMonad.Util.Parser.html#eof"><span class="hs-identifier hs-type">eof</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><a href="XMonad.Util.Parser.html#Parser"><span class="hs-identifier hs-type">Parser</span></a></span><span> </span><span class="hs-special">(</span><span class="hs-special">)</span><span>
+</span><span id="line-166"></span><span id="eof"><span class="annot"><span class="annottext">eof :: Parser ()
+</span><a href="XMonad.Util.Parser.html#eof"><span class="hs-identifier hs-var hs-var">eof</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">ReadP () -&gt; Parser ()
+</span><span class="hs-identifier hs-var">coerce</span></span><span> </span><span class="annot"><span class="annottext">ReadP ()
+</span><span class="hs-identifier hs-var">ReadP.eof</span></span><span>
+</span><span id="line-167"></span><span>
+</span><span id="line-168"></span><span class="hs-comment">-- | Parse an integral number number.</span><span>
+</span><span id="line-169"></span><span id="local-6989586621679388096"><span class="annot"><a href="XMonad.Util.Parser.html#num"><span class="hs-identifier hs-type">num</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">Read</span></span><span> </span><span class="annot"><a href="#local-6989586621679388096"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Integral</span></span><span> </span><span class="annot"><a href="#local-6989586621679388096"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=&gt;</span><span> </span><span class="annot"><a href="XMonad.Util.Parser.html#Parser"><span class="hs-identifier hs-type">Parser</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679388096"><span class="hs-identifier hs-type">a</span></a></span></span><span>
+</span><span id="line-170"></span><span id="num"><span class="annot"><span class="annottext">num :: forall a. (Read a, Integral a) =&gt; Parser a
+</span><a href="XMonad.Util.Parser.html#num"><span class="hs-identifier hs-var hs-var">num</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">String -&gt; a
+forall a. Read a =&gt; String -&gt; a
+</span><span class="hs-identifier hs-var">read</span></span><span> </span><span class="annot"><span class="annottext">(String -&gt; a) -&gt; Parser String -&gt; Parser a
+forall (f :: * -&gt; *) a b. Functor f =&gt; (a -&gt; b) -&gt; f a -&gt; f b
+</span><span class="hs-operator hs-var">&lt;$&gt;</span></span><span> </span><span class="annot"><span class="annottext">(Char -&gt; Bool) -&gt; Parser String
+</span><a href="XMonad.Util.Parser.html#munch1"><span class="hs-identifier hs-var">munch1</span></a></span><span> </span><span class="annot"><span class="annottext">Char -&gt; Bool
+</span><span class="hs-identifier hs-var">isDigit</span></span><span>
+</span><span id="line-171"></span><span class="hs-pragma">{-# SPECIALISE</span><span> </span><span class="annot"><a href="XMonad.Util.Parser.html#num"><span class="hs-pragma hs-type">num</span></a></span><span> </span><span class="hs-pragma">::</span><span> </span><span class="annot"><a href="XMonad.Util.Parser.html#Parser"><span class="hs-pragma hs-type">Parser</span></a></span><span> </span><span class="annot"><span class="hs-pragma hs-type">Word</span></span><span>    </span><span class="hs-pragma">#-}</span><span>
+</span><span id="line-172"></span><span class="hs-pragma">{-# SPECIALISE</span><span> </span><span class="annot"><a href="XMonad.Util.Parser.html#num"><span class="hs-pragma hs-type">num</span></a></span><span> </span><span class="hs-pragma">::</span><span> </span><span class="annot"><a href="XMonad.Util.Parser.html#Parser"><span class="hs-pragma hs-type">Parser</span></a></span><span> </span><span class="annot"><span class="hs-pragma hs-type">Int</span></span><span>     </span><span class="hs-pragma">#-}</span><span>
+</span><span id="line-173"></span><span class="hs-pragma">{-# SPECIALISE</span><span> </span><span class="annot"><a href="XMonad.Util.Parser.html#num"><span class="hs-pragma hs-type">num</span></a></span><span> </span><span class="hs-pragma">::</span><span> </span><span class="annot"><a href="XMonad.Util.Parser.html#Parser"><span class="hs-pragma hs-type">Parser</span></a></span><span> </span><span class="annot"><span class="hs-pragma hs-type">Integer</span></span><span> </span><span class="hs-pragma">#-}</span><span>
+</span><span id="line-174"></span><span>
+</span><span id="line-175"></span><span class="hs-comment">-- | Parse and return the specified character.</span><span>
+</span><span id="line-176"></span><span class="annot"><a href="XMonad.Util.Parser.html#char"><span class="hs-identifier hs-type">char</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Char</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="XMonad.Util.Parser.html#Parser"><span class="hs-identifier hs-type">Parser</span></a></span><span> </span><span class="annot"><span class="hs-identifier hs-type">Char</span></span><span>
+</span><span id="line-177"></span><span id="char"><span class="annot"><span class="annottext">char :: Char -&gt; Parser Char
+</span><a href="XMonad.Util.Parser.html#char"><span class="hs-identifier hs-var hs-var">char</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">(Char -&gt; ReadP Char) -&gt; Char -&gt; Parser Char
+</span><span class="hs-identifier hs-var">coerce</span></span><span> </span><span class="annot"><span class="annottext">Char -&gt; ReadP Char
+</span><span class="hs-identifier hs-var">ReadP.char</span></span><span>
+</span><span id="line-178"></span><span>
+</span><span id="line-179"></span><span class="hs-comment">-- | Parse and return the specified string.</span><span>
+</span><span id="line-180"></span><span class="annot"><a href="XMonad.Util.Parser.html#string"><span class="hs-identifier hs-type">string</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">String</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="XMonad.Util.Parser.html#Parser"><span class="hs-identifier hs-type">Parser</span></a></span><span> </span><span class="annot"><span class="hs-identifier hs-type">String</span></span><span>
+</span><span id="line-181"></span><span id="string"><span class="annot"><span class="annottext">string :: String -&gt; Parser String
+</span><a href="XMonad.Util.Parser.html#string"><span class="hs-identifier hs-var hs-var">string</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">(String -&gt; ReadP String) -&gt; String -&gt; Parser String
+</span><span class="hs-identifier hs-var">coerce</span></span><span> </span><span class="annot"><span class="annottext">String -&gt; ReadP String
+</span><span class="hs-identifier hs-var">ReadP.string</span></span><span>
+</span><span id="line-182"></span><span>
+</span><span id="line-183"></span><span class="hs-comment">-- | Skip all whitespace.</span><span>
+</span><span id="line-184"></span><span class="annot"><a href="XMonad.Util.Parser.html#skipSpaces"><span class="hs-identifier hs-type">skipSpaces</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><a href="XMonad.Util.Parser.html#Parser"><span class="hs-identifier hs-type">Parser</span></a></span><span> </span><span class="hs-special">(</span><span class="hs-special">)</span><span>
+</span><span id="line-185"></span><span id="skipSpaces"><span class="annot"><span class="annottext">skipSpaces :: Parser ()
+</span><a href="XMonad.Util.Parser.html#skipSpaces"><span class="hs-identifier hs-var hs-var">skipSpaces</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">ReadP () -&gt; Parser ()
+</span><span class="hs-identifier hs-var">coerce</span></span><span> </span><span class="annot"><span class="annottext">ReadP ()
+</span><span class="hs-identifier hs-var">ReadP.skipSpaces</span></span><span>
+</span><span id="line-186"></span><span>
+</span><span id="line-187"></span><span class="hs-comment">-- | Consume and return the next character if it satisfies the specified</span><span>
+</span><span id="line-188"></span><span class="hs-comment">-- predicate.</span><span>
+</span><span id="line-189"></span><span class="annot"><a href="XMonad.Util.Parser.html#satisfy"><span class="hs-identifier hs-type">satisfy</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">Char</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Bool</span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="XMonad.Util.Parser.html#Parser"><span class="hs-identifier hs-type">Parser</span></a></span><span> </span><span class="annot"><span class="hs-identifier hs-type">Char</span></span><span>
+</span><span id="line-190"></span><span id="satisfy"><span class="annot"><span class="annottext">satisfy :: (Char -&gt; Bool) -&gt; Parser Char
+</span><a href="XMonad.Util.Parser.html#satisfy"><span class="hs-identifier hs-var hs-var">satisfy</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">((Char -&gt; Bool) -&gt; ReadP Char) -&gt; (Char -&gt; Bool) -&gt; Parser Char
+</span><span class="hs-identifier hs-var">coerce</span></span><span> </span><span class="annot"><span class="annottext">(Char -&gt; Bool) -&gt; ReadP Char
+</span><span class="hs-identifier hs-var">ReadP.satisfy</span></span><span>
+</span><span id="line-191"></span><span>
+</span><span id="line-192"></span><span class="hs-comment">-- | Combine all parsers in the given list in a left-biased way.</span><span>
+</span><span id="line-193"></span><span id="local-6989586621679387906"><span class="annot"><a href="XMonad.Util.Parser.html#choice"><span class="hs-identifier hs-type">choice</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="hs-special">[</span><span class="annot"><a href="XMonad.Util.Parser.html#Parser"><span class="hs-identifier hs-type">Parser</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679387906"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">]</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="XMonad.Util.Parser.html#Parser"><span class="hs-identifier hs-type">Parser</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679387906"><span class="hs-identifier hs-type">a</span></a></span></span><span>
+</span><span id="line-194"></span><span id="choice"><span class="annot"><span class="annottext">choice :: forall a. [Parser a] -&gt; Parser a
+</span><a href="XMonad.Util.Parser.html#choice"><span class="hs-identifier hs-var hs-var">choice</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">(Parser a -&gt; Parser a -&gt; Parser a)
+-&gt; Parser a -&gt; [Parser a] -&gt; Parser a
+forall (t :: * -&gt; *) b a.
+Foldable t =&gt;
+(b -&gt; a -&gt; b) -&gt; b -&gt; t a -&gt; b
+</span><span class="hs-identifier hs-var">foldl'</span></span><span> </span><span class="annot"><span class="annottext">Parser a -&gt; Parser a -&gt; Parser a
+forall a. Semigroup a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-operator hs-var">(&lt;&gt;)</span></span><span> </span><span class="annot"><span class="annottext">Parser a
+forall a. Monoid a =&gt; a
+</span><span class="hs-identifier hs-var">mempty</span></span><span>
+</span><span id="line-195"></span><span>
+</span><span id="line-196"></span><span class="hs-comment">-- | Parse the first zero or more characters satisfying the predicate.</span><span>
+</span><span id="line-197"></span><span class="hs-comment">-- Always succeeds; returns an empty string if the predicate returns</span><span>
+</span><span id="line-198"></span><span class="hs-comment">-- @False@ on the first character of input.</span><span>
+</span><span id="line-199"></span><span class="annot"><a href="XMonad.Util.Parser.html#munch"><span class="hs-identifier hs-type">munch</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">Char</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Bool</span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="XMonad.Util.Parser.html#Parser"><span class="hs-identifier hs-type">Parser</span></a></span><span> </span><span class="annot"><span class="hs-identifier hs-type">String</span></span><span>
+</span><span id="line-200"></span><span id="munch"><span class="annot"><span class="annottext">munch :: (Char -&gt; Bool) -&gt; Parser String
+</span><a href="XMonad.Util.Parser.html#munch"><span class="hs-identifier hs-var hs-var">munch</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">((Char -&gt; Bool) -&gt; ReadP String) -&gt; (Char -&gt; Bool) -&gt; Parser String
+</span><span class="hs-identifier hs-var">coerce</span></span><span> </span><span class="annot"><span class="annottext">(Char -&gt; Bool) -&gt; ReadP String
+</span><span class="hs-identifier hs-var">ReadP.munch</span></span><span>
+</span><span id="line-201"></span><span>
+</span><span id="line-202"></span><span class="hs-comment">-- | Parse the first one or more characters satisfying the predicate.</span><span>
+</span><span id="line-203"></span><span class="hs-comment">-- Fails if none, else succeeds exactly once having consumed all the</span><span>
+</span><span id="line-204"></span><span class="hs-comment">-- characters.</span><span>
+</span><span id="line-205"></span><span class="annot"><a href="XMonad.Util.Parser.html#munch1"><span class="hs-identifier hs-type">munch1</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">Char</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Bool</span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="XMonad.Util.Parser.html#Parser"><span class="hs-identifier hs-type">Parser</span></a></span><span> </span><span class="annot"><span class="hs-identifier hs-type">String</span></span><span>
+</span><span id="line-206"></span><span id="munch1"><span class="annot"><span class="annottext">munch1 :: (Char -&gt; Bool) -&gt; Parser String
+</span><a href="XMonad.Util.Parser.html#munch1"><span class="hs-identifier hs-var hs-var">munch1</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">((Char -&gt; Bool) -&gt; ReadP String) -&gt; (Char -&gt; Bool) -&gt; Parser String
+</span><span class="hs-identifier hs-var">coerce</span></span><span> </span><span class="annot"><span class="annottext">(Char -&gt; Bool) -&gt; ReadP String
+</span><span class="hs-identifier hs-var">ReadP.munch1</span></span><span>
+</span><span id="line-207"></span><span>
+</span><span id="line-208"></span><span class="hs-comment">-- | @endBy p sep@ parses zero or more occurrences of @p@, separated and</span><span>
+</span><span id="line-209"></span><span class="hs-comment">-- ended by @sep@.</span><span>
+</span><span id="line-210"></span><span id="local-6989586621679388085"><span id="local-6989586621679388086"><span class="annot"><a href="XMonad.Util.Parser.html#endBy"><span class="hs-identifier hs-type">endBy</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><a href="XMonad.Util.Parser.html#Parser"><span class="hs-identifier hs-type">Parser</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679388086"><span class="hs-identifier hs-type">a</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="XMonad.Util.Parser.html#Parser"><span class="hs-identifier hs-type">Parser</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679388085"><span class="hs-identifier hs-type">sep</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="XMonad.Util.Parser.html#Parser"><span class="hs-identifier hs-type">Parser</span></a></span><span> </span><span class="hs-special">[</span><span class="annot"><a href="#local-6989586621679388086"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">]</span></span></span><span>
+</span><span id="line-211"></span><span id="endBy"><span class="annot"><span class="annottext">endBy :: forall a sep. Parser a -&gt; Parser sep -&gt; Parser [a]
+</span><a href="XMonad.Util.Parser.html#endBy"><span class="hs-identifier hs-var hs-var">endBy</span></a></span></span><span> </span><span id="local-6989586621679387896"><span class="annot"><span class="annottext">Parser a
+</span><a href="#local-6989586621679387896"><span class="hs-identifier hs-var">p</span></a></span></span><span> </span><span id="local-6989586621679387895"><span class="annot"><span class="annottext">Parser sep
+</span><a href="#local-6989586621679387895"><span class="hs-identifier hs-var">sep</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Parser a -&gt; Parser [a]
+forall (f :: * -&gt; *) a. Alternative f =&gt; f a -&gt; f [a]
+</span><span class="hs-identifier hs-var">many</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Parser a
+</span><a href="#local-6989586621679387896"><span class="hs-identifier hs-var">p</span></a></span><span> </span><span class="annot"><span class="annottext">Parser a -&gt; Parser sep -&gt; Parser a
+forall (f :: * -&gt; *) a b. Applicative f =&gt; f a -&gt; f b -&gt; f a
+</span><span class="hs-operator hs-var">&lt;*</span></span><span> </span><span class="annot"><span class="annottext">Parser sep
+</span><a href="#local-6989586621679387895"><span class="hs-identifier hs-var">sep</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-212"></span><span>
+</span><span id="line-213"></span><span class="hs-comment">-- | @endBy p sep@ parses one or more occurrences of @p@, separated and</span><span>
+</span><span id="line-214"></span><span class="hs-comment">-- ended by @sep@.</span><span>
+</span><span id="line-215"></span><span id="local-6989586621679387891"><span id="local-6989586621679387892"><span class="annot"><a href="XMonad.Util.Parser.html#endBy1"><span class="hs-identifier hs-type">endBy1</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><a href="XMonad.Util.Parser.html#Parser"><span class="hs-identifier hs-type">Parser</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679387892"><span class="hs-identifier hs-type">a</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="XMonad.Util.Parser.html#Parser"><span class="hs-identifier hs-type">Parser</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679387891"><span class="hs-identifier hs-type">sep</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="XMonad.Util.Parser.html#Parser"><span class="hs-identifier hs-type">Parser</span></a></span><span> </span><span class="hs-special">[</span><span class="annot"><a href="#local-6989586621679387892"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">]</span></span></span><span>
+</span><span id="line-216"></span><span id="endBy1"><span class="annot"><span class="annottext">endBy1 :: forall a sep. Parser a -&gt; Parser sep -&gt; Parser [a]
+</span><a href="XMonad.Util.Parser.html#endBy1"><span class="hs-identifier hs-var hs-var">endBy1</span></a></span></span><span> </span><span id="local-6989586621679387889"><span class="annot"><span class="annottext">Parser a
+</span><a href="#local-6989586621679387889"><span class="hs-identifier hs-var">p</span></a></span></span><span> </span><span id="local-6989586621679387888"><span class="annot"><span class="annottext">Parser sep
+</span><a href="#local-6989586621679387888"><span class="hs-identifier hs-var">sep</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Parser a -&gt; Parser [a]
+forall a. Parser a -&gt; Parser [a]
+</span><a href="XMonad.Util.Parser.html#many1"><span class="hs-identifier hs-var">many1</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Parser a
+</span><a href="#local-6989586621679387889"><span class="hs-identifier hs-var">p</span></a></span><span> </span><span class="annot"><span class="annottext">Parser a -&gt; Parser sep -&gt; Parser a
+forall (f :: * -&gt; *) a b. Applicative f =&gt; f a -&gt; f b -&gt; f a
+</span><span class="hs-operator hs-var">&lt;*</span></span><span> </span><span class="annot"><span class="annottext">Parser sep
+</span><a href="#local-6989586621679387888"><span class="hs-identifier hs-var">sep</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-217"></span><span>
+</span><span id="line-218"></span><span class="hs-comment">-- | Parse one or more occurrences of the given parser.</span><span>
+</span><span id="line-219"></span><span id="local-6989586621679387887"><span class="annot"><a href="XMonad.Util.Parser.html#many1"><span class="hs-identifier hs-type">many1</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><a href="XMonad.Util.Parser.html#Parser"><span class="hs-identifier hs-type">Parser</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679387887"><span class="hs-identifier hs-type">a</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="XMonad.Util.Parser.html#Parser"><span class="hs-identifier hs-type">Parser</span></a></span><span> </span><span class="hs-special">[</span><span class="annot"><a href="#local-6989586621679387887"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">]</span></span><span>
+</span><span id="line-220"></span><span id="many1"><span class="annot"><span class="annottext">many1 :: forall a. Parser a -&gt; Parser [a]
+</span><a href="XMonad.Util.Parser.html#many1"><span class="hs-identifier hs-var hs-var">many1</span></a></span></span><span> </span><span id="local-6989586621679387884"><span class="annot"><span class="annottext">Parser a
+</span><a href="#local-6989586621679387884"><span class="hs-identifier hs-var">p</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">(a -&gt; [a] -&gt; [a]) -&gt; Parser a -&gt; Parser [a] -&gt; Parser [a]
+forall (f :: * -&gt; *) a b c.
+Applicative f =&gt;
+(a -&gt; b -&gt; c) -&gt; f a -&gt; f b -&gt; f c
+</span><span class="hs-identifier hs-var">liftA2</span></span><span> </span><span class="hs-special">(</span><span class="hs-glyph">:</span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">Parser a
+</span><a href="#local-6989586621679387884"><span class="hs-identifier hs-var">p</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Parser a -&gt; Parser [a]
+forall (f :: * -&gt; *) a. Alternative f =&gt; f a -&gt; f [a]
+</span><span class="hs-identifier hs-var">many</span></span><span> </span><span class="annot"><span class="annottext">Parser a
+</span><a href="#local-6989586621679387884"><span class="hs-identifier hs-var">p</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-221"></span><span>
+</span><span id="line-222"></span><span class="hs-comment">-- | @sepBy p sep@ parses zero or more occurrences of @p@, separated by</span><span>
+</span><span id="line-223"></span><span class="hs-comment">-- @sep@.  Returns a list of values returned by @p@.</span><span>
+</span><span id="line-224"></span><span id="local-6989586621679387881"><span id="local-6989586621679387882"><span class="annot"><a href="XMonad.Util.Parser.html#sepBy"><span class="hs-identifier hs-type">sepBy</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><a href="XMonad.Util.Parser.html#Parser"><span class="hs-identifier hs-type">Parser</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679387882"><span class="hs-identifier hs-type">a</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="XMonad.Util.Parser.html#Parser"><span class="hs-identifier hs-type">Parser</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679387881"><span class="hs-identifier hs-type">sep</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="XMonad.Util.Parser.html#Parser"><span class="hs-identifier hs-type">Parser</span></a></span><span> </span><span class="hs-special">[</span><span class="annot"><a href="#local-6989586621679387882"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">]</span></span></span><span>
+</span><span id="line-225"></span><span id="sepBy"><span class="annot"><span class="annottext">sepBy :: forall a sep. Parser a -&gt; Parser sep -&gt; Parser [a]
+</span><a href="XMonad.Util.Parser.html#sepBy"><span class="hs-identifier hs-var hs-var">sepBy</span></a></span></span><span> </span><span id="local-6989586621679387878"><span class="annot"><span class="annottext">Parser a
+</span><a href="#local-6989586621679387878"><span class="hs-identifier hs-var">p</span></a></span></span><span> </span><span id="local-6989586621679387877"><span class="annot"><span class="annottext">Parser sep
+</span><a href="#local-6989586621679387877"><span class="hs-identifier hs-var">sep</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Parser a -&gt; Parser sep -&gt; Parser [a]
+forall a sep. Parser a -&gt; Parser sep -&gt; Parser [a]
+</span><a href="XMonad.Util.Parser.html#sepBy1"><span class="hs-identifier hs-var">sepBy1</span></a></span><span> </span><span class="annot"><span class="annottext">Parser a
+</span><a href="#local-6989586621679387878"><span class="hs-identifier hs-var">p</span></a></span><span> </span><span class="annot"><span class="annottext">Parser sep
+</span><a href="#local-6989586621679387877"><span class="hs-identifier hs-var">sep</span></a></span><span> </span><span class="annot"><span class="annottext">Parser [a] -&gt; Parser [a] -&gt; Parser [a]
+forall a. Semigroup a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-operator hs-var">&lt;&gt;</span></span><span> </span><span class="annot"><span class="annottext">[a] -&gt; Parser [a]
+forall (f :: * -&gt; *) a. Applicative f =&gt; a -&gt; f a
+</span><span class="hs-identifier hs-var">pure</span></span><span> </span><span class="hs-special">[</span><span class="hs-special">]</span><span>
+</span><span id="line-226"></span><span>
+</span><span id="line-227"></span><span class="hs-comment">-- | @sepBy1 p sep@ parses one or more occurrences of @p@, separated by</span><span>
+</span><span id="line-228"></span><span class="hs-comment">-- @sep@.  Returns a list of values returned by @p@.</span><span>
+</span><span id="line-229"></span><span id="local-6989586621679387875"><span id="local-6989586621679387876"><span class="annot"><a href="XMonad.Util.Parser.html#sepBy1"><span class="hs-identifier hs-type">sepBy1</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><a href="XMonad.Util.Parser.html#Parser"><span class="hs-identifier hs-type">Parser</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679387876"><span class="hs-identifier hs-type">a</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="XMonad.Util.Parser.html#Parser"><span class="hs-identifier hs-type">Parser</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679387875"><span class="hs-identifier hs-type">sep</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="XMonad.Util.Parser.html#Parser"><span class="hs-identifier hs-type">Parser</span></a></span><span> </span><span class="hs-special">[</span><span class="annot"><a href="#local-6989586621679387876"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">]</span></span></span><span>
+</span><span id="line-230"></span><span id="sepBy1"><span class="annot"><span class="annottext">sepBy1 :: forall a sep. Parser a -&gt; Parser sep -&gt; Parser [a]
+</span><a href="XMonad.Util.Parser.html#sepBy1"><span class="hs-identifier hs-var hs-var">sepBy1</span></a></span></span><span> </span><span id="local-6989586621679387871"><span class="annot"><span class="annottext">Parser a
+</span><a href="#local-6989586621679387871"><span class="hs-identifier hs-var">p</span></a></span></span><span> </span><span id="local-6989586621679387870"><span class="annot"><span class="annottext">Parser sep
+</span><a href="#local-6989586621679387870"><span class="hs-identifier hs-var">sep</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">(a -&gt; [a] -&gt; [a]) -&gt; Parser a -&gt; Parser [a] -&gt; Parser [a]
+forall (f :: * -&gt; *) a b c.
+Applicative f =&gt;
+(a -&gt; b -&gt; c) -&gt; f a -&gt; f b -&gt; f c
+</span><span class="hs-identifier hs-var">liftA2</span></span><span> </span><span class="hs-special">(</span><span class="hs-glyph">:</span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">Parser a
+</span><a href="#local-6989586621679387871"><span class="hs-identifier hs-var">p</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Parser a -&gt; Parser [a]
+forall (f :: * -&gt; *) a. Alternative f =&gt; f a -&gt; f [a]
+</span><span class="hs-identifier hs-var">many</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Parser sep
+</span><a href="#local-6989586621679387870"><span class="hs-identifier hs-var">sep</span></a></span><span> </span><span class="annot"><span class="annottext">Parser sep -&gt; Parser a -&gt; Parser a
+forall (f :: * -&gt; *) a b. Applicative f =&gt; f a -&gt; f b -&gt; f b
+</span><span class="hs-operator hs-var">*&gt;</span></span><span> </span><span class="annot"><span class="annottext">Parser a
+</span><a href="#local-6989586621679387871"><span class="hs-identifier hs-var">p</span></a></span><span class="hs-special">)</span><span class="hs-special">)</span><span>
+</span><span id="line-231"></span></pre></body></html>

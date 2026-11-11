@@ -1,0 +1,180 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd"><html xmlns="http://www.w3.org/1999/xhtml"><head><link rel="stylesheet" type="text/css" href="style.css" /><script type="text/javascript" src="highlight.js"></script></head><body><pre><span class="hs-pragma">{-# LANGUAGE InstanceSigs #-}</span><span>
+</span><span id="line-2"></span><span class="hs-comment">-----------------------------------------------------------------------------</span><span>
+</span><span id="line-3"></span><span class="hs-comment">-- |</span><span>
+</span><span id="line-4"></span><span class="hs-comment">-- Module      :  XMonad.Hooks.ShowWName</span><span>
+</span><span id="line-5"></span><span class="hs-comment">-- Description :  Like 'XMonad.Layout.ShowWName', but as a logHook</span><span>
+</span><span id="line-6"></span><span class="hs-comment">-- Copyright   :  (c) 2022  Tony Zorman</span><span>
+</span><span id="line-7"></span><span class="hs-comment">-- License     :  BSD3-style (see LICENSE)</span><span>
+</span><span id="line-8"></span><span class="hs-comment">--</span><span>
+</span><span id="line-9"></span><span class="hs-comment">-- Maintainer  :  Tony Zorman &lt;soliditsallgood@mailbox.org&gt;</span><span>
+</span><span id="line-10"></span><span class="hs-comment">--</span><span>
+</span><span id="line-11"></span><span class="hs-comment">-- Flash the names of workspaces name when switching to them.  This is a</span><span>
+</span><span id="line-12"></span><span class="hs-comment">-- reimplementation of &quot;XMonad.Layout.ShowWName&quot; as a logHook.</span><span>
+</span><span id="line-13"></span><span class="hs-comment">-----------------------------------------------------------------------------</span><span>
+</span><span id="line-14"></span><span>
+</span><span id="line-15"></span><span class="hs-keyword">module</span><span> </span><span class="hs-identifier">XMonad.Hooks.ShowWName</span><span> </span><span class="hs-special">(</span><span>
+</span><span id="line-16"></span><span>  </span><span class="annot"><span class="hs-comment">-- * Usage</span></span><span>
+</span><span id="line-17"></span><span>  </span><span class="annot"><span class="hs-comment">-- $usage</span></span><span>
+</span><span id="line-18"></span><span>  </span><span class="annot"><a href="XMonad.Hooks.ShowWName.html#showWNameLogHook"><span class="hs-identifier">showWNameLogHook</span></a></span><span class="hs-special">,</span><span>
+</span><span id="line-19"></span><span>  </span><span class="annot"><a href="XMonad.Layout.ShowWName.html#SWNConfig"><span class="hs-identifier">SWNConfig</span></a></span><span class="hs-special">(</span><span class="hs-glyph">..</span><span class="hs-special">)</span><span class="hs-special">,</span><span>
+</span><span id="line-20"></span><span>  </span><span class="annot"><a href="XMonad.Hooks.ShowWName.html#flashName"><span class="hs-identifier">flashName</span></a></span><span class="hs-special">,</span><span>
+</span><span id="line-21"></span><span class="hs-special">)</span><span> </span><span class="hs-keyword">where</span><span>
+</span><span id="line-22"></span><span>
+</span><span id="line-23"></span><span class="hs-keyword">import</span><span> </span><span class="hs-keyword">qualified</span><span> </span><span class="annot"><span class="hs-identifier">XMonad.StackSet</span></span><span>             </span><span class="hs-keyword">as</span><span> </span><span class="annot"><span class="hs-identifier">W</span></span><span>
+</span><span id="line-24"></span><span class="hs-keyword">import</span><span> </span><span class="hs-keyword">qualified</span><span> </span><span class="annot"><a href="XMonad.Util.ExtensibleState.html"><span class="hs-identifier">XMonad.Util.ExtensibleState</span></a></span><span> </span><span class="hs-keyword">as</span><span> </span><span class="annot"><span class="hs-identifier">XS</span></span><span>
+</span><span id="line-25"></span><span>
+</span><span id="line-26"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><span class="hs-identifier">XMonad</span></span><span>
+</span><span id="line-27"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><a href="XMonad.Layout.ShowWName.html"><span class="hs-identifier">XMonad.Layout.ShowWName</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="XMonad.Layout.ShowWName.html#SWNConfig"><span class="hs-identifier">SWNConfig</span></a></span><span> </span><span class="hs-special">(</span><span class="hs-glyph">..</span><span class="hs-special">)</span><span class="hs-special">)</span><span>
+</span><span id="line-28"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><a href="XMonad.Prelude.html"><span class="hs-identifier">XMonad.Prelude</span></a></span><span>
+</span><span id="line-29"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><a href="XMonad.Util.XUtils.html"><span class="hs-identifier">XMonad.Util.XUtils</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="XMonad.Util.XUtils.html#WindowConfig"><span class="hs-identifier">WindowConfig</span></a></span><span> </span><span class="hs-special">(</span><span class="hs-glyph">..</span><span class="hs-special">)</span><span class="hs-special">,</span><span> </span><span class="annot"><a href="XMonad.Util.XUtils.html#showSimpleWindow"><span class="hs-identifier">showSimpleWindow</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-30"></span><span>
+</span><span id="line-31"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><span class="hs-identifier">Control.Concurrent</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier">threadDelay</span></span><span class="hs-special">)</span><span>
+</span><span id="line-32"></span><span>
+</span><span id="line-33"></span><span class="hs-comment">{- $usage
+
+You can use this module with the following in your
+@xmonad.hs@:
+
+&gt; import XMonad.Hooks.ShowWName
+&gt;
+&gt; main :: IO ()
+&gt; main = xmonad $ def
+&gt;   { logHook = showWNameLogHook def
+&gt;   }
+
+Whenever a workspace gains focus, the above logHook will flash its name.
+You can customise the duration of the flash, as well as colours by
+customising the 'SWNConfig' argument that 'showWNameLogHook' takes.
+
+Alternatively, you can also bind 'flashName' to a key and manually
+invoke it when you want to know which workspace you are on.
+-}</span><span>
+</span><span id="line-52"></span><span>
+</span><span id="line-53"></span><span class="hs-comment">-- | LogHook for flashing the name of a workspace upon entering it.</span><span>
+</span><span id="line-54"></span><span class="annot"><a href="XMonad.Hooks.ShowWName.html#showWNameLogHook"><span class="hs-identifier hs-type">showWNameLogHook</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><a href="XMonad.Layout.ShowWName.html#SWNConfig"><span class="hs-identifier hs-type">SWNConfig</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">X</span></span><span> </span><span class="hs-special">(</span><span class="hs-special">)</span><span>
+</span><span id="line-55"></span><span id="showWNameLogHook"><span class="annot"><span class="annottext">showWNameLogHook :: SWNConfig -&gt; X ()
+</span><a href="XMonad.Hooks.ShowWName.html#showWNameLogHook"><span class="hs-identifier hs-var hs-var">showWNameLogHook</span></a></span></span><span> </span><span id="local-6989586621679507071"><span class="annot"><span class="annottext">SWNConfig
+</span><a href="#local-6989586621679507071"><span class="hs-identifier hs-var">cfg</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-56"></span><span>  </span><span class="annot"><a href="XMonad.Hooks.ShowWName.html#LastShown"><span class="hs-identifier hs-type">LastShown</span></a></span><span> </span><span id="local-6989586621679507069"><span class="annot"><span class="annottext">WorkspaceId
+</span><a href="#local-6989586621679507069"><span class="hs-identifier hs-var">s</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">forall a (m :: * -&gt; *). (ExtensionClass a, XLike m) =&gt; m a
+</span><a href="XMonad.Util.ExtensibleState.html#get"><span class="hs-identifier hs-var">XS.get</span></a></span><span>
+</span><span id="line-57"></span><span>  </span><span id="local-6989586621679507067"><span class="annot"><span class="annottext">WorkspaceId
+</span><a href="#local-6989586621679507067"><span class="hs-identifier hs-var">foc</span></a></span></span><span>         </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">forall a. (WindowSet -&gt; X a) -&gt; X a
+</span><span class="hs-identifier hs-var">withWindowSet</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">forall (f :: * -&gt; *) a. Applicative f =&gt; a -&gt; f a
+</span><span class="hs-identifier hs-var">pure</span></span><span> </span><span class="annot"><span class="annottext">forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">forall i l a s sd. StackSet i l a s sd -&gt; i
+</span><span class="hs-identifier hs-var">W.currentTag</span></span><span class="hs-special">)</span><span>
+</span><span id="line-58"></span><span>  </span><span class="annot"><span class="annottext">forall (f :: * -&gt; *). Applicative f =&gt; Bool -&gt; f () -&gt; f ()
+</span><span class="hs-identifier hs-var">unless</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">WorkspaceId
+</span><a href="#local-6989586621679507069"><span class="hs-identifier hs-var">s</span></a></span><span> </span><span class="annot"><span class="annottext">forall a. Eq a =&gt; a -&gt; a -&gt; Bool
+</span><span class="hs-operator hs-var">==</span></span><span> </span><span class="annot"><span class="annottext">WorkspaceId
+</span><a href="#local-6989586621679507067"><span class="hs-identifier hs-var">foc</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-59"></span><span>    </span><span class="annot"><span class="annottext">SWNConfig -&gt; X ()
+</span><a href="XMonad.Hooks.ShowWName.html#flashName"><span class="hs-identifier hs-var">flashName</span></a></span><span> </span><span class="annot"><span class="annottext">SWNConfig
+</span><a href="#local-6989586621679507071"><span class="hs-identifier hs-var">cfg</span></a></span><span>
+</span><span id="line-60"></span><span>    </span><span class="annot"><span class="annottext">forall a (m :: * -&gt; *). (ExtensionClass a, XLike m) =&gt; a -&gt; m ()
+</span><a href="XMonad.Util.ExtensibleState.html#put"><span class="hs-identifier hs-var">XS.put</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">WorkspaceId -&gt; LastShown
+</span><a href="XMonad.Hooks.ShowWName.html#LastShown"><span class="hs-identifier hs-var">LastShown</span></a></span><span> </span><span class="annot"><span class="annottext">WorkspaceId
+</span><a href="#local-6989586621679507067"><span class="hs-identifier hs-var">foc</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-61"></span><span>
+</span><span id="line-62"></span><span class="hs-comment">-- | Flash the name of the currently focused workspace.</span><span>
+</span><span id="line-63"></span><span class="annot"><a href="XMonad.Hooks.ShowWName.html#flashName"><span class="hs-identifier hs-type">flashName</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><a href="XMonad.Layout.ShowWName.html#SWNConfig"><span class="hs-identifier hs-type">SWNConfig</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">X</span></span><span> </span><span class="hs-special">(</span><span class="hs-special">)</span><span>
+</span><span id="line-64"></span><span id="flashName"><span class="annot"><span class="annottext">flashName :: SWNConfig -&gt; X ()
+</span><a href="XMonad.Hooks.ShowWName.html#flashName"><span class="hs-identifier hs-var hs-var">flashName</span></a></span></span><span> </span><span id="local-6989586621679507061"><span class="annot"><span class="annottext">SWNConfig
+</span><a href="#local-6989586621679507061"><span class="hs-identifier hs-var">cfg</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-65"></span><span>  </span><span id="local-6989586621679507060"><span class="annot"><span class="annottext">WorkspaceId
+</span><a href="#local-6989586621679507060"><span class="hs-identifier hs-var">n</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">forall a. (WindowSet -&gt; X a) -&gt; X a
+</span><span class="hs-identifier hs-var">withWindowSet</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">forall (f :: * -&gt; *) a. Applicative f =&gt; a -&gt; f a
+</span><span class="hs-identifier hs-var">pure</span></span><span> </span><span class="annot"><span class="annottext">forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">forall i l a s sd. StackSet i l a s sd -&gt; i
+</span><span class="hs-identifier hs-var">W.currentTag</span></span><span class="hs-special">)</span><span>
+</span><span id="line-66"></span><span>  </span><span class="annot"><span class="annottext">WindowConfig -&gt; [WorkspaceId] -&gt; X Window
+</span><a href="XMonad.Util.XUtils.html#showSimpleWindow"><span class="hs-identifier hs-var">showSimpleWindow</span></a></span><span> </span><span class="annot"><span class="annottext">WindowConfig
+</span><a href="#local-6989586621679507059"><span class="hs-identifier hs-var">cfg'</span></a></span><span> </span><span class="hs-special">[</span><span class="annot"><span class="annottext">WorkspaceId
+</span><a href="#local-6989586621679507060"><span class="hs-identifier hs-var">n</span></a></span><span class="hs-special">]</span><span> </span><span class="annot"><span class="annottext">forall (m :: * -&gt; *) a b. Monad m =&gt; m a -&gt; (a -&gt; m b) -&gt; m b
+</span><span class="hs-operator hs-var">&gt;&gt;=</span></span><span> </span><span class="hs-glyph">\</span><span id="local-6989586621679507058"><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679507058"><span class="hs-identifier hs-var">w</span></a></span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">forall (f :: * -&gt; *) a. Functor f =&gt; f a -&gt; f ()
+</span><span class="hs-identifier hs-var">void</span></span><span> </span><span class="annot"><span class="annottext">forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">forall (m :: * -&gt; *). MonadIO m =&gt; IO () -&gt; m ProcessID
+</span><span class="hs-identifier hs-var">xfork</span></span><span> </span><span class="annot"><span class="annottext">forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-67"></span><span>    </span><span id="local-6989586621679507055"><span class="annot"><span class="annottext">Display
+</span><a href="#local-6989586621679507055"><span class="hs-identifier hs-var">dpy</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">WorkspaceId -&gt; IO Display
+</span><span class="hs-identifier hs-var">openDisplay</span></span><span> </span><span class="annot"><span class="annottext">WorkspaceId
+</span><span class="hs-string">&quot;&quot;</span></span><span>
+</span><span id="line-68"></span><span>    </span><span class="annot"><span class="annottext">Int -&gt; IO ()
+</span><span class="hs-identifier hs-var">threadDelay</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">forall a. Enum a =&gt; a -&gt; Int
+</span><span class="hs-identifier hs-var">fromEnum</span></span><span> </span><span class="annot"><span class="annottext">forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">SWNConfig -&gt; Rational
+</span><a href="XMonad.Layout.ShowWName.html#swn_fade"><span class="hs-identifier hs-var">swn_fade</span></a></span><span> </span><span class="annot"><span class="annottext">SWNConfig
+</span><a href="#local-6989586621679507061"><span class="hs-identifier hs-var">cfg</span></a></span><span> </span><span class="annot"><span class="annottext">forall a. Num a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-operator hs-var">*</span></span><span> </span><span class="annot"><span class="annottext">Rational
+</span><span class="hs-number">1000000</span></span><span class="hs-special">)</span><span> </span><span class="hs-comment">-- 1_000_000 needs GHC 8.6.x and up</span><span>
+</span><span id="line-69"></span><span>    </span><span class="annot"><span class="annottext">forall (f :: * -&gt; *) a. Functor f =&gt; f a -&gt; f ()
+</span><span class="hs-identifier hs-var">void</span></span><span> </span><span class="annot"><span class="annottext">forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">Display -&gt; Window -&gt; IO ()
+</span><span class="hs-identifier hs-var">destroyWindow</span></span><span> </span><span class="annot"><span class="annottext">Display
+</span><a href="#local-6989586621679507055"><span class="hs-identifier hs-var">dpy</span></a></span><span> </span><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679507058"><span class="hs-identifier hs-var">w</span></a></span><span>
+</span><span id="line-70"></span><span>    </span><span class="annot"><span class="annottext">Display -&gt; IO ()
+</span><span class="hs-identifier hs-var">closeDisplay</span></span><span> </span><span class="annot"><span class="annottext">Display
+</span><a href="#local-6989586621679507055"><span class="hs-identifier hs-var">dpy</span></a></span><span>
+</span><span id="line-71"></span><span> </span><span class="hs-keyword">where</span><span>
+</span><span id="line-72"></span><span>  </span><span class="annot"><a href="#local-6989586621679507059"><span class="hs-identifier hs-type">cfg'</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><a href="XMonad.Util.XUtils.html#WindowConfig"><span class="hs-identifier hs-type">WindowConfig</span></a></span><span>
+</span><span id="line-73"></span><span>  </span><span id="local-6989586621679507059"><span class="annot"><span class="annottext">cfg' :: WindowConfig
+</span><a href="#local-6989586621679507059"><span class="hs-identifier hs-var hs-var">cfg'</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">forall a. Default a =&gt; a
+</span><span class="hs-identifier hs-var">def</span></span><span class="hs-special">{</span><span> </span><span class="annot"><span class="annottext">winFont :: WorkspaceId
+</span><a href="XMonad.Util.XUtils.html#winFont"><span class="hs-identifier hs-var">winFont</span></a></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">SWNConfig -&gt; WorkspaceId
+</span><a href="XMonad.Layout.ShowWName.html#swn_font"><span class="hs-identifier hs-var">swn_font</span></a></span><span> </span><span class="annot"><span class="annottext">SWNConfig
+</span><a href="#local-6989586621679507061"><span class="hs-identifier hs-var">cfg</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">winBg :: WorkspaceId
+</span><a href="XMonad.Util.XUtils.html#winBg"><span class="hs-identifier hs-var">winBg</span></a></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">SWNConfig -&gt; WorkspaceId
+</span><a href="XMonad.Layout.ShowWName.html#swn_bgcolor"><span class="hs-identifier hs-var">swn_bgcolor</span></a></span><span> </span><span class="annot"><span class="annottext">SWNConfig
+</span><a href="#local-6989586621679507061"><span class="hs-identifier hs-var">cfg</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">winFg :: WorkspaceId
+</span><a href="XMonad.Util.XUtils.html#winFg"><span class="hs-identifier hs-var">winFg</span></a></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">SWNConfig -&gt; WorkspaceId
+</span><a href="XMonad.Layout.ShowWName.html#swn_color"><span class="hs-identifier hs-var">swn_color</span></a></span><span> </span><span class="annot"><span class="annottext">SWNConfig
+</span><a href="#local-6989586621679507061"><span class="hs-identifier hs-var">cfg</span></a></span><span> </span><span class="hs-special">}</span><span>
+</span><span id="line-74"></span><span>
+</span><span id="line-75"></span><span class="hs-comment">-- | Last shown workspace.</span><span>
+</span><span id="line-76"></span><span class="hs-keyword">newtype</span><span> </span><span id="LastShown"><span class="annot"><a href="XMonad.Hooks.ShowWName.html#LastShown"><span class="hs-identifier hs-var">LastShown</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span id="LastShown"><span class="annot"><a href="XMonad.Hooks.ShowWName.html#LastShown"><span class="hs-identifier hs-var">LastShown</span></a></span></span><span> </span><span class="annot"><span class="hs-identifier hs-type">WorkspaceId</span></span><span>
+</span><span id="line-77"></span><span>  </span><span class="hs-keyword">deriving</span><span> </span><span class="hs-special">(</span><span id="local-6989586621679507031"><span id="local-6989586621679507033"><span id="local-6989586621679507040"><span class="annot"><span class="annottext">Int -&gt; LastShown -&gt; ShowS
+[LastShown] -&gt; ShowS
+LastShown -&gt; WorkspaceId
+forall a.
+(Int -&gt; a -&gt; ShowS)
+-&gt; (a -&gt; WorkspaceId) -&gt; ([a] -&gt; ShowS) -&gt; Show a
+showList :: [LastShown] -&gt; ShowS
+$cshowList :: [LastShown] -&gt; ShowS
+show :: LastShown -&gt; WorkspaceId
+$cshow :: LastShown -&gt; WorkspaceId
+showsPrec :: Int -&gt; LastShown -&gt; ShowS
+$cshowsPrec :: Int -&gt; LastShown -&gt; ShowS
+</span><span class="hs-identifier hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var">Show</span></span></span></span></span><span class="hs-special">,</span><span> </span><span id="local-6989586621679507013"><span id="local-6989586621679507022"><span id="local-6989586621679507025"><span id="local-6989586621679507027"><span class="annot"><span class="annottext">ReadPrec [LastShown]
+ReadPrec LastShown
+Int -&gt; ReadS LastShown
+ReadS [LastShown]
+forall a.
+(Int -&gt; ReadS a)
+-&gt; ReadS [a] -&gt; ReadPrec a -&gt; ReadPrec [a] -&gt; Read a
+readListPrec :: ReadPrec [LastShown]
+$creadListPrec :: ReadPrec [LastShown]
+readPrec :: ReadPrec LastShown
+$creadPrec :: ReadPrec LastShown
+readList :: ReadS [LastShown]
+$creadList :: ReadS [LastShown]
+readsPrec :: Int -&gt; ReadS LastShown
+$creadsPrec :: Int -&gt; ReadS LastShown
+</span><span class="hs-identifier hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var">Read</span></span></span></span></span></span><span class="hs-special">)</span><span>
+</span><span id="line-78"></span><span>
+</span><span id="line-79"></span><span class="hs-keyword">instance</span><span> </span><span class="annot"><span class="hs-identifier hs-type">ExtensionClass</span></span><span> </span><span class="annot"><a href="XMonad.Hooks.ShowWName.html#LastShown"><span class="hs-identifier hs-type">LastShown</span></a></span><span> </span><span class="hs-keyword">where</span><span>
+</span><span id="line-80"></span><span>  </span><span class="annot"><span class="hs-identifier hs-type">initialValue</span></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><a href="XMonad.Hooks.ShowWName.html#LastShown"><span class="hs-identifier hs-type">LastShown</span></a></span><span>
+</span><span id="line-81"></span><span>  </span><span id="local-6989586621679507003"><span class="annot"><span class="annottext">initialValue :: LastShown
+</span><a href="#local-6989586621679507003"><span class="hs-identifier hs-var hs-var hs-var hs-var">initialValue</span></a></span></span><span>  </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">WorkspaceId -&gt; LastShown
+</span><a href="XMonad.Hooks.ShowWName.html#LastShown"><span class="hs-identifier hs-var">LastShown</span></a></span><span> </span><span class="annot"><span class="annottext">WorkspaceId
+</span><span class="hs-string">&quot;&quot;</span></span><span>
+</span><span id="line-82"></span><span>
+</span><span id="line-83"></span><span>  </span><span class="annot"><span class="hs-identifier hs-type">extensionType</span></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><a href="XMonad.Hooks.ShowWName.html#LastShown"><span class="hs-identifier hs-type">LastShown</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">StateExtension</span></span><span>
+</span><span id="line-84"></span><span>  </span><span id="local-6989586621679506998"><span class="annot"><span class="annottext">extensionType :: LastShown -&gt; StateExtension
+</span><a href="#local-6989586621679506998"><span class="hs-identifier hs-var hs-var hs-var hs-var">extensionType</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">forall a. (Read a, Show a, ExtensionClass a) =&gt; a -&gt; StateExtension
+</span><span class="hs-identifier hs-var">PersistentExtension</span></span><span>
+</span><span id="line-85"></span></pre></body></html>

@@ -1,0 +1,329 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd"><html xmlns="http://www.w3.org/1999/xhtml"><head><link rel="stylesheet" type="text/css" href="style.css" /><script type="text/javascript" src="highlight.js"></script></head><body><pre><span class="hs-comment">-- |</span><span>
+</span><span id="line-2"></span><span class="hs-comment">-- Module      :  XMonad.Actions.ToggleFullFloat</span><span>
+</span><span id="line-3"></span><span class="hs-comment">-- Description :  Fullscreen (float) a window while remembering its original state.</span><span>
+</span><span id="line-4"></span><span class="hs-comment">-- Copyright   :  (c) 2022 Tom&#225;&#353; Janou&#353;ek &lt;tomi@nomi.cz&gt;</span><span>
+</span><span id="line-5"></span><span class="hs-comment">-- License     :  BSD3</span><span>
+</span><span id="line-6"></span><span class="hs-comment">-- Maintainer  :  Tom&#225;&#353; Janou&#353;ek &lt;tomi@nomi.cz&gt;</span><span>
+</span><span id="line-7"></span><span class="hs-comment">--</span><span>
+</span><span id="line-8"></span><span class="hs-keyword">module</span><span> </span><span class="hs-identifier">XMonad.Actions.ToggleFullFloat</span><span> </span><span class="hs-special">(</span><span>
+</span><span id="line-9"></span><span>    </span><span class="annot"><span class="hs-comment">-- * Usage</span></span><span>
+</span><span id="line-10"></span><span>    </span><span class="annot"><span class="hs-comment">-- $usage</span></span><span>
+</span><span id="line-11"></span><span>    </span><span class="annot"><a href="XMonad.Actions.ToggleFullFloat.html#toggleFullFloatEwmhFullscreen"><span class="hs-identifier">toggleFullFloatEwmhFullscreen</span></a></span><span class="hs-special">,</span><span>
+</span><span id="line-12"></span><span>    </span><span class="annot"><a href="XMonad.Actions.ToggleFullFloat.html#toggleFullFloat"><span class="hs-identifier">toggleFullFloat</span></a></span><span class="hs-special">,</span><span>
+</span><span id="line-13"></span><span>    </span><span class="annot"><a href="XMonad.Actions.ToggleFullFloat.html#fullFloat"><span class="hs-identifier">fullFloat</span></a></span><span class="hs-special">,</span><span>
+</span><span id="line-14"></span><span>    </span><span class="annot"><a href="XMonad.Actions.ToggleFullFloat.html#unFullFloat"><span class="hs-identifier">unFullFloat</span></a></span><span class="hs-special">,</span><span>
+</span><span id="line-15"></span><span>    </span><span class="annot"><a href="XMonad.Actions.ToggleFullFloat.html#gcToggleFullFloat"><span class="hs-identifier">gcToggleFullFloat</span></a></span><span class="hs-special">,</span><span>
+</span><span id="line-16"></span><span>    </span><span class="hs-special">)</span><span> </span><span class="hs-keyword">where</span><span>
+</span><span id="line-17"></span><span>
+</span><span id="line-18"></span><span class="hs-keyword">import</span><span> </span><span class="hs-keyword">qualified</span><span> </span><span class="annot"><span class="hs-identifier">Data.Map.Strict</span></span><span> </span><span class="hs-keyword">as</span><span> </span><span class="annot"><span class="hs-identifier">M</span></span><span>
+</span><span id="line-19"></span><span>
+</span><span id="line-20"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><span class="hs-identifier">XMonad</span></span><span>
+</span><span id="line-21"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><a href="XMonad.Prelude.html"><span class="hs-identifier">XMonad.Prelude</span></a></span><span>
+</span><span id="line-22"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><a href="XMonad.Hooks.EwmhDesktops.html"><span class="hs-identifier">XMonad.Hooks.EwmhDesktops</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="XMonad.Hooks.EwmhDesktops.html#setEwmhFullscreenHooks"><span class="hs-identifier">setEwmhFullscreenHooks</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-23"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><a href="XMonad.Hooks.ManageHelpers.html"><span class="hs-identifier">XMonad.Hooks.ManageHelpers</span></a></span><span>
+</span><span id="line-24"></span><span class="hs-keyword">import</span><span> </span><span class="hs-keyword">qualified</span><span> </span><span class="annot"><span class="hs-identifier">XMonad.StackSet</span></span><span> </span><span class="hs-keyword">as</span><span> </span><span class="annot"><span class="hs-identifier">W</span></span><span>
+</span><span id="line-25"></span><span class="hs-keyword">import</span><span> </span><span class="hs-keyword">qualified</span><span> </span><span class="annot"><a href="XMonad.Util.ExtensibleState.html"><span class="hs-identifier">XMonad.Util.ExtensibleState</span></a></span><span> </span><span class="hs-keyword">as</span><span> </span><span class="annot"><span class="hs-identifier">XS</span></span><span>
+</span><span id="line-26"></span><span>
+</span><span id="line-27"></span><span class="hs-comment">-- ---------------------------------------------------------------------</span><span>
+</span><span id="line-28"></span><span class="hs-comment">-- $usage</span><span>
+</span><span id="line-29"></span><span class="hs-comment">--</span><span>
+</span><span id="line-30"></span><span class="hs-comment">-- The main use-case is to make 'ewmhFullscreen' (re)store the size and</span><span>
+</span><span id="line-31"></span><span class="hs-comment">-- position of floating windows instead of just unconditionally sinking them</span><span>
+</span><span id="line-32"></span><span class="hs-comment">-- into the floating layer. To enable this, you'll need this in your</span><span>
+</span><span id="line-33"></span><span class="hs-comment">-- @xmonad.hs@:</span><span>
+</span><span id="line-34"></span><span class="hs-comment">--</span><span>
+</span><span id="line-35"></span><span class="hs-comment">-- &gt; import XMonad</span><span>
+</span><span id="line-36"></span><span class="hs-comment">-- &gt; import XMonad.Actions.ToggleFullFloat</span><span>
+</span><span id="line-37"></span><span class="hs-comment">-- &gt; import XMonad.Hooks.EwmhDesktops</span><span>
+</span><span id="line-38"></span><span class="hs-comment">-- &gt;</span><span>
+</span><span id="line-39"></span><span class="hs-comment">-- &gt; main = xmonad $ &#8230; . toggleFullFloatEwmhFullscreen . ewmhFullscreen . ewmh . &#8230; $ def{&#8230;}</span><span>
+</span><span id="line-40"></span><span class="hs-comment">--</span><span>
+</span><span id="line-41"></span><span class="hs-comment">-- Additionally, this &quot;smart&quot; fullscreening can be bound to a key and invoked</span><span>
+</span><span id="line-42"></span><span class="hs-comment">-- manually whenever one needs a larger window temporarily:</span><span>
+</span><span id="line-43"></span><span class="hs-comment">--</span><span>
+</span><span id="line-44"></span><span class="hs-comment">-- &gt;   , ((modMask .|. shiftMask, xK_t), withFocused toggleFullFloat)</span><span>
+</span><span id="line-45"></span><span>
+</span><span id="line-46"></span><span class="hs-keyword">newtype</span><span> </span><span id="ToggleFullFloat"><span class="annot"><a href="XMonad.Actions.ToggleFullFloat.html#ToggleFullFloat"><span class="hs-identifier hs-var">ToggleFullFloat</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span id="ToggleFullFloat"><span class="annot"><a href="XMonad.Actions.ToggleFullFloat.html#ToggleFullFloat"><span class="hs-identifier hs-var">ToggleFullFloat</span></a></span></span><span class="hs-special">{</span><span> </span><span id="fromToggleFullFloat"><span class="annot"><span class="annottext">ToggleFullFloat -&gt; Map Window (Maybe RationalRect)
+</span><a href="XMonad.Actions.ToggleFullFloat.html#fromToggleFullFloat"><span class="hs-identifier hs-var hs-var">fromToggleFullFloat</span></a></span></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">M.Map</span></span><span> </span><span class="annot"><span class="hs-identifier hs-type">Window</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">Maybe</span></span><span> </span><span class="annot"><span class="hs-identifier hs-type">W.RationalRect</span></span><span class="hs-special">)</span><span> </span><span class="hs-special">}</span><span>
+</span><span id="line-47"></span><span>    </span><span class="hs-keyword">deriving</span><span> </span><span class="hs-special">(</span><span id="local-6989586621679476747"><span id="local-6989586621679476749"><span id="local-6989586621679476757"><span class="annot"><span class="annottext">Int -&gt; ToggleFullFloat -&gt; ShowS
+[ToggleFullFloat] -&gt; ShowS
+ToggleFullFloat -&gt; String
+forall a.
+(Int -&gt; a -&gt; ShowS) -&gt; (a -&gt; String) -&gt; ([a] -&gt; ShowS) -&gt; Show a
+showList :: [ToggleFullFloat] -&gt; ShowS
+$cshowList :: [ToggleFullFloat] -&gt; ShowS
+show :: ToggleFullFloat -&gt; String
+$cshow :: ToggleFullFloat -&gt; String
+showsPrec :: Int -&gt; ToggleFullFloat -&gt; ShowS
+$cshowsPrec :: Int -&gt; ToggleFullFloat -&gt; ShowS
+</span><span class="hs-identifier hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var">Show</span></span></span></span></span><span class="hs-special">,</span><span> </span><span id="local-6989586621679476723"><span id="local-6989586621679476735"><span id="local-6989586621679476738"><span id="local-6989586621679476740"><span class="annot"><span class="annottext">ReadPrec [ToggleFullFloat]
+ReadPrec ToggleFullFloat
+Int -&gt; ReadS ToggleFullFloat
+ReadS [ToggleFullFloat]
+forall a.
+(Int -&gt; ReadS a)
+-&gt; ReadS [a] -&gt; ReadPrec a -&gt; ReadPrec [a] -&gt; Read a
+readListPrec :: ReadPrec [ToggleFullFloat]
+$creadListPrec :: ReadPrec [ToggleFullFloat]
+readPrec :: ReadPrec ToggleFullFloat
+$creadPrec :: ReadPrec ToggleFullFloat
+readList :: ReadS [ToggleFullFloat]
+$creadList :: ReadS [ToggleFullFloat]
+readsPrec :: Int -&gt; ReadS ToggleFullFloat
+$creadsPrec :: Int -&gt; ReadS ToggleFullFloat
+</span><span class="hs-identifier hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var">Read</span></span></span></span></span></span><span class="hs-special">)</span><span>
+</span><span id="line-48"></span><span>
+</span><span id="line-49"></span><span class="hs-keyword">instance</span><span> </span><span class="annot"><span class="hs-identifier hs-type">ExtensionClass</span></span><span> </span><span class="annot"><a href="XMonad.Actions.ToggleFullFloat.html#ToggleFullFloat"><span class="hs-identifier hs-type">ToggleFullFloat</span></a></span><span> </span><span class="hs-keyword">where</span><span>
+</span><span id="line-50"></span><span>    </span><span id="local-6989586621679476708"><span class="annot"><span class="annottext">extensionType :: ToggleFullFloat -&gt; StateExtension
+</span><span class="hs-identifier hs-var hs-var hs-var hs-var">extensionType</span></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">forall a. (Read a, Show a, ExtensionClass a) =&gt; a -&gt; StateExtension
+</span><span class="hs-identifier hs-var">PersistentExtension</span></span><span>
+</span><span id="line-51"></span><span>    </span><span id="local-6989586621679476703"><span class="annot"><span class="annottext">initialValue :: ToggleFullFloat
+</span><span class="hs-identifier hs-var hs-var hs-var hs-var">initialValue</span></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Map Window (Maybe RationalRect) -&gt; ToggleFullFloat
+</span><a href="XMonad.Actions.ToggleFullFloat.html#ToggleFullFloat"><span class="hs-identifier hs-var">ToggleFullFloat</span></a></span><span> </span><span class="annot"><span class="annottext">forall a. Monoid a =&gt; a
+</span><span class="hs-identifier hs-var">mempty</span></span><span>
+</span><span id="line-52"></span><span>
+</span><span id="line-53"></span><span class="hs-comment">-- | Full-float a window, remembering its state (tiled/floating and</span><span>
+</span><span id="line-54"></span><span class="hs-comment">-- position/size).</span><span>
+</span><span id="line-55"></span><span class="annot"><a href="XMonad.Actions.ToggleFullFloat.html#fullFloat"><span class="hs-identifier hs-type">fullFloat</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Window</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">X</span></span><span> </span><span class="hs-special">(</span><span class="hs-special">)</span><span>
+</span><span id="line-56"></span><span id="fullFloat"><span class="annot"><span class="annottext">fullFloat :: Window -&gt; X ()
+</span><a href="XMonad.Actions.ToggleFullFloat.html#fullFloat"><span class="hs-identifier hs-var hs-var">fullFloat</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">(WindowSet -&gt; WindowSet) -&gt; X ()
+</span><span class="hs-identifier hs-var">windows</span></span><span> </span><span class="annot"><span class="annottext">forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">forall a. Endo a -&gt; a -&gt; a
+</span><span class="hs-identifier hs-var">appEndo</span></span><span> </span><span class="annot"><span class="annottext">forall (m :: * -&gt; *) b c a.
+Monad m =&gt;
+(b -&gt; m c) -&gt; (a -&gt; m b) -&gt; a -&gt; m c
+</span><span class="hs-operator hs-var">&lt;=&lt;</span></span><span> </span><span class="annot"><span class="annottext">forall a. Query a -&gt; Window -&gt; X a
+</span><span class="hs-identifier hs-var">runQuery</span></span><span> </span><span class="annot"><span class="annottext">ManageHook
+</span><a href="XMonad.Actions.ToggleFullFloat.html#doFullFloatSave"><span class="hs-identifier hs-var">doFullFloatSave</span></a></span><span>
+</span><span id="line-57"></span><span>
+</span><span id="line-58"></span><span class="hs-comment">-- | Restore window to its remembered state.</span><span>
+</span><span id="line-59"></span><span class="annot"><a href="XMonad.Actions.ToggleFullFloat.html#unFullFloat"><span class="hs-identifier hs-type">unFullFloat</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Window</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">X</span></span><span> </span><span class="hs-special">(</span><span class="hs-special">)</span><span>
+</span><span id="line-60"></span><span id="unFullFloat"><span class="annot"><span class="annottext">unFullFloat :: Window -&gt; X ()
+</span><a href="XMonad.Actions.ToggleFullFloat.html#unFullFloat"><span class="hs-identifier hs-var hs-var">unFullFloat</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">(WindowSet -&gt; WindowSet) -&gt; X ()
+</span><span class="hs-identifier hs-var">windows</span></span><span> </span><span class="annot"><span class="annottext">forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">forall a. Endo a -&gt; a -&gt; a
+</span><span class="hs-identifier hs-var">appEndo</span></span><span> </span><span class="annot"><span class="annottext">forall (m :: * -&gt; *) b c a.
+Monad m =&gt;
+(b -&gt; m c) -&gt; (a -&gt; m b) -&gt; a -&gt; m c
+</span><span class="hs-operator hs-var">&lt;=&lt;</span></span><span> </span><span class="annot"><span class="annottext">forall a. Query a -&gt; Window -&gt; X a
+</span><span class="hs-identifier hs-var">runQuery</span></span><span> </span><span class="annot"><span class="annottext">ManageHook
+</span><a href="XMonad.Actions.ToggleFullFloat.html#doFullFloatRestore"><span class="hs-identifier hs-var">doFullFloatRestore</span></a></span><span>
+</span><span id="line-61"></span><span>
+</span><span id="line-62"></span><span class="hs-comment">-- | Full-float a window, if it's not already full-floating. Otherwise,</span><span>
+</span><span id="line-63"></span><span class="hs-comment">-- restore its original state.</span><span>
+</span><span id="line-64"></span><span class="annot"><a href="XMonad.Actions.ToggleFullFloat.html#toggleFullFloat"><span class="hs-identifier hs-type">toggleFullFloat</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Window</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">X</span></span><span> </span><span class="hs-special">(</span><span class="hs-special">)</span><span>
+</span><span id="line-65"></span><span id="toggleFullFloat"><span class="annot"><span class="annottext">toggleFullFloat :: Window -&gt; X ()
+</span><a href="XMonad.Actions.ToggleFullFloat.html#toggleFullFloat"><span class="hs-identifier hs-var hs-var">toggleFullFloat</span></a></span></span><span> </span><span id="local-6989586621679476694"><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679476694"><span class="hs-identifier hs-var">w</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">forall (m :: * -&gt; *) a. Monad m =&gt; m Bool -&gt; m a -&gt; m a -&gt; m a
+</span><span class="hs-identifier hs-var">ifM</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Window -&gt; X Bool
+</span><a href="XMonad.Actions.ToggleFullFloat.html#isFullFloat"><span class="hs-identifier hs-var">isFullFloat</span></a></span><span> </span><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679476694"><span class="hs-identifier hs-var">w</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Window -&gt; X ()
+</span><a href="XMonad.Actions.ToggleFullFloat.html#unFullFloat"><span class="hs-identifier hs-var">unFullFloat</span></a></span><span> </span><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679476694"><span class="hs-identifier hs-var">w</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Window -&gt; X ()
+</span><a href="XMonad.Actions.ToggleFullFloat.html#fullFloat"><span class="hs-identifier hs-var">fullFloat</span></a></span><span> </span><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679476694"><span class="hs-identifier hs-var">w</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-66"></span><span>
+</span><span id="line-67"></span><span class="annot"><a href="XMonad.Actions.ToggleFullFloat.html#isFullFloat"><span class="hs-identifier hs-type">isFullFloat</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Window</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">X</span></span><span> </span><span class="annot"><span class="hs-identifier hs-type">Bool</span></span><span>
+</span><span id="line-68"></span><span id="isFullFloat"><span class="annot"><span class="annottext">isFullFloat :: Window -&gt; X Bool
+</span><a href="XMonad.Actions.ToggleFullFloat.html#isFullFloat"><span class="hs-identifier hs-var hs-var">isFullFloat</span></a></span></span><span> </span><span id="local-6989586621679476691"><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679476691"><span class="hs-identifier hs-var">w</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">forall s (m :: * -&gt; *) a. MonadState s m =&gt; (s -&gt; a) -&gt; m a
+</span><span class="hs-identifier hs-var">gets</span></span><span> </span><span class="annot"><span class="annottext">forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">forall a. a -&gt; Maybe a
+</span><span class="hs-identifier hs-var">Just</span></span><span> </span><span class="annot"><span class="annottext">RationalRect
+</span><a href="#local-6989586621679476689"><span class="hs-identifier hs-var">fullRect</span></a></span><span> </span><span class="annot"><span class="annottext">forall a. Eq a =&gt; a -&gt; a -&gt; Bool
+</span><span class="hs-operator hs-var">==</span></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">forall k a. Ord k =&gt; k -&gt; Map k a -&gt; Maybe a
+</span><span class="hs-identifier hs-var">M.lookup</span></span><span> </span><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679476691"><span class="hs-identifier hs-var">w</span></a></span><span> </span><span class="annot"><span class="annottext">forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">forall i l a sid sd. StackSet i l a sid sd -&gt; Map a RationalRect
+</span><span class="hs-identifier hs-var">W.floating</span></span><span> </span><span class="annot"><span class="annottext">forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">XState -&gt; WindowSet
+</span><span class="hs-identifier hs-var">windowset</span></span><span>
+</span><span id="line-69"></span><span>  </span><span class="hs-keyword">where</span><span>
+</span><span id="line-70"></span><span>    </span><span id="local-6989586621679476689"><span class="annot"><span class="annottext">fullRect :: RationalRect
+</span><a href="#local-6989586621679476689"><span class="hs-identifier hs-var hs-var">fullRect</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Rational -&gt; Rational -&gt; Rational -&gt; Rational -&gt; RationalRect
+</span><span class="hs-identifier hs-var">W.RationalRect</span></span><span> </span><span class="annot"><span class="annottext">Rational
+</span><span class="hs-number">0</span></span><span> </span><span class="annot"><span class="annottext">Rational
+</span><span class="hs-number">0</span></span><span> </span><span class="annot"><span class="annottext">Rational
+</span><span class="hs-number">1</span></span><span> </span><span class="annot"><span class="annottext">Rational
+</span><span class="hs-number">1</span></span><span>
+</span><span id="line-71"></span><span>
+</span><span id="line-72"></span><span class="annot"><a href="XMonad.Actions.ToggleFullFloat.html#doFullFloatSave"><span class="hs-identifier hs-type">doFullFloatSave</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">ManageHook</span></span><span>
+</span><span id="line-73"></span><span id="doFullFloatSave"><span class="annot"><span class="annottext">doFullFloatSave :: ManageHook
+</span><a href="XMonad.Actions.ToggleFullFloat.html#doFullFloatSave"><span class="hs-identifier hs-var hs-var">doFullFloatSave</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-74"></span><span>    </span><span id="local-6989586621679476677"><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679476677"><span class="hs-identifier hs-var">w</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">forall r (m :: * -&gt; *). MonadReader r m =&gt; m r
+</span><span class="hs-identifier hs-var">ask</span></span><span>
+</span><span id="line-75"></span><span>    </span><span class="annot"><span class="annottext">forall a. X a -&gt; Query a
+</span><span class="hs-identifier hs-var">liftX</span></span><span> </span><span class="annot"><span class="annottext">forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-76"></span><span>        </span><span id="local-6989586621679476674"><span class="annot"><span class="annottext">Maybe RationalRect
+</span><a href="#local-6989586621679476674"><span class="hs-identifier hs-var">f</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">forall s (m :: * -&gt; *) a. MonadState s m =&gt; (s -&gt; a) -&gt; m a
+</span><span class="hs-identifier hs-var">gets</span></span><span> </span><span class="annot"><span class="annottext">forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">forall k a. Ord k =&gt; k -&gt; Map k a -&gt; Maybe a
+</span><span class="hs-identifier hs-var">M.lookup</span></span><span> </span><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679476677"><span class="hs-identifier hs-var">w</span></a></span><span> </span><span class="annot"><span class="annottext">forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">forall i l a sid sd. StackSet i l a sid sd -&gt; Map a RationalRect
+</span><span class="hs-identifier hs-var">W.floating</span></span><span> </span><span class="annot"><span class="annottext">forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">XState -&gt; WindowSet
+</span><span class="hs-identifier hs-var">windowset</span></span><span>
+</span><span id="line-77"></span><span>        </span><span class="hs-comment">-- @M.insertWith const@ = don't overwrite stored original state</span><span>
+</span><span id="line-78"></span><span>        </span><span class="annot"><span class="annottext">forall a (m :: * -&gt; *).
+(ExtensionClass a, XLike m) =&gt;
+(a -&gt; a) -&gt; m ()
+</span><a href="XMonad.Util.ExtensibleState.html#modify%27"><span class="hs-identifier hs-var">XS.modify'</span></a></span><span> </span><span class="annot"><span class="annottext">forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">Map Window (Maybe RationalRect) -&gt; ToggleFullFloat
+</span><a href="XMonad.Actions.ToggleFullFloat.html#ToggleFullFloat"><span class="hs-identifier hs-var">ToggleFullFloat</span></a></span><span> </span><span class="annot"><span class="annottext">forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">forall k a. Ord k =&gt; (a -&gt; a -&gt; a) -&gt; k -&gt; a -&gt; Map k a -&gt; Map k a
+</span><span class="hs-identifier hs-var">M.insertWith</span></span><span> </span><span class="annot"><span class="annottext">forall a b. a -&gt; b -&gt; a
+</span><span class="hs-identifier hs-var">const</span></span><span> </span><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679476677"><span class="hs-identifier hs-var">w</span></a></span><span> </span><span class="annot"><span class="annottext">Maybe RationalRect
+</span><a href="#local-6989586621679476674"><span class="hs-identifier hs-var">f</span></a></span><span> </span><span class="annot"><span class="annottext">forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">ToggleFullFloat -&gt; Map Window (Maybe RationalRect)
+</span><a href="XMonad.Actions.ToggleFullFloat.html#fromToggleFullFloat"><span class="hs-identifier hs-var">fromToggleFullFloat</span></a></span><span>
+</span><span id="line-79"></span><span>    </span><span class="annot"><span class="annottext">ManageHook
+</span><a href="XMonad.Hooks.ManageHelpers.html#doFullFloat"><span class="hs-identifier hs-var">doFullFloat</span></a></span><span>
+</span><span id="line-80"></span><span>
+</span><span id="line-81"></span><span class="annot"><a href="XMonad.Actions.ToggleFullFloat.html#doFullFloatRestore"><span class="hs-identifier hs-type">doFullFloatRestore</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">ManageHook</span></span><span>
+</span><span id="line-82"></span><span id="doFullFloatRestore"><span class="annot"><span class="annottext">doFullFloatRestore :: ManageHook
+</span><a href="XMonad.Actions.ToggleFullFloat.html#doFullFloatRestore"><span class="hs-identifier hs-var hs-var">doFullFloatRestore</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-83"></span><span>    </span><span id="local-6989586621679476669"><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679476669"><span class="hs-identifier hs-var">w</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">forall r (m :: * -&gt; *). MonadReader r m =&gt; m r
+</span><span class="hs-identifier hs-var">ask</span></span><span>
+</span><span id="line-84"></span><span>    </span><span id="local-6989586621679476668"><span class="annot"><span class="annottext">Maybe (Maybe RationalRect)
+</span><a href="#local-6989586621679476668"><span class="hs-identifier hs-var">mf</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">forall a. X a -&gt; Query a
+</span><span class="hs-identifier hs-var">liftX</span></span><span> </span><span class="annot"><span class="annottext">forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-85"></span><span>        </span><span id="local-6989586621679476667"><span class="annot"><span class="annottext">Maybe (Maybe RationalRect)
+</span><a href="#local-6989586621679476667"><span class="hs-identifier hs-var">mf</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">forall a (m :: * -&gt; *) b.
+(ExtensionClass a, XLike m) =&gt;
+(a -&gt; b) -&gt; m b
+</span><a href="XMonad.Util.ExtensibleState.html#gets"><span class="hs-identifier hs-var">XS.gets</span></a></span><span> </span><span class="annot"><span class="annottext">forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">forall k a. Ord k =&gt; k -&gt; Map k a -&gt; Maybe a
+</span><span class="hs-identifier hs-var">M.lookup</span></span><span> </span><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679476669"><span class="hs-identifier hs-var">w</span></a></span><span> </span><span class="annot"><span class="annottext">forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">ToggleFullFloat -&gt; Map Window (Maybe RationalRect)
+</span><a href="XMonad.Actions.ToggleFullFloat.html#fromToggleFullFloat"><span class="hs-identifier hs-var">fromToggleFullFloat</span></a></span><span>
+</span><span id="line-86"></span><span>        </span><span class="annot"><span class="annottext">forall a (m :: * -&gt; *).
+(ExtensionClass a, XLike m) =&gt;
+(a -&gt; a) -&gt; m ()
+</span><a href="XMonad.Util.ExtensibleState.html#modify%27"><span class="hs-identifier hs-var">XS.modify'</span></a></span><span> </span><span class="annot"><span class="annottext">forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">Map Window (Maybe RationalRect) -&gt; ToggleFullFloat
+</span><a href="XMonad.Actions.ToggleFullFloat.html#ToggleFullFloat"><span class="hs-identifier hs-var">ToggleFullFloat</span></a></span><span> </span><span class="annot"><span class="annottext">forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">forall k a. Ord k =&gt; k -&gt; Map k a -&gt; Map k a
+</span><span class="hs-identifier hs-var">M.delete</span></span><span> </span><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679476669"><span class="hs-identifier hs-var">w</span></a></span><span> </span><span class="annot"><span class="annottext">forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">ToggleFullFloat -&gt; Map Window (Maybe RationalRect)
+</span><a href="XMonad.Actions.ToggleFullFloat.html#fromToggleFullFloat"><span class="hs-identifier hs-var">fromToggleFullFloat</span></a></span><span>
+</span><span id="line-87"></span><span>        </span><span class="annot"><span class="annottext">forall (f :: * -&gt; *) a. Applicative f =&gt; a -&gt; f a
+</span><span class="hs-identifier hs-var">pure</span></span><span> </span><span class="annot"><span class="annottext">Maybe (Maybe RationalRect)
+</span><a href="#local-6989586621679476667"><span class="hs-identifier hs-var">mf</span></a></span><span>
+</span><span id="line-88"></span><span>    </span><span class="annot"><span class="annottext">forall s. (s -&gt; s) -&gt; Query (Endo s)
+</span><span class="hs-identifier hs-var">doF</span></span><span> </span><span class="annot"><span class="annottext">forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="hs-keyword">case</span><span> </span><span class="annot"><span class="annottext">Maybe (Maybe RationalRect)
+</span><a href="#local-6989586621679476668"><span class="hs-identifier hs-var">mf</span></a></span><span> </span><span class="hs-keyword">of</span><span>
+</span><span id="line-89"></span><span>        </span><span class="annot"><span class="hs-identifier hs-type">Just</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">Just</span></span><span> </span><span id="local-6989586621679476663"><span class="annot"><span class="annottext">RationalRect
+</span><a href="#local-6989586621679476663"><span class="hs-identifier hs-var">f</span></a></span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">forall a i l s sd.
+Ord a =&gt;
+a -&gt; RationalRect -&gt; StackSet i l a s sd -&gt; StackSet i l a s sd
+</span><span class="hs-identifier hs-var">W.float</span></span><span> </span><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679476669"><span class="hs-identifier hs-var">w</span></a></span><span> </span><span class="annot"><span class="annottext">RationalRect
+</span><a href="#local-6989586621679476663"><span class="hs-identifier hs-var">f</span></a></span><span>  </span><span class="hs-comment">-- was floating before</span><span>
+</span><span id="line-90"></span><span>        </span><span class="annot"><span class="hs-identifier hs-type">Just</span></span><span> </span><span class="annot"><span class="annottext">Maybe RationalRect
+</span><span class="hs-identifier hs-var">Nothing</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">forall a i l s sd.
+Ord a =&gt;
+a -&gt; StackSet i l a s sd -&gt; StackSet i l a s sd
+</span><span class="hs-identifier hs-var">W.sink</span></span><span> </span><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679476669"><span class="hs-identifier hs-var">w</span></a></span><span>      </span><span class="hs-comment">-- was tiled before</span><span>
+</span><span id="line-91"></span><span>        </span><span class="annot"><span class="annottext">Maybe (Maybe RationalRect)
+</span><span class="hs-identifier hs-var">Nothing</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">forall a i l s sd.
+Ord a =&gt;
+a -&gt; StackSet i l a s sd -&gt; StackSet i l a s sd
+</span><span class="hs-identifier hs-var">W.sink</span></span><span> </span><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679476669"><span class="hs-identifier hs-var">w</span></a></span><span>           </span><span class="hs-comment">-- fallback when not found in ToggleFullFloat</span><span>
+</span><span id="line-92"></span><span>
+</span><span id="line-93"></span><span class="hs-comment">-- | Install ToggleFullFloat garbage collection hooks.</span><span>
+</span><span id="line-94"></span><span class="hs-comment">--</span><span>
+</span><span id="line-95"></span><span class="hs-comment">-- Note: This is included in 'toggleFullFloatEwmhFullscreen', only needed if</span><span>
+</span><span id="line-96"></span><span class="hs-comment">-- using the 'toggleFullFloat' separately from the EWMH hook.</span><span>
+</span><span id="line-97"></span><span id="local-6989586621679476845"><span class="annot"><a href="XMonad.Actions.ToggleFullFloat.html#gcToggleFullFloat"><span class="hs-identifier hs-type">gcToggleFullFloat</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">XConfig</span></span><span> </span><span class="annot"><a href="#local-6989586621679476845"><span class="hs-identifier hs-type">a</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">XConfig</span></span><span> </span><span class="annot"><a href="#local-6989586621679476845"><span class="hs-identifier hs-type">a</span></a></span></span><span>
+</span><span id="line-98"></span><span id="gcToggleFullFloat"><span class="annot"><span class="annottext">gcToggleFullFloat :: forall (a :: * -&gt; *). XConfig a -&gt; XConfig a
+</span><a href="XMonad.Actions.ToggleFullFloat.html#gcToggleFullFloat"><span class="hs-identifier hs-var hs-var">gcToggleFullFloat</span></a></span></span><span> </span><span id="local-6989586621679476651"><span class="annot"><span class="annottext">XConfig a
+</span><a href="#local-6989586621679476651"><span class="hs-identifier hs-var">c</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">XConfig a
+</span><a href="#local-6989586621679476651"><span class="hs-identifier hs-var">c</span></a></span><span> </span><span class="hs-special">{</span><span> </span><span class="annot"><span class="annottext">startupHook :: X ()
+</span><span class="hs-identifier hs-var">startupHook</span></span><span>     </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">forall (l :: * -&gt; *). XConfig l -&gt; X ()
+</span><span class="hs-identifier hs-var">startupHook</span></span><span> </span><span class="annot"><span class="annottext">XConfig a
+</span><a href="#local-6989586621679476651"><span class="hs-identifier hs-var">c</span></a></span><span> </span><span class="annot"><span class="annottext">forall a. Semigroup a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-operator hs-var">&lt;&gt;</span></span><span> </span><span class="annot"><span class="annottext">X ()
+</span><a href="XMonad.Actions.ToggleFullFloat.html#gcToggleFullFloatStartupHook"><span class="hs-identifier hs-var">gcToggleFullFloatStartupHook</span></a></span><span>
+</span><span id="line-99"></span><span>                        </span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">handleEventHook :: Event -&gt; X All
+</span><span class="hs-identifier hs-var">handleEventHook</span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">forall (l :: * -&gt; *). XConfig l -&gt; Event -&gt; X All
+</span><span class="hs-identifier hs-var">handleEventHook</span></span><span> </span><span class="annot"><span class="annottext">XConfig a
+</span><a href="#local-6989586621679476651"><span class="hs-identifier hs-var">c</span></a></span><span> </span><span class="annot"><span class="annottext">forall a. Semigroup a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-operator hs-var">&lt;&gt;</span></span><span> </span><span class="annot"><span class="annottext">Event -&gt; X All
+</span><a href="XMonad.Actions.ToggleFullFloat.html#gcToggleFullFloatEventHook"><span class="hs-identifier hs-var">gcToggleFullFloatEventHook</span></a></span><span> </span><span class="hs-special">}</span><span>
+</span><span id="line-100"></span><span>
+</span><span id="line-101"></span><span class="hs-comment">-- | ToggleFullFloat garbage collection: drop windows when they're destroyed.</span><span>
+</span><span id="line-102"></span><span class="annot"><a href="XMonad.Actions.ToggleFullFloat.html#gcToggleFullFloatEventHook"><span class="hs-identifier hs-type">gcToggleFullFloatEventHook</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Event</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">X</span></span><span> </span><span class="annot"><span class="hs-identifier hs-type">All</span></span><span>
+</span><span id="line-103"></span><span id="gcToggleFullFloatEventHook"><span class="annot"><span class="annottext">gcToggleFullFloatEventHook :: Event -&gt; X All
+</span><a href="XMonad.Actions.ToggleFullFloat.html#gcToggleFullFloatEventHook"><span class="hs-identifier hs-var hs-var">gcToggleFullFloatEventHook</span></a></span></span><span> </span><span class="annot"><span class="hs-identifier hs-type">DestroyWindowEvent</span></span><span class="hs-special">{</span><span class="annot"><span class="annottext">ev_window :: Event -&gt; Window
+</span><span class="hs-identifier hs-var">ev_window</span></span><span> </span><span class="hs-glyph">=</span><span> </span><span id="local-6989586621679476644"><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679476644"><span class="hs-identifier hs-var">w</span></a></span></span><span class="hs-special">}</span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-104"></span><span>    </span><span class="annot"><span class="annottext">forall a (m :: * -&gt; *).
+(ExtensionClass a, XLike m) =&gt;
+(a -&gt; a) -&gt; m ()
+</span><a href="XMonad.Util.ExtensibleState.html#modify%27"><span class="hs-identifier hs-var">XS.modify'</span></a></span><span> </span><span class="annot"><span class="annottext">forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">Map Window (Maybe RationalRect) -&gt; ToggleFullFloat
+</span><a href="XMonad.Actions.ToggleFullFloat.html#ToggleFullFloat"><span class="hs-identifier hs-var">ToggleFullFloat</span></a></span><span> </span><span class="annot"><span class="annottext">forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">forall k a. Ord k =&gt; k -&gt; Map k a -&gt; Map k a
+</span><span class="hs-identifier hs-var">M.delete</span></span><span> </span><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679476644"><span class="hs-identifier hs-var">w</span></a></span><span> </span><span class="annot"><span class="annottext">forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">ToggleFullFloat -&gt; Map Window (Maybe RationalRect)
+</span><a href="XMonad.Actions.ToggleFullFloat.html#fromToggleFullFloat"><span class="hs-identifier hs-var">fromToggleFullFloat</span></a></span><span>
+</span><span id="line-105"></span><span>    </span><span class="annot"><span class="annottext">forall a. Monoid a =&gt; a
+</span><span class="hs-identifier hs-var">mempty</span></span><span>
+</span><span id="line-106"></span><span class="annot"><a href="XMonad.Actions.ToggleFullFloat.html#gcToggleFullFloatEventHook"><span class="hs-identifier hs-var">gcToggleFullFloatEventHook</span></a></span><span> </span><span class="annot"><span class="annottext">Event
+</span><span class="hs-identifier">_</span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">forall a. Monoid a =&gt; a
+</span><span class="hs-identifier hs-var">mempty</span></span><span>
+</span><span id="line-107"></span><span>
+</span><span id="line-108"></span><span class="hs-comment">-- | ToggleFullFloat garbage collection: restrict to existing windows at</span><span>
+</span><span id="line-109"></span><span class="hs-comment">-- startup.</span><span>
+</span><span id="line-110"></span><span class="annot"><a href="XMonad.Actions.ToggleFullFloat.html#gcToggleFullFloatStartupHook"><span class="hs-identifier hs-type">gcToggleFullFloatStartupHook</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">X</span></span><span> </span><span class="hs-special">(</span><span class="hs-special">)</span><span>
+</span><span id="line-111"></span><span id="gcToggleFullFloatStartupHook"><span class="annot"><span class="annottext">gcToggleFullFloatStartupHook :: X ()
+</span><a href="XMonad.Actions.ToggleFullFloat.html#gcToggleFullFloatStartupHook"><span class="hs-identifier hs-var hs-var">gcToggleFullFloatStartupHook</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">forall a. (WindowSet -&gt; X a) -&gt; X a
+</span><span class="hs-identifier hs-var">withWindowSet</span></span><span> </span><span class="annot"><span class="annottext">forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="hs-glyph">\</span><span id="local-6989586621679476642"><span class="annot"><span class="annottext">WindowSet
+</span><a href="#local-6989586621679476642"><span class="hs-identifier hs-var">ws</span></a></span></span><span> </span><span class="hs-glyph">-&gt;</span><span>
+</span><span id="line-112"></span><span>    </span><span class="annot"><span class="annottext">forall a (m :: * -&gt; *).
+(ExtensionClass a, XLike m) =&gt;
+(a -&gt; a) -&gt; m ()
+</span><a href="XMonad.Util.ExtensibleState.html#modify%27"><span class="hs-identifier hs-var">XS.modify'</span></a></span><span> </span><span class="annot"><span class="annottext">forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">Map Window (Maybe RationalRect) -&gt; ToggleFullFloat
+</span><a href="XMonad.Actions.ToggleFullFloat.html#ToggleFullFloat"><span class="hs-identifier hs-var">ToggleFullFloat</span></a></span><span> </span><span class="annot"><span class="annottext">forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">forall k a. (k -&gt; a -&gt; Bool) -&gt; Map k a -&gt; Map k a
+</span><span class="hs-identifier hs-var">M.filterWithKey</span></span><span> </span><span class="hs-special">(</span><span class="hs-glyph">\</span><span id="local-6989586621679476640"><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679476640"><span class="hs-identifier hs-var">w</span></a></span></span><span> </span><span class="annot"><span class="annottext">Maybe RationalRect
+</span><span class="hs-identifier">_</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679476640"><span class="hs-identifier hs-var">w</span></a></span><span> </span><span class="annot"><span class="annottext">forall a i l s sd. Eq a =&gt; a -&gt; StackSet i l a s sd -&gt; Bool
+</span><span class="hs-operator hs-var">`W.member`</span></span><span> </span><span class="annot"><span class="annottext">WindowSet
+</span><a href="#local-6989586621679476642"><span class="hs-identifier hs-var">ws</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">ToggleFullFloat -&gt; Map Window (Maybe RationalRect)
+</span><a href="XMonad.Actions.ToggleFullFloat.html#fromToggleFullFloat"><span class="hs-identifier hs-var">fromToggleFullFloat</span></a></span><span>
+</span><span id="line-113"></span><span>
+</span><span id="line-114"></span><span class="hs-comment">-- | Hook this module into 'XMonad.Hooks.EwmhDesktops.ewmhFullscreen'. This</span><span>
+</span><span id="line-115"></span><span class="hs-comment">-- makes windows restore their original state (size and position if floating)</span><span>
+</span><span id="line-116"></span><span class="hs-comment">-- instead of unconditionally sinking into the tiling layer.</span><span>
+</span><span id="line-117"></span><span class="hs-comment">--</span><span>
+</span><span id="line-118"></span><span class="hs-comment">-- ('gcToggleFullFloat' is included here.)</span><span>
+</span><span id="line-119"></span><span id="local-6989586621679476638"><span class="annot"><a href="XMonad.Actions.ToggleFullFloat.html#toggleFullFloatEwmhFullscreen"><span class="hs-identifier hs-type">toggleFullFloatEwmhFullscreen</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">XConfig</span></span><span> </span><span class="annot"><a href="#local-6989586621679476638"><span class="hs-identifier hs-type">a</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">XConfig</span></span><span> </span><span class="annot"><a href="#local-6989586621679476638"><span class="hs-identifier hs-type">a</span></a></span></span><span>
+</span><span id="line-120"></span><span id="toggleFullFloatEwmhFullscreen"><span class="annot"><span class="annottext">toggleFullFloatEwmhFullscreen :: forall (a :: * -&gt; *). XConfig a -&gt; XConfig a
+</span><a href="XMonad.Actions.ToggleFullFloat.html#toggleFullFloatEwmhFullscreen"><span class="hs-identifier hs-var hs-var">toggleFullFloatEwmhFullscreen</span></a></span></span><span> </span><span class="hs-glyph">=</span><span>
+</span><span id="line-121"></span><span>    </span><span class="annot"><span class="annottext">forall (l :: * -&gt; *).
+ManageHook -&gt; ManageHook -&gt; XConfig l -&gt; XConfig l
+</span><a href="XMonad.Hooks.EwmhDesktops.html#setEwmhFullscreenHooks"><span class="hs-identifier hs-var">setEwmhFullscreenHooks</span></a></span><span> </span><span class="annot"><span class="annottext">ManageHook
+</span><a href="XMonad.Actions.ToggleFullFloat.html#doFullFloatSave"><span class="hs-identifier hs-var">doFullFloatSave</span></a></span><span> </span><span class="annot"><span class="annottext">ManageHook
+</span><a href="XMonad.Actions.ToggleFullFloat.html#doFullFloatRestore"><span class="hs-identifier hs-var">doFullFloatRestore</span></a></span><span> </span><span class="annot"><span class="annottext">forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span>
+</span><span id="line-122"></span><span>    </span><span class="annot"><span class="annottext">forall (a :: * -&gt; *). XConfig a -&gt; XConfig a
+</span><a href="XMonad.Actions.ToggleFullFloat.html#gcToggleFullFloat"><span class="hs-identifier hs-var">gcToggleFullFloat</span></a></span><span>
+</span><span id="line-123"></span></pre></body></html>

@@ -1,0 +1,188 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd"><html xmlns="http://www.w3.org/1999/xhtml"><head><link rel="stylesheet" type="text/css" href="style.css" /><script type="text/javascript" src="highlight.js"></script></head><body><pre><span class="hs-pragma">{-# LANGUAGE LambdaCase #-}</span><span>
+</span><span id="line-2"></span><span>
+</span><span id="line-3"></span><span class="hs-comment">--------------------------------------------------------------------------------</span><span>
+</span><span id="line-4"></span><span class="hs-comment">-- |</span><span>
+</span><span id="line-5"></span><span class="hs-comment">-- Module      :  XMonad.Util.Grab</span><span>
+</span><span id="line-6"></span><span class="hs-comment">-- Description :  Utilities for grabbing/ungrabbing keys.</span><span>
+</span><span id="line-7"></span><span class="hs-comment">-- Copyright   :  (c) 2018  L. S. Leary</span><span>
+</span><span id="line-8"></span><span class="hs-comment">-- License     :  BSD3-style (see LICENSE)</span><span>
+</span><span id="line-9"></span><span class="hs-comment">--</span><span>
+</span><span id="line-10"></span><span class="hs-comment">-- Maintainer  :  L. S. Leary</span><span>
+</span><span id="line-11"></span><span class="hs-comment">-- Stability   :  unstable</span><span>
+</span><span id="line-12"></span><span class="hs-comment">-- Portability :  unportable</span><span>
+</span><span id="line-13"></span><span class="hs-comment">--</span><span>
+</span><span id="line-14"></span><span class="hs-comment">-- This module should not be directly used by users. Its purpose is to</span><span>
+</span><span id="line-15"></span><span class="hs-comment">-- facilitate grabbing and ungrabbing keys.</span><span>
+</span><span id="line-16"></span><span class="hs-comment">--------------------------------------------------------------------------------</span><span>
+</span><span id="line-17"></span><span>
+</span><span id="line-18"></span><span class="hs-comment">-- --&lt; Imports &amp; Exports &gt;-- {{{</span><span>
+</span><span id="line-19"></span><span>
+</span><span id="line-20"></span><span class="hs-keyword">module</span><span> </span><span class="hs-identifier">XMonad.Util.Grab</span><span>
+</span><span id="line-21"></span><span>  </span><span class="hs-special">(</span><span>
+</span><span id="line-22"></span><span> </span><span class="annot"><span class="hs-comment">-- * Usage</span></span><span>
+</span><span id="line-23"></span><span> </span><span class="annot"><span class="hs-comment">-- $Usage</span></span><span>
+</span><span id="line-24"></span><span>    </span><span class="annot"><a href="XMonad.Util.Grab.html#grabKP"><span class="hs-identifier">grabKP</span></a></span><span>
+</span><span id="line-25"></span><span>  </span><span class="hs-special">,</span><span> </span><span class="annot"><a href="XMonad.Util.Grab.html#ungrabKP"><span class="hs-identifier">ungrabKP</span></a></span><span>
+</span><span id="line-26"></span><span>  </span><span class="hs-special">,</span><span> </span><span class="annot"><a href="XMonad.Util.Grab.html#grabUngrab"><span class="hs-identifier">grabUngrab</span></a></span><span>
+</span><span id="line-27"></span><span>  </span><span class="hs-special">,</span><span> </span><span class="annot"><a href="XMonad.Util.Grab.html#grab"><span class="hs-identifier">grab</span></a></span><span>
+</span><span id="line-28"></span><span>  </span><span class="hs-special">,</span><span> </span><span class="annot"><a href="XMonad.Util.Grab.html#customRegrabEvHook"><span class="hs-identifier">customRegrabEvHook</span></a></span><span>
+</span><span id="line-29"></span><span>  </span><span class="hs-special">)</span><span> </span><span class="hs-keyword">where</span><span>
+</span><span id="line-30"></span><span>
+</span><span id="line-31"></span><span class="hs-comment">-- core</span><span>
+</span><span id="line-32"></span><span class="hs-keyword">import</span><span>           </span><span class="annot"><span class="hs-identifier">XMonad</span></span><span>
+</span><span id="line-33"></span><span>
+</span><span id="line-34"></span><span class="hs-keyword">import</span><span>           </span><span class="annot"><span class="hs-identifier">Control.Monad</span></span><span>                  </span><span class="hs-special">(</span><span> </span><span class="annot"><span class="hs-identifier">when</span></span><span> </span><span class="hs-special">)</span><span>
+</span><span id="line-35"></span><span class="hs-keyword">import</span><span>           </span><span class="annot"><span class="hs-identifier">Data.Foldable</span></span><span>                  </span><span class="hs-special">(</span><span> </span><span class="annot"><span class="hs-identifier">traverse_</span></span><span> </span><span class="hs-special">)</span><span>
+</span><span id="line-36"></span><span class="hs-comment">-- base</span><span>
+</span><span id="line-37"></span><span class="hs-keyword">import</span><span>           </span><span class="annot"><span class="hs-identifier">Data.Semigroup</span></span><span>                 </span><span class="hs-special">(</span><span> </span><span class="annot"><span class="hs-identifier">All</span></span><span class="hs-special">(</span><span class="hs-glyph">..</span><span class="hs-special">)</span><span> </span><span class="hs-special">)</span><span>
+</span><span id="line-38"></span><span>
+</span><span id="line-39"></span><span class="hs-comment">-- }}}</span><span>
+</span><span id="line-40"></span><span>
+</span><span id="line-41"></span><span class="hs-comment">-- --&lt; Usage &gt;-- {{{</span><span>
+</span><span id="line-42"></span><span>
+</span><span id="line-43"></span><span class="hs-comment">-- $Usage</span><span>
+</span><span id="line-44"></span><span class="hs-comment">--</span><span>
+</span><span id="line-45"></span><span class="hs-comment">-- This module should not be directly used by users. Its purpose is to</span><span>
+</span><span id="line-46"></span><span class="hs-comment">-- facilitate grabbing and ungrabbing keys.</span><span>
+</span><span id="line-47"></span><span>
+</span><span id="line-48"></span><span class="hs-comment">-- }}}</span><span>
+</span><span id="line-49"></span><span>
+</span><span id="line-50"></span><span class="hs-comment">-- --&lt; Public Utils &gt;-- {{{</span><span>
+</span><span id="line-51"></span><span>
+</span><span id="line-52"></span><span class="hs-comment">-- | A more convenient version of 'grabKey'.</span><span>
+</span><span id="line-53"></span><span class="annot"><a href="XMonad.Util.Grab.html#grabKP"><span class="hs-identifier hs-type">grabKP</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">KeyMask</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">KeyCode</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">X</span></span><span> </span><span class="hs-special">(</span><span class="hs-special">)</span><span>
+</span><span id="line-54"></span><span id="grabKP"><span class="annot"><span class="annottext">grabKP :: KeyMask -&gt; KeyCode -&gt; X ()
+</span><a href="XMonad.Util.Grab.html#grabKP"><span class="hs-identifier hs-var hs-var">grabKP</span></a></span></span><span> </span><span id="local-6989586621679431996"><span class="annot"><span class="annottext">KeyMask
+</span><a href="#local-6989586621679431996"><span class="hs-identifier hs-var">mdfr</span></a></span></span><span> </span><span id="local-6989586621679431995"><span class="annot"><span class="annottext">KeyCode
+</span><a href="#local-6989586621679431995"><span class="hs-identifier hs-var">kc</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-55"></span><span>  </span><span class="annot"><span class="hs-identifier hs-type">XConf</span></span><span> </span><span class="hs-special">{</span><span> </span><span class="annot"><span class="annottext">display :: XConf -&gt; Display
+</span><span class="hs-identifier hs-var">display</span></span><span> </span><span class="hs-glyph">=</span><span> </span><span id="local-6989586621679431992"><span class="annot"><span class="annottext">Display
+</span><a href="#local-6989586621679431992"><span class="hs-identifier hs-var">dpy</span></a></span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">theRoot :: XConf -&gt; Window
+</span><span class="hs-identifier hs-var">theRoot</span></span><span> </span><span class="hs-glyph">=</span><span> </span><span id="local-6989586621679431990"><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679431990"><span class="hs-identifier hs-var">rootw</span></a></span></span><span> </span><span class="hs-special">}</span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">forall r (m :: * -&gt; *). MonadReader r m =&gt; m r
+</span><span class="hs-identifier hs-var">ask</span></span><span>
+</span><span id="line-56"></span><span>  </span><span class="annot"><span class="annottext">forall (m :: * -&gt; *) a. MonadIO m =&gt; IO a -&gt; m a
+</span><span class="hs-identifier hs-var">io</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Display
+-&gt; KeyCode
+-&gt; KeyMask
+-&gt; Window
+-&gt; Bool
+-&gt; MappingRequest
+-&gt; MappingRequest
+-&gt; IO ()
+</span><span class="hs-identifier hs-var">grabKey</span></span><span> </span><span class="annot"><span class="annottext">Display
+</span><a href="#local-6989586621679431992"><span class="hs-identifier hs-var">dpy</span></a></span><span> </span><span class="annot"><span class="annottext">KeyCode
+</span><a href="#local-6989586621679431995"><span class="hs-identifier hs-var">kc</span></a></span><span> </span><span class="annot"><span class="annottext">KeyMask
+</span><a href="#local-6989586621679431996"><span class="hs-identifier hs-var">mdfr</span></a></span><span> </span><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679431990"><span class="hs-identifier hs-var">rootw</span></a></span><span> </span><span class="annot"><span class="annottext">Bool
+</span><span class="hs-identifier hs-var">True</span></span><span> </span><span class="annot"><span class="annottext">MappingRequest
+</span><span class="hs-identifier hs-var">grabModeAsync</span></span><span> </span><span class="annot"><span class="annottext">MappingRequest
+</span><span class="hs-identifier hs-var">grabModeAsync</span></span><span class="hs-special">)</span><span>
+</span><span id="line-57"></span><span>
+</span><span id="line-58"></span><span class="hs-comment">-- | A more convenient version of 'ungrabKey'.</span><span>
+</span><span id="line-59"></span><span class="annot"><a href="XMonad.Util.Grab.html#ungrabKP"><span class="hs-identifier hs-type">ungrabKP</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">KeyMask</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">KeyCode</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">X</span></span><span> </span><span class="hs-special">(</span><span class="hs-special">)</span><span>
+</span><span id="line-60"></span><span id="ungrabKP"><span class="annot"><span class="annottext">ungrabKP :: KeyMask -&gt; KeyCode -&gt; X ()
+</span><a href="XMonad.Util.Grab.html#ungrabKP"><span class="hs-identifier hs-var hs-var">ungrabKP</span></a></span></span><span> </span><span id="local-6989586621679431985"><span class="annot"><span class="annottext">KeyMask
+</span><a href="#local-6989586621679431985"><span class="hs-identifier hs-var">mdfr</span></a></span></span><span> </span><span id="local-6989586621679431984"><span class="annot"><span class="annottext">KeyCode
+</span><a href="#local-6989586621679431984"><span class="hs-identifier hs-var">kc</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-61"></span><span>  </span><span class="annot"><span class="hs-identifier hs-type">XConf</span></span><span> </span><span class="hs-special">{</span><span> </span><span class="annot"><span class="annottext">display :: XConf -&gt; Display
+</span><span class="hs-identifier hs-var">display</span></span><span> </span><span class="hs-glyph">=</span><span> </span><span id="local-6989586621679431983"><span class="annot"><span class="annottext">Display
+</span><a href="#local-6989586621679431983"><span class="hs-identifier hs-var">dpy</span></a></span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">theRoot :: XConf -&gt; Window
+</span><span class="hs-identifier hs-var">theRoot</span></span><span> </span><span class="hs-glyph">=</span><span> </span><span id="local-6989586621679431982"><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679431982"><span class="hs-identifier hs-var">rootw</span></a></span></span><span> </span><span class="hs-special">}</span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">forall r (m :: * -&gt; *). MonadReader r m =&gt; m r
+</span><span class="hs-identifier hs-var">ask</span></span><span>
+</span><span id="line-62"></span><span>  </span><span class="annot"><span class="annottext">forall (m :: * -&gt; *) a. MonadIO m =&gt; IO a -&gt; m a
+</span><span class="hs-identifier hs-var">io</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Display -&gt; KeyCode -&gt; KeyMask -&gt; Window -&gt; IO ()
+</span><span class="hs-identifier hs-var">ungrabKey</span></span><span> </span><span class="annot"><span class="annottext">Display
+</span><a href="#local-6989586621679431983"><span class="hs-identifier hs-var">dpy</span></a></span><span> </span><span class="annot"><span class="annottext">KeyCode
+</span><a href="#local-6989586621679431984"><span class="hs-identifier hs-var">kc</span></a></span><span> </span><span class="annot"><span class="annottext">KeyMask
+</span><a href="#local-6989586621679431985"><span class="hs-identifier hs-var">mdfr</span></a></span><span> </span><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679431982"><span class="hs-identifier hs-var">rootw</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-63"></span><span>
+</span><span id="line-64"></span><span class="hs-comment">-- | A convenience function to grab and ungrab keys</span><span>
+</span><span id="line-65"></span><span class="annot"><a href="XMonad.Util.Grab.html#grabUngrab"><span class="hs-identifier hs-type">grabUngrab</span></a></span><span>
+</span><span id="line-66"></span><span>  </span><span class="hs-glyph">::</span><span> </span><span class="hs-special">[</span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">KeyMask</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier hs-type">KeySym</span></span><span class="hs-special">)</span><span class="hs-special">]</span><span> </span><span class="hs-comment">-- ^  Keys to grab</span><span>
+</span><span id="line-67"></span><span>  </span><span class="hs-glyph">-&gt;</span><span> </span><span class="hs-special">[</span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">KeyMask</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier hs-type">KeySym</span></span><span class="hs-special">)</span><span class="hs-special">]</span><span> </span><span class="hs-comment">-- ^ Keys to ungrab</span><span>
+</span><span id="line-68"></span><span>  </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">X</span></span><span> </span><span class="hs-special">(</span><span class="hs-special">)</span><span>
+</span><span id="line-69"></span><span id="grabUngrab"><span class="annot"><span class="annottext">grabUngrab :: [(KeyMask, Window)] -&gt; [(KeyMask, Window)] -&gt; X ()
+</span><a href="XMonad.Util.Grab.html#grabUngrab"><span class="hs-identifier hs-var hs-var">grabUngrab</span></a></span></span><span> </span><span id="local-6989586621679431979"><span class="annot"><span class="annottext">[(KeyMask, Window)]
+</span><a href="#local-6989586621679431979"><span class="hs-identifier hs-var">gr</span></a></span></span><span> </span><span id="local-6989586621679431978"><span class="annot"><span class="annottext">[(KeyMask, Window)]
+</span><a href="#local-6989586621679431978"><span class="hs-identifier hs-var">ugr</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-70"></span><span>  </span><span class="annot"><span class="annottext">forall (t :: * -&gt; *) (f :: * -&gt; *) a b.
+(Foldable t, Applicative f) =&gt;
+(a -&gt; f b) -&gt; t a -&gt; f ()
+</span><span class="hs-identifier hs-var">traverse_</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">forall a b c. (a -&gt; b -&gt; c) -&gt; (a, b) -&gt; c
+</span><span class="hs-identifier hs-var">uncurry</span></span><span> </span><span class="annot"><span class="annottext">KeyMask -&gt; KeyCode -&gt; X ()
+</span><a href="XMonad.Util.Grab.html#ungrabKP"><span class="hs-identifier hs-var">ungrabKP</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">forall (m :: * -&gt; *) a b. Monad m =&gt; (a -&gt; m b) -&gt; m a -&gt; m b
+</span><span class="hs-operator hs-var">=&lt;&lt;</span></span><span> </span><span class="annot"><span class="annottext">[(KeyMask, Window)] -&gt; X [(KeyMask, KeyCode)]
+</span><span class="hs-identifier hs-var">mkGrabs</span></span><span> </span><span class="annot"><span class="annottext">[(KeyMask, Window)]
+</span><a href="#local-6989586621679431978"><span class="hs-identifier hs-var">ugr</span></a></span><span>
+</span><span id="line-71"></span><span>  </span><span class="annot"><span class="annottext">forall (t :: * -&gt; *) (f :: * -&gt; *) a b.
+(Foldable t, Applicative f) =&gt;
+(a -&gt; f b) -&gt; t a -&gt; f ()
+</span><span class="hs-identifier hs-var">traverse_</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">forall a b c. (a -&gt; b -&gt; c) -&gt; (a, b) -&gt; c
+</span><span class="hs-identifier hs-var">uncurry</span></span><span> </span><span class="annot"><span class="annottext">KeyMask -&gt; KeyCode -&gt; X ()
+</span><a href="XMonad.Util.Grab.html#grabKP"><span class="hs-identifier hs-var">grabKP</span></a></span><span class="hs-special">)</span><span>   </span><span class="annot"><span class="annottext">forall (m :: * -&gt; *) a b. Monad m =&gt; (a -&gt; m b) -&gt; m a -&gt; m b
+</span><span class="hs-operator hs-var">=&lt;&lt;</span></span><span> </span><span class="annot"><span class="annottext">[(KeyMask, Window)] -&gt; X [(KeyMask, KeyCode)]
+</span><span class="hs-identifier hs-var">mkGrabs</span></span><span> </span><span class="annot"><span class="annottext">[(KeyMask, Window)]
+</span><a href="#local-6989586621679431979"><span class="hs-identifier hs-var">gr</span></a></span><span>
+</span><span id="line-72"></span><span>
+</span><span id="line-73"></span><span class="hs-comment">-- | A convenience function to grab keys. This also ungrabs all</span><span>
+</span><span id="line-74"></span><span class="hs-comment">-- previously grabbed keys.</span><span>
+</span><span id="line-75"></span><span class="annot"><a href="XMonad.Util.Grab.html#grab"><span class="hs-identifier hs-type">grab</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="hs-special">[</span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">KeyMask</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier hs-type">KeySym</span></span><span class="hs-special">)</span><span class="hs-special">]</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">X</span></span><span> </span><span class="hs-special">(</span><span class="hs-special">)</span><span>
+</span><span id="line-76"></span><span id="grab"><span class="annot"><span class="annottext">grab :: [(KeyMask, Window)] -&gt; X ()
+</span><a href="XMonad.Util.Grab.html#grab"><span class="hs-identifier hs-var hs-var">grab</span></a></span></span><span> </span><span id="local-6989586621679431974"><span class="annot"><span class="annottext">[(KeyMask, Window)]
+</span><a href="#local-6989586621679431974"><span class="hs-identifier hs-var">ks</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-77"></span><span>  </span><span class="annot"><span class="hs-identifier hs-type">XConf</span></span><span> </span><span class="hs-special">{</span><span> </span><span class="annot"><span class="annottext">display :: XConf -&gt; Display
+</span><span class="hs-identifier hs-var">display</span></span><span> </span><span class="hs-glyph">=</span><span> </span><span id="local-6989586621679431973"><span class="annot"><span class="annottext">Display
+</span><a href="#local-6989586621679431973"><span class="hs-identifier hs-var">dpy</span></a></span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">theRoot :: XConf -&gt; Window
+</span><span class="hs-identifier hs-var">theRoot</span></span><span> </span><span class="hs-glyph">=</span><span> </span><span id="local-6989586621679431972"><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679431972"><span class="hs-identifier hs-var">rootw</span></a></span></span><span> </span><span class="hs-special">}</span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">forall r (m :: * -&gt; *). MonadReader r m =&gt; m r
+</span><span class="hs-identifier hs-var">ask</span></span><span>
+</span><span id="line-78"></span><span>  </span><span class="annot"><span class="annottext">forall (m :: * -&gt; *) a. MonadIO m =&gt; IO a -&gt; m a
+</span><span class="hs-identifier hs-var">io</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Display -&gt; KeyCode -&gt; KeyMask -&gt; Window -&gt; IO ()
+</span><span class="hs-identifier hs-var">ungrabKey</span></span><span> </span><span class="annot"><span class="annottext">Display
+</span><a href="#local-6989586621679431973"><span class="hs-identifier hs-var">dpy</span></a></span><span> </span><span class="annot"><span class="annottext">KeyCode
+</span><span class="hs-identifier hs-var">anyKey</span></span><span> </span><span class="annot"><span class="annottext">KeyMask
+</span><span class="hs-identifier hs-var">anyModifier</span></span><span> </span><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679431972"><span class="hs-identifier hs-var">rootw</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-79"></span><span>  </span><span class="annot"><span class="annottext">[(KeyMask, Window)] -&gt; [(KeyMask, Window)] -&gt; X ()
+</span><a href="XMonad.Util.Grab.html#grabUngrab"><span class="hs-identifier hs-var">grabUngrab</span></a></span><span> </span><span class="annot"><span class="annottext">[(KeyMask, Window)]
+</span><a href="#local-6989586621679431974"><span class="hs-identifier hs-var">ks</span></a></span><span> </span><span class="hs-special">[</span><span class="hs-special">]</span><span>
+</span><span id="line-80"></span><span>
+</span><span id="line-81"></span><span class="hs-comment">-- | An event hook that runs a custom action to regrab the necessary keys.</span><span>
+</span><span id="line-82"></span><span class="annot"><a href="XMonad.Util.Grab.html#customRegrabEvHook"><span class="hs-identifier hs-type">customRegrabEvHook</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">X</span></span><span> </span><span class="hs-special">(</span><span class="hs-special">)</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Event</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">X</span></span><span> </span><span class="annot"><span class="hs-identifier hs-type">All</span></span><span>
+</span><span id="line-83"></span><span id="customRegrabEvHook"><span class="annot"><span class="annottext">customRegrabEvHook :: X () -&gt; Event -&gt; X All
+</span><a href="XMonad.Util.Grab.html#customRegrabEvHook"><span class="hs-identifier hs-var hs-var">customRegrabEvHook</span></a></span></span><span> </span><span id="local-6989586621679431969"><span class="annot"><span class="annottext">X ()
+</span><a href="#local-6989586621679431969"><span class="hs-identifier hs-var">regr</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-glyph">\</span><span class="hs-glyph">case</span><span>
+</span><span id="line-84"></span><span>  </span><span id="local-6989586621679431968"><span class="annot"><span class="annottext">e :: Event
+</span><a href="#local-6989586621679431968"><span class="hs-identifier hs-var">e</span></a></span></span><span class="hs-glyph">@</span><span class="annot"><span class="hs-identifier hs-type">MappingNotifyEvent</span></span><span class="hs-special">{</span><span class="hs-special">}</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-85"></span><span>    </span><span class="annot"><span class="annottext">forall (m :: * -&gt; *) a. MonadIO m =&gt; IO a -&gt; m a
+</span><span class="hs-identifier hs-var">io</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Event -&gt; IO ()
+</span><span class="hs-identifier hs-var">refreshKeyboardMapping</span></span><span> </span><span class="annot"><span class="annottext">Event
+</span><a href="#local-6989586621679431968"><span class="hs-identifier hs-var">e</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-86"></span><span>    </span><span class="annot"><span class="annottext">forall (f :: * -&gt; *). Applicative f =&gt; Bool -&gt; f () -&gt; f ()
+</span><span class="hs-identifier hs-var">when</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Event -&gt; MappingRequest
+</span><span class="hs-identifier hs-var">ev_request</span></span><span> </span><span class="annot"><span class="annottext">Event
+</span><a href="#local-6989586621679431968"><span class="hs-identifier hs-var">e</span></a></span><span> </span><span class="annot"><span class="annottext">forall (t :: * -&gt; *) a. (Foldable t, Eq a) =&gt; a -&gt; t a -&gt; Bool
+</span><span class="hs-operator hs-var">`elem`</span></span><span> </span><span class="hs-special">[</span><span class="annot"><span class="annottext">MappingRequest
+</span><span class="hs-identifier hs-var">mappingKeyboard</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">MappingRequest
+</span><span class="hs-identifier hs-var">mappingModifier</span></span><span class="hs-special">]</span><span class="hs-special">)</span><span>
+</span><span id="line-87"></span><span>      </span><span class="annot"><span class="annottext">forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span>  </span><span class="annot"><span class="annottext">X ()
+</span><span class="hs-identifier hs-var">cacheNumlockMask</span></span><span>
+</span><span id="line-88"></span><span>      </span><span class="annot"><span class="annottext">forall (m :: * -&gt; *) a b. Monad m =&gt; m a -&gt; m b -&gt; m b
+</span><span class="hs-operator hs-var">&gt;&gt;</span></span><span> </span><span class="annot"><span class="annottext">X ()
+</span><a href="#local-6989586621679431969"><span class="hs-identifier hs-var">regr</span></a></span><span>
+</span><span id="line-89"></span><span>    </span><span class="annot"><span class="annottext">forall (f :: * -&gt; *) a. Applicative f =&gt; a -&gt; f a
+</span><span class="hs-identifier hs-var">pure</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Bool -&gt; All
+</span><span class="hs-identifier hs-var">All</span></span><span> </span><span class="annot"><span class="annottext">Bool
+</span><span class="hs-identifier hs-var">False</span></span><span class="hs-special">)</span><span>
+</span><span id="line-90"></span><span>  </span><span class="annot"><span class="annottext">Event
+</span><span class="hs-identifier">_</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">forall (f :: * -&gt; *) a. Applicative f =&gt; a -&gt; f a
+</span><span class="hs-identifier hs-var">pure</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Bool -&gt; All
+</span><span class="hs-identifier hs-var">All</span></span><span> </span><span class="annot"><span class="annottext">Bool
+</span><span class="hs-identifier hs-var">True</span></span><span class="hs-special">)</span><span>
+</span><span id="line-91"></span><span>
+</span><span id="line-92"></span><span class="hs-comment">-- }}}</span><span>
+</span><span id="line-93"></span></pre></body></html>

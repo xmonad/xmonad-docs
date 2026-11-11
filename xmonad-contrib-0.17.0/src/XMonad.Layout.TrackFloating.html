@@ -1,0 +1,520 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd"><html xmlns="http://www.w3.org/1999/xhtml"><head><link rel="stylesheet" type="text/css" href="style.css" /><script type="text/javascript" src="highlight.js"></script></head><body><pre><span class="hs-pragma">{-# LANGUAGE MultiParamTypeClasses, TypeSynonymInstances #-}</span><span>
+</span><span id="line-2"></span><span class="hs-comment">{- |
+
+Module      :  XMonad.Layout.TrackFloating
+Description :  Track focus in the tiled layer.
+Copyright   :  (c) 2010 &amp; 2013 Adam Vogt
+               2011 Willem Vanlint
+License     :  BSD-style (see xmonad/LICENSE)
+
+Maintainer  :  vogt.adam@gmail.com
+Stability   :  unstable
+Portability :  unportable
+
+Layout modifier that tracks focus in the tiled layer while the floating layer
+or another sublayout is in use. This is particularly helpful for tiled layouts
+where the focus determines what is visible. It can also be used to improve the
+behaviour of a child layout that has not been given the focused window.
+
+The relevant bugs are Issue 4 and 306:
+&lt;http://code.google.com/p/xmonad/issues/detail?id=4&gt;,
+&lt;http://code.google.com/p/xmonad/issues/detail?id=306&gt;
+-}</span><span>
+</span><span id="line-23"></span><span class="hs-keyword">module</span><span> </span><span class="hs-identifier">XMonad.Layout.TrackFloating</span><span>
+</span><span id="line-24"></span><span>    </span><span class="hs-special">(</span><span class="annot"><span class="hs-comment">-- * Usage</span></span><span>
+</span><span id="line-25"></span><span>     </span><span class="annot"><span class="hs-comment">-- $usage</span></span><span>
+</span><span id="line-26"></span><span>
+</span><span id="line-27"></span><span>     </span><span class="annot"><span class="hs-comment">-- ** For other layout modifiers</span></span><span>
+</span><span id="line-28"></span><span>     </span><span class="annot"><span class="hs-comment">-- $layoutModifier</span></span><span>
+</span><span id="line-29"></span><span>     </span><span class="annot"><a href="XMonad.Layout.TrackFloating.html#trackFloating"><span class="hs-identifier">trackFloating</span></a></span><span class="hs-special">,</span><span>
+</span><span id="line-30"></span><span>     </span><span class="annot"><a href="XMonad.Layout.TrackFloating.html#useTransientFor"><span class="hs-identifier">useTransientFor</span></a></span><span class="hs-special">,</span><span>
+</span><span id="line-31"></span><span>
+</span><span id="line-32"></span><span>     </span><span class="annot"><span class="hs-comment">-- ** Exported types</span></span><span>
+</span><span id="line-33"></span><span>     </span><span class="annot"><a href="XMonad.Layout.TrackFloating.html#TrackFloating"><span class="hs-identifier">TrackFloating</span></a></span><span class="hs-special">,</span><span>
+</span><span id="line-34"></span><span>     </span><span class="annot"><a href="XMonad.Layout.TrackFloating.html#UseTransientFor"><span class="hs-identifier">UseTransientFor</span></a></span><span class="hs-special">,</span><span>
+</span><span id="line-35"></span><span>    </span><span class="hs-special">)</span><span> </span><span class="hs-keyword">where</span><span>
+</span><span id="line-36"></span><span>
+</span><span id="line-37"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><a href="XMonad.Prelude.html"><span class="hs-identifier">XMonad.Prelude</span></a></span><span>
+</span><span id="line-38"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><span class="hs-identifier">XMonad</span></span><span>
+</span><span id="line-39"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><a href="XMonad.Layout.LayoutModifier.html"><span class="hs-identifier">XMonad.Layout.LayoutModifier</span></a></span><span>
+</span><span id="line-40"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><a href="XMonad.Util.Stack.html"><span class="hs-identifier">XMonad.Util.Stack</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="XMonad.Util.Stack.html#findZ"><span class="hs-identifier">findZ</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-41"></span><span class="hs-keyword">import</span><span> </span><span class="hs-keyword">qualified</span><span> </span><span class="annot"><span class="hs-identifier">XMonad.StackSet</span></span><span> </span><span class="hs-keyword">as</span><span> </span><span class="annot"><span class="hs-identifier">W</span></span><span>
+</span><span id="line-42"></span><span>
+</span><span id="line-43"></span><span class="hs-keyword">import</span><span> </span><span class="hs-keyword">qualified</span><span> </span><span class="annot"><span class="hs-identifier">Data.Traversable</span></span><span> </span><span class="hs-keyword">as</span><span> </span><span class="annot"><span class="hs-identifier">T</span></span><span>
+</span><span id="line-44"></span><span>
+</span><span id="line-45"></span><span>
+</span><span id="line-46"></span><span class="hs-keyword">newtype</span><span> </span><span id="TrackFloating"><span class="annot"><a href="XMonad.Layout.TrackFloating.html#TrackFloating"><span class="hs-identifier hs-var">TrackFloating</span></a></span></span><span> </span><span id="local-6989586621679382079"><span class="annot"><a href="#local-6989586621679382079"><span class="hs-identifier hs-type">a</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span id="TrackFloating"><span class="annot"><a href="XMonad.Layout.TrackFloating.html#TrackFloating"><span class="hs-identifier hs-var">TrackFloating</span></a></span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">Maybe</span></span><span> </span><span class="annot"><span class="hs-identifier hs-type">Window</span></span><span class="hs-special">)</span><span>
+</span><span id="line-47"></span><span>    </span><span class="hs-keyword">deriving</span><span> </span><span class="hs-special">(</span><span id="local-6989586621679382023"><span id="local-6989586621679382025"><span id="local-6989586621679382027"><span id="local-6989586621679382029"><span class="annot"><span class="annottext">ReadPrec [TrackFloating a]
+ReadPrec (TrackFloating a)
+Int -&gt; ReadS (TrackFloating a)
+ReadS [TrackFloating a]
+(Int -&gt; ReadS (TrackFloating a))
+-&gt; ReadS [TrackFloating a]
+-&gt; ReadPrec (TrackFloating a)
+-&gt; ReadPrec [TrackFloating a]
+-&gt; Read (TrackFloating a)
+forall a. ReadPrec [TrackFloating a]
+forall a. ReadPrec (TrackFloating a)
+forall a. Int -&gt; ReadS (TrackFloating a)
+forall a. ReadS [TrackFloating a]
+forall a.
+(Int -&gt; ReadS a)
+-&gt; ReadS [a] -&gt; ReadPrec a -&gt; ReadPrec [a] -&gt; Read a
+readListPrec :: ReadPrec [TrackFloating a]
+$creadListPrec :: forall a. ReadPrec [TrackFloating a]
+readPrec :: ReadPrec (TrackFloating a)
+$creadPrec :: forall a. ReadPrec (TrackFloating a)
+readList :: ReadS [TrackFloating a]
+$creadList :: forall a. ReadS [TrackFloating a]
+readsPrec :: Int -&gt; ReadS (TrackFloating a)
+$creadsPrec :: forall a. Int -&gt; ReadS (TrackFloating a)
+</span><span class="hs-identifier hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var">Read</span></span></span></span></span></span><span class="hs-special">,</span><span id="local-6989586621679382016"><span id="local-6989586621679382018"><span id="local-6989586621679382020"><span class="annot"><span class="annottext">Int -&gt; TrackFloating a -&gt; ShowS
+[TrackFloating a] -&gt; ShowS
+TrackFloating a -&gt; String
+(Int -&gt; TrackFloating a -&gt; ShowS)
+-&gt; (TrackFloating a -&gt; String)
+-&gt; ([TrackFloating a] -&gt; ShowS)
+-&gt; Show (TrackFloating a)
+forall a. Int -&gt; TrackFloating a -&gt; ShowS
+forall a. [TrackFloating a] -&gt; ShowS
+forall a. TrackFloating a -&gt; String
+forall a.
+(Int -&gt; a -&gt; ShowS) -&gt; (a -&gt; String) -&gt; ([a] -&gt; ShowS) -&gt; Show a
+showList :: [TrackFloating a] -&gt; ShowS
+$cshowList :: forall a. [TrackFloating a] -&gt; ShowS
+show :: TrackFloating a -&gt; String
+$cshow :: forall a. TrackFloating a -&gt; String
+showsPrec :: Int -&gt; TrackFloating a -&gt; ShowS
+$cshowsPrec :: forall a. Int -&gt; TrackFloating a -&gt; ShowS
+</span><span class="hs-identifier hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var">Show</span></span></span></span></span><span class="hs-special">)</span><span>
+</span><span id="line-48"></span><span>
+</span><span id="line-49"></span><span>
+</span><span id="line-50"></span><span class="hs-keyword">instance</span><span> </span><span id="local-6989586621679381992"><span id="local-6989586621679381994"><span id="local-6989586621679381996"><span id="local-6989586621679381998"><span id="local-6989586621679382000"><span id="local-6989586621679382002"><span id="local-6989586621679382004"><span id="local-6989586621679382006"><span id="local-6989586621679382008"><span id="local-6989586621679382011"><span class="annot"><a href="XMonad.Layout.LayoutModifier.html#LayoutModifier"><span class="hs-identifier hs-type">LayoutModifier</span></a></span><span> </span><span class="annot"><a href="XMonad.Layout.TrackFloating.html#TrackFloating"><span class="hs-identifier hs-type">TrackFloating</span></a></span><span> </span><span class="annot"><span class="hs-identifier hs-type">Window</span></span></span></span></span></span></span></span></span></span></span></span><span> </span><span class="hs-keyword">where</span><span>
+</span><span id="line-51"></span><span>    </span><span id="local-6989586621679381990"><span class="annot"><span class="annottext">modifyLayoutWithUpdate :: TrackFloating Window
+-&gt; Workspace String (l Window) Window
+-&gt; Rectangle
+-&gt; X (([(Window, Rectangle)], Maybe (l Window)),
+      Maybe (TrackFloating Window))
+</span><a href="XMonad.Layout.LayoutModifier.html#modifyLayoutWithUpdate"><span class="hs-identifier hs-var hs-var hs-var hs-var">modifyLayoutWithUpdate</span></a></span></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="XMonad.Layout.TrackFloating.html#TrackFloating"><span class="hs-identifier hs-type">TrackFloating</span></a></span><span> </span><span id="local-6989586621679381988"><span class="annot"><span class="annottext">Maybe Window
+</span><a href="#local-6989586621679381988"><span class="hs-identifier hs-var">mw</span></a></span></span><span class="hs-special">)</span><span> </span><span id="local-6989586621679381987"><span class="annot"><span class="annottext">ws :: Workspace String (l Window) Window
+</span><a href="#local-6989586621679381987"><span class="hs-identifier hs-var">ws</span></a></span></span><span class="hs-glyph">@</span><span class="annot"><span class="hs-identifier hs-type">W.Workspace</span></span><span class="hs-special">{</span><span> </span><span class="annot"><span class="annottext">stack :: forall i l a. Workspace i l a -&gt; Maybe (Stack a)
+</span><span class="hs-identifier hs-var">W.stack</span></span><span> </span><span class="hs-glyph">=</span><span> </span><span id="local-6989586621679381984"><span class="annot"><span class="annottext">Maybe (Stack Window)
+</span><a href="#local-6989586621679381984"><span class="hs-identifier hs-var">ms</span></a></span></span><span> </span><span class="hs-special">}</span><span> </span><span id="local-6989586621679381983"><span class="annot"><span class="annottext">Rectangle
+</span><a href="#local-6989586621679381983"><span class="hs-identifier hs-var">r</span></a></span></span><span>
+</span><span id="line-52"></span><span>      </span><span class="hs-glyph">=</span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-53"></span><span>        </span><span id="local-6989586621679381982"><span class="annot"><span class="annottext">Maybe Window
+</span><a href="#local-6989586621679381982"><span class="hs-identifier hs-var">xCur</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">(XState -&gt; Maybe Window) -&gt; X (Maybe Window)
+forall s (m :: * -&gt; *) a. MonadState s m =&gt; (s -&gt; a) -&gt; m a
+</span><span class="hs-identifier hs-var">gets</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">StackSet String (Layout Window) Window ScreenId ScreenDetail
+-&gt; Maybe Window
+forall i l a s sd. StackSet i l a s sd -&gt; Maybe a
+</span><span class="hs-identifier hs-var">W.peek</span></span><span> </span><span class="annot"><span class="annottext">(StackSet String (Layout Window) Window ScreenId ScreenDetail
+ -&gt; Maybe Window)
+-&gt; (XState
+    -&gt; StackSet String (Layout Window) Window ScreenId ScreenDetail)
+-&gt; XState
+-&gt; Maybe Window
+forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">String
+-&gt; StackSet String (Layout Window) Window ScreenId ScreenDetail
+-&gt; StackSet String (Layout Window) Window ScreenId ScreenDetail
+forall s i l a sd.
+(Eq s, Eq i) =&gt;
+i -&gt; StackSet i l a s sd -&gt; StackSet i l a s sd
+</span><span class="hs-identifier hs-var">W.view</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Workspace String (l Window) Window -&gt; String
+forall i l a. Workspace i l a -&gt; i
+</span><span class="hs-identifier hs-var hs-var">W.tag</span></span><span> </span><span class="annot"><span class="annottext">Workspace String (l Window) Window
+</span><a href="#local-6989586621679381987"><span class="hs-identifier hs-var">ws</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">(StackSet String (Layout Window) Window ScreenId ScreenDetail
+ -&gt; StackSet String (Layout Window) Window ScreenId ScreenDetail)
+-&gt; (XState
+    -&gt; StackSet String (Layout Window) Window ScreenId ScreenDetail)
+-&gt; XState
+-&gt; StackSet String (Layout Window) Window ScreenId ScreenDetail
+forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">XState
+-&gt; StackSet String (Layout Window) Window ScreenId ScreenDetail
+</span><span class="hs-identifier hs-var hs-var">windowset</span></span><span class="hs-special">)</span><span>
+</span><span id="line-54"></span><span>        </span><span class="hs-keyword">let</span><span> </span><span id="local-6989586621679381975"><span class="annot"><span class="annottext">isF :: Bool
+</span><a href="#local-6989586621679381975"><span class="hs-identifier hs-var hs-var">isF</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Maybe Window
+</span><a href="#local-6989586621679381982"><span class="hs-identifier hs-var">xCur</span></a></span><span> </span><span class="annot"><span class="annottext">Maybe Window -&gt; Maybe Window -&gt; Bool
+forall a. Eq a =&gt; a -&gt; a -&gt; Bool
+</span><span class="hs-operator hs-var">/=</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Stack Window -&gt; Window
+forall a. Stack a -&gt; a
+</span><span class="hs-identifier hs-var hs-var">W.focus</span></span><span> </span><span class="annot"><span class="annottext">(Stack Window -&gt; Window) -&gt; Maybe (Stack Window) -&gt; Maybe Window
+forall (f :: * -&gt; *) a b. Functor f =&gt; (a -&gt; b) -&gt; f a -&gt; f b
+</span><span class="hs-operator hs-var">&lt;$&gt;</span></span><span> </span><span class="annot"><span class="annottext">Maybe (Stack Window)
+</span><a href="#local-6989586621679381984"><span class="hs-identifier hs-var">ms</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-55"></span><span>            </span><span class="hs-comment">-- use the remembered focus point when true focus differs from</span><span>
+</span><span id="line-56"></span><span>            </span><span class="hs-comment">-- what this (sub)layout is given, which happens e.g. when true</span><span>
+</span><span id="line-57"></span><span>            </span><span class="hs-comment">-- focus is in floating layer or when another sublayout has focus</span><span>
+</span><span id="line-58"></span><span>            </span><span id="local-6989586621679381971"><span class="annot"><span class="annottext">newStack :: Maybe (Stack Window)
+</span><a href="#local-6989586621679381971"><span class="hs-identifier hs-var hs-var">newStack</span></a></span></span><span> </span><span class="hs-glyph">|</span><span> </span><span class="annot"><span class="annottext">Bool
+</span><a href="#local-6989586621679381975"><span class="hs-identifier hs-var">isF</span></a></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Maybe Window
+</span><a href="#local-6989586621679381988"><span class="hs-identifier hs-var">mw</span></a></span><span> </span><span class="annot"><span class="annottext">Maybe Window
+-&gt; (Window -&gt; Maybe (Stack Window)) -&gt; Maybe (Stack Window)
+forall (m :: * -&gt; *) a b. Monad m =&gt; m a -&gt; (a -&gt; m b) -&gt; m b
+</span><span class="hs-operator hs-var">&gt;&gt;=</span></span><span> </span><span class="hs-glyph">\</span><span id="local-6989586621679381970"><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679381970"><span class="hs-identifier hs-var">w</span></a></span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">(Window -&gt; Bool) -&gt; Maybe (Stack Window) -&gt; Maybe (Stack Window)
+forall a. (a -&gt; Bool) -&gt; Zipper a -&gt; Zipper a
+</span><a href="XMonad.Util.Stack.html#findZ"><span class="hs-identifier hs-var">findZ</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679381970"><span class="hs-identifier hs-var">w</span></a></span><span class="annot"><span class="annottext">Window -&gt; Window -&gt; Bool
+forall a. Eq a =&gt; a -&gt; a -&gt; Bool
+</span><span class="hs-operator hs-var">==</span></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">Maybe (Stack Window)
+</span><a href="#local-6989586621679381984"><span class="hs-identifier hs-var">ms</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">Maybe (Stack Window)
+-&gt; Maybe (Stack Window) -&gt; Maybe (Stack Window)
+forall (f :: * -&gt; *) a. Alternative f =&gt; f a -&gt; f a -&gt; f a
+</span><span class="hs-operator hs-var">&lt;|&gt;</span></span><span> </span><span class="annot"><span class="annottext">Maybe (Stack Window)
+</span><a href="#local-6989586621679381984"><span class="hs-identifier hs-var">ms</span></a></span><span>
+</span><span id="line-59"></span><span>                     </span><span class="hs-glyph">|</span><span> </span><span class="annot"><span class="annottext">Bool
+</span><span class="hs-identifier hs-var">otherwise</span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Maybe (Stack Window)
+</span><a href="#local-6989586621679381984"><span class="hs-identifier hs-var">ms</span></a></span><span>
+</span><span id="line-60"></span><span>            </span><span id="local-6989586621679381968"><span class="annot"><span class="annottext">newState :: Maybe Window
+</span><a href="#local-6989586621679381968"><span class="hs-identifier hs-var hs-var">newState</span></a></span></span><span> </span><span class="hs-glyph">|</span><span> </span><span class="annot"><span class="annottext">Bool
+</span><a href="#local-6989586621679381975"><span class="hs-identifier hs-var">isF</span></a></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Maybe Window
+</span><a href="#local-6989586621679381988"><span class="hs-identifier hs-var">mw</span></a></span><span>
+</span><span id="line-61"></span><span>                     </span><span class="hs-glyph">|</span><span> </span><span class="annot"><span class="annottext">Bool
+</span><span class="hs-identifier hs-var">otherwise</span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Maybe Window
+</span><a href="#local-6989586621679381982"><span class="hs-identifier hs-var">xCur</span></a></span><span>
+</span><span id="line-62"></span><span>        </span><span id="local-6989586621679381967"><span class="annot"><span class="annottext">([(Window, Rectangle)], Maybe (l Window))
+</span><a href="#local-6989586621679381967"><span class="hs-identifier hs-var">ran</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">Workspace String (l Window) Window
+-&gt; Rectangle -&gt; X ([(Window, Rectangle)], Maybe (l Window))
+forall (layout :: * -&gt; *) a.
+LayoutClass layout a =&gt;
+Workspace String (layout a) a
+-&gt; Rectangle -&gt; X ([(a, Rectangle)], Maybe (layout a))
+</span><span class="hs-identifier hs-var">runLayout</span></span><span> </span><span class="annot"><span class="annottext">Workspace String (l Window) Window
+</span><a href="#local-6989586621679381987"><span class="hs-identifier hs-var">ws</span></a></span><span class="hs-special">{</span><span> </span><span class="annot"><span class="annottext">stack :: Maybe (Stack Window)
+</span><span class="hs-identifier hs-var">W.stack</span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Maybe (Stack Window)
+</span><a href="#local-6989586621679381971"><span class="hs-identifier hs-var">newStack</span></a></span><span> </span><span class="hs-special">}</span><span> </span><span class="annot"><span class="annottext">Rectangle
+</span><a href="#local-6989586621679381983"><span class="hs-identifier hs-var">r</span></a></span><span>
+</span><span id="line-63"></span><span>        </span><span class="annot"><span class="annottext">(([(Window, Rectangle)], Maybe (l Window)),
+ Maybe (TrackFloating Window))
+-&gt; X (([(Window, Rectangle)], Maybe (l Window)),
+      Maybe (TrackFloating Window))
+forall (m :: * -&gt; *) a. Monad m =&gt; a -&gt; m a
+</span><span class="hs-identifier hs-var">return</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">([(Window, Rectangle)], Maybe (l Window))
+</span><a href="#local-6989586621679381967"><span class="hs-identifier hs-var">ran</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">Bool -&gt; Maybe ()
+forall (f :: * -&gt; *). Alternative f =&gt; Bool -&gt; f ()
+</span><span class="hs-identifier hs-var">guard</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Maybe Window
+</span><a href="#local-6989586621679381968"><span class="hs-identifier hs-var">newState</span></a></span><span> </span><span class="annot"><span class="annottext">Maybe Window -&gt; Maybe Window -&gt; Bool
+forall a. Eq a =&gt; a -&gt; a -&gt; Bool
+</span><span class="hs-operator hs-var">/=</span></span><span> </span><span class="annot"><span class="annottext">Maybe Window
+</span><a href="#local-6989586621679381988"><span class="hs-identifier hs-var">mw</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">Maybe ()
+-&gt; Maybe (TrackFloating Window) -&gt; Maybe (TrackFloating Window)
+forall (m :: * -&gt; *) a b. Monad m =&gt; m a -&gt; m b -&gt; m b
+</span><span class="hs-operator hs-var">&gt;&gt;</span></span><span> </span><span class="annot"><span class="annottext">TrackFloating Window -&gt; Maybe (TrackFloating Window)
+forall a. a -&gt; Maybe a
+</span><span class="hs-identifier hs-var">Just</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Maybe Window -&gt; TrackFloating Window
+forall a. Maybe Window -&gt; TrackFloating a
+</span><a href="XMonad.Layout.TrackFloating.html#TrackFloating"><span class="hs-identifier hs-var">TrackFloating</span></a></span><span> </span><span class="annot"><span class="annottext">Maybe Window
+</span><a href="#local-6989586621679381968"><span class="hs-identifier hs-var">newState</span></a></span><span class="hs-special">)</span><span class="hs-special">)</span><span>
+</span><span id="line-64"></span><span>
+</span><span id="line-65"></span><span>
+</span><span id="line-66"></span><span>
+</span><span id="line-67"></span><span class="hs-comment">{- | When focus is on the tiled layer, the underlying layout is run with focus
+on the window named by the WM_TRANSIENT_FOR property on the floating window.
+-}</span><span>
+</span><span id="line-70"></span><span id="local-6989586621679381964"><span id="local-6989586621679381965"><span class="annot"><a href="XMonad.Layout.TrackFloating.html#useTransientFor"><span class="hs-identifier hs-type">useTransientFor</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><a href="#local-6989586621679381965"><span class="hs-identifier hs-type">l</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679381964"><span class="hs-identifier hs-type">a</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="XMonad.Layout.LayoutModifier.html#ModifiedLayout"><span class="hs-identifier hs-type">ModifiedLayout</span></a></span><span> </span><span class="annot"><a href="XMonad.Layout.TrackFloating.html#UseTransientFor"><span class="hs-identifier hs-type">UseTransientFor</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679381965"><span class="hs-identifier hs-type">l</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679381964"><span class="hs-identifier hs-type">a</span></a></span></span></span><span>
+</span><span id="line-71"></span><span id="useTransientFor"><span class="annot"><span class="annottext">useTransientFor :: l a -&gt; ModifiedLayout UseTransientFor l a
+</span><a href="XMonad.Layout.TrackFloating.html#useTransientFor"><span class="hs-identifier hs-var hs-var">useTransientFor</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">UseTransientFor a -&gt; l a -&gt; ModifiedLayout UseTransientFor l a
+forall (m :: * -&gt; *) (l :: * -&gt; *) a.
+m a -&gt; l a -&gt; ModifiedLayout m l a
+</span><a href="XMonad.Layout.LayoutModifier.html#ModifiedLayout"><span class="hs-identifier hs-var">ModifiedLayout</span></a></span><span> </span><span class="annot"><span class="annottext">UseTransientFor a
+forall a. UseTransientFor a
+</span><a href="XMonad.Layout.TrackFloating.html#UseTransientFor"><span class="hs-identifier hs-var">UseTransientFor</span></a></span><span>
+</span><span id="line-72"></span><span>
+</span><span id="line-73"></span><span class="hs-keyword">data</span><span> </span><span id="UseTransientFor"><span class="annot"><a href="XMonad.Layout.TrackFloating.html#UseTransientFor"><span class="hs-identifier hs-var">UseTransientFor</span></a></span></span><span> </span><span id="local-6989586621679382071"><span class="annot"><a href="#local-6989586621679382071"><span class="hs-identifier hs-type">a</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span id="UseTransientFor"><span class="annot"><a href="XMonad.Layout.TrackFloating.html#UseTransientFor"><span class="hs-identifier hs-var">UseTransientFor</span></a></span></span><span> </span><span class="hs-keyword">deriving</span><span> </span><span class="hs-special">(</span><span id="local-6989586621679381954"><span id="local-6989586621679381956"><span id="local-6989586621679381958"><span id="local-6989586621679381960"><span class="annot"><span class="annottext">ReadPrec [UseTransientFor a]
+ReadPrec (UseTransientFor a)
+Int -&gt; ReadS (UseTransientFor a)
+ReadS [UseTransientFor a]
+(Int -&gt; ReadS (UseTransientFor a))
+-&gt; ReadS [UseTransientFor a]
+-&gt; ReadPrec (UseTransientFor a)
+-&gt; ReadPrec [UseTransientFor a]
+-&gt; Read (UseTransientFor a)
+forall a. ReadPrec [UseTransientFor a]
+forall a. ReadPrec (UseTransientFor a)
+forall a. Int -&gt; ReadS (UseTransientFor a)
+forall a. ReadS [UseTransientFor a]
+forall a.
+(Int -&gt; ReadS a)
+-&gt; ReadS [a] -&gt; ReadPrec a -&gt; ReadPrec [a] -&gt; Read a
+readListPrec :: ReadPrec [UseTransientFor a]
+$creadListPrec :: forall a. ReadPrec [UseTransientFor a]
+readPrec :: ReadPrec (UseTransientFor a)
+$creadPrec :: forall a. ReadPrec (UseTransientFor a)
+readList :: ReadS [UseTransientFor a]
+$creadList :: forall a. ReadS [UseTransientFor a]
+readsPrec :: Int -&gt; ReadS (UseTransientFor a)
+$creadsPrec :: forall a. Int -&gt; ReadS (UseTransientFor a)
+</span><span class="hs-identifier hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var">Read</span></span></span></span></span></span><span class="hs-special">,</span><span id="local-6989586621679381948"><span id="local-6989586621679381950"><span id="local-6989586621679381952"><span class="annot"><span class="annottext">Int -&gt; UseTransientFor a -&gt; ShowS
+[UseTransientFor a] -&gt; ShowS
+UseTransientFor a -&gt; String
+(Int -&gt; UseTransientFor a -&gt; ShowS)
+-&gt; (UseTransientFor a -&gt; String)
+-&gt; ([UseTransientFor a] -&gt; ShowS)
+-&gt; Show (UseTransientFor a)
+forall a. Int -&gt; UseTransientFor a -&gt; ShowS
+forall a. [UseTransientFor a] -&gt; ShowS
+forall a. UseTransientFor a -&gt; String
+forall a.
+(Int -&gt; a -&gt; ShowS) -&gt; (a -&gt; String) -&gt; ([a] -&gt; ShowS) -&gt; Show a
+showList :: [UseTransientFor a] -&gt; ShowS
+$cshowList :: forall a. [UseTransientFor a] -&gt; ShowS
+show :: UseTransientFor a -&gt; String
+$cshow :: forall a. UseTransientFor a -&gt; String
+showsPrec :: Int -&gt; UseTransientFor a -&gt; ShowS
+$cshowsPrec :: forall a. Int -&gt; UseTransientFor a -&gt; ShowS
+</span><span class="hs-identifier hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var">Show</span></span></span></span></span><span class="hs-special">,</span><span id="local-6989586621679381944"><span id="local-6989586621679381946"><span class="annot"><span class="annottext">UseTransientFor a -&gt; UseTransientFor a -&gt; Bool
+(UseTransientFor a -&gt; UseTransientFor a -&gt; Bool)
+-&gt; (UseTransientFor a -&gt; UseTransientFor a -&gt; Bool)
+-&gt; Eq (UseTransientFor a)
+forall a. UseTransientFor a -&gt; UseTransientFor a -&gt; Bool
+forall a. (a -&gt; a -&gt; Bool) -&gt; (a -&gt; a -&gt; Bool) -&gt; Eq a
+/= :: UseTransientFor a -&gt; UseTransientFor a -&gt; Bool
+$c/= :: forall a. UseTransientFor a -&gt; UseTransientFor a -&gt; Bool
+== :: UseTransientFor a -&gt; UseTransientFor a -&gt; Bool
+$c== :: forall a. UseTransientFor a -&gt; UseTransientFor a -&gt; Bool
+</span><span class="hs-identifier hs-var hs-var hs-var hs-var hs-var hs-var">Eq</span></span></span></span><span class="hs-special">)</span><span>
+</span><span id="line-74"></span><span>
+</span><span id="line-75"></span><span class="hs-keyword">instance</span><span> </span><span id="local-6989586621679381920"><span id="local-6989586621679381922"><span id="local-6989586621679381924"><span id="local-6989586621679381926"><span id="local-6989586621679381928"><span id="local-6989586621679381930"><span id="local-6989586621679381932"><span id="local-6989586621679381934"><span id="local-6989586621679381936"><span id="local-6989586621679381938"><span class="annot"><a href="XMonad.Layout.LayoutModifier.html#LayoutModifier"><span class="hs-identifier hs-type">LayoutModifier</span></a></span><span> </span><span class="annot"><a href="XMonad.Layout.TrackFloating.html#UseTransientFor"><span class="hs-identifier hs-type">UseTransientFor</span></a></span><span> </span><span class="annot"><span class="hs-identifier hs-type">Window</span></span></span></span></span></span></span></span></span></span></span></span><span> </span><span class="hs-keyword">where</span><span>
+</span><span id="line-76"></span><span>    </span><span id="local-6989586621679381919"><span class="annot"><span class="annottext">modifyLayout :: UseTransientFor Window
+-&gt; Workspace String (l Window) Window
+-&gt; Rectangle
+-&gt; X ([(Window, Rectangle)], Maybe (l Window))
+</span><a href="XMonad.Layout.LayoutModifier.html#modifyLayout"><span class="hs-identifier hs-var hs-var hs-var hs-var">modifyLayout</span></a></span></span><span> </span><span class="annot"><span class="annottext">UseTransientFor Window
+</span><span class="hs-identifier">_</span></span><span> </span><span id="local-6989586621679381917"><span class="annot"><span class="annottext">ws :: Workspace String (l Window) Window
+</span><a href="#local-6989586621679381917"><span class="hs-identifier hs-var">ws</span></a></span></span><span class="hs-glyph">@</span><span class="annot"><span class="hs-identifier hs-type">W.Workspace</span></span><span class="hs-special">{</span><span> </span><span class="annot"><span class="annottext">stack :: forall i l a. Workspace i l a -&gt; Maybe (Stack a)
+</span><span class="hs-identifier hs-var">W.stack</span></span><span> </span><span class="hs-glyph">=</span><span> </span><span id="local-6989586621679381916"><span class="annot"><span class="annottext">Maybe (Stack Window)
+</span><a href="#local-6989586621679381916"><span class="hs-identifier hs-var">ms</span></a></span></span><span> </span><span class="hs-special">}</span><span> </span><span id="local-6989586621679381915"><span class="annot"><span class="annottext">Rectangle
+</span><a href="#local-6989586621679381915"><span class="hs-identifier hs-var">r</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-77"></span><span>        </span><span id="local-6989586621679381914"><span class="annot"><span class="annottext">Maybe Window
+</span><a href="#local-6989586621679381914"><span class="hs-identifier hs-var">m</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">(XState -&gt; Maybe Window) -&gt; X (Maybe Window)
+forall s (m :: * -&gt; *) a. MonadState s m =&gt; (s -&gt; a) -&gt; m a
+</span><span class="hs-identifier hs-var">gets</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">StackSet String (Layout Window) Window ScreenId ScreenDetail
+-&gt; Maybe Window
+forall i l a s sd. StackSet i l a s sd -&gt; Maybe a
+</span><span class="hs-identifier hs-var">W.peek</span></span><span> </span><span class="annot"><span class="annottext">(StackSet String (Layout Window) Window ScreenId ScreenDetail
+ -&gt; Maybe Window)
+-&gt; (XState
+    -&gt; StackSet String (Layout Window) Window ScreenId ScreenDetail)
+-&gt; XState
+-&gt; Maybe Window
+forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">String
+-&gt; StackSet String (Layout Window) Window ScreenId ScreenDetail
+-&gt; StackSet String (Layout Window) Window ScreenId ScreenDetail
+forall s i l a sd.
+(Eq s, Eq i) =&gt;
+i -&gt; StackSet i l a s sd -&gt; StackSet i l a s sd
+</span><span class="hs-identifier hs-var">W.view</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Workspace String (l Window) Window -&gt; String
+forall i l a. Workspace i l a -&gt; i
+</span><span class="hs-identifier hs-var hs-var">W.tag</span></span><span> </span><span class="annot"><span class="annottext">Workspace String (l Window) Window
+</span><a href="#local-6989586621679381917"><span class="hs-identifier hs-var">ws</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">(StackSet String (Layout Window) Window ScreenId ScreenDetail
+ -&gt; StackSet String (Layout Window) Window ScreenId ScreenDetail)
+-&gt; (XState
+    -&gt; StackSet String (Layout Window) Window ScreenId ScreenDetail)
+-&gt; XState
+-&gt; StackSet String (Layout Window) Window ScreenId ScreenDetail
+forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">XState
+-&gt; StackSet String (Layout Window) Window ScreenId ScreenDetail
+</span><span class="hs-identifier hs-var hs-var">windowset</span></span><span class="hs-special">)</span><span>
+</span><span id="line-78"></span><span>        </span><span id="local-6989586621679381913"><span class="annot"><span class="annottext">Display
+</span><a href="#local-6989586621679381913"><span class="hs-identifier hs-var">d</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">(XConf -&gt; Display) -&gt; X Display
+forall r (m :: * -&gt; *) a. MonadReader r m =&gt; (r -&gt; a) -&gt; m a
+</span><span class="hs-identifier hs-var">asks</span></span><span> </span><span class="annot"><span class="annottext">XConf -&gt; Display
+</span><span class="hs-identifier hs-var hs-var">display</span></span><span>
+</span><span id="line-79"></span><span>        </span><span id="local-6989586621679381910"><span class="annot"><span class="annottext">Maybe Window
+</span><a href="#local-6989586621679381910"><span class="hs-identifier hs-var">parent</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">Maybe (Maybe Window) -&gt; Maybe Window
+forall (m :: * -&gt; *) a. Monad m =&gt; m (m a) -&gt; m a
+</span><span class="hs-identifier hs-var">join</span></span><span> </span><span class="annot"><span class="annottext">(Maybe (Maybe Window) -&gt; Maybe Window)
+-&gt; X (Maybe (Maybe Window)) -&gt; X (Maybe Window)
+forall (f :: * -&gt; *) a b. Functor f =&gt; (a -&gt; b) -&gt; f a -&gt; f b
+</span><span class="hs-operator hs-var">&lt;$&gt;</span></span><span> </span><span class="annot"><span class="annottext">(Window -&gt; X (Maybe Window))
+-&gt; Maybe Window -&gt; X (Maybe (Maybe Window))
+forall (t :: * -&gt; *) (f :: * -&gt; *) a b.
+(Traversable t, Applicative f) =&gt;
+(a -&gt; f b) -&gt; t a -&gt; f (t b)
+</span><span class="hs-identifier hs-var">T.traverse</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">IO (Maybe Window) -&gt; X (Maybe Window)
+forall (m :: * -&gt; *) a. MonadIO m =&gt; IO a -&gt; m a
+</span><span class="hs-identifier hs-var">io</span></span><span> </span><span class="annot"><span class="annottext">(IO (Maybe Window) -&gt; X (Maybe Window))
+-&gt; (Window -&gt; IO (Maybe Window)) -&gt; Window -&gt; X (Maybe Window)
+forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">Display -&gt; Window -&gt; IO (Maybe Window)
+</span><span class="hs-identifier hs-var">getTransientForHint</span></span><span> </span><span class="annot"><span class="annottext">Display
+</span><a href="#local-6989586621679381913"><span class="hs-identifier hs-var">d</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">Maybe Window
+</span><a href="#local-6989586621679381914"><span class="hs-identifier hs-var">m</span></a></span><span>
+</span><span id="line-80"></span><span>
+</span><span id="line-81"></span><span>        </span><span id="local-6989586621679381906"><span class="annot"><span class="annottext">XState
+</span><a href="#local-6989586621679381906"><span class="hs-identifier hs-var">s0</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">X XState
+forall s (m :: * -&gt; *). MonadState s m =&gt; m s
+</span><span class="hs-identifier hs-var">get</span></span><span>
+</span><span id="line-82"></span><span>        </span><span class="annot"><span class="annottext">Maybe Window -&gt; (Window -&gt; X ()) -&gt; X ()
+forall (m :: * -&gt; *) a. Monad m =&gt; Maybe a -&gt; (a -&gt; m ()) -&gt; m ()
+</span><span class="hs-identifier hs-var">whenJust</span></span><span> </span><span class="annot"><span class="annottext">Maybe Window
+</span><a href="#local-6989586621679381910"><span class="hs-identifier hs-var">parent</span></a></span><span> </span><span class="annot"><span class="annottext">((Window -&gt; X ()) -&gt; X ()) -&gt; (Window -&gt; X ()) -&gt; X ()
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="hs-glyph">\</span><span id="local-6989586621679381903"><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679381903"><span class="hs-identifier hs-var">p</span></a></span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">XState -&gt; X ()
+forall s (m :: * -&gt; *). MonadState s m =&gt; s -&gt; m ()
+</span><span class="hs-identifier hs-var">put</span></span><span> </span><span class="annot"><span class="annottext">XState
+</span><a href="#local-6989586621679381906"><span class="hs-identifier hs-var">s0</span></a></span><span class="hs-special">{</span><span> </span><span class="annot"><span class="annottext">windowset :: StackSet String (Layout Window) Window ScreenId ScreenDetail
+</span><span class="hs-identifier hs-var">windowset</span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Window
+-&gt; StackSet String (Layout Window) Window ScreenId ScreenDetail
+-&gt; StackSet String (Layout Window) Window ScreenId ScreenDetail
+forall s a i l sd.
+(Eq s, Eq a, Eq i) =&gt;
+a -&gt; StackSet i l a s sd -&gt; StackSet i l a s sd
+</span><span class="hs-identifier hs-var">W.focusWindow</span></span><span> </span><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679381903"><span class="hs-identifier hs-var">p</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">XState
+-&gt; StackSet String (Layout Window) Window ScreenId ScreenDetail
+</span><span class="hs-identifier hs-var hs-var">windowset</span></span><span> </span><span class="annot"><span class="annottext">XState
+</span><a href="#local-6989586621679381906"><span class="hs-identifier hs-var">s0</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-special">}</span><span>
+</span><span id="line-83"></span><span>        </span><span id="local-6989586621679381900"><span class="annot"><span class="annottext">([(Window, Rectangle)], Maybe (l Window))
+</span><a href="#local-6989586621679381900"><span class="hs-identifier hs-var">result</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">Workspace String (l Window) Window
+-&gt; Rectangle -&gt; X ([(Window, Rectangle)], Maybe (l Window))
+forall (layout :: * -&gt; *) a.
+LayoutClass layout a =&gt;
+Workspace String (layout a) a
+-&gt; Rectangle -&gt; X ([(a, Rectangle)], Maybe (layout a))
+</span><span class="hs-identifier hs-var">runLayout</span></span><span> </span><span class="annot"><span class="annottext">Workspace String (l Window) Window
+</span><a href="#local-6989586621679381917"><span class="hs-identifier hs-var">ws</span></a></span><span class="hs-special">{</span><span> </span><span class="annot"><span class="annottext">stack :: Maybe (Stack Window)
+</span><span class="hs-identifier hs-var">W.stack</span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Maybe Window
+</span><a href="#local-6989586621679381910"><span class="hs-identifier hs-var">parent</span></a></span><span> </span><span class="annot"><span class="annottext">Maybe Window
+-&gt; (Window -&gt; Maybe (Stack Window)) -&gt; Maybe (Stack Window)
+forall (m :: * -&gt; *) a b. Monad m =&gt; m a -&gt; (a -&gt; m b) -&gt; m b
+</span><span class="hs-operator hs-var">&gt;&gt;=</span></span><span> </span><span class="hs-glyph">\</span><span id="local-6989586621679381899"><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679381899"><span class="hs-identifier hs-var">p</span></a></span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">(Window -&gt; Bool) -&gt; Maybe (Stack Window) -&gt; Maybe (Stack Window)
+forall a. (a -&gt; Bool) -&gt; Zipper a -&gt; Zipper a
+</span><a href="XMonad.Util.Stack.html#findZ"><span class="hs-identifier hs-var">findZ</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679381899"><span class="hs-identifier hs-var">p</span></a></span><span class="annot"><span class="annottext">Window -&gt; Window -&gt; Bool
+forall a. Eq a =&gt; a -&gt; a -&gt; Bool
+</span><span class="hs-operator hs-var">==</span></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">Maybe (Stack Window)
+</span><a href="#local-6989586621679381916"><span class="hs-identifier hs-var">ms</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">Maybe (Stack Window)
+-&gt; Maybe (Stack Window) -&gt; Maybe (Stack Window)
+forall (f :: * -&gt; *) a. Alternative f =&gt; f a -&gt; f a -&gt; f a
+</span><span class="hs-operator hs-var">&lt;|&gt;</span></span><span> </span><span class="annot"><span class="annottext">Maybe (Stack Window)
+</span><a href="#local-6989586621679381916"><span class="hs-identifier hs-var">ms</span></a></span><span> </span><span class="hs-special">}</span><span> </span><span class="annot"><span class="annottext">Rectangle
+</span><a href="#local-6989586621679381915"><span class="hs-identifier hs-var">r</span></a></span><span>
+</span><span id="line-84"></span><span>
+</span><span id="line-85"></span><span>        </span><span id="local-6989586621679381898"><span class="annot"><span class="annottext">Maybe Window
+</span><a href="#local-6989586621679381898"><span class="hs-identifier hs-var">m'</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">(XState -&gt; Maybe Window) -&gt; X (Maybe Window)
+forall s (m :: * -&gt; *) a. MonadState s m =&gt; (s -&gt; a) -&gt; m a
+</span><span class="hs-identifier hs-var">gets</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">StackSet String (Layout Window) Window ScreenId ScreenDetail
+-&gt; Maybe Window
+forall i l a s sd. StackSet i l a s sd -&gt; Maybe a
+</span><span class="hs-identifier hs-var">W.peek</span></span><span> </span><span class="annot"><span class="annottext">(StackSet String (Layout Window) Window ScreenId ScreenDetail
+ -&gt; Maybe Window)
+-&gt; (XState
+    -&gt; StackSet String (Layout Window) Window ScreenId ScreenDetail)
+-&gt; XState
+-&gt; Maybe Window
+forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">XState
+-&gt; StackSet String (Layout Window) Window ScreenId ScreenDetail
+</span><span class="hs-identifier hs-var hs-var">windowset</span></span><span class="hs-special">)</span><span>
+</span><span id="line-86"></span><span>
+</span><span id="line-87"></span><span>        </span><span class="annot"><span class="annottext">Bool -&gt; X () -&gt; X ()
+forall (f :: * -&gt; *). Applicative f =&gt; Bool -&gt; f () -&gt; f ()
+</span><span class="hs-identifier hs-var">when</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Maybe Window
+</span><a href="#local-6989586621679381898"><span class="hs-identifier hs-var">m'</span></a></span><span> </span><span class="annot"><span class="annottext">Maybe Window -&gt; Maybe Window -&gt; Bool
+forall a. Eq a =&gt; a -&gt; a -&gt; Bool
+</span><span class="hs-operator hs-var">==</span></span><span> </span><span class="annot"><span class="annottext">Maybe Window
+</span><a href="#local-6989586621679381910"><span class="hs-identifier hs-var">parent</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">(X () -&gt; X ()) -&gt; X () -&gt; X ()
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span>
+</span><span id="line-88"></span><span>            </span><span class="hs-comment">-- layout changed the windowset, so don't clobber it</span><span>
+</span><span id="line-89"></span><span>            </span><span class="annot"><span class="annottext">Maybe Window -&gt; (Window -&gt; X ()) -&gt; X ()
+forall (m :: * -&gt; *) a. Monad m =&gt; Maybe a -&gt; (a -&gt; m ()) -&gt; m ()
+</span><span class="hs-identifier hs-var">whenJust</span></span><span> </span><span class="annot"><span class="annottext">Maybe Window
+</span><a href="#local-6989586621679381914"><span class="hs-identifier hs-var">m</span></a></span><span> </span><span class="annot"><span class="annottext">((Window -&gt; X ()) -&gt; X ()) -&gt; (Window -&gt; X ()) -&gt; X ()
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="hs-glyph">\</span><span id="local-6989586621679381896"><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679381896"><span class="hs-identifier hs-var">p</span></a></span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">XState -&gt; X ()
+forall s (m :: * -&gt; *). MonadState s m =&gt; s -&gt; m ()
+</span><span class="hs-identifier hs-var">put</span></span><span> </span><span class="annot"><span class="annottext">XState
+</span><a href="#local-6989586621679381906"><span class="hs-identifier hs-var">s0</span></a></span><span class="hs-special">{</span><span> </span><span class="annot"><span class="annottext">windowset :: StackSet String (Layout Window) Window ScreenId ScreenDetail
+</span><span class="hs-identifier hs-var">windowset</span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Window
+-&gt; StackSet String (Layout Window) Window ScreenId ScreenDetail
+-&gt; StackSet String (Layout Window) Window ScreenId ScreenDetail
+forall s a i l sd.
+(Eq s, Eq a, Eq i) =&gt;
+a -&gt; StackSet i l a s sd -&gt; StackSet i l a s sd
+</span><span class="hs-identifier hs-var">W.focusWindow</span></span><span> </span><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679381896"><span class="hs-identifier hs-var">p</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">XState
+-&gt; StackSet String (Layout Window) Window ScreenId ScreenDetail
+</span><span class="hs-identifier hs-var hs-var">windowset</span></span><span> </span><span class="annot"><span class="annottext">XState
+</span><a href="#local-6989586621679381906"><span class="hs-identifier hs-var">s0</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-special">}</span><span>
+</span><span id="line-90"></span><span>
+</span><span id="line-91"></span><span>        </span><span class="annot"><span class="annottext">([(Window, Rectangle)], Maybe (l Window))
+-&gt; X ([(Window, Rectangle)], Maybe (l Window))
+forall (m :: * -&gt; *) a. Monad m =&gt; a -&gt; m a
+</span><span class="hs-identifier hs-var">return</span></span><span> </span><span class="annot"><span class="annottext">([(Window, Rectangle)], Maybe (l Window))
+</span><a href="#local-6989586621679381900"><span class="hs-identifier hs-var">result</span></a></span><span>
+</span><span id="line-92"></span><span>
+</span><span id="line-93"></span><span>
+</span><span id="line-94"></span><span>
+</span><span id="line-95"></span><span class="hs-comment">{- $usage
+
+Apply to your layout in a config like:
+
+&gt; main = xmonad (def{
+&gt;                   layoutHook = trackFloating (useTransientFor
+&gt;                       (noBorders Full ||| Tall 1 0.3 0.5)),
+&gt;                   ...
+&gt;               })
+
+
+'useTransientFor' and 'trackFloating' can be enabled independently.  For
+example when the floating window sets @WM_TRANSIENT_FOR@, such as libreoffice's
+file-&gt;preferences window, @optionA@ will have the last-focused window magnified
+while @optionB@ will result magnify the window that opened the preferences
+window regardless of which tiled window was focused before.
+
+&gt; import XMonad.Layout.Magnifier
+&gt; import XMonad.Layout.TrackFloating
+&gt;
+&gt; underlyingLayout = magnifier (Tall 1 0.3 0.5)
+&gt;
+&gt; optionA = trackFloating underlyingLayout
+&gt; optionB = trackFloating (useTransientFor underlyingLayout)
+
+-}</span><span>
+</span><span id="line-121"></span><span>
+</span><span id="line-122"></span><span class="hs-comment">{- | Runs another layout with a remembered focus, provided:
+
+* the subset of windows doesn't include the focus in XState
+
+* it was previously run with a subset that included the XState focus
+
+* the remembered focus hasn't since been killed
+
+-}</span><span>
+</span><span id="line-131"></span><span id="local-6989586621679381894"><span id="local-6989586621679381895"><span class="annot"><a href="XMonad.Layout.TrackFloating.html#trackFloating"><span class="hs-identifier hs-type">trackFloating</span></a></span><span> </span><span class="hs-glyph">::</span><span>  </span><span class="annot"><a href="#local-6989586621679381895"><span class="hs-identifier hs-type">l</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679381894"><span class="hs-identifier hs-type">a</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="XMonad.Layout.LayoutModifier.html#ModifiedLayout"><span class="hs-identifier hs-type">ModifiedLayout</span></a></span><span> </span><span class="annot"><a href="XMonad.Layout.TrackFloating.html#TrackFloating"><span class="hs-identifier hs-type">TrackFloating</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679381895"><span class="hs-identifier hs-type">l</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679381894"><span class="hs-identifier hs-type">a</span></a></span></span></span><span>
+</span><span id="line-132"></span><span id="trackFloating"><span class="annot"><span class="annottext">trackFloating :: l a -&gt; ModifiedLayout TrackFloating l a
+</span><a href="XMonad.Layout.TrackFloating.html#trackFloating"><span class="hs-identifier hs-var hs-var">trackFloating</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">TrackFloating a -&gt; l a -&gt; ModifiedLayout TrackFloating l a
+forall (m :: * -&gt; *) (l :: * -&gt; *) a.
+m a -&gt; l a -&gt; ModifiedLayout m l a
+</span><a href="XMonad.Layout.LayoutModifier.html#ModifiedLayout"><span class="hs-identifier hs-var">ModifiedLayout</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Maybe Window -&gt; TrackFloating a
+forall a. Maybe Window -&gt; TrackFloating a
+</span><a href="XMonad.Layout.TrackFloating.html#TrackFloating"><span class="hs-identifier hs-var">TrackFloating</span></a></span><span> </span><span class="annot"><span class="annottext">Maybe Window
+forall a. Maybe a
+</span><span class="hs-identifier hs-var">Nothing</span></span><span class="hs-special">)</span><span>
+</span><span id="line-133"></span><span>
+</span><span id="line-134"></span><span class="hs-comment">{- $layoutModifier
+It also corrects focus issues for full-like layouts inside other layout
+modifiers:
+
+&gt; import XMonad.Layout.IM
+&gt; import XMonad.Layout.Tabbed
+&gt; import XMonad.Layout.TrackFloating
+&gt; import XMonad.Layout.Reflect
+
+&gt; gimpLayout = withIM 0.11 (Role &quot;gimp-toolbox&quot;) $ reflectHoriz
+&gt;       $ withIM 0.15 (Role &quot;gimp-dock&quot;) (trackFloating simpleTabbed)
+
+Interactions with some layout modifiers (ex. decorations, minimizing) are
+unknown but likely unpleasant.
+-}</span><span>
+</span><span id="line-149"></span></pre></body></html>

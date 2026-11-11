@@ -1,0 +1,255 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd"><html xmlns="http://www.w3.org/1999/xhtml"><head><link rel="stylesheet" type="text/css" href="style.css" /><script type="text/javascript" src="highlight.js"></script></head><body><pre><span class="hs-comment">-----------------------------------------------------------------------------</span><span>
+</span><span id="line-2"></span><span class="hs-comment">-- |</span><span>
+</span><span id="line-3"></span><span class="hs-comment">-- Module      :  XMonad.Prompt.RunOrRaise</span><span>
+</span><span id="line-4"></span><span class="hs-comment">-- Description :  A prompt to run a program, open a file, or raise a running program.</span><span>
+</span><span id="line-5"></span><span class="hs-comment">-- Copyright   :  (C) 2008 Justin Bogner</span><span>
+</span><span id="line-6"></span><span class="hs-comment">-- License     :  BSD3</span><span>
+</span><span id="line-7"></span><span class="hs-comment">--</span><span>
+</span><span id="line-8"></span><span class="hs-comment">-- Maintainer  :  mail@justinbogner.com</span><span>
+</span><span id="line-9"></span><span class="hs-comment">-- Stability   :  unstable</span><span>
+</span><span id="line-10"></span><span class="hs-comment">-- Portability :  unportable</span><span>
+</span><span id="line-11"></span><span class="hs-comment">--</span><span>
+</span><span id="line-12"></span><span class="hs-comment">-- A prompt for XMonad which will run a program, open a file,</span><span>
+</span><span id="line-13"></span><span class="hs-comment">-- or raise an already running program, depending on context.</span><span>
+</span><span id="line-14"></span><span class="hs-comment">--</span><span>
+</span><span id="line-15"></span><span class="hs-comment">-----------------------------------------------------------------------------</span><span>
+</span><span id="line-16"></span><span>
+</span><span id="line-17"></span><span class="hs-keyword">module</span><span> </span><span class="hs-identifier">XMonad.Prompt.RunOrRaise</span><span>
+</span><span id="line-18"></span><span>    </span><span class="hs-special">(</span><span> </span><span class="annot"><span class="hs-comment">-- * Usage</span></span><span>
+</span><span id="line-19"></span><span>      </span><span class="annot"><span class="hs-comment">-- $usage</span></span><span>
+</span><span id="line-20"></span><span>      </span><span class="annot"><a href="XMonad.Prompt.RunOrRaise.html#runOrRaisePrompt"><span class="hs-identifier">runOrRaisePrompt</span></a></span><span class="hs-special">,</span><span>
+</span><span id="line-21"></span><span>      </span><span class="annot"><a href="XMonad.Prompt.RunOrRaise.html#RunOrRaisePrompt"><span class="hs-identifier">RunOrRaisePrompt</span></a></span><span class="hs-special">,</span><span>
+</span><span id="line-22"></span><span>    </span><span class="hs-special">)</span><span> </span><span class="hs-keyword">where</span><span>
+</span><span id="line-23"></span><span>
+</span><span id="line-24"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><span class="hs-identifier">XMonad</span></span><span> </span><span class="hs-keyword">hiding</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier">config</span></span><span class="hs-special">)</span><span>
+</span><span id="line-25"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><a href="XMonad.Prelude.html"><span class="hs-identifier">XMonad.Prelude</span></a></span><span>
+</span><span id="line-26"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><a href="XMonad.Prompt.html"><span class="hs-identifier">XMonad.Prompt</span></a></span><span>
+</span><span id="line-27"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><a href="XMonad.Prompt.Shell.html"><span class="hs-identifier">XMonad.Prompt.Shell</span></a></span><span>
+</span><span id="line-28"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><a href="XMonad.Actions.WindowGo.html"><span class="hs-identifier">XMonad.Actions.WindowGo</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="XMonad.Actions.WindowGo.html#runOrRaise"><span class="hs-identifier">runOrRaise</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-29"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><a href="XMonad.Util.Run.html"><span class="hs-identifier">XMonad.Util.Run</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="XMonad.Util.Run.html#runProcessWithInput"><span class="hs-identifier">runProcessWithInput</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-30"></span><span>
+</span><span id="line-31"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><span class="hs-identifier">Control.Exception</span></span><span> </span><span class="hs-keyword">as</span><span> </span><span class="annot"><span class="hs-identifier">E</span></span><span>
+</span><span id="line-32"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><span class="hs-identifier">System.Directory</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier">doesDirectoryExist</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier">doesFileExist</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier">executable</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier">findExecutable</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier">getPermissions</span></span><span class="hs-special">)</span><span>
+</span><span id="line-33"></span><span>
+</span><span id="line-34"></span><span id="local-6989586621679449649"><span id="local-6989586621679449650"><span class="annot"><a href="XMonad.Prompt.RunOrRaise.html#econst"><span class="hs-identifier hs-type">econst</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Monad</span></span><span> </span><span class="annot"><a href="#local-6989586621679449650"><span class="hs-identifier hs-type">m</span></a></span><span> </span><span class="hs-glyph">=&gt;</span><span> </span><span class="annot"><a href="#local-6989586621679449649"><span class="hs-identifier hs-type">a</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">IOException</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="#local-6989586621679449650"><span class="hs-identifier hs-type">m</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679449649"><span class="hs-identifier hs-type">a</span></a></span></span></span><span>
+</span><span id="line-35"></span><span id="econst"><span class="annot"><span class="annottext">econst :: forall (m :: * -&gt; *) a. Monad m =&gt; a -&gt; IOException -&gt; m a
+</span><a href="XMonad.Prompt.RunOrRaise.html#econst"><span class="hs-identifier hs-var hs-var">econst</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">forall a b. a -&gt; b -&gt; a
+</span><span class="hs-identifier hs-var">const</span></span><span> </span><span class="annot"><span class="annottext">forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">forall (m :: * -&gt; *) a. Monad m =&gt; a -&gt; m a
+</span><span class="hs-identifier hs-var">return</span></span><span>
+</span><span id="line-36"></span><span>
+</span><span id="line-37"></span><span class="hs-comment">{- $usage
+1. In your @xmonad.hs@:
+
+&gt; import XMonad.Prompt
+&gt; import XMonad.Prompt.RunOrRaise
+
+2. In your keybindings add something like:
+
+&gt;   , ((modm .|. controlMask, xK_x), runOrRaisePrompt def)
+
+For detailed instruction on editing the key binding see
+&lt;https://xmonad.org/TUTORIAL.html#customizing-xmonad the tutorial&gt;.
+-}</span><span>
+</span><span id="line-50"></span><span>
+</span><span id="line-51"></span><span class="hs-keyword">data</span><span> </span><span id="RunOrRaisePrompt"><span class="annot"><a href="XMonad.Prompt.RunOrRaise.html#RunOrRaisePrompt"><span class="hs-identifier hs-var">RunOrRaisePrompt</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span id="RRP"><span class="annot"><a href="XMonad.Prompt.RunOrRaise.html#RRP"><span class="hs-identifier hs-var">RRP</span></a></span></span><span>
+</span><span id="line-52"></span><span class="hs-keyword">instance</span><span> </span><span id="local-6989586621679449515"><span id="local-6989586621679449517"><span id="local-6989586621679449519"><span id="local-6989586621679449521"><span id="local-6989586621679449523"><span class="annot"><a href="XMonad.Prompt.html#XPrompt"><span class="hs-identifier hs-type">XPrompt</span></a></span><span> </span><span class="annot"><a href="XMonad.Prompt.RunOrRaise.html#RunOrRaisePrompt"><span class="hs-identifier hs-type">RunOrRaisePrompt</span></a></span></span></span></span></span></span><span> </span><span class="hs-keyword">where</span><span>
+</span><span id="line-53"></span><span>    </span><span id="local-6989586621679449513"><span class="annot"><span class="annottext">showXPrompt :: RunOrRaisePrompt -&gt; String
+</span><a href="XMonad.Prompt.html#showXPrompt"><span class="hs-identifier hs-var hs-var hs-var hs-var">showXPrompt</span></a></span></span><span> </span><span class="annot"><span class="annottext">RunOrRaisePrompt
+</span><a href="XMonad.Prompt.RunOrRaise.html#RRP"><span class="hs-identifier hs-var">RRP</span></a></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot;Run or Raise: &quot;</span></span><span>
+</span><span id="line-54"></span><span>
+</span><span id="line-55"></span><span class="annot"><a href="XMonad.Prompt.RunOrRaise.html#runOrRaisePrompt"><span class="hs-identifier hs-type">runOrRaisePrompt</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><a href="XMonad.Prompt.html#XPConfig"><span class="hs-identifier hs-type">XPConfig</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">X</span></span><span> </span><span class="hs-special">(</span><span class="hs-special">)</span><span>
+</span><span id="line-56"></span><span id="runOrRaisePrompt"><span class="annot"><span class="annottext">runOrRaisePrompt :: XPConfig -&gt; X ()
+</span><a href="XMonad.Prompt.RunOrRaise.html#runOrRaisePrompt"><span class="hs-identifier hs-var hs-var">runOrRaisePrompt</span></a></span></span><span> </span><span id="local-6989586621679449511"><span class="annot"><span class="annottext">XPConfig
+</span><a href="#local-6989586621679449511"><span class="hs-identifier hs-var">c</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-keyword">do</span><span> </span><span id="local-6989586621679449510"><span class="annot"><span class="annottext">[String]
+</span><a href="#local-6989586621679449510"><span class="hs-identifier hs-var">cmds</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">forall (m :: * -&gt; *) a. MonadIO m =&gt; IO a -&gt; m a
+</span><span class="hs-identifier hs-var">io</span></span><span> </span><span class="annot"><span class="annottext">IO [String]
+</span><a href="XMonad.Prompt.Shell.html#getCommands"><span class="hs-identifier hs-var">getCommands</span></a></span><span>
+</span><span id="line-57"></span><span>                        </span><span class="annot"><span class="annottext">forall p.
+XPrompt p =&gt;
+p -&gt; XPConfig -&gt; ComplFunction -&gt; (String -&gt; X ()) -&gt; X ()
+</span><a href="XMonad.Prompt.html#mkXPrompt"><span class="hs-identifier hs-var">mkXPrompt</span></a></span><span> </span><span class="annot"><span class="annottext">RunOrRaisePrompt
+</span><a href="XMonad.Prompt.RunOrRaise.html#RRP"><span class="hs-identifier hs-var">RRP</span></a></span><span> </span><span class="annot"><span class="annottext">XPConfig
+</span><a href="#local-6989586621679449511"><span class="hs-identifier hs-var">c</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">[String] -&gt; Predicate -&gt; ComplFunction
+</span><a href="XMonad.Prompt.Shell.html#getShellCompl"><span class="hs-identifier hs-var">getShellCompl</span></a></span><span> </span><span class="annot"><span class="annottext">[String]
+</span><a href="#local-6989586621679449510"><span class="hs-identifier hs-var">cmds</span></a></span><span> </span><span class="annot"><span class="annottext">forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">XPConfig -&gt; Predicate
+</span><a href="XMonad.Prompt.html#searchPredicate"><span class="hs-identifier hs-var">searchPredicate</span></a></span><span> </span><span class="annot"><span class="annottext">XPConfig
+</span><a href="#local-6989586621679449511"><span class="hs-identifier hs-var">c</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">String -&gt; X ()
+</span><a href="XMonad.Prompt.RunOrRaise.html#open"><span class="hs-identifier hs-var">open</span></a></span><span>
+</span><span id="line-58"></span><span class="annot"><a href="XMonad.Prompt.RunOrRaise.html#open"><span class="hs-identifier hs-type">open</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">String</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">X</span></span><span> </span><span class="hs-special">(</span><span class="hs-special">)</span><span>
+</span><span id="line-59"></span><span id="open"><span class="annot"><span class="annottext">open :: String -&gt; X ()
+</span><a href="XMonad.Prompt.RunOrRaise.html#open"><span class="hs-identifier hs-var hs-var">open</span></a></span></span><span> </span><span id="local-6989586621679449503"><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679449503"><span class="hs-identifier hs-var">path</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">forall (m :: * -&gt; *) a. MonadIO m =&gt; IO a -&gt; m a
+</span><span class="hs-identifier hs-var">io</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">String -&gt; IO Bool
+</span><a href="#local-6989586621679449502"><span class="hs-identifier hs-var">isNormalFile</span></a></span><span> </span><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679449503"><span class="hs-identifier hs-var">path</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">forall (m :: * -&gt; *) a b. Monad m =&gt; m a -&gt; (a -&gt; m b) -&gt; m b
+</span><span class="hs-operator hs-var">&gt;&gt;=</span></span><span> </span><span class="hs-glyph">\</span><span id="local-6989586621679449501"><span class="annot"><span class="annottext">Bool
+</span><a href="#local-6989586621679449501"><span class="hs-identifier hs-var">b</span></a></span></span><span> </span><span class="hs-glyph">-&gt;</span><span>
+</span><span id="line-60"></span><span>            </span><span class="hs-keyword">if</span><span> </span><span class="annot"><span class="annottext">Bool
+</span><a href="#local-6989586621679449501"><span class="hs-identifier hs-var">b</span></a></span><span>
+</span><span id="line-61"></span><span>            </span><span class="hs-keyword">then</span><span> </span><span class="annot"><span class="annottext">forall (m :: * -&gt; *). MonadIO m =&gt; String -&gt; m ()
+</span><span class="hs-identifier hs-var">spawn</span></span><span> </span><span class="annot"><span class="annottext">forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot;xdg-open \&quot;&quot;</span></span><span> </span><span class="annot"><span class="annottext">forall a. [a] -&gt; [a] -&gt; [a]
+</span><span class="hs-operator hs-var">++</span></span><span> </span><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679449503"><span class="hs-identifier hs-var">path</span></a></span><span> </span><span class="annot"><span class="annottext">forall a. [a] -&gt; [a] -&gt; [a]
+</span><span class="hs-operator hs-var">++</span></span><span> </span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot;\&quot;&quot;</span></span><span>
+</span><span id="line-62"></span><span>            </span><span class="hs-keyword">else</span><span> </span><span class="annot"><span class="annottext">forall a b c. (a -&gt; b -&gt; c) -&gt; (a, b) -&gt; c
+</span><span class="hs-identifier hs-var">uncurry</span></span><span> </span><span class="annot"><span class="annottext">String -&gt; Query Bool -&gt; X ()
+</span><a href="XMonad.Actions.WindowGo.html#runOrRaise"><span class="hs-identifier hs-var">runOrRaise</span></a></span><span> </span><span class="annot"><span class="annottext">forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">String -&gt; (String, Query Bool)
+</span><a href="#local-6989586621679449498"><span class="hs-identifier hs-var">getTarget</span></a></span><span> </span><span class="annot"><span class="annottext">forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679449503"><span class="hs-identifier hs-var">path</span></a></span><span>
+</span><span id="line-63"></span><span>    </span><span class="hs-keyword">where</span><span>
+</span><span id="line-64"></span><span>      </span><span id="local-6989586621679449502"><span class="annot"><span class="annottext">isNormalFile :: String -&gt; IO Bool
+</span><a href="#local-6989586621679449502"><span class="hs-identifier hs-var hs-var">isNormalFile</span></a></span></span><span> </span><span id="local-6989586621679449485"><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679449485"><span class="hs-identifier hs-var">f</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-65"></span><span>          </span><span id="local-6989586621679449484"><span class="annot"><span class="annottext">Bool
+</span><a href="#local-6989586621679449484"><span class="hs-identifier hs-var">notCommand</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">forall a. Maybe a -&gt; Bool
+</span><span class="hs-identifier hs-var">isNothing</span></span><span> </span><span class="annot"><span class="annottext">forall (f :: * -&gt; *) a b. Functor f =&gt; (a -&gt; b) -&gt; f a -&gt; f b
+</span><span class="hs-operator hs-var">&lt;$&gt;</span></span><span> </span><span class="annot"><span class="annottext">String -&gt; IO (Maybe String)
+</span><span class="hs-identifier hs-var">findExecutable</span></span><span> </span><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679449485"><span class="hs-identifier hs-var">f</span></a></span><span> </span><span class="hs-comment">-- not a command (executable in $PATH)</span><span>
+</span><span id="line-66"></span><span>          </span><span id="local-6989586621679449481"><span class="annot"><span class="annottext">Bool
+</span><a href="#local-6989586621679449481"><span class="hs-identifier hs-var">exists</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">forall (t :: * -&gt; *). Foldable t =&gt; t Bool -&gt; Bool
+</span><span class="hs-identifier hs-var">or</span></span><span> </span><span class="annot"><span class="annottext">forall (f :: * -&gt; *) a b. Functor f =&gt; (a -&gt; b) -&gt; f a -&gt; f b
+</span><span class="hs-operator hs-var">&lt;$&gt;</span></span><span> </span><span class="annot"><span class="annottext">forall (t :: * -&gt; *) (m :: * -&gt; *) a.
+(Traversable t, Monad m) =&gt;
+t (m a) -&gt; m (t a)
+</span><span class="hs-identifier hs-var">sequence</span></span><span> </span><span class="hs-special">[</span><span class="annot"><span class="annottext">String -&gt; IO Bool
+</span><a href="#local-6989586621679449478"><span class="hs-identifier hs-var">doesDirExist</span></a></span><span> </span><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679449485"><span class="hs-identifier hs-var">f</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">String -&gt; IO Bool
+</span><span class="hs-identifier hs-var">doesFileExist</span></span><span> </span><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679449485"><span class="hs-identifier hs-var">f</span></a></span><span class="hs-special">]</span><span>
+</span><span id="line-67"></span><span>          </span><span class="hs-keyword">case</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Bool
+</span><a href="#local-6989586621679449484"><span class="hs-identifier hs-var">notCommand</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">Bool
+</span><a href="#local-6989586621679449481"><span class="hs-identifier hs-var">exists</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-keyword">of</span><span>
+</span><span id="line-68"></span><span>              </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Bool
+</span><span class="hs-identifier hs-var">True</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">Bool
+</span><span class="hs-identifier hs-var">True</span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">String -&gt; IO Bool
+</span><a href="#local-6989586621679449477"><span class="hs-identifier hs-var">notExecutable</span></a></span><span> </span><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679449485"><span class="hs-identifier hs-var">f</span></a></span><span> </span><span class="hs-comment">-- not executable as a file in current dir</span><span>
+</span><span id="line-69"></span><span>              </span><span class="annot"><span class="annottext">(Bool, Bool)
+</span><span class="hs-identifier">_</span></span><span>            </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">forall (f :: * -&gt; *) a. Applicative f =&gt; a -&gt; f a
+</span><span class="hs-identifier hs-var">pure</span></span><span> </span><span class="annot"><span class="annottext">Bool
+</span><span class="hs-identifier hs-var">False</span></span><span>
+</span><span id="line-70"></span><span>      </span><span id="local-6989586621679449477"><span class="annot"><span class="annottext">notExecutable :: String -&gt; IO Bool
+</span><a href="#local-6989586621679449477"><span class="hs-identifier hs-var hs-var">notExecutable</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">forall (f :: * -&gt; *) a b. Functor f =&gt; (a -&gt; b) -&gt; f a -&gt; f b
+</span><span class="hs-identifier hs-var">fmap</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Bool -&gt; Bool
+</span><span class="hs-identifier hs-var">not</span></span><span> </span><span class="annot"><span class="annottext">forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">Permissions -&gt; Bool
+</span><span class="hs-identifier hs-var">executable</span></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">String -&gt; IO Permissions
+</span><span class="hs-identifier hs-var">getPermissions</span></span><span>
+</span><span id="line-71"></span><span>      </span><span id="local-6989586621679449478"><span class="annot"><span class="annottext">doesDirExist :: String -&gt; IO Bool
+</span><a href="#local-6989586621679449478"><span class="hs-identifier hs-var hs-var">doesDirExist</span></a></span></span><span> </span><span id="local-6989586621679449472"><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679449472"><span class="hs-identifier hs-var">f</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot;/&quot;</span></span><span> </span><span class="annot"><span class="annottext">forall a. Eq a =&gt; [a] -&gt; [a] -&gt; Bool
+</span><span class="hs-operator hs-var">`isSuffixOf`</span></span><span> </span><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679449472"><span class="hs-identifier hs-var">f</span></a></span><span> </span><span class="annot"><span class="annottext">Bool -&gt; Bool -&gt; Bool
+</span><span class="hs-operator hs-var">&amp;&amp;</span></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">forall (f :: * -&gt; *) a b. Functor f =&gt; (a -&gt; b) -&gt; f a -&gt; f b
+</span><span class="hs-operator hs-var">&lt;$&gt;</span></span><span> </span><span class="annot"><span class="annottext">String -&gt; IO Bool
+</span><span class="hs-identifier hs-var">doesDirectoryExist</span></span><span> </span><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679449472"><span class="hs-identifier hs-var">f</span></a></span><span>
+</span><span id="line-72"></span><span>      </span><span id="local-6989586621679449498"><span class="annot"><span class="annottext">getTarget :: String -&gt; (String, Query Bool)
+</span><a href="#local-6989586621679449498"><span class="hs-identifier hs-var hs-var">getTarget</span></a></span></span><span> </span><span id="local-6989586621679449469"><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679449469"><span class="hs-identifier hs-var">x</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679449469"><span class="hs-identifier hs-var">x</span></a></span><span class="hs-special">,</span><span class="annot"><span class="annottext">String -&gt; Query Bool
+</span><a href="XMonad.Prompt.RunOrRaise.html#isApp"><span class="hs-identifier hs-var">isApp</span></a></span><span> </span><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679449469"><span class="hs-identifier hs-var">x</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-73"></span><span>
+</span><span id="line-74"></span><span class="annot"><a href="XMonad.Prompt.RunOrRaise.html#isApp"><span class="hs-identifier hs-type">isApp</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">String</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Query</span></span><span> </span><span class="annot"><span class="hs-identifier hs-type">Bool</span></span><span>
+</span><span id="line-75"></span><span id="isApp"><span class="annot"><span class="annottext">isApp :: String -&gt; Query Bool
+</span><a href="XMonad.Prompt.RunOrRaise.html#isApp"><span class="hs-identifier hs-var hs-var">isApp</span></a></span></span><span> </span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot;firefox&quot;</span></span><span>     </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Query String
+</span><span class="hs-identifier hs-var">className</span></span><span> </span><span class="annot"><span class="annottext">forall a. Eq a =&gt; Query a -&gt; a -&gt; Query Bool
+</span><span class="hs-operator hs-var">=?</span></span><span> </span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot;Firefox-bin&quot;</span></span><span>     </span><span class="annot"><span class="annottext">forall (m :: * -&gt; *). Monad m =&gt; m Bool -&gt; m Bool -&gt; m Bool
+</span><span class="hs-operator hs-var">&lt;||&gt;</span></span><span> </span><span class="annot"><span class="annottext">Query String
+</span><span class="hs-identifier hs-var">className</span></span><span> </span><span class="annot"><span class="annottext">forall a. Eq a =&gt; Query a -&gt; a -&gt; Query Bool
+</span><span class="hs-operator hs-var">=?</span></span><span> </span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot;Firefox&quot;</span></span><span>
+</span><span id="line-76"></span><span class="annot"><a href="XMonad.Prompt.RunOrRaise.html#isApp"><span class="hs-identifier hs-var">isApp</span></a></span><span> </span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot;thunderbird&quot;</span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Query String
+</span><span class="hs-identifier hs-var">className</span></span><span> </span><span class="annot"><span class="annottext">forall a. Eq a =&gt; Query a -&gt; a -&gt; Query Bool
+</span><span class="hs-operator hs-var">=?</span></span><span> </span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot;Thunderbird-bin&quot;</span></span><span> </span><span class="annot"><span class="annottext">forall (m :: * -&gt; *). Monad m =&gt; m Bool -&gt; m Bool -&gt; m Bool
+</span><span class="hs-operator hs-var">&lt;||&gt;</span></span><span> </span><span class="annot"><span class="annottext">Query String
+</span><span class="hs-identifier hs-var">className</span></span><span> </span><span class="annot"><span class="annottext">forall a. Eq a =&gt; Query a -&gt; a -&gt; Query Bool
+</span><span class="hs-operator hs-var">=?</span></span><span> </span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot;Thunderbird&quot;</span></span><span>
+</span><span id="line-77"></span><span class="annot"><a href="XMonad.Prompt.RunOrRaise.html#isApp"><span class="hs-identifier hs-var">isApp</span></a></span><span> </span><span id="local-6989586621679449464"><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679449464"><span class="hs-identifier hs-var">x</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">forall (f :: * -&gt; *) a b c.
+Applicative f =&gt;
+(a -&gt; b -&gt; c) -&gt; f a -&gt; f b -&gt; f c
+</span><span class="hs-identifier hs-var">liftA2</span></span><span> </span><span class="annot"><span class="annottext">forall a. Eq a =&gt; a -&gt; a -&gt; Bool
+</span><span class="hs-operator hs-var">(==)</span></span><span> </span><span class="annot"><span class="annottext">Query Int
+</span><a href="XMonad.Prompt.RunOrRaise.html#pid"><span class="hs-identifier hs-var">pid</span></a></span><span> </span><span class="annot"><span class="annottext">forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">String -&gt; Query Int
+</span><a href="XMonad.Prompt.RunOrRaise.html#pidof"><span class="hs-identifier hs-var">pidof</span></a></span><span> </span><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679449464"><span class="hs-identifier hs-var">x</span></a></span><span>
+</span><span id="line-78"></span><span>
+</span><span id="line-79"></span><span class="annot"><a href="XMonad.Prompt.RunOrRaise.html#pidof"><span class="hs-identifier hs-type">pidof</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">String</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Query</span></span><span> </span><span class="annot"><span class="hs-identifier hs-type">Int</span></span><span>
+</span><span id="line-80"></span><span id="pidof"><span class="annot"><span class="annottext">pidof :: String -&gt; Query Int
+</span><a href="XMonad.Prompt.RunOrRaise.html#pidof"><span class="hs-identifier hs-var hs-var">pidof</span></a></span></span><span> </span><span id="local-6989586621679449460"><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679449460"><span class="hs-identifier hs-var">x</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">forall (m :: * -&gt; *) a. MonadIO m =&gt; IO a -&gt; m a
+</span><span class="hs-identifier hs-var">io</span></span><span> </span><span class="annot"><span class="annottext">forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">forall (m :: * -&gt; *).
+MonadIO m =&gt;
+String -&gt; [String] -&gt; String -&gt; m String
+</span><a href="XMonad.Util.Run.html#runProcessWithInput"><span class="hs-identifier hs-var">runProcessWithInput</span></a></span><span> </span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot;pidof&quot;</span></span><span> </span><span class="hs-special">[</span><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679449460"><span class="hs-identifier hs-var">x</span></a></span><span class="hs-special">]</span><span> </span><span class="hs-special">[</span><span class="hs-special">]</span><span> </span><span class="annot"><span class="annottext">forall (m :: * -&gt; *) a b. Monad m =&gt; m a -&gt; (a -&gt; m b) -&gt; m b
+</span><span class="hs-operator hs-var">&gt;&gt;=</span></span><span> </span><span class="annot"><span class="annottext">forall a. Read a =&gt; String -&gt; IO a
+</span><span class="hs-identifier hs-var">readIO</span></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">forall e a. Exception e =&gt; IO a -&gt; (e -&gt; IO a) -&gt; IO a
+</span><span class="hs-operator hs-var">`E.catch`</span></span><span> </span><span class="annot"><span class="annottext">forall (m :: * -&gt; *) a. Monad m =&gt; a -&gt; IOException -&gt; m a
+</span><a href="XMonad.Prompt.RunOrRaise.html#econst"><span class="hs-identifier hs-var">econst</span></a></span><span> </span><span class="annot"><span class="annottext">Int
+</span><span class="hs-number">0</span></span><span>
+</span><span id="line-81"></span><span>
+</span><span id="line-82"></span><span class="annot"><a href="XMonad.Prompt.RunOrRaise.html#pid"><span class="hs-identifier hs-type">pid</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Query</span></span><span> </span><span class="annot"><span class="hs-identifier hs-type">Int</span></span><span>
+</span><span id="line-83"></span><span id="pid"><span class="annot"><span class="annottext">pid :: Query Int
+</span><a href="XMonad.Prompt.RunOrRaise.html#pid"><span class="hs-identifier hs-var hs-var">pid</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">forall r (m :: * -&gt; *). MonadReader r m =&gt; m r
+</span><span class="hs-identifier hs-var">ask</span></span><span> </span><span class="annot"><span class="annottext">forall (m :: * -&gt; *) a b. Monad m =&gt; m a -&gt; (a -&gt; m b) -&gt; m b
+</span><span class="hs-operator hs-var">&gt;&gt;=</span></span><span> </span><span class="hs-special">(</span><span class="hs-glyph">\</span><span id="local-6989586621679449456"><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679449456"><span class="hs-identifier hs-var">w</span></a></span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">forall a. X a -&gt; Query a
+</span><span class="hs-identifier hs-var">liftX</span></span><span> </span><span class="annot"><span class="annottext">forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">forall a. (Display -&gt; X a) -&gt; X a
+</span><span class="hs-identifier hs-var">withDisplay</span></span><span> </span><span class="annot"><span class="annottext">forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="hs-glyph">\</span><span id="local-6989586621679449453"><span class="annot"><span class="annottext">Display
+</span><a href="#local-6989586621679449453"><span class="hs-identifier hs-var">d</span></a></span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">forall {b}. Num b =&gt; Display -&gt; Window -&gt; X b
+</span><a href="#local-6989586621679449452"><span class="hs-identifier hs-var">getPID</span></a></span><span> </span><span class="annot"><span class="annottext">Display
+</span><a href="#local-6989586621679449453"><span class="hs-identifier hs-var">d</span></a></span><span> </span><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679449456"><span class="hs-identifier hs-var">w</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-84"></span><span>    </span><span class="hs-keyword">where</span><span> </span><span id="local-6989586621679449452"><span class="annot"><span class="annottext">getPID :: Display -&gt; Window -&gt; X b
+</span><a href="#local-6989586621679449452"><span class="hs-identifier hs-var hs-var">getPID</span></a></span></span><span> </span><span id="local-6989586621679449444"><span class="annot"><span class="annottext">Display
+</span><a href="#local-6989586621679449444"><span class="hs-identifier hs-var">d</span></a></span></span><span> </span><span id="local-6989586621679449443"><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679449443"><span class="hs-identifier hs-var">w</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">String -&gt; X Window
+</span><span class="hs-identifier hs-var">getAtom</span></span><span> </span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot;_NET_WM_PID&quot;</span></span><span> </span><span class="annot"><span class="annottext">forall (m :: * -&gt; *) a b. Monad m =&gt; m a -&gt; (a -&gt; m b) -&gt; m b
+</span><span class="hs-operator hs-var">&gt;&gt;=</span></span><span> </span><span class="hs-glyph">\</span><span id="local-6989586621679449441"><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679449441"><span class="hs-identifier hs-var">a</span></a></span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">forall (m :: * -&gt; *) a. MonadIO m =&gt; IO a -&gt; m a
+</span><span class="hs-identifier hs-var">io</span></span><span> </span><span class="annot"><span class="annottext">forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span>
+</span><span id="line-85"></span><span>                       </span><span class="annot"><span class="annottext">forall (f :: * -&gt; *) a b. Functor f =&gt; (a -&gt; b) -&gt; f a -&gt; f b
+</span><span class="hs-identifier hs-var">fmap</span></span><span> </span><span class="annot"><span class="annottext">forall {a} {b}. (Integral a, Num b) =&gt; Maybe [a] -&gt; b
+</span><a href="#local-6989586621679449440"><span class="hs-identifier hs-var">getPID'</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Display -&gt; Window -&gt; Window -&gt; IO (Maybe [CLong])
+</span><span class="hs-identifier hs-var">getWindowProperty32</span></span><span> </span><span class="annot"><span class="annottext">Display
+</span><a href="#local-6989586621679449444"><span class="hs-identifier hs-var">d</span></a></span><span> </span><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679449441"><span class="hs-identifier hs-var">a</span></a></span><span> </span><span class="annot"><span class="annottext">Window
+</span><a href="#local-6989586621679449443"><span class="hs-identifier hs-var">w</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-86"></span><span>          </span><span id="local-6989586621679449440"><span class="annot"><span class="annottext">getPID' :: Maybe [a] -&gt; b
+</span><a href="#local-6989586621679449440"><span class="hs-identifier hs-var hs-var">getPID'</span></a></span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">Just</span></span><span> </span><span class="hs-special">(</span><span id="local-6989586621679449430"><span class="annot"><span class="annottext">a
+</span><a href="#local-6989586621679449430"><span class="hs-identifier hs-var">x</span></a></span></span><span class="annot"><span class="hs-glyph hs-type">:</span></span><span class="annot"><span class="annottext">[a]
+</span><span class="hs-identifier">_</span></span><span class="hs-special">)</span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">forall a b. (Integral a, Num b) =&gt; a -&gt; b
+</span><span class="hs-identifier hs-var">fromIntegral</span></span><span> </span><span class="annot"><span class="annottext">a
+</span><a href="#local-6989586621679449430"><span class="hs-identifier hs-var">x</span></a></span><span>
+</span><span id="line-87"></span><span>          </span><span class="annot"><a href="#local-6989586621679449440"><span class="hs-identifier hs-var">getPID'</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">Just</span></span><span> </span><span class="hs-special">[</span><span class="hs-special">]</span><span class="hs-special">)</span><span>    </span><span class="hs-glyph">=</span><span> </span><span class="hs-glyph">-</span><span class="annot"><span class="annottext">b
+</span><span class="hs-number">1</span></span><span>
+</span><span id="line-88"></span><span>          </span><span class="annot"><a href="#local-6989586621679449440"><span class="hs-identifier hs-var">getPID'</span></a></span><span> </span><span class="annot"><span class="annottext">Maybe [a]
+</span><span class="hs-identifier hs-var">Nothing</span></span><span>      </span><span class="hs-glyph">=</span><span> </span><span class="hs-glyph">-</span><span class="annot"><span class="annottext">b
+</span><span class="hs-number">1</span></span><span>
+</span><span id="line-89"></span></pre></body></html>

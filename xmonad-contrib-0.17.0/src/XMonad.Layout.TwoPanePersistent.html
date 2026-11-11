@@ -1,0 +1,366 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd"><html xmlns="http://www.w3.org/1999/xhtml"><head><link rel="stylesheet" type="text/css" href="style.css" /><script type="text/javascript" src="highlight.js"></script></head><body><pre><span class="hs-pragma">{-# LANGUAGE FlexibleInstances, MultiParamTypeClasses #-}</span><span>
+</span><span id="line-2"></span><span class="hs-comment">-----------------------------------------------------------------------------</span><span>
+</span><span id="line-3"></span><span class="hs-comment">-- |</span><span>
+</span><span id="line-4"></span><span class="hs-comment">-- Module      :  XMonad.Layout.TwoPanePersistent</span><span>
+</span><span id="line-5"></span><span class="hs-comment">-- Description :  &quot;XMonad.Layout.TwoPane&quot; with a persistent stack window.</span><span>
+</span><span id="line-6"></span><span class="hs-comment">-- Copyright   :  (c) Chayanon Wichitrnithed</span><span>
+</span><span id="line-7"></span><span class="hs-comment">-- License     :  BSD3-style (see LICENSE)</span><span>
+</span><span id="line-8"></span><span class="hs-comment">--</span><span>
+</span><span id="line-9"></span><span class="hs-comment">-- Maintainer  :  Chayanon Wichitrnithed &lt;namowi@gatech.edu&gt;</span><span>
+</span><span id="line-10"></span><span class="hs-comment">-- Stability   :  unstable</span><span>
+</span><span id="line-11"></span><span class="hs-comment">-- Portability :  unportable</span><span>
+</span><span id="line-12"></span><span class="hs-comment">--</span><span>
+</span><span id="line-13"></span><span class="hs-comment">-- This layout is the same as &quot;XMonad.Layout.TwoPane&quot; except that it keeps track of the slave window</span><span>
+</span><span id="line-14"></span><span class="hs-comment">-- that is alongside the master pane. In other words, it prevents the slave pane</span><span>
+</span><span id="line-15"></span><span class="hs-comment">-- from changing after the focus goes back to the master pane.</span><span>
+</span><span id="line-16"></span><span>
+</span><span id="line-17"></span><span class="hs-comment">-----------------------------------------------------------------------------</span><span>
+</span><span id="line-18"></span><span>
+</span><span id="line-19"></span><span>
+</span><span id="line-20"></span><span class="hs-keyword">module</span><span> </span><span class="hs-identifier">XMonad.Layout.TwoPanePersistent</span><span>
+</span><span id="line-21"></span><span>  </span><span class="hs-special">(</span><span>
+</span><span id="line-22"></span><span>    </span><span class="annot"><span class="hs-comment">-- * Usage</span></span><span>
+</span><span id="line-23"></span><span>    </span><span class="annot"><span class="hs-comment">-- $usage</span></span><span>
+</span><span id="line-24"></span><span>  </span><span class="annot"><a href="XMonad.Layout.TwoPanePersistent.html#TwoPanePersistent"><span class="hs-identifier">TwoPanePersistent</span></a></span><span class="hs-special">(</span><span class="hs-glyph">..</span><span class="hs-special">)</span><span>
+</span><span id="line-25"></span><span>  </span><span class="hs-special">)</span><span> </span><span class="hs-keyword">where</span><span>
+</span><span id="line-26"></span><span>
+</span><span id="line-27"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><span class="hs-identifier">XMonad.StackSet</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier">focus</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier">up</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier">down</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier">Stack</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier">Stack</span></span><span class="hs-special">(</span><span class="hs-glyph">..</span><span class="hs-special">)</span><span class="hs-special">)</span><span>
+</span><span id="line-28"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><span class="hs-identifier">XMonad</span></span><span> </span><span class="hs-keyword">hiding</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier">focus</span></span><span class="hs-special">)</span><span>
+</span><span id="line-29"></span><span>
+</span><span id="line-30"></span><span class="hs-comment">-- $usage</span><span>
+</span><span id="line-31"></span><span class="hs-comment">-- Import the module in @~\/.xmonad\/xmonad.hs@:</span><span>
+</span><span id="line-32"></span><span class="hs-comment">--</span><span>
+</span><span id="line-33"></span><span class="hs-comment">-- &gt; import XMonad.Layout.TwoPanePersistent</span><span>
+</span><span id="line-34"></span><span class="hs-comment">--</span><span>
+</span><span id="line-35"></span><span class="hs-comment">-- Then add the layout to the @layoutHook@:</span><span>
+</span><span id="line-36"></span><span class="hs-comment">--</span><span>
+</span><span id="line-37"></span><span class="hs-comment">-- &gt; myLayout = TwoPanePersistent Nothing (3/100) (1/2) ||| Full ||| etc..</span><span>
+</span><span id="line-38"></span><span class="hs-comment">-- &gt; main = xmonad def { layoutHook = myLayout }</span><span>
+</span><span id="line-39"></span><span>
+</span><span id="line-40"></span><span>
+</span><span id="line-41"></span><span class="hs-keyword">data</span><span> </span><span id="TwoPanePersistent"><span class="annot"><a href="XMonad.Layout.TwoPanePersistent.html#TwoPanePersistent"><span class="hs-identifier hs-var">TwoPanePersistent</span></a></span></span><span> </span><span id="local-6989586621679356909"><span class="annot"><a href="#local-6989586621679356909"><span class="hs-identifier hs-type">a</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span id="TwoPanePersistent"><span class="annot"><a href="XMonad.Layout.TwoPanePersistent.html#TwoPanePersistent"><span class="hs-identifier hs-var">TwoPanePersistent</span></a></span></span><span>
+</span><span id="line-42"></span><span>  </span><span class="hs-special">{</span><span> </span><span id="slaveWin"><span class="annot"><span class="annottext">TwoPanePersistent a -&gt; Maybe a
+</span><a href="XMonad.Layout.TwoPanePersistent.html#slaveWin"><span class="hs-identifier hs-var hs-var">slaveWin</span></a></span></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Maybe</span></span><span> </span><span class="annot"><a href="#local-6989586621679356909"><span class="hs-identifier hs-type">a</span></a></span><span>  </span><span class="hs-comment">-- ^ slave window; if 'Nothing' or not in the current workspace,</span><span>
+</span><span id="line-43"></span><span>                         </span><span class="hs-comment">-- the window below the master will go into the slave pane</span><span>
+</span><span id="line-44"></span><span>  </span><span class="hs-special">,</span><span> </span><span id="dFrac"><span class="annot"><span class="annottext">TwoPanePersistent a -&gt; Rational
+</span><a href="XMonad.Layout.TwoPanePersistent.html#dFrac"><span class="hs-identifier hs-var hs-var">dFrac</span></a></span></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Rational</span></span><span> </span><span class="hs-comment">-- ^ shrink/expand size</span><span>
+</span><span id="line-45"></span><span>  </span><span class="hs-special">,</span><span> </span><span id="mFrac"><span class="annot"><span class="annottext">TwoPanePersistent a -&gt; Rational
+</span><a href="XMonad.Layout.TwoPanePersistent.html#mFrac"><span class="hs-identifier hs-var hs-var">mFrac</span></a></span></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Rational</span></span><span> </span><span class="hs-comment">-- ^ initial master size</span><span>
+</span><span id="line-46"></span><span>  </span><span class="hs-special">}</span><span> </span><span class="hs-keyword">deriving</span><span> </span><span class="hs-special">(</span><span id="local-6989586621679356887"><span id="local-6989586621679356889"><span id="local-6989586621679356891"><span class="annot"><span class="annottext">Int -&gt; TwoPanePersistent a -&gt; ShowS
+[TwoPanePersistent a] -&gt; ShowS
+TwoPanePersistent a -&gt; String
+(Int -&gt; TwoPanePersistent a -&gt; ShowS)
+-&gt; (TwoPanePersistent a -&gt; String)
+-&gt; ([TwoPanePersistent a] -&gt; ShowS)
+-&gt; Show (TwoPanePersistent a)
+forall a. Show a =&gt; Int -&gt; TwoPanePersistent a -&gt; ShowS
+forall a. Show a =&gt; [TwoPanePersistent a] -&gt; ShowS
+forall a. Show a =&gt; TwoPanePersistent a -&gt; String
+forall a.
+(Int -&gt; a -&gt; ShowS) -&gt; (a -&gt; String) -&gt; ([a] -&gt; ShowS) -&gt; Show a
+showList :: [TwoPanePersistent a] -&gt; ShowS
+$cshowList :: forall a. Show a =&gt; [TwoPanePersistent a] -&gt; ShowS
+show :: TwoPanePersistent a -&gt; String
+$cshow :: forall a. Show a =&gt; TwoPanePersistent a -&gt; String
+showsPrec :: Int -&gt; TwoPanePersistent a -&gt; ShowS
+$cshowsPrec :: forall a. Show a =&gt; Int -&gt; TwoPanePersistent a -&gt; ShowS
+</span><span class="hs-identifier hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var">Show</span></span></span></span></span><span class="hs-special">,</span><span> </span><span id="local-6989586621679356878"><span id="local-6989586621679356880"><span id="local-6989586621679356882"><span id="local-6989586621679356884"><span class="annot"><span class="annottext">ReadPrec [TwoPanePersistent a]
+ReadPrec (TwoPanePersistent a)
+Int -&gt; ReadS (TwoPanePersistent a)
+ReadS [TwoPanePersistent a]
+(Int -&gt; ReadS (TwoPanePersistent a))
+-&gt; ReadS [TwoPanePersistent a]
+-&gt; ReadPrec (TwoPanePersistent a)
+-&gt; ReadPrec [TwoPanePersistent a]
+-&gt; Read (TwoPanePersistent a)
+forall a. Read a =&gt; ReadPrec [TwoPanePersistent a]
+forall a. Read a =&gt; ReadPrec (TwoPanePersistent a)
+forall a. Read a =&gt; Int -&gt; ReadS (TwoPanePersistent a)
+forall a. Read a =&gt; ReadS [TwoPanePersistent a]
+forall a.
+(Int -&gt; ReadS a)
+-&gt; ReadS [a] -&gt; ReadPrec a -&gt; ReadPrec [a] -&gt; Read a
+readListPrec :: ReadPrec [TwoPanePersistent a]
+$creadListPrec :: forall a. Read a =&gt; ReadPrec [TwoPanePersistent a]
+readPrec :: ReadPrec (TwoPanePersistent a)
+$creadPrec :: forall a. Read a =&gt; ReadPrec (TwoPanePersistent a)
+readList :: ReadS [TwoPanePersistent a]
+$creadList :: forall a. Read a =&gt; ReadS [TwoPanePersistent a]
+readsPrec :: Int -&gt; ReadS (TwoPanePersistent a)
+$creadsPrec :: forall a. Read a =&gt; Int -&gt; ReadS (TwoPanePersistent a)
+</span><span class="hs-identifier hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var">Read</span></span></span></span></span></span><span class="hs-special">)</span><span>
+</span><span id="line-47"></span><span>
+</span><span id="line-48"></span><span>
+</span><span id="line-49"></span><span id="local-6989586621679356876"><span class="hs-keyword">instance</span><span> </span><span id="local-6989586621679356865"><span id="local-6989586621679356867"><span id="local-6989586621679356869"><span id="local-6989586621679356872"><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">Show</span></span><span> </span><span class="annot"><a href="#local-6989586621679356876"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Eq</span></span><span> </span><span class="annot"><a href="#local-6989586621679356876"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">LayoutClass</span></span><span> </span><span class="annot"><a href="XMonad.Layout.TwoPanePersistent.html#TwoPanePersistent"><span class="hs-identifier hs-type">TwoPanePersistent</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679356876"><span class="hs-identifier hs-type">a</span></a></span></span></span></span></span><span> </span><span class="hs-keyword">where</span><span>
+</span><span id="line-50"></span><span>  </span><span id="local-6989586621679356861"><span class="annot"><span class="annottext">doLayout :: TwoPanePersistent a
+-&gt; Rectangle
+-&gt; Stack a
+-&gt; X ([(a, Rectangle)], Maybe (TwoPanePersistent a))
+</span><span class="hs-identifier hs-var hs-var hs-var hs-var">doLayout</span></span></span><span> </span><span id="local-6989586621679356859"><span class="annot"><span class="annottext">TwoPanePersistent a
+</span><a href="#local-6989586621679356859"><span class="hs-identifier hs-var">l</span></a></span></span><span> </span><span id="local-6989586621679356858"><span class="annot"><span class="annottext">Rectangle
+</span><a href="#local-6989586621679356858"><span class="hs-identifier hs-var">r</span></a></span></span><span> </span><span id="local-6989586621679356857"><span class="annot"><span class="annottext">Stack a
+</span><a href="#local-6989586621679356857"><span class="hs-identifier hs-var">s</span></a></span></span><span> </span><span class="hs-glyph">=</span><span>
+</span><span id="line-51"></span><span>    </span><span class="hs-keyword">case</span><span> </span><span class="annot"><span class="annottext">[a] -&gt; [a]
+forall a. [a] -&gt; [a]
+</span><span class="hs-identifier hs-var">reverse</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Stack a -&gt; [a]
+forall a. Stack a -&gt; [a]
+</span><span class="hs-identifier hs-var hs-var">up</span></span><span> </span><span class="annot"><span class="annottext">Stack a
+</span><a href="#local-6989586621679356857"><span class="hs-identifier hs-var">s</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-keyword">of</span><span>
+</span><span id="line-52"></span><span>      </span><span class="hs-comment">-- master is focused</span><span>
+</span><span id="line-53"></span><span>      </span><span class="hs-special">[</span><span class="hs-special">]</span><span>         </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">([(a, Rectangle)], Maybe (TwoPanePersistent a))
+-&gt; X ([(a, Rectangle)], Maybe (TwoPanePersistent a))
+forall (m :: * -&gt; *) a. Monad m =&gt; a -&gt; m a
+</span><span class="hs-identifier hs-var">return</span></span><span> </span><span class="annot"><span class="annottext">(([(a, Rectangle)], Maybe (TwoPanePersistent a))
+ -&gt; X ([(a, Rectangle)], Maybe (TwoPanePersistent a)))
+-&gt; ([(a, Rectangle)], Maybe (TwoPanePersistent a))
+-&gt; X ([(a, Rectangle)], Maybe (TwoPanePersistent a))
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">TwoPanePersistent a
+-&gt; Stack a
+-&gt; Rectangle
+-&gt; ([(a, Rectangle)], Maybe (TwoPanePersistent a))
+forall a.
+Eq a =&gt;
+TwoPanePersistent a
+-&gt; Stack a
+-&gt; Rectangle
+-&gt; ([(a, Rectangle)], Maybe (TwoPanePersistent a))
+</span><a href="XMonad.Layout.TwoPanePersistent.html#focusedMaster"><span class="hs-identifier hs-var">focusedMaster</span></a></span><span> </span><span class="annot"><span class="annottext">TwoPanePersistent a
+</span><a href="#local-6989586621679356859"><span class="hs-identifier hs-var">l</span></a></span><span> </span><span class="annot"><span class="annottext">Stack a
+</span><a href="#local-6989586621679356857"><span class="hs-identifier hs-var">s</span></a></span><span> </span><span class="annot"><span class="annottext">Rectangle
+</span><a href="#local-6989586621679356858"><span class="hs-identifier hs-var">r</span></a></span><span>
+</span><span id="line-54"></span><span>
+</span><span id="line-55"></span><span>      </span><span class="hs-comment">-- slave is focused</span><span>
+</span><span id="line-56"></span><span>      </span><span class="hs-special">(</span><span id="local-6989586621679356854"><span class="annot"><span class="annottext">a
+</span><a href="#local-6989586621679356854"><span class="hs-identifier hs-var">master</span></a></span></span><span class="annot"><span class="hs-glyph hs-type">:</span></span><span class="annot"><span class="annottext">[a]
+</span><span class="hs-identifier">_</span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">([(a, Rectangle)], Maybe (TwoPanePersistent a))
+-&gt; X ([(a, Rectangle)], Maybe (TwoPanePersistent a))
+forall (m :: * -&gt; *) a. Monad m =&gt; a -&gt; m a
+</span><span class="hs-identifier hs-var">return</span></span><span> </span><span class="annot"><span class="annottext">(([(a, Rectangle)], Maybe (TwoPanePersistent a))
+ -&gt; X ([(a, Rectangle)], Maybe (TwoPanePersistent a)))
+-&gt; ([(a, Rectangle)], Maybe (TwoPanePersistent a))
+-&gt; X ([(a, Rectangle)], Maybe (TwoPanePersistent a))
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">TwoPanePersistent a
+-&gt; Stack a
+-&gt; Rectangle
+-&gt; a
+-&gt; ([(a, Rectangle)], Maybe (TwoPanePersistent a))
+forall a.
+TwoPanePersistent a
+-&gt; Stack a
+-&gt; Rectangle
+-&gt; a
+-&gt; ([(a, Rectangle)], Maybe (TwoPanePersistent a))
+</span><a href="XMonad.Layout.TwoPanePersistent.html#focusedSlave"><span class="hs-identifier hs-var">focusedSlave</span></a></span><span> </span><span class="annot"><span class="annottext">TwoPanePersistent a
+</span><a href="#local-6989586621679356859"><span class="hs-identifier hs-var">l</span></a></span><span> </span><span class="annot"><span class="annottext">Stack a
+</span><a href="#local-6989586621679356857"><span class="hs-identifier hs-var">s</span></a></span><span> </span><span class="annot"><span class="annottext">Rectangle
+</span><a href="#local-6989586621679356858"><span class="hs-identifier hs-var">r</span></a></span><span> </span><span class="annot"><span class="annottext">a
+</span><a href="#local-6989586621679356854"><span class="hs-identifier hs-var">master</span></a></span><span>
+</span><span id="line-57"></span><span>
+</span><span id="line-58"></span><span>
+</span><span id="line-59"></span><span>  </span><span id="local-6989586621679356852"><span class="annot"><span class="annottext">pureMessage :: TwoPanePersistent a -&gt; SomeMessage -&gt; Maybe (TwoPanePersistent a)
+</span><span class="hs-identifier hs-var hs-var hs-var hs-var">pureMessage</span></span></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="XMonad.Layout.TwoPanePersistent.html#TwoPanePersistent"><span class="hs-identifier hs-type">TwoPanePersistent</span></a></span><span> </span><span id="local-6989586621679356850"><span class="annot"><span class="annottext">Maybe a
+</span><a href="#local-6989586621679356850"><span class="hs-identifier hs-var">w</span></a></span></span><span> </span><span id="local-6989586621679356849"><span class="annot"><span class="annottext">Rational
+</span><a href="#local-6989586621679356849"><span class="hs-identifier hs-var">delta</span></a></span></span><span> </span><span id="local-6989586621679356848"><span class="annot"><span class="annottext">Rational
+</span><a href="#local-6989586621679356848"><span class="hs-identifier hs-var">split</span></a></span></span><span class="hs-special">)</span><span> </span><span id="local-6989586621679356847"><span class="annot"><span class="annottext">SomeMessage
+</span><a href="#local-6989586621679356847"><span class="hs-identifier hs-var">x</span></a></span></span><span> </span><span class="hs-glyph">=</span><span>
+</span><span id="line-60"></span><span>    </span><span class="hs-keyword">case</span><span> </span><span class="annot"><span class="annottext">SomeMessage -&gt; Maybe Resize
+forall m. Message m =&gt; SomeMessage -&gt; Maybe m
+</span><span class="hs-identifier hs-var">fromMessage</span></span><span> </span><span class="annot"><span class="annottext">SomeMessage
+</span><a href="#local-6989586621679356847"><span class="hs-identifier hs-var">x</span></a></span><span> </span><span class="hs-keyword">of</span><span>
+</span><span id="line-61"></span><span>      </span><span class="annot"><span class="hs-identifier hs-type">Just</span></span><span> </span><span class="annot"><span class="annottext">Resize
+</span><span class="hs-identifier hs-var">Shrink</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">TwoPanePersistent a -&gt; Maybe (TwoPanePersistent a)
+forall a. a -&gt; Maybe a
+</span><span class="hs-identifier hs-var">Just</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Maybe a -&gt; Rational -&gt; Rational -&gt; TwoPanePersistent a
+forall a. Maybe a -&gt; Rational -&gt; Rational -&gt; TwoPanePersistent a
+</span><a href="XMonad.Layout.TwoPanePersistent.html#TwoPanePersistent"><span class="hs-identifier hs-var">TwoPanePersistent</span></a></span><span> </span><span class="annot"><span class="annottext">Maybe a
+</span><a href="#local-6989586621679356850"><span class="hs-identifier hs-var">w</span></a></span><span> </span><span class="annot"><span class="annottext">Rational
+</span><a href="#local-6989586621679356849"><span class="hs-identifier hs-var">delta</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Rational
+</span><a href="#local-6989586621679356848"><span class="hs-identifier hs-var">split</span></a></span><span> </span><span class="annot"><span class="annottext">Rational -&gt; Rational -&gt; Rational
+forall a. Num a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-glyph hs-var">-</span></span><span> </span><span class="annot"><span class="annottext">Rational
+</span><a href="#local-6989586621679356849"><span class="hs-identifier hs-var">delta</span></a></span><span class="hs-special">)</span><span class="hs-special">)</span><span>
+</span><span id="line-62"></span><span>      </span><span class="annot"><span class="hs-identifier hs-type">Just</span></span><span> </span><span class="annot"><span class="annottext">Resize
+</span><span class="hs-identifier hs-var">Expand</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">TwoPanePersistent a -&gt; Maybe (TwoPanePersistent a)
+forall a. a -&gt; Maybe a
+</span><span class="hs-identifier hs-var">Just</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Maybe a -&gt; Rational -&gt; Rational -&gt; TwoPanePersistent a
+forall a. Maybe a -&gt; Rational -&gt; Rational -&gt; TwoPanePersistent a
+</span><a href="XMonad.Layout.TwoPanePersistent.html#TwoPanePersistent"><span class="hs-identifier hs-var">TwoPanePersistent</span></a></span><span> </span><span class="annot"><span class="annottext">Maybe a
+</span><a href="#local-6989586621679356850"><span class="hs-identifier hs-var">w</span></a></span><span> </span><span class="annot"><span class="annottext">Rational
+</span><a href="#local-6989586621679356849"><span class="hs-identifier hs-var">delta</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Rational
+</span><a href="#local-6989586621679356848"><span class="hs-identifier hs-var">split</span></a></span><span> </span><span class="annot"><span class="annottext">Rational -&gt; Rational -&gt; Rational
+forall a. Num a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-operator hs-var">+</span></span><span> </span><span class="annot"><span class="annottext">Rational
+</span><a href="#local-6989586621679356849"><span class="hs-identifier hs-var">delta</span></a></span><span class="hs-special">)</span><span class="hs-special">)</span><span>
+</span><span id="line-63"></span><span>      </span><span class="annot"><span class="annottext">Maybe Resize
+</span><span class="hs-identifier">_</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">Maybe (TwoPanePersistent a)
+forall a. Maybe a
+</span><span class="hs-identifier hs-var">Nothing</span></span><span>
+</span><span id="line-64"></span><span>
+</span><span id="line-65"></span><span>  </span><span id="local-6989586621679356842"><span class="annot"><span class="annottext">description :: TwoPanePersistent a -&gt; String
+</span><span class="hs-identifier hs-var hs-var hs-var hs-var">description</span></span></span><span> </span><span class="annot"><span class="annottext">TwoPanePersistent a
+</span><span class="hs-identifier">_</span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot;TwoPanePersistent&quot;</span></span></span><span>
+</span><span id="line-66"></span><span>
+</span><span id="line-67"></span><span>
+</span><span id="line-68"></span><span class="hs-comment">----------------------------------------------------------------------------------------</span><span>
+</span><span id="line-69"></span><span>
+</span><span id="line-70"></span><span id="local-6989586621679356915"><span class="annot"><a href="XMonad.Layout.TwoPanePersistent.html#focusedMaster"><span class="hs-identifier hs-type">focusedMaster</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">Eq</span></span><span> </span><span class="annot"><a href="#local-6989586621679356915"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=&gt;</span><span> </span><span class="annot"><a href="XMonad.Layout.TwoPanePersistent.html#TwoPanePersistent"><span class="hs-identifier hs-type">TwoPanePersistent</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679356915"><span class="hs-identifier hs-type">a</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Stack</span></span><span> </span><span class="annot"><a href="#local-6989586621679356915"><span class="hs-identifier hs-type">a</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Rectangle</span></span><span>
+</span><span id="line-71"></span><span>              </span><span class="hs-glyph">-&gt;</span><span> </span><span class="hs-special">(</span><span> </span><span class="hs-special">[</span><span class="hs-special">(</span><span class="annot"><a href="#local-6989586621679356915"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Rectangle</span></span><span class="hs-special">)</span><span class="hs-special">]</span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Maybe</span></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="XMonad.Layout.TwoPanePersistent.html#TwoPanePersistent"><span class="hs-identifier hs-type">TwoPanePersistent</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679356915"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-special">)</span></span><span>
+</span><span id="line-72"></span><span id="focusedMaster"><span class="annot"><span class="annottext">focusedMaster :: TwoPanePersistent a
+-&gt; Stack a
+-&gt; Rectangle
+-&gt; ([(a, Rectangle)], Maybe (TwoPanePersistent a))
+</span><a href="XMonad.Layout.TwoPanePersistent.html#focusedMaster"><span class="hs-identifier hs-var hs-var">focusedMaster</span></a></span></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="XMonad.Layout.TwoPanePersistent.html#TwoPanePersistent"><span class="hs-identifier hs-type">TwoPanePersistent</span></a></span><span> </span><span id="local-6989586621679356840"><span class="annot"><span class="annottext">Maybe a
+</span><a href="#local-6989586621679356840"><span class="hs-identifier hs-var">w</span></a></span></span><span> </span><span id="local-6989586621679356839"><span class="annot"><span class="annottext">Rational
+</span><a href="#local-6989586621679356839"><span class="hs-identifier hs-var">delta</span></a></span></span><span> </span><span id="local-6989586621679356838"><span class="annot"><span class="annottext">Rational
+</span><a href="#local-6989586621679356838"><span class="hs-identifier hs-var">split</span></a></span></span><span class="hs-special">)</span><span> </span><span id="local-6989586621679356837"><span class="annot"><span class="annottext">Stack a
+</span><a href="#local-6989586621679356837"><span class="hs-identifier hs-var">s</span></a></span></span><span> </span><span id="local-6989586621679356836"><span class="annot"><span class="annottext">Rectangle
+</span><a href="#local-6989586621679356836"><span class="hs-identifier hs-var">r</span></a></span></span><span> </span><span class="hs-glyph">=</span><span>
+</span><span id="line-73"></span><span>  </span><span class="hs-keyword">let</span><span> </span><span class="hs-special">(</span><span id="local-6989586621679356835"><span class="annot"><span class="annottext">Rectangle
+</span><a href="#local-6989586621679356835"><span class="hs-identifier hs-var">left</span></a></span></span><span class="hs-special">,</span><span> </span><span id="local-6989586621679356834"><span class="annot"><span class="annottext">Rectangle
+</span><a href="#local-6989586621679356834"><span class="hs-identifier hs-var">right</span></a></span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Rational -&gt; Rectangle -&gt; (Rectangle, Rectangle)
+forall r. RealFrac r =&gt; r -&gt; Rectangle -&gt; (Rectangle, Rectangle)
+</span><span class="hs-identifier hs-var">splitHorizontallyBy</span></span><span> </span><span class="annot"><span class="annottext">Rational
+</span><a href="#local-6989586621679356838"><span class="hs-identifier hs-var">split</span></a></span><span> </span><span class="annot"><span class="annottext">Rectangle
+</span><a href="#local-6989586621679356836"><span class="hs-identifier hs-var">r</span></a></span><span> </span><span class="hs-keyword">in</span><span>
+</span><span id="line-74"></span><span>      </span><span class="hs-keyword">case</span><span> </span><span class="annot"><span class="annottext">Stack a -&gt; [a]
+forall a. Stack a -&gt; [a]
+</span><span class="hs-identifier hs-var hs-var">down</span></span><span> </span><span class="annot"><span class="annottext">Stack a
+</span><a href="#local-6989586621679356837"><span class="hs-identifier hs-var">s</span></a></span><span> </span><span class="hs-keyword">of</span><span>
+</span><span id="line-75"></span><span>        </span><span class="hs-comment">-- there exist windows below the master</span><span>
+</span><span id="line-76"></span><span>        </span><span class="hs-special">(</span><span id="local-6989586621679356832"><span class="annot"><span class="annottext">a
+</span><a href="#local-6989586621679356832"><span class="hs-identifier hs-var">next</span></a></span></span><span class="annot"><span class="hs-glyph hs-type">:</span></span><span class="annot"><span class="annottext">[a]
+</span><span class="hs-identifier">_</span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="hs-keyword">let</span><span> </span><span id="local-6989586621679356831"><span class="annot"><span class="annottext">nextSlave :: ([(a, Rectangle)], Maybe (TwoPanePersistent a))
+</span><a href="#local-6989586621679356831"><span class="hs-identifier hs-var hs-var">nextSlave</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-special">(</span><span> </span><span class="hs-special">[</span><span class="hs-special">(</span><span class="annot"><span class="annottext">Stack a -&gt; a
+forall a. Stack a -&gt; a
+</span><span class="hs-identifier hs-var hs-var">focus</span></span><span> </span><span class="annot"><span class="annottext">Stack a
+</span><a href="#local-6989586621679356837"><span class="hs-identifier hs-var">s</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">Rectangle
+</span><a href="#local-6989586621679356835"><span class="hs-identifier hs-var">left</span></a></span><span class="hs-special">)</span><span class="hs-special">,</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">a
+</span><a href="#local-6989586621679356832"><span class="hs-identifier hs-var">next</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">Rectangle
+</span><a href="#local-6989586621679356834"><span class="hs-identifier hs-var">right</span></a></span><span class="hs-special">)</span><span class="hs-special">]</span><span>
+</span><span id="line-77"></span><span>                                    </span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">TwoPanePersistent a -&gt; Maybe (TwoPanePersistent a)
+forall a. a -&gt; Maybe a
+</span><span class="hs-identifier hs-var">Just</span></span><span> </span><span class="annot"><span class="annottext">(TwoPanePersistent a -&gt; Maybe (TwoPanePersistent a))
+-&gt; TwoPanePersistent a -&gt; Maybe (TwoPanePersistent a)
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">Maybe a -&gt; Rational -&gt; Rational -&gt; TwoPanePersistent a
+forall a. Maybe a -&gt; Rational -&gt; Rational -&gt; TwoPanePersistent a
+</span><a href="XMonad.Layout.TwoPanePersistent.html#TwoPanePersistent"><span class="hs-identifier hs-var">TwoPanePersistent</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">a -&gt; Maybe a
+forall a. a -&gt; Maybe a
+</span><span class="hs-identifier hs-var">Just</span></span><span> </span><span class="annot"><span class="annottext">a
+</span><a href="#local-6989586621679356832"><span class="hs-identifier hs-var">next</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">Rational
+</span><a href="#local-6989586621679356839"><span class="hs-identifier hs-var">delta</span></a></span><span> </span><span class="annot"><span class="annottext">Rational
+</span><a href="#local-6989586621679356838"><span class="hs-identifier hs-var">split</span></a></span><span> </span><span class="hs-special">)</span><span>
+</span><span id="line-78"></span><span>                    </span><span class="hs-keyword">in</span><span> </span><span class="hs-keyword">case</span><span> </span><span class="annot"><span class="annottext">Maybe a
+</span><a href="#local-6989586621679356840"><span class="hs-identifier hs-var">w</span></a></span><span> </span><span class="hs-keyword">of</span><span>
+</span><span id="line-79"></span><span>                      </span><span class="hs-comment">-- if retains state, preserve the layout</span><span>
+</span><span id="line-80"></span><span>                      </span><span class="annot"><span class="hs-identifier hs-type">Just</span></span><span> </span><span id="local-6989586621679356830"><span class="annot"><span class="annottext">a
+</span><a href="#local-6989586621679356830"><span class="hs-identifier hs-var">win</span></a></span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="hs-keyword">if</span><span> </span><span class="annot"><span class="annottext">a
+</span><a href="#local-6989586621679356830"><span class="hs-identifier hs-var">win</span></a></span><span> </span><span class="annot"><span class="annottext">a -&gt; [a] -&gt; Bool
+forall (t :: * -&gt; *) a. (Foldable t, Eq a) =&gt; a -&gt; t a -&gt; Bool
+</span><span class="hs-operator hs-var">`elem`</span></span><span> </span><span class="annot"><span class="annottext">Stack a -&gt; [a]
+forall a. Stack a -&gt; [a]
+</span><span class="hs-identifier hs-var hs-var">down</span></span><span> </span><span class="annot"><span class="annottext">Stack a
+</span><a href="#local-6989586621679356837"><span class="hs-identifier hs-var">s</span></a></span><span> </span><span class="annot"><span class="annottext">Bool -&gt; Bool -&gt; Bool
+</span><span class="hs-operator hs-var">&amp;&amp;</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Stack a -&gt; a
+forall a. Stack a -&gt; a
+</span><span class="hs-identifier hs-var hs-var">focus</span></span><span> </span><span class="annot"><span class="annottext">Stack a
+</span><a href="#local-6989586621679356837"><span class="hs-identifier hs-var">s</span></a></span><span> </span><span class="annot"><span class="annottext">a -&gt; a -&gt; Bool
+forall a. Eq a =&gt; a -&gt; a -&gt; Bool
+</span><span class="hs-operator hs-var">/=</span></span><span> </span><span class="annot"><span class="annottext">a
+</span><a href="#local-6989586621679356830"><span class="hs-identifier hs-var">win</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-81"></span><span>                                  </span><span class="hs-keyword">then</span><span> </span><span class="hs-special">(</span><span> </span><span class="hs-special">[</span><span class="hs-special">(</span><span class="annot"><span class="annottext">Stack a -&gt; a
+forall a. Stack a -&gt; a
+</span><span class="hs-identifier hs-var hs-var">focus</span></span><span> </span><span class="annot"><span class="annottext">Stack a
+</span><a href="#local-6989586621679356837"><span class="hs-identifier hs-var">s</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">Rectangle
+</span><a href="#local-6989586621679356835"><span class="hs-identifier hs-var">left</span></a></span><span class="hs-special">)</span><span class="hs-special">,</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">a
+</span><a href="#local-6989586621679356830"><span class="hs-identifier hs-var">win</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">Rectangle
+</span><a href="#local-6989586621679356834"><span class="hs-identifier hs-var">right</span></a></span><span class="hs-special">)</span><span class="hs-special">]</span><span>
+</span><span id="line-82"></span><span>                                       </span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">TwoPanePersistent a -&gt; Maybe (TwoPanePersistent a)
+forall a. a -&gt; Maybe a
+</span><span class="hs-identifier hs-var">Just</span></span><span> </span><span class="annot"><span class="annottext">(TwoPanePersistent a -&gt; Maybe (TwoPanePersistent a))
+-&gt; TwoPanePersistent a -&gt; Maybe (TwoPanePersistent a)
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">Maybe a -&gt; Rational -&gt; Rational -&gt; TwoPanePersistent a
+forall a. Maybe a -&gt; Rational -&gt; Rational -&gt; TwoPanePersistent a
+</span><a href="XMonad.Layout.TwoPanePersistent.html#TwoPanePersistent"><span class="hs-identifier hs-var">TwoPanePersistent</span></a></span><span> </span><span class="annot"><span class="annottext">Maybe a
+</span><a href="#local-6989586621679356840"><span class="hs-identifier hs-var">w</span></a></span><span> </span><span class="annot"><span class="annottext">Rational
+</span><a href="#local-6989586621679356839"><span class="hs-identifier hs-var">delta</span></a></span><span> </span><span class="annot"><span class="annottext">Rational
+</span><a href="#local-6989586621679356838"><span class="hs-identifier hs-var">split</span></a></span><span> </span><span class="hs-special">)</span><span>
+</span><span id="line-83"></span><span>                                  </span><span class="hs-keyword">else</span><span> </span><span class="annot"><span class="annottext">([(a, Rectangle)], Maybe (TwoPanePersistent a))
+</span><a href="#local-6989586621679356831"><span class="hs-identifier hs-var">nextSlave</span></a></span><span>
+</span><span id="line-84"></span><span>                      </span><span class="hs-comment">-- if no previous state, default to the next slave window</span><span>
+</span><span id="line-85"></span><span>                      </span><span class="annot"><span class="annottext">Maybe a
+</span><span class="hs-identifier hs-var">Nothing</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">([(a, Rectangle)], Maybe (TwoPanePersistent a))
+</span><a href="#local-6989586621679356831"><span class="hs-identifier hs-var">nextSlave</span></a></span><span>
+</span><span id="line-86"></span><span>
+</span><span id="line-87"></span><span>
+</span><span id="line-88"></span><span>        </span><span class="hs-comment">-- the master is the only window</span><span>
+</span><span id="line-89"></span><span>        </span><span class="hs-special">[</span><span class="hs-special">]</span><span>       </span><span class="hs-glyph">-&gt;</span><span> </span><span class="hs-special">(</span><span> </span><span class="hs-special">[</span><span class="hs-special">(</span><span class="annot"><span class="annottext">Stack a -&gt; a
+forall a. Stack a -&gt; a
+</span><span class="hs-identifier hs-var hs-var">focus</span></span><span> </span><span class="annot"><span class="annottext">Stack a
+</span><a href="#local-6989586621679356837"><span class="hs-identifier hs-var">s</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">Rectangle
+</span><a href="#local-6989586621679356836"><span class="hs-identifier hs-var">r</span></a></span><span class="hs-special">)</span><span class="hs-special">]</span><span>
+</span><span id="line-90"></span><span>                    </span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">TwoPanePersistent a -&gt; Maybe (TwoPanePersistent a)
+forall a. a -&gt; Maybe a
+</span><span class="hs-identifier hs-var">Just</span></span><span> </span><span class="annot"><span class="annottext">(TwoPanePersistent a -&gt; Maybe (TwoPanePersistent a))
+-&gt; TwoPanePersistent a -&gt; Maybe (TwoPanePersistent a)
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">Maybe a -&gt; Rational -&gt; Rational -&gt; TwoPanePersistent a
+forall a. Maybe a -&gt; Rational -&gt; Rational -&gt; TwoPanePersistent a
+</span><a href="XMonad.Layout.TwoPanePersistent.html#TwoPanePersistent"><span class="hs-identifier hs-var">TwoPanePersistent</span></a></span><span> </span><span class="annot"><span class="annottext">Maybe a
+forall a. Maybe a
+</span><span class="hs-identifier hs-var">Nothing</span></span><span> </span><span class="annot"><span class="annottext">Rational
+</span><a href="#local-6989586621679356839"><span class="hs-identifier hs-var">delta</span></a></span><span> </span><span class="annot"><span class="annottext">Rational
+</span><a href="#local-6989586621679356838"><span class="hs-identifier hs-var">split</span></a></span><span> </span><span class="hs-special">)</span><span>
+</span><span id="line-91"></span><span>
+</span><span id="line-92"></span><span>
+</span><span id="line-93"></span><span>
+</span><span id="line-94"></span><span id="local-6989586621679356914"><span class="annot"><a href="XMonad.Layout.TwoPanePersistent.html#focusedSlave"><span class="hs-identifier hs-type">focusedSlave</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><a href="XMonad.Layout.TwoPanePersistent.html#TwoPanePersistent"><span class="hs-identifier hs-type">TwoPanePersistent</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679356914"><span class="hs-identifier hs-type">a</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Stack</span></span><span> </span><span class="annot"><a href="#local-6989586621679356914"><span class="hs-identifier hs-type">a</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Rectangle</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="#local-6989586621679356914"><span class="hs-identifier hs-type">a</span></a></span><span>
+</span><span id="line-95"></span><span>             </span><span class="hs-glyph">-&gt;</span><span> </span><span class="hs-special">(</span><span> </span><span class="hs-special">[</span><span class="hs-special">(</span><span class="annot"><a href="#local-6989586621679356914"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Rectangle</span></span><span class="hs-special">)</span><span class="hs-special">]</span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Maybe</span></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="XMonad.Layout.TwoPanePersistent.html#TwoPanePersistent"><span class="hs-identifier hs-type">TwoPanePersistent</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679356914"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-special">)</span></span><span>
+</span><span id="line-96"></span><span id="focusedSlave"><span class="annot"><span class="annottext">focusedSlave :: TwoPanePersistent a
+-&gt; Stack a
+-&gt; Rectangle
+-&gt; a
+-&gt; ([(a, Rectangle)], Maybe (TwoPanePersistent a))
+</span><a href="XMonad.Layout.TwoPanePersistent.html#focusedSlave"><span class="hs-identifier hs-var hs-var">focusedSlave</span></a></span></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="XMonad.Layout.TwoPanePersistent.html#TwoPanePersistent"><span class="hs-identifier hs-type">TwoPanePersistent</span></a></span><span> </span><span class="annot"><span class="annottext">Maybe a
+</span><span class="hs-identifier">_</span></span><span> </span><span id="local-6989586621679356826"><span class="annot"><span class="annottext">Rational
+</span><a href="#local-6989586621679356826"><span class="hs-identifier hs-var">delta</span></a></span></span><span> </span><span id="local-6989586621679356825"><span class="annot"><span class="annottext">Rational
+</span><a href="#local-6989586621679356825"><span class="hs-identifier hs-var">split</span></a></span></span><span class="hs-special">)</span><span> </span><span id="local-6989586621679356824"><span class="annot"><span class="annottext">Stack a
+</span><a href="#local-6989586621679356824"><span class="hs-identifier hs-var">s</span></a></span></span><span> </span><span id="local-6989586621679356823"><span class="annot"><span class="annottext">Rectangle
+</span><a href="#local-6989586621679356823"><span class="hs-identifier hs-var">r</span></a></span></span><span> </span><span id="local-6989586621679356822"><span class="annot"><span class="annottext">a
+</span><a href="#local-6989586621679356822"><span class="hs-identifier hs-var">m</span></a></span></span><span> </span><span class="hs-glyph">=</span><span>
+</span><span id="line-97"></span><span>  </span><span class="hs-special">(</span><span> </span><span class="hs-special">[</span><span class="hs-special">(</span><span class="annot"><span class="annottext">a
+</span><a href="#local-6989586621679356822"><span class="hs-identifier hs-var">m</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">Rectangle
+</span><a href="#local-6989586621679356821"><span class="hs-identifier hs-var">left</span></a></span><span class="hs-special">)</span><span class="hs-special">,</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Stack a -&gt; a
+forall a. Stack a -&gt; a
+</span><span class="hs-identifier hs-var hs-var">focus</span></span><span> </span><span class="annot"><span class="annottext">Stack a
+</span><a href="#local-6989586621679356824"><span class="hs-identifier hs-var">s</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">Rectangle
+</span><a href="#local-6989586621679356820"><span class="hs-identifier hs-var">right</span></a></span><span class="hs-special">)</span><span class="hs-special">]</span><span>
+</span><span id="line-98"></span><span>  </span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">TwoPanePersistent a -&gt; Maybe (TwoPanePersistent a)
+forall a. a -&gt; Maybe a
+</span><span class="hs-identifier hs-var">Just</span></span><span> </span><span class="annot"><span class="annottext">(TwoPanePersistent a -&gt; Maybe (TwoPanePersistent a))
+-&gt; TwoPanePersistent a -&gt; Maybe (TwoPanePersistent a)
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">Maybe a -&gt; Rational -&gt; Rational -&gt; TwoPanePersistent a
+forall a. Maybe a -&gt; Rational -&gt; Rational -&gt; TwoPanePersistent a
+</span><a href="XMonad.Layout.TwoPanePersistent.html#TwoPanePersistent"><span class="hs-identifier hs-var">TwoPanePersistent</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">a -&gt; Maybe a
+forall a. a -&gt; Maybe a
+</span><span class="hs-identifier hs-var">Just</span></span><span> </span><span class="annot"><span class="annottext">(a -&gt; Maybe a) -&gt; a -&gt; Maybe a
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">Stack a -&gt; a
+forall a. Stack a -&gt; a
+</span><span class="hs-identifier hs-var hs-var">focus</span></span><span> </span><span class="annot"><span class="annottext">Stack a
+</span><a href="#local-6989586621679356824"><span class="hs-identifier hs-var">s</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">Rational
+</span><a href="#local-6989586621679356826"><span class="hs-identifier hs-var">delta</span></a></span><span> </span><span class="annot"><span class="annottext">Rational
+</span><a href="#local-6989586621679356825"><span class="hs-identifier hs-var">split</span></a></span><span> </span><span class="hs-special">)</span><span>
+</span><span id="line-99"></span><span>  </span><span class="hs-keyword">where</span><span> </span><span class="hs-special">(</span><span id="local-6989586621679356821"><span class="annot"><span class="annottext">Rectangle
+</span><a href="#local-6989586621679356821"><span class="hs-identifier hs-var">left</span></a></span></span><span class="hs-special">,</span><span> </span><span id="local-6989586621679356820"><span class="annot"><span class="annottext">Rectangle
+</span><a href="#local-6989586621679356820"><span class="hs-identifier hs-var">right</span></a></span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Rational -&gt; Rectangle -&gt; (Rectangle, Rectangle)
+forall r. RealFrac r =&gt; r -&gt; Rectangle -&gt; (Rectangle, Rectangle)
+</span><span class="hs-identifier hs-var">splitHorizontallyBy</span></span><span> </span><span class="annot"><span class="annottext">Rational
+</span><a href="#local-6989586621679356825"><span class="hs-identifier hs-var">split</span></a></span><span> </span><span class="annot"><span class="annottext">Rectangle
+</span><a href="#local-6989586621679356823"><span class="hs-identifier hs-var">r</span></a></span><span>
+</span><span id="line-100"></span></pre></body></html>
